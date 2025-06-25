@@ -31,6 +31,10 @@ class ProgressGrid(Static):
         self.current_step_index = 0
         self._find_first_valid_step()
         
+        # Background color constants
+        self.selection_background_color = "bright_black"
+        self.dependency_background_color = "steel_blue"
+        
         # Horizontal scrolling
         self.h_scroll_offset = 0
         self.viewport_width = 60  # Initial value, will be updated in render()
@@ -193,22 +197,33 @@ class ProgressGrid(Static):
         return self._get_step_boundaries(node, current_step)
 
     def _get_current_blocking_steps(self) -> set:
-        """Get all blocking steps for the currently selected step."""
+        """Get only root blocking steps for the currently selected step."""
         current_step = self._get_current_step()
         if not current_step or not self.steps:
             return set()
             
         current_node, _ = self.steps[self.current_step_index]
-        blocking_list = self._get_blocking_steps(current_node, current_step)
+        blocking_list = self._get_root_blocking_steps(current_node, current_step)
         
         # Convert to set of (node, step) for fast lookup
         return set(blocking_list)
+
+    def _get_blocking_highlight_info(self, node: str) -> tuple[Optional[int], Optional[int]]:
+        """Get highlighting information for blocking steps on this node."""
+        blocking_steps = self._get_current_blocking_steps()
+        
+        # Find any blocking step for this node
+        for block_node, block_step in blocking_steps:
+            if block_node == node:
+                return self._get_step_boundaries(node, block_step)
+        
+        return None, None
 
     def _create_progress_line(self, node: str) -> Text:
         """Create a progress line for a node with background color highlighting."""
         progress = Text()
         highlight_start, highlight_end = self._get_current_highlight_info(node)
-        blocking_steps = self._get_current_blocking_steps()
+        blocking_start, blocking_end = self._get_blocking_highlight_info(node)
         visible_dates = self._get_visible_dates()
         
         # Add dummy space at start of all progress lines for consistent alignment
@@ -220,23 +235,26 @@ class ProgressGrid(Static):
             # Check if this position is highlighted
             is_highlighted = highlight_start is not None and highlight_start <= i <= highlight_end
             
-            # Check if this step is blocking the current selection
-            is_blocking = status_obj and (node, status_obj) in blocking_steps
+            # Check if this position is in a blocking step range
+            is_blocking = blocking_start is not None and blocking_start <= i <= blocking_end
             
             if status_obj:
                 color = self._get_status_color(status_obj.status)
                 if is_highlighted:
                     # Current selection - gray background
-                    progress.append("■", style=f"{color} on bright_black")
+                    progress.append("■", style=f"{color} on {self.selection_background_color}")
                 elif is_blocking:
-                    # Blocking step - red background to show it's blocking
-                    progress.append("■", style=f"{color} on red")
+                    # Root blocking step - subtle background to show it's blocking
+                    progress.append("■", style=f"{color} on {self.dependency_background_color}")
                 else:
                     progress.append("■", style=color)  # Normal filled box
             else:
                 if is_highlighted:
                     # Add gray background for highlighted empty cells
-                    progress.append("◦", style="dim on bright_black")
+                    progress.append("◦", style=f"dim on {self.selection_background_color}")
+                elif is_blocking:
+                    # Root blocking empty cell - subtle background
+                    progress.append("◦", style=f"dim on {self.dependency_background_color}")
                 else:
                     progress.append("◦", style="dim")  # Empty/no status
             
@@ -249,25 +267,35 @@ class ProgressGrid(Static):
                 is_connector_highlighted = (highlight_start is not None and 
                                           highlight_start <= i and i + 1 <= highlight_end)
                 
+                # Check if connector is part of a blocking step range
+                is_connector_blocking = (blocking_start is not None and 
+                                       blocking_start <= i and i + 1 <= blocking_end)
+                
                 if (status_obj and next_status_obj and 
                     status_obj.status == next_status_obj.status and
                     status_obj.start_date <= next_date <= status_obj.end_date):
                     connector_color = self._get_status_color(status_obj.status)
                     
                     if is_connector_highlighted:
-                        progress.append("─", style=f"{connector_color} on bright_black")
+                        progress.append("─", style=f"{connector_color} on {self.selection_background_color}")
+                    elif is_connector_blocking:
+                        progress.append("─", style=f"{connector_color} on {self.dependency_background_color}")
                     else:
                         progress.append("─", style=connector_color)
                 elif status_obj and next_status_obj:
                     # Both sides have status but different - use dot
                     if is_connector_highlighted:
-                        progress.append("·", style="dim on bright_black")
+                        progress.append("·", style=f"dim on {self.selection_background_color}")
+                    elif is_connector_blocking:
+                        progress.append("·", style=f"dim on {self.dependency_background_color}")
                     else:
                         progress.append("·", style="dim")
                 else:
                     # At least one side is empty - use space
                     if is_connector_highlighted:
-                        progress.append(" ", style="on bright_black")
+                        progress.append(" ", style=f"on {self.selection_background_color}")
+                    elif is_connector_blocking:
+                        progress.append(" ", style=f"on {self.dependency_background_color}")
                     else:
                         progress.append(" ")
         
@@ -366,6 +394,43 @@ class ProgressGrid(Static):
         
         # Convert set back to list for consistent API
         return list(blocking_steps)
+
+    def _get_root_blocking_steps(self, target_node: str, target_step: StepStatus) -> List[Tuple[str, StepStatus]]:
+        """
+        Find only the root blocking steps by traversing dependencies recursively.
+        
+        Root blocking steps are leaf nodes in the dependency tree that are not finished.
+        """
+        root_blocking = []
+        visited = set()
+        
+        def _find_root_blocking_recursive(step: StepStatus):
+            if step in visited:
+                return
+            visited.add(step)
+            
+            # Check if this step has any unfinished dependencies
+            has_blocking_deps = False
+            
+            for dep in step.step_dependencies:
+                if dep.node_name in self.node_statuses:
+                    for upstream_step in self.node_statuses[dep.node_name]:
+                        if (upstream_step.status != "finished" and 
+                            self._steps_overlap(upstream_step, dep.start_date, dep.end_date)):
+                            has_blocking_deps = True
+                            _find_root_blocking_recursive(upstream_step)
+            
+            # If this step has no blocking dependencies, it's a root blocker
+            if not has_blocking_deps and step.status != "finished":
+                # Find which node this step belongs to
+                for node_name, node_steps in self.node_statuses.items():
+                    if step in node_steps:
+                        root_blocking.append((node_name, step))
+                        break
+        
+        _find_root_blocking_recursive(target_step)
+        
+        return root_blocking
     
     def _steps_overlap(self, step: StepStatus, dep_start: date, dep_end: date) -> bool:
         """Check if a step overlaps with a dependency date range."""
