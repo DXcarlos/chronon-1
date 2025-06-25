@@ -55,8 +55,8 @@ object TableDependencies {
 
     if (forMutations && source.mutationsTable.isEmpty) return None
 
-    val startCutOff = Option(source.query).map(_.getStartPartition).getOrElse("")
-    val endCutOff = Option(source.query).map(_.getEndPartition).getOrElse("")
+    val startCutOff = Option(source.query).map(_.getStartPartition).orNull
+    val endCutOff = Option(source.query).map(_.getEndPartition).orNull
 
     val lagOpt = Option(WindowUtils.plus(source.query.getPartitionLag, shift.orNull))
     val endOffset = lagOpt.orNull

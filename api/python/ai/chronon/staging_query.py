@@ -29,7 +29,7 @@ class TableDependency:
                 table=self.table, 
                 partitionColumn=self.partition_column,
                 partitionFormat="YYYY-MM-dd",  # Default partition format
-                partitionInterval=offset_window,
+                partitionInterval=common.Window(length = 1, timeUnit= common.TimeUnit.DAYS),
                 isCumulative=False,
             ),
             startOffset=offset_window,
