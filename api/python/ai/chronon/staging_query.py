@@ -28,9 +28,6 @@ class TableDependency:
             tableInfo=common.TableInfo(
                 table=self.table, 
                 partitionColumn=self.partition_column,
-                partitionFormat="YYYY-MM-dd",  # Default partition format
-                partitionInterval=common.Window(length = 1, timeUnit= common.TimeUnit.DAYS),
-                isCumulative=False,
             ),
             startOffset=offset_window,
             endOffset=offset_window,
