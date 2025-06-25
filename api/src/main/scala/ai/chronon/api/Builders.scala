@@ -330,7 +330,7 @@ object Builders {
       stagingQuery.setStartPartition(startPartition)
       stagingQuery.setPartitionColumn(partitionColumn)
       stagingQuery.setEngineType(engineType)
-      stagingQuery.setTableDependencies(tableDependencies.toJava)
+      if (tableDependencies != null) stagingQuery.setTableDependencies(tableDependencies.toJava)
       if (setups != null) stagingQuery.setSetups(setups.toJava)
       stagingQuery
     }
