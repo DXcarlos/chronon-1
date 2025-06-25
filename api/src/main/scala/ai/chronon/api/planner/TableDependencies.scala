@@ -13,10 +13,6 @@ object TableDependencies {
     Option(stagingQuery.tableDependencies)
       .map(_.asScala.toSeq)
       .getOrElse(Seq.empty)
-      .map { tableDep =>
-        new TableDependency()
-          .setTableInfo(tableDep)
-      }
   }
 
   def fromJoin(join: api.Join)(implicit spec: PartitionSpec): Seq[TableDependency] = {
@@ -59,8 +55,8 @@ object TableDependencies {
 
     if (forMutations && source.mutationsTable.isEmpty) return None
 
-    val startCutOff = source.query.getStartPartition
-    val endCutOff = source.query.getEndPartition
+    val startCutOff = Option(source.query).map(_.getStartPartition).orNull
+    val endCutOff = Option(source.query).map(_.getEndPartition).orNull
 
     val lagOpt = Option(WindowUtils.plus(source.query.getPartitionLag, shift.orNull))
     val endOffset = lagOpt.orNull

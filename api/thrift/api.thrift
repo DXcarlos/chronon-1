@@ -91,7 +91,7 @@ struct StagingQuery {
     **/
     6: optional EngineType engineType
 
-    7: optional list<common.TableInfo> tableDependencies
+    7: optional list<common.TableDependency> tableDependencies
 
     /* If specified, will recompute the output of this StagingQuery for the given number of days after initial computation
     * Should be used in one of two scenarios:

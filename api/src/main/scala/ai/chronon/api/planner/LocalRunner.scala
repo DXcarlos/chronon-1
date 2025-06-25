@@ -24,11 +24,11 @@ object LocalRunner {
 
   private def tryParsingConf[T <: TBase[_, _]: Manifest: ClassTag](file: String): Option[T] =
     try {
-      Some(ThriftJsonCodec.fromJsonFile[T](file, check = false))
+      val res = Some(ThriftJsonCodec.fromJsonFile[T](file, check = true))
+      res
     } catch {
       case ex: Exception =>
-        new RuntimeException(s"Failed to parse file: $file", ex).printStackTrace()
-        None
+        throw new RuntimeException(s"Failed to parse file: $file", ex)
     }
 
   def parseConfs[T <: TBase[_, _]: Manifest: ClassTag](confSubfolder: String): Seq[T] = listFiles(confSubfolder)

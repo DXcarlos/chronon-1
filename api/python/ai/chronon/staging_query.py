@@ -26,8 +26,8 @@ class TableDependency:
         offset_window = common.Window(length = self.offset, timeUnit= common.TimeUnit.DAYS) if self.offset else None
         return common.TableDependency(
             tableInfo=common.TableInfo(
-                table=self.table, partitionColumn=self.partition_column,
-                partitionFormat="YYYY-MM-dd",  # Default partition format
+                table=self.table,
+                partitionColumn=self.partition_column,
             ),
             startOffset=offset_window,
             endOffset=offset_window,
@@ -161,6 +161,12 @@ def StagingQuery(
         tableProperties=table_properties,
     )
 
+    thrift_deps = []
+    if dependencies and len(dependencies) > 0:
+        for d in dependencies:
+            if d and isinstance(d, TableDependency):
+                thrift_deps.append(d.to_thrift())
+
     # Create and return the StagingQuery object with camelCase parameter names
     staging_query = ttypes.StagingQuery(
         tableDependencies=[
@@ -172,6 +178,7 @@ def StagingQuery(
         setups=setups,
         partitionColumn=partition_column,
         engineType=engine_type,
+        tableDependencies=thrift_deps,
         recomputeDays=recompute_days,
     )
 

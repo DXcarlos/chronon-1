@@ -321,7 +321,8 @@ object Builders {
         startPartition: String = null,
         setups: Seq[String] = null,
         partitionColumn: String = null,
-        engineType: EngineType = EngineType.SPARK
+        engineType: EngineType = EngineType.SPARK,
+        tableDependencies: Seq[TableDependency] = null
     ): StagingQuery = {
       val stagingQuery = new StagingQuery()
       stagingQuery.setQuery(query)
@@ -329,6 +330,7 @@ object Builders {
       stagingQuery.setStartPartition(startPartition)
       stagingQuery.setPartitionColumn(partitionColumn)
       stagingQuery.setEngineType(engineType)
+      if (tableDependencies != null) stagingQuery.setTableDependencies(tableDependencies.toJava)
       if (setups != null) stagingQuery.setSetups(setups.toJava)
       stagingQuery
     }
