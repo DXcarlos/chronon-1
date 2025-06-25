@@ -34,7 +34,7 @@ v1 = StagingQuery(
     ],
     name="sample_staging_query",
     output_namespace="sample_namespace",
-    table_properties={"sample_config_json": """{"sample_key": "sample value}"""},
+    table_properties={"sample_config_json": """{"sample_key": "sample value"}"""},
     dependencies=[
         TableDependency(table="sample_namespace.sample_table", partition_column="ds", additional_partitions=["_HR=23:00"], offset=1),
         {

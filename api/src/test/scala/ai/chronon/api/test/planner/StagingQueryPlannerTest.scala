@@ -1,10 +1,12 @@
 package ai.chronon.api.test.planner
 
+import ai.chronon.api.{EngineType, ExecutionInfo, PartitionSpec}
 import ai.chronon.api.planner.{LocalRunner, StagingQueryPlanner}
 import ai.chronon.api.Builders.{MetaData, StagingQuery}
-import ai.chronon.api.{ExecutionInfo, PartitionSpec, EngineType}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import ai.chronon.api.TableDependency
+import ai.chronon.api.TableInfo
 
 import java.nio.file.Paths
 import scala.jdk.CollectionConverters._
@@ -32,10 +34,13 @@ class StagingQueryPlannerTest extends AnyFlatSpec with Matchers {
   }
 
   it should "staging query planner should create valid plans without exceptions" in {
+    val ti = new TableInfo().setTable("hello")
+    val td = new TableDependency().setTableInfo(ti)
     val stagingQuery = StagingQuery(
       query = "SELECT * FROM test_table",
       metaData = MetaData(name = "testStagingQuery"),
-      engineType = EngineType.SPARK
+      engineType = EngineType.SPARK,
+      tableDependencies = Seq(td)
     )
 
     val planner = new StagingQueryPlanner(stagingQuery)
