@@ -169,9 +169,6 @@ def StagingQuery(
 
     # Create and return the StagingQuery object with camelCase parameter names
     staging_query = ttypes.StagingQuery(
-        tableDependencies=[
-            d.to_thrift() for d in dependencies if d and isinstance(d, TableDependency)
-        ] if dependencies else [],
         metaData=meta_data,
         query=query,
         startPartition=start_partition,
