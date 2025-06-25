@@ -22,6 +22,19 @@ class TableDependency:
     additional_partitions: Optional[List[str]] = None
     offset: Optional[int] = None
 
+    def to_thrift(self):
+        offset_window = common.Window(length = self.offset, timeUnit= common.TimeUnit.DAYS) if self.offset else None
+        return common.TableDependency(
+            tableInfo=common.TableInfo(
+                table=self.table, partitionColumn=self.partition_column,
+                partitionFormat="YYYY-MM-dd",  # Default partition format
+            ),
+            startOffset=offset_window,
+            endOffset=offset_window,
+            startCutOff=None,
+            endCutOff=None
+        )
+
 def StagingQuery(
     name: str,
     query: str,
@@ -111,7 +124,7 @@ def StagingQuery(
         conf=conf,
         env=env_vars,
         stepDays=step_days,
-        clusterConf=cluster_conf
+        clusterConf=cluster_conf,
     )
 
     airflow_dependencies = []
@@ -150,6 +163,9 @@ def StagingQuery(
 
     # Create and return the StagingQuery object with camelCase parameter names
     staging_query = ttypes.StagingQuery(
+        tableDependencies=[
+            d.to_thrift() for d in dependencies if d and isinstance(d, TableDependency)
+        ] if dependencies else [],
         metaData=meta_data,
         query=query,
         startPartition=start_partition,

@@ -59,11 +59,13 @@ def _build_local_repo_hashmap(root_dir: str):
                 md5_hash = hashlib.md5(thrift_json.encode()).hexdigest()
                 # md5_hash = hashlib.md5(thrift_json.encode()).hexdigest() + "123"
                 # results[name] = (binary, md5_hash, FOLDER_NAME_TO_LOGICAL_TYPE[folder_name])
+                logical_type = FOLDER_NAME_TO_LOGICAL_TYPE[folder_name]
+                print(f"logical type for this file {json_file} is {logical_type}")
                 results[name] = Conf(name=name,
                                           hash=md5_hash,
                                           # contents=binary,
                                           contents=thrift_json,
-                                          logicalType=FOLDER_NAME_TO_LOGICAL_TYPE[folder_name])
+                                          logicalType=logical_type)
 
             except Exception as e:
                 exceptions.append(f"{json_file} - {e}")

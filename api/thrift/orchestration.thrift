@@ -32,11 +32,11 @@ union LogicalNode {
 
 
 enum LogicalType {
-    GROUP_BY = 1,
-    JOIN = 2,
-    STAGING_QUERY = 3,
-    MODEL = 4,
-    TABULAR_DATA = 5
+    GROUP_BY = 0,
+    JOIN = 1,
+    STAGING_QUERY = 2,
+    MODEL = 3,
+    TABULAR_DATA = 4
 }
 
 struct NodeKey {
