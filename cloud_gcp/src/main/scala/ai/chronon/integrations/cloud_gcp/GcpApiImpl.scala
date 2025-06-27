@@ -1,19 +1,10 @@
 package ai.chronon.integrations.cloud_gcp
 
-import ai.chronon.online.{
-  Api,
-  ExternalSourceRegistry,
-  FlagStore,
-  FlagStoreConstants,
-  GroupByServingInfoParsed,
-  KVStore,
-  KafkaLoggableResponseConsumer,
-  LoggableResponse,
-  TopicInfo
-}
+import ai.chronon.online.{Api, ExternalSourceRegistry, FlagStore, FlagStoreConstants, GroupByServingInfoParsed, KVStore, KafkaLoggableResponseConsumer, LoggableResponse, TopicInfo}
 import ai.chronon.online.serde.{AvroConversions, AvroSerDe, SerDe}
 import com.google.api.gax.core.{InstantiatingExecutorProvider, NoCredentialsProvider}
 import com.google.api.gax.retrying.RetrySettings
+import com.google.api.gax.rpc.TransportChannelProvider
 import com.google.cloud.bigquery.BigQueryOptions
 import com.google.cloud.bigtable.admin.v2.BigtableTableAdminClient
 import com.google.cloud.bigtable.admin.v2.BigtableTableAdminSettings
@@ -23,7 +14,7 @@ import com.google.cloud.bigtable.data.v2.stub.metrics.NoopMetricsProvider
 
 import java.time.Duration
 import java.util
-import java.util.concurrent.ThreadFactory
+import java.util.concurrent.{ScheduledExecutorService, ThreadFactory}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Consumer
 
@@ -196,9 +187,9 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
       dataSettingsBuilderWithProfileId: BigtableDataSettings.Builder,
       maybeAdminSettingsBuilder: Option[BigtableTableAdminSettings.Builder]
   ): Unit = {
-    dataSettingsBuilderWithProfileId.stubSettings().setBackgroundExecutorProvider(executorProvider)
+    dataSettingsBuilderWithProfileId.stubSettings().setBackgroundExecutorProvider(backgroundExecutorProvider).setTransportChannelProvider(transportChannelProvider)
     maybeAdminSettingsBuilder.foreach(adminSettingsBuilder =>
-      adminSettingsBuilder.stubSettings().setBackgroundExecutorProvider(executorProvider))
+      adminSettingsBuilder.stubSettings().setBackgroundExecutorProvider(backgroundExecutorProvider))
   }
 
   // TODO: Load from user jar.
@@ -249,14 +240,47 @@ object GcpApiImpl {
     override def newThread(r: Runnable): Thread = {
       val t = new Thread(r)
       t.setName(s"chronon-bt-gax-${counter.incrementAndGet()}")
+      t.setDaemon(true) // Make threads persistent
       t
     }
+
   }
 
+
+
   // override the executor provider to use a custom named thread factory
-  lazy val executorProvider: InstantiatingExecutorProvider = InstantiatingExecutorProvider
+  lazy val backgroundExecutorProvider: InstantiatingExecutorProvider = InstantiatingExecutorProvider
     .newBuilder()
     .setExecutorThreadCount(Runtime.getRuntime.availableProcessors() * 4)
     .setThreadFactory(threadFactory)
     .build()
+
+  // Create a thread factory for transport threads with custom naming
+  val transportThreadFactory: ThreadFactory = new ThreadFactory {
+    private val counter = new AtomicInteger(0)
+    override def newThread(r: Runnable): Thread = {
+      val t = new Thread(r)
+      t.setName(s"chronon-bt-transport-${counter.incrementAndGet()}")
+      t.setDaemon(true) // Make threads persistent
+      t
+    }
+  }
+
+  // Create a scheduledExecutorService with thread count of processors * 4 and threads named as
+  // chronon-bt-transport-<count> - these threads should be persistent
+  lazy val transportExecutor: ScheduledExecutorService = {
+    import java.util.concurrent.Executors
+    Executors.newScheduledThreadPool(
+      Runtime.getRuntime.availableProcessors() * 4,
+      transportThreadFactory
+    )
+  }
+
+  // Create a transport channel provider that uses our custom transport executor
+  lazy val transportChannelProvider: TransportChannelProvider = {
+    import com.google.cloud.bigtable.data.v2.stub.BigtableDataStubSettings
+    BigtableDataStubSettings.defaultGrpcTransportProviderBuilder()
+      .setExecutor(transportExecutor)
+      .build()
+  }
 }
