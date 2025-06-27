@@ -9,6 +9,7 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import scala.collection.immutable.Set
 import scala.jdk.CollectionConverters._
 
 case class SubmitterConf(
@@ -524,13 +525,19 @@ object DataprocSubmitter {
     if (clusterName != "") {
       try {
         val cluster = dataprocClient.getCluster(projectId, region, clusterName)
-        if (
-          cluster != null && Set(ClusterStatus.State.RUNNING,
-                                 ClusterStatus.State.UPDATING,
-                                 ClusterStatus.State.CREATING).contains(cluster.getStatus.getState)
-        ) {
-          println(s"Dataproc cluster $clusterName already exists and is healthy.")
-          clusterName
+
+        if (cluster != null) {
+          if (
+            Set(ClusterStatus.State.RUNNING, ClusterStatus.State.UPDATING, ClusterStatus.State.CREATING).contains(
+              cluster.getStatus.getState)
+          ) {
+            println(s"Dataproc cluster $clusterName already exists and is healthy.")
+            clusterName
+          } else {
+            throw new Exception(
+              s"Dataproc cluster $clusterName exists but is not in a healthy state: ${cluster.getStatus.getState}. " +
+                s"Attempting to create a new cluster with the provided config.")
+          }
         } else if (maybeClusterConfig.isDefined && maybeClusterConfig.get.contains("dataproc.config")) {
           // Print to stderr so that it flushes immediately
           System.err.println(
