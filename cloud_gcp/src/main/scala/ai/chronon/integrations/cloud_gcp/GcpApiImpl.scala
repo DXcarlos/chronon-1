@@ -1,6 +1,16 @@
 package ai.chronon.integrations.cloud_gcp
 
-import ai.chronon.online.{Api, ExternalSourceRegistry, FlagStore, FlagStoreConstants, GroupByServingInfoParsed, KVStore, KafkaLoggableResponseConsumer, LoggableResponse, TopicInfo}
+import ai.chronon.online.{
+  Api,
+  ExternalSourceRegistry,
+  FlagStore,
+  FlagStoreConstants,
+  GroupByServingInfoParsed,
+  KVStore,
+  KafkaLoggableResponseConsumer,
+  LoggableResponse,
+  TopicInfo
+}
 import ai.chronon.online.serde.{AvroConversions, AvroSerDe, SerDe}
 import com.google.api.gax.core.{InstantiatingExecutorProvider, NoCredentialsProvider}
 import com.google.api.gax.retrying.RetrySettings
@@ -187,7 +197,10 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
       dataSettingsBuilderWithProfileId: BigtableDataSettings.Builder,
       maybeAdminSettingsBuilder: Option[BigtableTableAdminSettings.Builder]
   ): Unit = {
-    dataSettingsBuilderWithProfileId.stubSettings().setBackgroundExecutorProvider(backgroundExecutorProvider).setTransportChannelProvider(transportChannelProvider)
+    dataSettingsBuilderWithProfileId
+      .stubSettings()
+      .setBackgroundExecutorProvider(backgroundExecutorProvider)
+      .setTransportChannelProvider(transportChannelProvider)
     maybeAdminSettingsBuilder.foreach(adminSettingsBuilder =>
       adminSettingsBuilder.stubSettings().setBackgroundExecutorProvider(backgroundExecutorProvider))
   }
@@ -246,8 +259,6 @@ object GcpApiImpl {
 
   }
 
-
-
   // override the executor provider to use a custom named thread factory
   lazy val backgroundExecutorProvider: InstantiatingExecutorProvider = InstantiatingExecutorProvider
     .newBuilder()
@@ -279,7 +290,8 @@ object GcpApiImpl {
   // Create a transport channel provider that uses our custom transport executor
   lazy val transportChannelProvider: TransportChannelProvider = {
     import com.google.cloud.bigtable.data.v2.stub.BigtableDataStubSettings
-    BigtableDataStubSettings.defaultGrpcTransportProviderBuilder()
+    BigtableDataStubSettings
+      .defaultGrpcTransportProviderBuilder()
       .setExecutor(transportExecutor)
       .build()
   }
