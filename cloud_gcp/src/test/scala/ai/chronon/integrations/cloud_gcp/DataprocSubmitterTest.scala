@@ -797,6 +797,42 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
 
   }
 
+  it should "fail to create a Dataproc cluster if already exist in an unhealthy state" in {
+    val mockDataprocClient = mock[ClusterControllerClient]
+
+    val mockCluster = Cluster
+      .newBuilder()
+      .setStatus(ClusterStatus.newBuilder().setState(ClusterStatus.State.UNKNOWN))
+      .build()
+
+    when(mockDataprocClient.getCluster(any[String], any[String], any[String])).thenReturn(mockCluster)
+
+    val region = "test-region"
+    val projectId = "test-project"
+
+    val clusterConfigStr = """{
+      "masterConfig": {
+        "numInstances": 1,
+        "machineTypeUri": "n1-standard-4"
+      },
+      "workerConfig": {
+        "numInstances": 2,
+        "machineTypeUri": "n1-standard-4"
+      }
+    }"""
+
+    assertThrows[Exception] {
+      DataprocSubmitter.getOrCreateCluster("some-cluster",
+                                           Option(Map("dataproc.config" -> clusterConfigStr)),
+                                           projectId,
+                                           region,
+                                           mockDataprocClient)
+    }
+
+    // Expect no calls to create cluster when existing cluster is in unhealthy state
+    verify(mockDataprocClient, never()).createClusterAsync(any())
+  }
+
   it should "create a Dataproc cluster successfully with a given config" in {
     val mockDataprocClient = mock[ClusterControllerClient]
 
