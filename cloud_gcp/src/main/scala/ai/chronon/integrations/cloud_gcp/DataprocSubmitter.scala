@@ -525,7 +525,6 @@ object DataprocSubmitter {
     if (clusterName != "") {
       try {
         val cluster = dataprocClient.getCluster(projectId, region, clusterName)
-
         if (cluster != null) {
           if (
             Set(ClusterStatus.State.RUNNING, ClusterStatus.State.UPDATING, ClusterStatus.State.CREATING).contains(
@@ -535,8 +534,7 @@ object DataprocSubmitter {
             clusterName
           } else {
             throw new Exception(
-              s"Dataproc cluster $clusterName exists but is not in a healthy state: ${cluster.getStatus.getState}. " +
-                s"Attempting to create a new cluster with the provided config.")
+              s"Dataproc cluster $clusterName exists but is not in a healthy state: ${cluster.getStatus.getState}.")
           }
         } else if (maybeClusterConfig.isDefined && maybeClusterConfig.get.contains("dataproc.config")) {
           // Print to stderr so that it flushes immediately
@@ -548,7 +546,7 @@ object DataprocSubmitter {
                                 dataprocClient,
                                 maybeClusterConfig.get.getOrElse("dataproc.config", ""))
         } else {
-          throw new Exception(s"Dataproc cluster $clusterName does not exist and no cluster config provided.")
+          throw new Exception(s"Cluster $clusterName does not exist and no cluster config provided.")
         }
       } catch {
         case _: ApiException if maybeClusterConfig.isDefined && maybeClusterConfig.get.contains("dataproc.config") =>
@@ -559,8 +557,6 @@ object DataprocSubmitter {
                                 region,
                                 dataprocClient,
                                 maybeClusterConfig.get.getOrElse("dataproc.config", ""))
-        case _: ApiException =>
-          throw new Exception(s"Dataproc cluster $clusterName does not exist and no cluster config provided.")
       }
     } else if (maybeClusterConfig.isDefined && maybeClusterConfig.get.contains("dataproc.config")) {
       // Print to stderr so that it flushes immediately
