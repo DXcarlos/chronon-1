@@ -60,6 +60,21 @@ struct JoinMetadataUpload {
     2: optional api.Join join
 }
 
+struct JoinEvalNode {
+    2: optional api.Join join
+    3: optional string requestId
+}
+
+struct GroupByEvalNode {
+    2: optional api.GroupBy groupBy
+    3: optional string requestId
+}
+
+struct StagingQueryEvalNode {
+    2: optional api.StagingQuery stagingQuery
+    3: optional string requestId
+}
+
 union NodeContent {
     // join nodes
     1: SourceWithFilterNode sourceWithFilter
@@ -82,6 +97,11 @@ union NodeContent {
 
     // stagingQuery nodes
     200: api.StagingQuery stagingQueryBackfill
+
+    // eval nodes
+    300: JoinEvalNode joinEval
+    301: GroupByEvalNode groupByEval
+    302: StagingQueryEvalNode stagingQueryEval
 
     // TODO: add metrics nodes
 }

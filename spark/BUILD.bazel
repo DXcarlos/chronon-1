@@ -91,6 +91,7 @@ scala_library(
         "//aggregator:lib",
         "//api:lib",
         "//api:thrift_java",
+        "//online:lib",
         "//online:metrics_lib",
         "//online:serde_lib",
         "//spark:lib",

@@ -299,6 +299,8 @@ enum CheckResult {
     SKIPPED = 2
 }
 
+// TODO -- make SourceEvalResult it's own struct, covering expression check, timestamp check and schema
+
 struct BaseEvalResult {
     1: optional CheckResult checkResult
     2: optional string message
