@@ -2,14 +2,7 @@ package ai.chronon.spark.batch
 
 import ai.chronon.api.{MetaData, PartitionRange, PartitionSpec, ThriftJsonCodec}
 import ai.chronon.api.planner.NodeRunner
-import ai.chronon.planner.{
-  GroupByEvalNode,
-  GroupByUploadNode,
-  JoinEvalNode,
-  MonolithJoinNode,
-  NodeContent,
-  StagingQueryEvalNode
-}
+import ai.chronon.planner.{GroupByUploadNode, MonolithJoinNode, NodeContent}
 import ai.chronon.spark.{GroupByUpload, Join}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.join.UnionJoin
@@ -51,12 +44,6 @@ object BatchNodeRunner extends NodeRunner {
         runMonolithJoin(metadata, conf.getMonolithJoin, range, tableUtils)
       case NodeContent._Fields.GROUP_BY_UPLOAD =>
         runGroupByUpload(metadata, conf.getGroupByUpload, range, tableUtils)
-      case NodeContent._Fields.JOIN_EVAL =>
-        runJoinEval(metadata, conf.getJoinEval, tableUtils)
-      case NodeContent._Fields.GROUP_BY_EVAL =>
-        runGroupByEval(metadata, conf.getGroupByEval, tableUtils)
-      case NodeContent._Fields.STAGING_QUERY_EVAL =>
-        runStagingQueryEval(metadata, conf.getStagingQueryEval, tableUtils)
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported NodeContent type: ${conf.getSetField}")
     }
@@ -101,70 +88,16 @@ object BatchNodeRunner extends NodeRunner {
     }
   }
 
-  private def runJoinEval(metadata: MetaData, joinEval: JoinEvalNode, tableUtils: TableUtils): Unit = {
-    require(joinEval.isSetJoin, "JoinEvalNode must have a join set")
-    val joinConf = joinEval.join
-    val requestId = Option(joinEval.getRequestId).getOrElse("unknown")
-    logger.info(s"Running join evaluation for '${metadata.name}' with request ID: $requestId")
-
-    implicit val tu: TableUtils = tableUtils
-    // TODO: Pass API instance for KV store upload - for now use withoutKvStore
-    val eval = Eval.withoutKvStore()
-    val result = eval.evalJoinAndPersistResult(joinConf, requestId)
-
-    logger.info(s"Join evaluation completed for '${metadata.name}' with request ID: $requestId")
-  }
-
-  private def runGroupByEval(metadata: MetaData, groupByEval: GroupByEvalNode, tableUtils: TableUtils): Unit = {
-    require(groupByEval.isSetGroupBy, "GroupByEvalNode must have a groupBy set")
-    val groupByConf = groupByEval.groupBy
-    val requestId = Option(groupByEval.getRequestId).getOrElse("unknown")
-    logger.info(s"Running groupBy evaluation for '${metadata.name}' with request ID: $requestId")
-
-    implicit val tu: TableUtils = tableUtils
-    // TODO: Pass API instance for KV store upload - for now use withoutKvStore
-    val eval = Eval.withoutKvStore()
-    val (result, schema) = eval.evalGroupAndPersistResult(groupByConf, requestId)
-
-    logger.info(s"GroupBy evaluation completed for '${metadata.name}' with request ID: $requestId")
-  }
-
-  private def runStagingQueryEval(metadata: MetaData,
-                                  stagingQueryEval: StagingQueryEvalNode,
-                                  tableUtils: TableUtils): Unit = {
-    require(stagingQueryEval.isSetStagingQuery, "StagingQueryEvalNode must have a stagingQuery set")
-    val stagingQueryConf = stagingQueryEval.stagingQuery
-    val requestId = Option(stagingQueryEval.getRequestId).getOrElse("unknown")
-    logger.info(s"Running staging query evaluation for '${metadata.name}' with request ID: $requestId")
-
-    implicit val tu: TableUtils = tableUtils
-    // TODO: Pass API instance for KV store upload - for now use withoutKvStore
-    val eval = Eval.withoutKvStore()
-    val result = eval.evalStagingQueryAndPersistResult(stagingQueryConf, requestId)
-
-    logger.info(s"Staging query evaluation completed for '${metadata.name}' with request ID: $requestId")
-  }
-
   override def run(metadata: MetaData, conf: NodeContent, range: Option[PartitionRange]): Unit = {
-    // Eval nodes don't need a range, other nodes do
-    if (
-      conf.getSetField != NodeContent._Fields.JOIN_EVAL &&
-      conf.getSetField != NodeContent._Fields.GROUP_BY_EVAL &&
-      conf.getSetField != NodeContent._Fields.STAGING_QUERY_EVAL
-    ) {
-      require(range.isDefined, "Partition range must be defined for batch node runner")
-    }
-    run(metadata, conf, range.getOrElse(null), createTableUtils(metadata.name))
+    require(range.isDefined, "Partition range must be defined for batch node runner")
+    run(metadata, conf, range.get, createTableUtils(metadata.name))
   }
 
   private[batch] def loadNodeContent(confPath: String): (MetaData, NodeContent) = {
     val nodeContent = ThriftJsonCodec.fromJsonFile[NodeContent](confPath, check = true)
     (nodeContent.getSetField match {
-       case NodeContent._Fields.MONOLITH_JOIN      => nodeContent.getMonolithJoin.join.metaData
-       case NodeContent._Fields.STAGING_QUERY      => nodeContent.getStagingQuery.stagingQuery.metaData
-       case NodeContent._Fields.JOIN_EVAL          => nodeContent.getJoinEval.join.metaData
-       case NodeContent._Fields.GROUP_BY_EVAL      => nodeContent.getGroupByEval.groupBy.metaData
-       case NodeContent._Fields.STAGING_QUERY_EVAL => nodeContent.getStagingQueryEval.stagingQuery.metaData
+       case NodeContent._Fields.MONOLITH_JOIN => nodeContent.getMonolithJoin.join.metaData
+       case NodeContent._Fields.STAGING_QUERY => nodeContent.getStagingQuery.stagingQuery.metaData
        case other => throw new UnsupportedOperationException(s"NodeContent type ${other} not supported")
      },
      nodeContent)

@@ -12,31 +12,24 @@ import ai.chronon.api.Extensions.{
   SourceOps
 }
 import ai.chronon.api.ScalaJavaConversions.{JListOps, JMapOps, ListOps, MapOps}
-import ai.chronon.api.{Constants, PartitionRange, StructField, ThriftJsonCodec}
+import ai.chronon.api.{Constants, PartitionRange, StructField}
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.online.serde.SparkConversions.toChrononSchema
-import ai.chronon.online.{Api, KVStore}
-import ai.chronon.online.KVStore.PutRequest
 import ai.chronon.orchestration._
 import ai.chronon.spark.{GroupBy, JoinUtils}
 import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.Extensions._
 import org.apache.spark.sql.functions.{col, left, lit, sum, when}
-import org.apache.spark.sql.types.{BinaryType, StringType, StructType}
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.slf4j.LoggerFactory
 
 import java.io.{PrintWriter, StringWriter}
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import scala.collection.{immutable, mutable}
-import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.jdk.CollectionConverters.{asScalaBufferConverter, mapAsScalaMapConverter}
 import scala.util.Try
 
-class Eval(apiOpt: Option[Api] = None)(implicit tableUtils: TableUtils) {
-  @transient lazy val logger = LoggerFactory.getLogger(getClass)
+class Eval(implicit tableUtils: TableUtils) {
   implicit val partitionSpec = tableUtils.partitionSpec
 
   private val timestampCheckSampleSize = 100
@@ -595,71 +588,5 @@ class Eval(apiOpt: Option[Api] = None)(implicit tableUtils: TableUtils) {
     }
     evalResult
   }
-
-  private def persistEvalResult(resultString: String, requestId: String, resultType: String): Unit = {
-    require(apiOpt.isDefined, "API must be provided to persist evaluation results to KV store")
-
-    logger.info(s"Persisting $resultType evaluation result for request ID: $requestId")
-
-    try {
-      val api = apiOpt.get
-      val kvStore = api.genKvStore
-      logger.info(s"Starting KV store upload for $resultType evaluation result with request ID: $requestId")
-
-      // Create PutRequest with request ID as key and result as value
-      val keyBytes = requestId.getBytes(Constants.UTF8)
-      val valueBytes = resultString.getBytes(Constants.UTF8)
-      val putRequest = PutRequest(keyBytes, valueBytes, "evaluation_results", None)
-
-      // Use multiPut to store the single key-value pair
-      val putResult = Await.result(kvStore.put(putRequest), 30.seconds)
-
-      if (putResult) {
-        logger.info(s"Successfully uploaded $resultType evaluation result for request ID: $requestId to KV store")
-      } else {
-        logger.error(
-          s"Failed to upload $resultType evaluation result for request ID: $requestId to KV store - put operation returned false")
-      }
-
-    } catch {
-      case e: Exception =>
-        logger.error(s"Failed to persist $resultType evaluation result for request ID: $requestId", e)
-      // Don't throw - we want the evaluation to succeed even if persistence fails
-    }
-  }
-
-  def evalJoinAndPersistResult(joinConf: api.Join, requestId: String): JoinEvalResult = {
-    logger.info(s"Starting join evaluation for request ID: $requestId")
-    val result = evalJoin(joinConf)
-    persistEvalResult(result.toString, requestId, "join")
-    logger.info(s"Completed join evaluation for request ID: $requestId")
-    result
-  }
-
-  def evalGroupAndPersistResult(groupByConf: api.GroupBy,
-                                requestId: String): (GroupByEvalResult, Option[ai.chronon.api.StructType]) = {
-    logger.info(s"Starting groupBy evaluation for request ID: $requestId")
-    val result = evalGroupBy(groupByConf)
-    persistEvalResult(result._1.toString, requestId, "groupBy")
-    logger.info(s"Completed groupBy evaluation for request ID: $requestId")
-    result
-  }
-
-  def evalStagingQueryAndPersistResult(stagingQueryConf: api.StagingQuery,
-                                       requestId: String): StagingQueryEvalResult = {
-    logger.info(s"Starting staging query evaluation for request ID: $requestId")
-    val result = evalStagingQuery(stagingQueryConf)
-    persistEvalResult(result.toString, requestId, "stagingQuery")
-    logger.info(s"Completed staging query evaluation for request ID: $requestId")
-    result
-  }
-
-}
-
-object Eval {
-  // Convenience methods for creating Eval instances with KV store upload capability
-  def withKvStore(api: Api)(implicit tableUtils: TableUtils): Eval = new Eval(Some(api))
-
-  def withoutKvStore()(implicit tableUtils: TableUtils): Eval = new Eval(None)
 
 }
