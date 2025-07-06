@@ -8,6 +8,7 @@ import ai.chronon.cli.compile.display.compiled_obj
 import ai.chronon.cli.compile.parse_configs as parser
 import ai.chronon.cli.logger as logger
 from ai.chronon.cli.compile import serializer
+from ai.chronon.cli.compile.change_validator import ChangeValidator
 from ai.chronon.cli.compile.compile_context import CompileContext, ConfigInfo
 from ai.chronon.cli.compile.display.compiled_obj import CompiledObj
 from ai.chronon.cli.compile.display.console import console
@@ -45,6 +46,10 @@ class Compiler:
         # check if staging_output_dir exists
         staging_dir = self.compile_context.staging_output_dir()
         if os.path.exists(staging_dir):
+            # Validate changed files before overwriting
+            validator = ChangeValidator(self.compile_context)
+            validator.validate_changed_files(staging_dir)
+            
             # replace staging_output_dir to output_dir
             output_dir = self.compile_context.output_dir()
             if os.path.exists(output_dir):
