@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -111,8 +112,6 @@ class ChangeValidator:
         Returns dict with metadata info, or None if file cannot be parsed.
         """
         try:
-            import json
-            
             with open(file_path, 'r') as f:
                 data = json.load(f)
             
