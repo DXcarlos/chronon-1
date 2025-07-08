@@ -32,6 +32,24 @@ import scala.collection.Seq
 
 object CatalystUtil {
   lazy val session: SparkSession = {
+    // Define the JVM options for module access
+    val javaOptions = Seq(
+      "--add-opens=java.base/java.lang=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+      "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+      "--add-opens=java.base/java.io=ALL-UNNAMED",
+      "--add-opens=java.base/java.net=ALL-UNNAMED",
+      "--add-opens=java.base/java.nio=ALL-UNNAMED",
+      "--add-opens=java.base/java.util=ALL-UNNAMED",
+      "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+      "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+      "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+      "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+      "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+      "--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED"
+    ).mkString(" ")
+
     val spark = SparkSession
       .builder()
       .appName(s"catalyst_test_${Thread.currentThread().toString}")
@@ -50,6 +68,8 @@ object CatalystUtil {
       .config("spark.driver.bindAddress", "127.0.0.1")
       .config(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
       .config(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key, false)
+      .config("spark.driver.extraJavaOptions", javaOptions)
+      .config("spark.executor.extraJavaOptions", javaOptions)
       .enableHiveSupport() // needed to support registering Hive UDFs via CREATE FUNCTION.. calls
       .getOrCreate()
     assert(spark.sessionState.conf.wholeStageEnabled)
