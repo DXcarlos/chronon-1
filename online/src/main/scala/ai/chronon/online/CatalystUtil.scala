@@ -31,7 +31,7 @@ import java.util.function
 import scala.collection.Seq
 
 object CatalystUtil {
-  import scala.util.{Try, Success, Failure}
+  import scala.util.{Failure, Success, Try}
 
   lazy val session: SparkSession = {
     def getJavaMajorVersion: Int = {
