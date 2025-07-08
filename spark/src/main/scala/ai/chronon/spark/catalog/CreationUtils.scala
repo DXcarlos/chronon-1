@@ -30,15 +30,19 @@ object CreationUtils {
          |""".stripMargin
 
     val partitionFragment = if (partitionColumns != null && partitionColumns.nonEmpty) {
+      // Support Iceberg partition transforms if this is an Iceberg table
+      if (tableTypeString.toLowerCase == "iceberg") {
+        generateIcebergPartitionSpec(schema, partitionColumns, tableProperties)
+      } else {
+        // Standard Hive-style partitioning
+        val partitionDefinitions = schema
+          .filter(field => partitionColumns.contains(field.name))
+          .map(field => s"${field.name} ${field.dataType.catalogString}")
 
-      val partitionDefinitions = schema
-        .filter(field => partitionColumns.contains(field.name))
-        .map(field => s"${field.name} ${field.dataType.catalogString}")
-
-      s"""PARTITIONED BY (
-         |    ${partitionDefinitions.mkString(",\n    ")}
-         |)""".stripMargin
-
+        s"""PARTITIONED BY (
+           |    ${partitionDefinitions.mkString(",\n    ")}
+           |)""".stripMargin
+      }
     } else {
       ""
     }
@@ -56,6 +60,47 @@ object CreationUtils {
 
     Seq(createFragment, partitionFragment, propertiesFragment).mkString("\n")
 
+  }
+
+  /**
+   * Generates Iceberg partition specification with support for bucketing transforms.
+   */
+  private def generateIcebergPartitionSpec(schema: StructType, 
+                                         partitionColumns: List[String],
+                                         tableProperties: Map[String, String]): String = {
+    
+    val partitionSpecs = scala.collection.mutable.ListBuffer[String]()
+    
+    // Add standard partition columns (typically time-based)
+    val standardPartitions = schema
+      .filter(field => partitionColumns.contains(field.name))
+      .map(field => field.name)
+    
+    partitionSpecs ++= standardPartitions
+    
+    // Add bucketing transforms if configured
+    if (tableProperties != null) {
+      val hashColumns = tableProperties.get("write.hash-columns")
+      val numBuckets = tableProperties.get("write.hash-buckets")
+      
+      (hashColumns, numBuckets) match {
+        case (Some(columns), Some(buckets)) =>
+          val bucketColumns = columns.split(",").map(_.trim)
+          // Add bucket transform for each hash column
+          bucketColumns.foreach { column =>
+            partitionSpecs += s"bucket($buckets, $column)"
+          }
+        case _ => // No bucketing configuration
+      }
+    }
+    
+    if (partitionSpecs.nonEmpty) {
+      s"""PARTITIONED BY (
+         |    ${partitionSpecs.mkString(",\n    ")}
+         |)""".stripMargin
+    } else {
+      ""
+    }
   }
 
   // Needs provider

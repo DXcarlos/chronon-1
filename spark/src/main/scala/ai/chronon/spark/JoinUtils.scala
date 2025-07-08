@@ -188,6 +188,131 @@ object JoinUtils {
     finalDf
   }
 
+  /**
+    * Optimized version of coalescedJoin that can leverage bucketing and table metadata
+    * to improve join performance when tables are bucketed on compatible keys.
+    */
+  def coalescedJoinOptimized(leftDf: DataFrame, 
+                           rightDf: DataFrame, 
+                           keys: Seq[String], 
+                           joinType: String = "left",
+                           leftTableName: Option[String] = None,
+                           rightTableName: Option[String] = None)(implicit tableUtils: TableUtils): DataFrame = {
+    
+    leftDf.validateJoinKeys(rightDf, keys)
+    val sharedColumns = rightDf.columns.intersect(leftDf.columns)
+    sharedColumns.foreach { column =>
+      val leftDataType = leftDf.schema(leftDf.schema.fieldIndex(column)).dataType
+      val rightDataType = rightDf.schema(rightDf.schema.fieldIndex(column)).dataType
+      assert(leftDataType == rightDataType,
+             s"Column '$column' has mismatched data types - left type: $leftDataType vs. right type $rightDataType")
+    }
+
+    // Check if bucketing optimization is enabled
+    val bucketingEnabled = leftDf.sparkSession.conf.get("spark.chronon.bucketing.join.enabled", "true").toBoolean
+    
+    val (optimizedLeftDf, optimizedRightDf) = if (bucketingEnabled && canUseBucketedOptimization(leftTableName, rightTableName, keys)) {
+      logger.info(s"Using bucketed join optimization for keys: ${keys.mkString(", ")}")
+      // Apply bucketing hints to avoid shuffle
+      val leftHinted = leftDf.hint("bucket", keys: _*)
+      val rightHinted = rightDf.hint("bucket", keys: _*)
+      (leftHinted, rightHinted)
+    } else {
+      // Apply join strategy selection based on table sizes and characteristics
+      applyJoinStrategy(leftDf, rightDf, keys)
+    }
+
+    val joinedDf = optimizedLeftDf.join(optimizedRightDf, keys.toSeq, joinType)
+    
+    // find columns that exist both on left and right that are not keys and coalesce them
+    val selects = keys.map(col) ++
+      leftDf.columns.flatMap { colName =>
+        if (keys.contains(colName)) {
+          None
+        } else if (sharedColumns.contains(colName)) {
+          Some(coalesce(leftDf(colName), rightDf(colName)).as(colName))
+        } else {
+          Some(leftDf(colName))
+        }
+      } ++
+      rightDf.columns.flatMap { colName =>
+        if (sharedColumns.contains(colName)) {
+          None // already selected previously
+        } else {
+          Some(rightDf(colName))
+        }
+      }
+    val finalDf = joinedDf.select(selects.toSeq: _*)
+    finalDf
+  }
+
+  /**
+    * Checks if bucketed join optimization can be used for the given tables and keys.
+    */
+  private def canUseBucketedOptimization(leftTableName: Option[String], 
+                                       rightTableName: Option[String], 
+                                       keys: Seq[String])(implicit tableUtils: TableUtils): Boolean = {
+    (leftTableName, rightTableName) match {
+      case (Some(leftTable), Some(rightTable)) =>
+        tableUtils.canUseBucketedJoin(leftTable, rightTable, keys)
+      case _ => false
+    }
+  }
+
+  /**
+    * Applies intelligent join strategy selection based on table characteristics.
+    */
+  private def applyJoinStrategy(leftDf: DataFrame, rightDf: DataFrame, keys: Seq[String]): (DataFrame, DataFrame) = {
+    val broadcastThreshold = leftDf.sparkSession.conf.get("spark.sql.adaptive.advisoryPartitionSizeInBytes", "64MB")
+    val broadcastThresholdBytes = parseSize(broadcastThreshold)
+    
+    // Estimate table sizes (simplified heuristic)
+    val leftSize = estimateDataFrameSize(leftDf)
+    val rightSize = estimateDataFrameSize(rightDf)
+    
+    if (rightSize < broadcastThresholdBytes) {
+      logger.info(s"Using broadcast join optimization for small right table")
+      (leftDf, rightDf.hint("broadcast"))
+    } else if (leftSize < broadcastThresholdBytes) {
+      logger.info(s"Using broadcast join optimization for small left table")
+      (leftDf.hint("broadcast"), rightDf)
+    } else {
+      logger.info(s"Using sort-merge join for large tables")
+      (leftDf, rightDf)
+    }
+  }
+
+  /**
+    * Estimates DataFrame size in bytes (simplified heuristic).
+    */
+  private def estimateDataFrameSize(df: DataFrame): Long = {
+    try {
+      df.queryExecution.executedPlan.stats.sizeInBytes.toLong
+    } catch {
+      case _: Exception => Long.MaxValue // Conservative estimate if stats unavailable
+    }
+  }
+
+  /**
+    * Parses size string like "64MB" to bytes.
+    */
+  private def parseSize(sizeStr: String): Long = {
+    val sizePattern = """(\d+)([KMGT]?B?)""".r
+    sizeStr.toUpperCase match {
+      case sizePattern(size, unit) =>
+        val bytes = size.toLong
+        unit match {
+          case "B" | "" => bytes
+          case "KB" => bytes * 1024
+          case "MB" => bytes * 1024 * 1024
+          case "GB" => bytes * 1024 * 1024 * 1024
+          case "TB" => bytes * 1024 * 1024 * 1024 * 1024
+          case _ => bytes
+        }
+      case _ => 64 * 1024 * 1024 // Default 64MB
+    }
+  }
+
   /** *
     * Method to create or replace a view for feature table joining with labels.
     * Label columns will be prefixed with "label" or custom prefix for easy identification

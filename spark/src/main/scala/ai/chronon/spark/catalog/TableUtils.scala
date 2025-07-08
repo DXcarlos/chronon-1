@@ -201,9 +201,12 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
 
     if (!tableReachable(tableName, ignoreFailure = true)) {
       try {
+        // Determine final table type - use Iceberg if bucketing is configured
+        val finalTableType = determineFinalTableType(tableProperties, tableWriteFormat)
+        
         sql(
           CreationUtils
-            .createTableSql(tableName, df.schema, partitionColumns, tableProperties, fileFormat, tableWriteFormat))
+            .createTableSql(tableName, df.schema, partitionColumns, tableProperties, fileFormat, finalTableType))
       } catch {
         case _: TableAlreadyExistsException =>
           logger.info(s"Table $tableName already exists, skipping creation")
@@ -212,6 +215,117 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
           throw e
 
       }
+    }
+  }
+
+  /**
+   * Determines the final table type to use, automatically switching to Iceberg when bucketing is configured.
+   */
+  private def determineFinalTableType(tableProperties: Map[String, String], defaultTableType: String): String = {
+    val hasBucketing = Option(tableProperties).exists { props =>
+      props.contains("write.hash-columns") && props.contains("write.hash-buckets")
+    }
+    
+    if (hasBucketing) {
+      logger.info(s"Bucketing configuration detected, using Iceberg table type")
+      "iceberg"
+    } else {
+      defaultTableType
+    }
+  }
+
+  /**
+   * Case class to hold bucketing information for a table.
+   */
+  case class BucketingInfo(columns: Seq[String], numBuckets: Int)
+
+  /**
+   * Checks if a table is bucketed by examining its table properties.
+   */
+  def isTableBucketed(tableName: String): Boolean = {
+    getTableProperties(tableName) match {
+      case Some(properties) =>
+        properties.contains("write.hash-columns") && properties.contains("write.hash-buckets")
+      case None => false
+    }
+  }
+
+  /**
+   * Gets bucketing information for a table if it exists.
+   */
+  def getBucketingInfo(tableName: String): Option[BucketingInfo] = {
+    getTableProperties(tableName).flatMap { properties =>
+      for {
+        hashColumns <- properties.get("write.hash-columns")
+        hashBuckets <- properties.get("write.hash-buckets")
+      } yield {
+        val columns = hashColumns.split(",").map(_.trim).toSeq
+        val buckets = hashBuckets.toInt
+        BucketingInfo(columns, buckets)
+      }
+    }
+  }
+
+  /**
+   * Checks if two tables are bucketed compatibly for a join on the given keys.
+   */
+  def canUseBucketedJoin(leftTable: String, rightTable: String, joinKeys: Seq[String]): Boolean = {
+    try {
+      val leftBucketing = getBucketingInfo(leftTable)
+      val rightBucketing = getBucketingInfo(rightTable)
+      
+      (leftBucketing, rightBucketing) match {
+        case (Some(leftInfo), Some(rightInfo)) =>
+          // Check if bucket counts match and join keys are subset of bucket columns
+          val bucketCountsMatch = leftInfo.numBuckets == rightInfo.numBuckets
+          val joinKeysSupported = joinKeys.forall(key => 
+            leftInfo.columns.contains(key) && rightInfo.columns.contains(key)
+          )
+          
+          if (bucketCountsMatch && joinKeysSupported) {
+            logger.info(s"Bucketed join compatibility confirmed: " +
+              s"left=$leftTable(${leftInfo.numBuckets} buckets), " +
+              s"right=$rightTable(${rightInfo.numBuckets} buckets), " +
+              s"keys=${joinKeys.mkString(",")}")
+            true
+          } else {
+            if (!bucketCountsMatch) {
+              logger.info(s"Bucket counts don't match: left=${leftInfo.numBuckets}, right=${rightInfo.numBuckets}")
+            }
+            if (!joinKeysSupported) {
+              logger.info(s"Join keys not fully supported by bucket columns: " +
+                s"joinKeys=${joinKeys.mkString(",")}, " +
+                s"leftBuckets=${leftInfo.columns.mkString(",")}, " +
+                s"rightBuckets=${rightInfo.columns.mkString(",")}")
+            }
+            false
+          }
+        case (Some(_), None) =>
+          logger.debug(s"Only left table $leftTable is bucketed, cannot use bucketed join")
+          false
+        case (None, Some(_)) =>
+          logger.debug(s"Only right table $rightTable is bucketed, cannot use bucketed join")
+          false
+        case (None, None) =>
+          logger.debug(s"Neither table is bucketed: $leftTable, $rightTable")
+          false
+      }
+    } catch {
+      case ex: Exception =>
+        logger.warn(s"Error checking bucketed join compatibility: ${ex.getMessage}")
+        false
+    }
+  }
+
+  /**
+   * Gets table properties from Spark catalog.
+   */
+  def getTableProperties(tableName: String): Option[Map[String, String]] = {
+    try {
+      val tableId = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+      Some(sparkSession.sessionState.catalog.getTempViewOrPermanentTableMetadata(tableId).properties)
+    } catch {
+      case _: Exception => None
     }
   }
 

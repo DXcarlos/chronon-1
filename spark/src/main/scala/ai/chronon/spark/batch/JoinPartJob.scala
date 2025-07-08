@@ -58,9 +58,12 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
       val joinLevelBloomMapOpt =
         JoinUtils.genBloomFilterIfNeeded(joinPart, node.leftDataModel, dateRange, None)
 
+      val baseTableProps = Option(metaData.tableProps).getOrElse(Map.empty[String, String])
+      val tablePropsWithBucketing = addBucketingConfig(baseTableProps, joinPart)
+      
       JoinPartJobContext(Option(leftWithStats),
                          joinLevelBloomMapOpt,
-                         Option(metaData.tableProps).getOrElse(Map.empty[String, String]),
+                         tablePropsWithBucketing,
                          runSmallMode)
     }
 
@@ -237,5 +240,74 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
       rightDfWithDerivations.prettyPrint()
     }
     Some(rightDfWithDerivations)
+  }
+
+  /**
+   * Adds bucketing configuration to table properties for Iceberg tables based on join keys.
+   * Extracts join keys from the joinPart and configures Iceberg table bucketing.
+   */
+  private def addBucketingConfig(baseTableProps: Map[String, String], joinPart: JoinPart): Map[String, String] = {
+    // Check if bucketing is enabled
+    val bucketingEnabled = tableUtils.sparkSession.conf
+      .get("spark.chronon.bucketing.enabled", "false")
+      .toBoolean
+    
+    if (!bucketingEnabled) {
+      return baseTableProps
+    }
+    
+    // Extract join keys from rightToLeft mappings
+    val joinKeys = joinPart.rightToLeft.values.toSeq
+    
+    // Only enable bucketing for tables with join keys
+    if (joinKeys.isEmpty) {
+      logger.info(s"No join keys found for ${joinPart.groupBy.metaData.name}, skipping bucketing")
+      return baseTableProps
+    }
+    
+    // Validate and get bucketing configuration
+    val numBuckets = validateBucketCount(tableUtils.sparkSession.conf.get("spark.chronon.bucketing.numBuckets", "100"))
+    
+    if (joinKeys.length > 5) {
+      logger.warn(s"High number of join keys (${joinKeys.length}) for bucketing in ${joinPart.groupBy.metaData.name}. " +
+        "This may impact performance. Consider reducing join key cardinality.")
+    }
+    
+    val bucketColumns = joinKeys.mkString(",")
+    
+    logger.info(s"Adding bucketing configuration for ${joinPart.groupBy.metaData.name}: " +
+      s"buckets=$numBuckets, columns=$bucketColumns")
+    
+    // Add Iceberg-specific bucketing properties
+    baseTableProps ++ Map(
+      "write.distribution-mode" -> "hash",
+      "write.hash-columns" -> bucketColumns,
+      "write.hash-buckets" -> numBuckets.toString
+    )
+  }
+
+  /**
+   * Validates and normalizes the bucket count to ensure it's within reasonable bounds.
+   */
+  private def validateBucketCount(bucketCountStr: String): Int = {
+    try {
+      val bucketCount = bucketCountStr.toInt
+      bucketCount match {
+        case n if n <= 0 =>
+          logger.warn(s"Invalid bucket count: $n. Using default value of 100.")
+          100
+        case n if n > 10000 =>
+          logger.warn(s"Very high bucket count: $n. This may cause too many small files. Consider using a smaller value.")
+          n
+        case n if n < 10 =>
+          logger.warn(s"Low bucket count: $n. This may limit parallelism. Consider using a higher value.")
+          n
+        case n => n
+      }
+    } catch {
+      case _: NumberFormatException =>
+        logger.warn(s"Invalid bucket count format: $bucketCountStr. Using default value of 100.")
+        100
+    }
   }
 }

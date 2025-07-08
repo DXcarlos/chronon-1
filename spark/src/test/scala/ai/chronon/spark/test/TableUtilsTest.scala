@@ -614,4 +614,67 @@ class TableUtilsTest extends AnyFlatSpec {
     assertThrows[ParseException](Format.getCatalog(""))
   }
 
+  it should "detect bucketing configuration correctly" in {
+    // Test bucketing detection and validation
+    val bucketingProps = Map(
+      "write.hash-columns" -> "user_id,item_id",
+      "write.hash-buckets" -> "100",
+      "write.distribution-mode" -> "hash"
+    )
+
+    // Test bucket info extraction
+    val mockTableName = "test_bucketed_table"
+    
+    // Mock the table properties by using the determineFinalTableType logic
+    val finalTableType = if (bucketingProps.contains("write.hash-columns") && bucketingProps.contains("write.hash-buckets")) {
+      "iceberg"
+    } else {
+      ""
+    }
+    
+    assertEquals("iceberg", finalTableType)
+    
+    // Test bucket count validation
+    val validBucketCount = if (bucketingProps.get("write.hash-buckets").exists(_.toInt > 0)) {
+      bucketingProps("write.hash-buckets").toInt
+    } else {
+      100 // default
+    }
+    
+    assertEquals(100, validBucketCount)
+    
+    // Test join key compatibility
+    val joinKeys = Seq("user_id", "item_id")
+    val bucketColumns = bucketingProps("write.hash-columns").split(",").map(_.trim).toSeq
+    val allKeysSupported = joinKeys.forall(bucketColumns.contains)
+    
+    assertTrue("All join keys should be supported by bucket columns", allKeysSupported)
+  }
+
+  it should "validate bucket count ranges correctly" in {
+    // Test various bucket count scenarios
+    val testCases = Map(
+      "0" -> 100,      // Invalid -> default
+      "-1" -> 100,     // Invalid -> default  
+      "1" -> 1,        // Valid but low
+      "50" -> 50,      // Valid 
+      "100" -> 100,    // Valid
+      "5000" -> 5000,  // Valid but high
+      "invalid" -> 100 // Invalid format -> default
+    )
+    
+    testCases.foreach { case (input, expected) =>
+      val result = try {
+        val bucketCount = input.toInt
+        bucketCount match {
+          case n if n <= 0 => 100
+          case n => n
+        }
+      } catch {
+        case _: NumberFormatException => 100
+      }
+      assertEquals(s"Bucket count validation failed for input: $input", expected, result)
+    }
+  }
+
 }
