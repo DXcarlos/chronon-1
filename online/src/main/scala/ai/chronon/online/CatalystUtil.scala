@@ -31,26 +31,36 @@ import java.util.function
 import scala.collection.Seq
 
 object CatalystUtil {
-  lazy val session: SparkSession = {
-    // Define the JVM options for module access
-    val javaOptions = Seq(
-      "--add-opens=java.base/java.lang=ALL-UNNAMED",
-      "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
-      "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
-      "--add-opens=java.base/java.io=ALL-UNNAMED",
-      "--add-opens=java.base/java.net=ALL-UNNAMED",
-      "--add-opens=java.base/java.nio=ALL-UNNAMED",
-      "--add-opens=java.base/java.util=ALL-UNNAMED",
-      "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
-      "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
-      "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
-      "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
-      "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
-      "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
-      "--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED"
-    ).mkString(" ")
+  import scala.util.{Try, Success, Failure}
 
-    val spark = SparkSession
+  lazy val session: SparkSession = {
+    def getJavaMajorVersion: Int = {
+      val version = System.getProperty("java.version")
+      Try {
+        if (version.startsWith("1.")) {
+          // Java 8 and earlier: "1.8.0_xxx" -> 8
+          version.substring(2, 3).toInt
+        } else {
+          // Java 9+: "11.0.1" -> 11, "17.0.2" -> 17
+          version.split("\\.")(0).toInt
+        }
+      }.getOrElse {
+        // Fallback - assume Java 8 if parsing fails
+        println(s"Warning: Could not parse Java version '$version', assuming Java 8")
+        8
+      }
+    }
+
+    // Check if we need module system workarounds
+    def needsModuleWorkarounds: Boolean = {
+      val majorVersion = getJavaMajorVersion
+      val needs = majorVersion >= 9
+      println(s"Java version: $majorVersion, needs module workarounds: $needs")
+      needs
+    }
+
+    // Build the configuration
+    val builder = SparkSession
       .builder()
       .appName(s"catalyst_test_${Thread.currentThread().toString}")
       .master("local[*]")
@@ -58,20 +68,41 @@ object CatalystUtil {
       .config("spark.sql.adaptive.enabled", "false")
       .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
       .config("spark.ui.enabled", "false")
-      // the default column reader batch size is 4096 - spark reads that many rows into memory buffer at once.
-      // that causes ooms on large columns.
-      // for derivations we only need to read one row at a time.
-      // for interactive we set the limit to 16.
       .config("spark.sql.parquet.columnarReaderBatchSize", "16")
-      // The default doesn't seem to be set properly in the scala 2.13 version of spark
-      // running into this issue https://github.com/dotnet/spark/issues/435
       .config("spark.driver.bindAddress", "127.0.0.1")
       .config(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
       .config(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key, false)
-      .config("spark.driver.extraJavaOptions", javaOptions)
-      .config("spark.executor.extraJavaOptions", javaOptions)
-      .enableHiveSupport() // needed to support registering Hive UDFs via CREATE FUNCTION.. calls
+
+    // Add module workarounds if needed
+    val finalBuilder = if (needsModuleWorkarounds) {
+      val moduleOptions = Seq(
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens=java.base/java.io=ALL-UNNAMED",
+        "--add-opens=java.base/java.net=ALL-UNNAMED",
+        "--add-opens=java.base/java.nio=ALL-UNNAMED",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+        "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+        "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+        "--add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED"
+      ).mkString(" ")
+
+      builder
+        .config("spark.driver.extraJavaOptions", moduleOptions)
+        .config("spark.executor.extraJavaOptions", moduleOptions)
+    } else {
+      builder
+    }
+
+    val spark = finalBuilder
+      .enableHiveSupport()
       .getOrCreate()
+
     assert(spark.sessionState.conf.wholeStageEnabled)
     spark
   }
