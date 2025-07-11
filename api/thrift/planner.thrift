@@ -15,6 +15,8 @@ struct JoinBootstrapNode {
 
 struct JoinMergeNode {
     2: optional api.Join join
+    // If set, the merge job will look for the output table of the production version to reuse as many unchanged columns as possible
+    3: optional api.Join productionJoin
 }
 
 struct JoinDerivationNode {
@@ -26,6 +28,8 @@ struct JoinPartNode {
     3: optional api.DataModel leftDataModel
     4: optional api.JoinPart joinPart
     5: optional map<string, list<string>> skewKeys
+    // If set, the merge job will look for the output table of the production version to reuse as many unchanged columns as possible
+    6: optional api.JoinPart productionJoinPart
 }
 
 struct LabelJoinNode {

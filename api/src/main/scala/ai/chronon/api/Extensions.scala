@@ -157,6 +157,11 @@ object Extensions {
   implicit class MetadataOps(metaData: MetaData) {
     def cleanName: String = metaData.name.sanitize
 
+    def cleanNameWithoutVersion: String = {
+      val clean = metaData.name.sanitize
+      clean.replaceAll("__v\\d+$", "")
+    }
+
     def outputTable: String = s"${metaData.outputNamespace}.${metaData.cleanName}"
 
     // legacy way of generating label info - we might end-up doing views again, but probably with better names
@@ -810,7 +815,7 @@ object Extensions {
     // For long names, we use the gb name, else for short names we use the keys
     // We set the default to false in python, however if it's unset in the config, default back to true (legacy)
     private lazy val gbPrefix: String = if (Option(joinPart.useLongNames).getOrElse(true)) {
-      groupBy.getMetaData.cleanName
+      groupBy.getMetaData.cleanNameWithoutVersion
     } else {
       groupBy.getKeyColumns.toScala.mkString("_")
     }

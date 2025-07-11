@@ -284,7 +284,7 @@ struct MetaData {
 
     2: optional string team
 
-    // will be set by the compiler based on changes to column lineage - do not manually set
+    // will be set by the compiler based on what user sets (currently only for GB and Join)
     3: optional string version
 
     4: optional string outputNamespace

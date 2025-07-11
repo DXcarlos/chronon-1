@@ -75,7 +75,13 @@ def import_module_set_name(module, cls):
             # example module.__name__=group_bys.user.avg_session_length, name=v1
             # obj.metaData.name=user.avg_session_length.v1
             # obj.metaData.team=user
-            obj.metaData.name = module.__name__.partition(".")[2] + "." + name
+            base_name = module.__name__.partition(".")[2] + "." + name
+            
+            # Add version suffix if version is set
+            if hasattr(obj.metaData, 'version') and obj.metaData.version is not None:
+                base_name = base_name + "__v" + str(obj.metaData.version)
+            
+            obj.metaData.name = base_name
             obj.metaData.team = module.__name__.split(".")[1]
     return module
 

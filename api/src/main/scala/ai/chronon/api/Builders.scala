@@ -275,7 +275,8 @@ object Builders {
         historicalBackfill: Boolean = true,
         driftSpec: DriftSpec = null,
         additionalOutputPartitionColumns: Seq[String] = Seq.empty,
-        executionInfo: ExecutionInfo = null
+        executionInfo: ExecutionInfo = null,
+        version: Int = 0
     ): MetaData = {
       val result = new MetaData()
       result.setName(name)
@@ -283,6 +284,7 @@ object Builders {
       result.setProduction(production)
       result.setCustomJson(customJson)
       result.setOutputNamespace(namespace)
+      result.setVersion(version.toString)
 
       val effectiveTeam = (Option(team), Option(name)) match {
         case (Some(t), _) => t

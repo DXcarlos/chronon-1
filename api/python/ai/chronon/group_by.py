@@ -441,6 +441,7 @@ def GroupBy(
     tags: Dict[str, str] = None,
     online: bool = DEFAULT_ONLINE,
     production: bool = DEFAULT_PRODUCTION,
+    version: int = 0,
     # execution params
     offline_schedule: str = "@daily",
     conf: common.ConfigProperties = None,
@@ -673,6 +674,7 @@ def GroupBy(
         executionInfo=exec_info,
         tags=tags if tags else None,
         columnTags=column_tags if column_tags else None,
+        version=str(version),
     )
 
     group_by = ttypes.GroupBy(

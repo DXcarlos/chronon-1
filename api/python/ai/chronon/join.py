@@ -370,6 +370,7 @@ def Join(
     check_consistency: bool = None,
     consistency_sample_percent: float = 5.0,
     use_long_names: bool = False,
+    version: int = 0,
     # execution params
     offline_schedule: str = "@daily",
     historical_backfill: bool = None,
@@ -542,6 +543,7 @@ def Join(
         consistencyCheck=check_consistency,
         consistencySamplePercent=consistency_sample_percent,
         executionInfo=exec_info,
+        version=str(version),
     )
 
     join = api.Join(

@@ -99,6 +99,11 @@ def from_file(file_path: str, cls: type, input_dir: str):
             copied_obj = copy.deepcopy(obj)
 
             name = f"{mod_path}.{var_name}"
+            
+            # Add version suffix if version is set
+            if hasattr(copied_obj.metaData, 'version') and copied_obj.metaData.version is not None:
+                name = name + "__v" + str(copied_obj.metaData.version)
+            
             copied_obj.metaData.name = name
             copied_obj.metaData.team = mod_path.split(".")[0]
 
