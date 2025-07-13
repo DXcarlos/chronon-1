@@ -235,8 +235,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
   /** Analyze join parts to determine which can be reused from production table
     * Returns (selectFromProdTableAsLeft, joinPartsToQueryAndJoin)
     */
-  private def analyzeJoinPartsForReuse(dayStep: PartitionRange,
-                                       currentLeftDf: DataFrame): (Seq[String], Seq[JoinPart]) = {
+  def analyzeJoinPartsForReuse(dayStep: PartitionRange, currentLeftDf: DataFrame): (Seq[String], Seq[JoinPart]) = {
     Option(productionJoin) match {
       case Some(prodJoin) =>
         val productionTable = prodJoin.metaData.outputTable
@@ -287,7 +286,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
                                                                               tableUtils.partitionColumn,
                                                                               Constants.TimePartitionColumn)
                   val partValueColumns =
-                    partSchema.fieldNames.filterNot(partKeyColumns.contains).map(joinPart.columnPrefix + _)
+                    partSchema.fieldNames.filterNot(partKeyColumns.contains)
 
                   // Check if all value columns from this join part are present in production table
                   if (partValueColumns.forall(productionColumns.contains)) {
