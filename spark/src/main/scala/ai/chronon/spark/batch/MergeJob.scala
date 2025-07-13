@@ -286,7 +286,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
                                                                               tableUtils.partitionColumn,
                                                                               Constants.TimePartitionColumn)
                   val partValueColumns =
-                    partSchema.fieldNames.filterNot(partKeyColumns.contains)
+                    partSchema.fieldNames.filterNot(partKeyColumns.contains).map(joinPart.columnPrefix + _)
 
                   // Check if all value columns from this join part are present in production table
                   if (partValueColumns.forall(productionColumns.contains)) {
