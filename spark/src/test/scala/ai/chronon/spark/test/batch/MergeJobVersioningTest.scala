@@ -173,7 +173,6 @@ class MergeJobVersioningTest extends AnyFlatSpec {
 
     val leftSourceWithFilter = new SourceWithFilterNode().setSource(joinV1.left)
     val sourceRunner = new SourceJob(leftSourceWithFilter, sourceMetaData, dateRange)
-    try {}
     sourceRunner.run()
 
     // Step 4: Run join part job for the added GroupBy only (shared will be reused from production)
