@@ -8,7 +8,8 @@ function print_usage() {
     echo "Options:"
     echo "  --canary | --dev          Specify the environment (canary or dev)"
     echo "  --version <version>       Specify the version you want to run"
-    echo "  -h, --help  Show this help message"
+    echo "  --zipline_hub <hub_url>       Specify the hub URL to connect to"
+    echo "  -h, --help                Show this help message"
 }
 
 if [ $# -ne 3 ]; then
@@ -43,6 +44,15 @@ while [[ $# -gt 0 ]]; do
             VERSION="$2"
             shift 2
             ;;
+        --zipline_hub)
+            if [[ -z $2 ]]; then
+                echo "Error: --zipline_hub requires a value"
+                print_usage
+                exit 1
+            fi
+            ZIPLINE_HUB="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             print_usage
@@ -54,6 +64,11 @@ done
 # Set ENVIRONMENT based on flags
 if [[ "$USE_CANARY" == true ]]; then
     ENVIRONMENT="canary"
+    if [[ -z "$ZIPLINE_HUB" ]]; then
+        echo "Error: --zipline_hub is required for canary environment"
+        print_usage
+        exit 1
+    fi
 elif [[ "$USE_DEV" == true ]]; then
     ENVIRONMENT="dev"
 else
@@ -132,7 +147,9 @@ zipline compile --chronon-root=$CHRONON_ROOT
 
 echo -e "${GREEN}<<<<<.....................................BACKFILL.....................................>>>>>\033[0m"
 if [[ "$ENVIRONMENT" == "canary" ]]; then
-  zipline run --repo=$CHRONON_ROOT  --version $VERSION --mode backfill --conf compiled/group_bys/gcp/purchases.v1_test --start-ds 2023-11-01 --end-ds 2023-12-01
+  zipline hub backfill --repo=$CHRONON_ROOT --conf compiled/group_bys/gcp/purchases.v1_test --start-ds 2023-11-01 --end-ds 2023-12-01
+elif [[ "$ZIPLINE_HUB" != "" ]]; then
+  zipline hub backfill --repo=$CHRONON_ROOT --conf compiled/group_bys/gcp/purchases.v1_dev --start-ds 2023-11-01 --end-ds 2023-12-01
 else
   zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/gcp/purchases.v1_dev --start-ds 2023-11-01 --end-ds 2023-12-01
 fi
