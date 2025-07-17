@@ -58,7 +58,7 @@ object TableDependencies {
     val endCutOff = Option(source.query).map(_.getEndPartition).orNull
 
     val lagOpt = Option(WindowUtils.plus(source.query.getPartitionLag, shift.orNull))
-    val endOffset = lagOpt.orNull
+    val endOffset = lagOpt.getOrElse(WindowUtils.zero())
 
     // we don't care if the source is cumulative YET.
     // Downstream partitionRange calculation logic will need to look at tableInfo and use that

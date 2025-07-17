@@ -5,6 +5,8 @@ import ai.chronon.api.PartitionRange
 import ai.chronon.planner.NodeContent
 trait NodeRunner {
 
+  val TablePartitionsDataset = "TABLE_PARTITIONS"
+
   def run(metadata: api.MetaData, conf: NodeContent, range: Option[PartitionRange]): Unit
 }
 

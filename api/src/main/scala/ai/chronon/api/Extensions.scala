@@ -1177,6 +1177,16 @@ object Extensions {
     def prettyInline: String = strs.mkString("[", ",", "]")
   }
 
+  implicit class TableInfoOps(ti: TableInfo) {
+    def partitionSpec(defaultSpec: PartitionSpec): PartitionSpec = {
+      val column = Option(ti).flatMap((q) => Option(q.partitionColumn)).getOrElse(defaultSpec.column)
+      val format = Option(ti).flatMap((q) => Option(q.partitionFormat)).getOrElse(defaultSpec.format)
+      val interval = Option(ti).flatMap((q) => Option(q.partitionInterval)).getOrElse(WindowUtils.Day)
+      PartitionSpec(column, format, interval.millis)
+    }
+
+  }
+
   implicit class QueryOps(query: Query) {
     def setupsSeq: Seq[String] = {
       Option(query.setups)

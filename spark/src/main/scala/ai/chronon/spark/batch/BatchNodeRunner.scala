@@ -1,17 +1,22 @@
 package ai.chronon.spark.batch
 
+import ai.chronon.api.Extensions._
+import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
 import ai.chronon.api.{MetaData, PartitionRange, PartitionSpec, ThriftJsonCodec}
-import ai.chronon.api.planner.NodeRunner
+import ai.chronon.online.Api
+import ai.chronon.online.KVStore.PutRequest
 import ai.chronon.planner.{GroupByUploadNode, MonolithJoinNode, Node, NodeContent, StagingQueryNode}
-import ai.chronon.spark.{GroupByUpload, Join}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.submission.SparkSessionBuilder
+import ai.chronon.spark.{GroupByUpload, Join}
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 import org.slf4j.{Logger, LoggerFactory}
 
+import scala.collection.JavaConverters._
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
-import ai.chronon.online.Api
 
 class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
 
@@ -46,6 +51,7 @@ object BatchNodeRunner extends NodeRunner {
   }
 
   private[batch] def run(metadata: MetaData, conf: NodeContent, range: PartitionRange, tableUtils: TableUtils): Unit = {
+
     conf.getSetField match {
       case NodeContent._Fields.MONOLITH_JOIN =>
         runMonolithJoin(metadata, conf.getMonolithJoin, range, tableUtils)
@@ -108,7 +114,10 @@ object BatchNodeRunner extends NodeRunner {
       logger.info(s"Successfully wrote range: $range")
     } else {
       val join = new Join(joinConf, range.end, tableUtils)
-      val df = join.computeJoin(overrideStartPartition = Option(range.start))
+      val stepDays = for {
+        executionInfo <- Option(metadata.executionInfo)
+      } yield executionInfo.stepDays
+      val df = join.computeJoin(stepDays = stepDays, overrideStartPartition = Option(range.start))
 
       df.show(numRows = 3, truncate = 0, vertical = true)
       logger.info(s"\nShowing three rows of output above.\nQuery table '$joinName' for more.\n")
@@ -117,19 +126,81 @@ object BatchNodeRunner extends NodeRunner {
 
   override def run(metadata: MetaData, conf: NodeContent, range: Option[PartitionRange]): Unit = {
     require(range.isDefined, "Partition range must be defined for batch node runner")
+
     run(metadata, conf, range.get, createTableUtils(metadata.name))
   }
 
   def runFromArgs(api: Api, confPath: String, startDs: String, endDs: String): Try[Unit] = {
     Try {
       val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
-      // TODO(tchow): implement partition listing
       val kvStore = api.genKvStore
       val node = ThriftJsonCodec.fromJsonFile[Node](confPath, check = true)
+      val metadata = node.metaData
 
-      logger.info(s"Starting batch node runner for '${node.metaData.name}'")
-      run(node.metaData, node.content, Option(range))
-      logger.info(s"Successfully completed batch node runner for '${node.metaData.name}'")
+      logger.info(s"Starting batch node runner for '${metadata.name}'")
+      val tableUtils = createTableUtils(metadata.name)
+      val inputTablesToRange = Option(metadata.executionInfo.getTableDependencies)
+        .map(_.asScala.toArray)
+        .getOrElse(Array.empty)
+        .map((td) => {
+          val inputPartSpec =
+            Option(td.getTableInfo).map(_.partitionSpec(tableUtils.partitionSpec)).getOrElse(tableUtils.partitionSpec)
+          td.getTableInfo.table -> DependencyResolver.computeInputRange(range, td).map(_.translate(inputPartSpec))
+        })
+        .toMap
+      val allInputTablePartitions = inputTablesToRange.map {
+        case (tableName, maybePartitionRange) => {
+          // The partitions returned here are going to follow the tableUtils.partitionSpec default spec.
+          tableName -> tableUtils.partitions(tableName, tablePartitionSpec = maybePartitionRange.map(_.partitionSpec))
+        }
+      }
+
+      val maybeMissingPartitions = inputTablesToRange.map {
+        case (tableName, maybePartitionRange) => {
+          tableName -> maybePartitionRange.map((requestedPR) =>
+            // Need to normalize back again to the default spec before diffing against the existing partitions.
+            requestedPR.translate(tableUtils.partitionSpec).partitions.diff(allInputTablePartitions(tableName)))
+        }
+      }
+      val kvStoreUpdates = kvStore.multiPut(allInputTablePartitions.map { case (tableName, allPartitions) =>
+        val partitionsJson = PartitionRange.collapsedPrint(allPartitions)(range.partitionSpec)
+        PutRequest(tableName.getBytes, partitionsJson.getBytes, TablePartitionsDataset)
+      }.toSeq)
+
+      Await.result(kvStoreUpdates, Duration.Inf)
+
+      val missingPartitions = maybeMissingPartitions.collect {
+        case (tableName, Some(missing)) if missing.nonEmpty =>
+          tableName -> missing
+      }
+      if (missingPartitions.nonEmpty) {
+        throw new RuntimeException(
+          "The following input tables are missing partitions for the requested range:\n" +
+            missingPartitions
+              .map { case (tableName, missing) =>
+                s"Table: $tableName, Missing Partitions: ${missing.mkString(", ")}"
+              }
+              .mkString("\n")
+        )
+      } else {
+        run(metadata, node.content, Option(range))
+        val outputTablePartitionSpec = (for {
+          meta <- Option(metadata)
+          executionInfo <- Option(meta.executionInfo)
+          outputTableInfo <- Option(executionInfo.outputTableInfo)
+          definedSpec = outputTableInfo.partitionSpec(tableUtils.partitionSpec)
+        } yield definedSpec).getOrElse(tableUtils.partitionSpec)
+        val allOutputTablePartitions = tableUtils.partitions(metadata.executionInfo.outputTableInfo.table,
+                                                             tablePartitionSpec = Option(outputTablePartitionSpec))
+
+        val outputTablePartitionsJson = PartitionRange.collapsedPrint(allOutputTablePartitions)(range.partitionSpec)
+        val putRequest = PutRequest(metadata.executionInfo.outputTableInfo.table.getBytes,
+                                    outputTablePartitionsJson.getBytes,
+                                    TablePartitionsDataset)
+        val kvStoreUpdates = kvStore.put(putRequest)
+        Await.result(kvStoreUpdates, Duration.Inf)
+        logger.info(s"Successfully completed batch node runner for '${metadata.name}'")
+      }
     }
   }
 

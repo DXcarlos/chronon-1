@@ -1,11 +1,8 @@
 package ai.chronon.api.planner
 
-import ai.chronon.api
-import ai.chronon.api.Extensions.{SourceOps, WindowUtils}
-import ai.chronon.api.Extensions.WindowUtils.convertUnits
-import ai.chronon.api.{Accuracy, DataModel, PartitionRange, PartitionSpec, TableDependency, TableInfo, Window}
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
+import ai.chronon.api.{PartitionRange, PartitionSpec, TableDependency, Window}
 
 object DependencyResolver {
 

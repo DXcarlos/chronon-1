@@ -119,6 +119,7 @@ test_deps = _SCALA_TEST_DEPS + [
     maven_artifact("commons.lang:commons-lang"),
     maven_artifact_with_suffix("org.scala-lang.modules:scala-java8-compat"),
     maven_artifact_with_suffix("com.fasterxml.jackson.module:jackson-module-scala"),
+    maven_artifact_with_suffix("org.scala-lang.modules:scala-collection-compat"),
     maven_artifact("org.slf4j:slf4j-api"),
     maven_artifact_with_suffix("org.json4s:json4s-core"),
     maven_artifact_with_suffix("org.json4s:json4s-jackson"),
