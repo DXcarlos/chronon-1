@@ -8,11 +8,11 @@ function print_usage() {
     echo "Options:"
     echo "  --canary | --dev          Specify the environment (canary or dev)"
     echo "  --version <version>       Specify the version you want to run"
-    echo "  --zipline_hub <hub_url>       Specify the hub URL to connect to"
+    echo "  --zipline_hub <hub_url>   Specify the hub URL to connect to"
     echo "  -h, --help                Show this help message"
 }
 
-if [ $# -ne 3 ]; then
+if [ $# -lt 3 ] || [ $# -gt 5 ]; then
     print_usage
     exit 1
 fi
@@ -147,9 +147,9 @@ zipline compile --chronon-root=$CHRONON_ROOT
 
 echo -e "${GREEN}<<<<<.....................................BACKFILL.....................................>>>>>\033[0m"
 if [[ "$ENVIRONMENT" == "canary" ]]; then
-  zipline hub backfill --repo=$CHRONON_ROOT --conf compiled/group_bys/gcp/purchases.v1_test --start-ds 2023-11-01 --end-ds 2023-12-01
+  zipline hub backfill --hub_url $ZIPLINE_HUB --repo=$CHRONON_ROOT --conf compiled/group_bys/gcp/purchases.v1_test --start-ds 2023-11-01 --end-ds 2023-12-01
 elif [[ "$ZIPLINE_HUB" != "" ]]; then
-  zipline hub backfill --repo=$CHRONON_ROOT --conf compiled/group_bys/gcp/purchases.v1_dev --start-ds 2023-11-01 --end-ds 2023-12-01
+  zipline hub backfill --hub_url $ZIPLINE_HUB --repo=$CHRONON_ROOT --conf compiled/group_bys/gcp/purchases.v1_dev --start-ds 2023-11-01 --end-ds 2023-12-01
 else
   zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/gcp/purchases.v1_dev --start-ds 2023-11-01 --end-ds 2023-12-01
 fi
@@ -158,9 +158,11 @@ fail_if_bash_failed $?
 
 echo -e "${GREEN}<<<<<.....................................BACKFILL-JOIN.....................................>>>>>\033[0m"
 if [[ "$ENVIRONMENT" == "canary" ]]; then
-  zipline run --repo=$CHRONON_ROOT  --version $VERSION --mode backfill --conf compiled/joins/gcp/training_set.v1_test --start-ds 2023-11-01 --end-ds 2023-12-01
-  zipline run --repo=$CHRONON_ROOT  --version $VERSION --mode backfill --conf compiled/joins/gcp/training_set.v1_test_notds --start-ds 2023-11-01 --end-ds 2023-12-01
-
+  zipline hub backfill --hub_url $ZIPLINE_HUB --repo=$CHRONON_ROOT --conf compiled/joins/gcp/training_set.v1_test --start-ds 2023-11-01 --end-ds 2023-12-01
+  zipline hub backfill --hub_url $ZIPLINE_HUB --repo=$CHRONON_ROOT --conf compiled/joins/gcp/training_set.v1_test_notds --start-ds 2023-11-01 --end-ds 2023-12-01
+elif [[ "$ZIPLINE_HUB" != "" ]]; then
+  zipline hub backfill --hub_url $ZIPLINE_HUB --repo=$CHRONON_ROOT --conf compiled/joins/gcp/training_set.v1_dev --start-ds 2023-11-01 --end-ds 2023-12-01
+  zipline hub backfill --hub_url $ZIPLINE_HUB --repo=$CHRONON_ROOT --conf compiled/joins/gcp/training_set.v1_dev_notds --start-ds 2023-11-01 --end-ds 2023-12-01
 else
   zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/joins/gcp/training_set.v1_dev --start-ds 2023-11-01 --end-ds 2023-12-01
   zipline run --repo=$CHRONON_ROOT  --version $VERSION --mode backfill --conf compiled/joins/gcp/training_set.v1_dev_notds --start-ds 2023-11-01 --end-ds 2023-12-01
