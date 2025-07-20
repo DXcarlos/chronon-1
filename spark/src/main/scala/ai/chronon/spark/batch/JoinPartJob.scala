@@ -3,16 +3,16 @@ package ai.chronon.spark.batch
 import ai.chronon.api.DataModel.{ENTITIES, EVENTS}
 import ai.chronon.api.Extensions.{DateRangeOps, DerivationOps, GroupByOps, JoinPartOps, MetadataOps}
 import ai.chronon.api.PartitionRange.toTimeRange
-import ai.chronon.api.ScalaJavaConversions.ListOps
 import ai.chronon.api._
 import ai.chronon.online.metrics.Metrics
 import ai.chronon.planner.JoinPartNode
 import ai.chronon.spark.Extensions._
+import ai.chronon.spark.JoinUtils.coalescedJoin
 import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.{GroupBy, JoinUtils}
 import ai.chronon.spark.join.UnionJoin
+import ai.chronon.spark.{GroupBy, JoinUtils}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.{col, column, date_format}
+import org.apache.spark.sql.functions._
 import org.apache.spark.util.sketch.BloomFilter
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -43,11 +43,14 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
 
     val jobContext = context.getOrElse {
       // LeftTable is already computed by SourceJob, no need to apply query/filters/etc
-      val relevantLeftCols =
-        joinPart.rightToLeft.keys.toArray ++ Seq(tableUtils.partitionColumn) ++ (node.leftDataModel match {
-          case ENTITIES => None
-          case EVENTS   => Some(Constants.TimeColumn)
-        })
+      val entityCols = joinPart.rightToLeft.keys.toArray
+      val additionalCols = Seq(tableUtils.partitionColumn, Constants.RowIDColumn)
+      val timeCol = node.leftDataModel match {
+        case ENTITIES => None
+        case EVENTS   => Some(Constants.TimeColumn)
+      }
+
+      val relevantLeftCols = entityCols ++ additionalCols ++ timeCol
 
       val query = Builders.Query(selects = relevantLeftCols.map(t => t -> t).toMap)
       val cachedLeftDf = tableUtils.scanDf(query = query, leftTable, range = Some(dateRange))
@@ -96,7 +99,8 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
         // Cache join part data into intermediate table
         if (filledDf.isDefined) {
           logger.info(s"Writing to join part table: $partTable for partition range $rightRange")
-          filledDf.get.save(partTable, jobContext.tableProps.toMap)
+          // Apply bucketing on row ID column if it exists in the DataFrame
+          filledDf.get.save(partTable, tableProperties = jobContext.tableProps.toMap, bucketByRowId = true)
         } else {
           logger.info(s"Skipping $partTable because no data in computed joinPart.")
         }
@@ -203,44 +207,62 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
       case c => renamedLeftRawDf.col(c)
     }.toList: _*)
 
-    val rightDf = (node.leftDataModel, joinPart.groupBy.dataModel, joinPart.groupBy.inferredAccuracy) match {
-      case (ENTITIES, EVENTS, _)   => partitionRangeGroupBy.snapshotEvents(dateRange)
-      case (ENTITIES, ENTITIES, _) => partitionRangeGroupBy.snapshotEntities
-      case (EVENTS, EVENTS, Accuracy.SNAPSHOT) =>
-        genGroupBy(shiftedPartitionRange).snapshotEvents(shiftedPartitionRange)
-      case (EVENTS, EVENTS, Accuracy.TEMPORAL) =>
-        val skewFreeMode = tableUtils.sparkSession.conf
-          .get("spark.chronon.join.backfill.mode.skewFree", "false")
-          .toBoolean
+    // When we implement versioning on JoinPartJob, we can modify this to also include the reused columns
+    val colsToJoinFromLeft = Seq(Constants.RowIDColumn)
 
-        if (skewFreeMode) {
-          // Use UnionJoin for skewFree mode - it will handle column selection internally
-          logger.info(s"Using UnionJoin for TEMPORAL events join part: ${joinPart.groupBy.metaData.name}")
-          UnionJoin.computeJoinPart(renamedLeftDf, joinPart, unfilledPartitionRange, produceFinalJoinOutput = false)
-        } else {
-          // Use traditional temporalEvents approach
-          genGroupBy(unfilledPartitionRange).temporalEvents(renamedLeftDf, Some(toTimeRange(unfilledPartitionRange)))
-        }
+    // RightDF is the joinPart data, shouldJoinToLeft indicates whether we need to join it back to the left to extract
+    // additional `colsToJoinFromLeft` or not. For some compute modes, the relevant columns can be "passed through" computation
+    // And we don't need to join them back to the leftDf.
+    val (rightDf, shouldJoinToLeft) =
+      (node.leftDataModel, joinPart.groupBy.dataModel, joinPart.groupBy.inferredAccuracy) match {
+        case (ENTITIES, EVENTS, _)   => (partitionRangeGroupBy.snapshotEvents(dateRange), true)
+        case (ENTITIES, ENTITIES, _) => (partitionRangeGroupBy.snapshotEntities, true)
+        case (EVENTS, EVENTS, Accuracy.SNAPSHOT) =>
+          (genGroupBy(shiftedPartitionRange).snapshotEvents(shiftedPartitionRange), true)
+        case (EVENTS, EVENTS, Accuracy.TEMPORAL) =>
+          val skewFreeMode = tableUtils.sparkSession.conf
+            .get("spark.chronon.join.backfill.mode.skewFree", "false")
+            .toBoolean
 
-      case (EVENTS, ENTITIES, Accuracy.SNAPSHOT) => genGroupBy(shiftedPartitionRange).snapshotEntities
+          if (skewFreeMode) {
+            // Use UnionJoin for skewFree mode - it will handle column selection internally
+            logger.info(s"Using UnionJoin for TEMPORAL events join part: ${joinPart.groupBy.metaData.name}")
+            (UnionJoin.computeJoinPart(renamedLeftDf, joinPart, unfilledPartitionRange, produceFinalJoinOutput = false),
+             false)
+          } else {
+            // Use traditional temporalEvents approach
+            // TODO: Modify temporalEvents to include row ID column on output, then we can return false for shouldJoinToLeft
+            (genGroupBy(unfilledPartitionRange).temporalEvents(renamedLeftDf,
+                                                               Some(toTimeRange(unfilledPartitionRange))),
+             true)
+          }
 
-      case (EVENTS, ENTITIES, Accuracy.TEMPORAL) =>
-        // Snapshots and mutations are partitioned with ds holding data between <ds 00:00> and ds <23:59>.
-        genGroupBy(shiftedPartitionRange).temporalEntities(renamedLeftDf)
+        case (EVENTS, ENTITIES, Accuracy.SNAPSHOT) => (genGroupBy(shiftedPartitionRange).snapshotEntities, true)
+
+        case (EVENTS, ENTITIES, Accuracy.TEMPORAL) =>
+          // Snapshots and mutations are partitioned with ds holding data between <ds 00:00> and ds <23:59>.
+          // TODO: Modify temporalEntities to include row ID column on output, then we can return false for shouldJoinToLeft
+          (genGroupBy(shiftedPartitionRange).temporalEntities(renamedLeftDf), true)
+      }
+
+    val rightDfWithAllCols = if (shouldJoinToLeft) {
+      joinWithLeft(renamedLeftDf, rightDf, colsToJoinFromLeft)
+    } else {
+      rightDf
     }
 
     val rightDfWithDerivations = if (joinPart.groupBy.hasDerivations) {
 
       val finalOutputColumns = joinPart.groupBy.derivationsScala.finalOutputColumn(
-        rightDf.columns,
-        ensureKeys = joinPart.groupBy.keys(tableUtils.partitionColumn)
+        rightDfWithAllCols.columns,
+        ensureKeys = joinPart.groupBy.keys(tableUtils.partitionColumn) ++ Seq(Constants.RowIDColumn)
       )
 
-      val result = rightDf.select(finalOutputColumns: _*)
+      val result = rightDfWithAllCols.select(finalOutputColumns: _*)
       result
 
     } else {
-      rightDf
+      rightDfWithAllCols
     }
 
     if (showDf) {
@@ -249,5 +271,64 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
     }
 
     Some(rightDfWithDerivations)
+  }
+
+  def joinWithLeft(leftDf: DataFrame,
+                   rightDf: DataFrame,
+                   additionalLeftColumnsToInclude: Seq[String] = Seq.empty): DataFrame = {
+
+    // This join logic does not do any bucket hinting because it is on pre-bucketed data.
+    // The output of this will get bucketed and written, which MergeJob will benefit from.
+    val partLeftKeys = joinPart.rightToLeft.keys.toArray
+
+    // compute join keys, besides the groupBy keys -  like ds, ts etc.,
+    val additionalKeys: Seq[String] = {
+      if (node.leftDataModel == ENTITIES) {
+        Seq(tableUtils.partitionColumn)
+      } else if (joinPart.groupBy.inferredAccuracy == Accuracy.TEMPORAL) {
+        Seq(Constants.TimeColumn, tableUtils.partitionColumn)
+      } else { // left-events + snapshot => join-key = ds_of_left_ts
+        Seq(Constants.TimePartitionColumn)
+      }
+    }
+
+    val keys = partLeftKeys ++ additionalKeys
+
+    val allLeftCols = keys ++ additionalLeftColumnsToInclude
+    // Filter down left to only the columns that we want to keep on the joined output for the Joinpart
+    val leftDfWithRelevantCols =
+      if (node.leftDataModel == DataModel.EVENTS && !leftDf.columns.contains(Constants.TimePartitionColumn)) {
+        leftDf.withTimeBasedColumn(Constants.TimePartitionColumn)
+      } else {
+        leftDf
+      }.select(allLeftCols.map(column): _*)
+
+    // adjust join keys
+    val joinableRightDf = if (additionalKeys.contains(Constants.TimePartitionColumn)) {
+      // increment one day to align with left side ts_ds
+      // because one day was decremented from the partition range for snapshot accuracy
+      rightDf
+        .withColumn(
+          Constants.TimePartitionColumn,
+          date_format(date_add(to_date(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format), 1),
+                      tableUtils.partitionSpec.format)
+        )
+    } else {
+      rightDf
+    }
+
+    logger.info(s"""
+                   |Join keys for ${joinPart.groupBy.metaData.name}: ${keys.mkString(", ")}
+                   |Left Schema:
+                   |${leftDfWithRelevantCols.schema.pretty}
+                   |Right Schema:
+                   |${joinableRightDf.schema.pretty}""".stripMargin)
+
+    val joinedDf = coalescedJoin(leftDfWithRelevantCols, joinableRightDf, keys)
+    logger.info(s"""Final Schema:
+                   |${joinedDf.schema.pretty}
+                   |""".stripMargin)
+
+    joinedDf
   }
 }

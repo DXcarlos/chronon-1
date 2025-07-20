@@ -64,67 +64,6 @@ abstract class JoinBase(val joinConfCloned: api.Join,
   protected val tableProps: Map[String, String] =
     confTableProps ++ Map(Constants.SemanticHashKey -> gson.toJson(joinConfCloned.semanticHash.asJava))
 
-  def joinWithLeft(leftDf: DataFrame, rightDf: DataFrame, joinPart: JoinPart): DataFrame = {
-    val partLeftKeys = joinPart.rightToLeft.values.toArray
-
-    // compute join keys, besides the groupBy keys -  like ds, ts etc.,
-    val additionalKeys: Seq[String] = {
-      if (joinConfCloned.left.dataModel == ENTITIES) {
-        Seq(tableUtils.partitionColumn)
-      } else if (joinPart.groupBy.inferredAccuracy == Accuracy.TEMPORAL) {
-        Seq(Constants.TimeColumn, tableUtils.partitionColumn)
-      } else { // left-events + snapshot => join-key = ds_of_left_ts
-        Seq(Constants.TimePartitionColumn)
-      }
-    }
-    val keys = partLeftKeys ++ additionalKeys
-
-    // apply prefix to value columns
-    val nonValueColumns = joinPart.rightToLeft.keys.toArray ++ Array(Constants.TimeColumn,
-                                                                     tableUtils.partitionColumn,
-                                                                     Constants.TimePartitionColumn)
-    val valueColumns = rightDf.schema.names.filterNot(nonValueColumns.contains)
-    val prefixedRightDf = rightDf.prefixColumnNames(joinPart.columnPrefix, valueColumns)
-
-    // apply key-renaming to key columns
-    val newColumns = prefixedRightDf.columns.map { column =>
-      if (joinPart.rightToLeft.contains(column)) {
-        col(column).as(joinPart.rightToLeft(column))
-      } else {
-        col(column)
-      }
-    }
-    val keyRenamedRightDf = prefixedRightDf.select(newColumns: _*)
-
-    // adjust join keys
-    val joinableRightDf = if (additionalKeys.contains(Constants.TimePartitionColumn)) {
-      // increment one day to align with left side ts_ds
-      // because one day was decremented from the partition range for snapshot accuracy
-      keyRenamedRightDf
-        .withColumn(
-          Constants.TimePartitionColumn,
-          date_format(date_add(to_date(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format), 1),
-                      tableUtils.partitionSpec.format)
-        )
-        .drop(tableUtils.partitionColumn)
-    } else {
-      keyRenamedRightDf
-    }
-
-    logger.info(s"""
-               |Join keys for ${joinPart.groupBy.metaData.name}: ${keys.mkString(", ")}
-               |Left Schema:
-               |${leftDf.schema.pretty}
-               |Right Schema:
-               |${joinableRightDf.schema.pretty}""".stripMargin)
-    val joinedDf = coalescedJoin(leftDf, joinableRightDf, keys)
-    logger.info(s"""Final Schema:
-               |${joinedDf.schema.pretty}
-               |""".stripMargin)
-
-    joinedDf
-  }
-
   def computeRange(leftDf: DataFrame,
                    leftRange: PartitionRange,
                    bootstrapInfo: BootstrapInfo,

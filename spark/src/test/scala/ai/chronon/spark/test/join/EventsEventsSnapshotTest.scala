@@ -37,7 +37,8 @@ class EventsEventsSnapshotTest extends BaseJoinTest {
     DataFrameGen.events(spark, viewsSchema, count = 100, partitions = 200).drop("ts").save(viewsTable)
 
     val viewsSource = Builders.Source.events(
-      query = Builders.Query(selects = Builders.Selects("time_spent_ms"), startPartition = yearAgo),
+      query =
+        Builders.Query(selects = Builders.Selects("time_spent_ms", Constants.RowIDColumn), startPartition = yearAgo),
       table = viewsTable
     )
 
@@ -68,7 +69,7 @@ class EventsEventsSnapshotTest extends BaseJoinTest {
 
     (new Analyzer(tableUtils, joinConf, monthAgo, today)).run()
     val join = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = monthAgo, tableUtils = tableUtils)
-    val computed = join.computeJoin()
+    val computed = join.computeJoin().drop(Constants.RowIDColumn)
     computed.show()
 
     val expected = tableUtils.sql(s"""

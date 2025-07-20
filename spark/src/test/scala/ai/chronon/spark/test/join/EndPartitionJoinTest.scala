@@ -17,6 +17,7 @@
 package ai.chronon.spark.test.join
 
 import ai.chronon.api.Builders
+import ai.chronon.api.Constants
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.spark._
@@ -30,8 +31,12 @@ class EndPartitionJoinTest extends BaseJoinTest {
     val start = join.getLeft.query.startPartition
     val end = tableUtils.partitionSpec.after(start)
     val limitedJoin = Builders.Join(
-      left =
-        Builders.Source.events(Builders.Query(startPartition = start, endPartition = end), table = join.getLeft.table),
+      left = Builders.Source.events(
+        Builders.Query(selects = Map("item" -> "item", Constants.RowIDColumn -> Constants.RowIDColumn),
+                       startPartition = start,
+                       endPartition = end),
+        table = join.getLeft.table
+      ),
       joinParts = join.getJoinParts.toScala,
       metaData = join.metaData
     )

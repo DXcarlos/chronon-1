@@ -19,7 +19,7 @@ import ai.chronon.api.ttypes as api
 
 
 def Query(
-    selects: Dict[str, str] = None,
+    selects: Dict[str, str],
     wheres: List[str] = None,
     start_partition: str = None,
     end_partition: str = None,

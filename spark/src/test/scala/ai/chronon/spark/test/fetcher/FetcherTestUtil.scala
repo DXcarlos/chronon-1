@@ -3,12 +3,13 @@ package ai.chronon.spark.test.fetcher
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.Builders.Derivation
-import ai.chronon.api.Constants.MetadataDataset
+import ai.chronon.api.Constants.{ContextualSourceName, MetadataDataset}
 import ai.chronon.api.Extensions.{JoinOps, MetadataOps}
 import ai.chronon.api.{
   Accuracy,
   BooleanType,
   Builders,
+  Constants,
   DoubleType,
   IntType,
   ListType,
@@ -19,8 +20,7 @@ import ai.chronon.api.{
   StructType,
   TimeUnit,
   TsUtils,
-  Window,
-  Constants
+  Window
 }
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.online._
@@ -192,7 +192,7 @@ object FetcherTestUtil {
         s"SELECT * FROM $joinTable WHERE ts >= unix_timestamp('$endDs', '${tableUtils.partitionSpec.format}')")
     }
     // Keep only left-side columns (keys, ts, ds) and drop all feature columns
-    val keys = joinConf.leftKeyCols
+    val keys = joinConf.leftKeyCols :+ Constants.RowIDColumn
     val leftSideColumns = keys ++ Array(Constants.TimeColumn, tableUtils.partitionColumn)
     val columnsToKeep = endDsEvents.schema.fieldNames.filter(leftSideColumns.contains)
     val endDsQueries = endDsEvents.select(columnsToKeep.map(col): _*)
@@ -295,11 +295,11 @@ object FetcherTestUtil {
     tableUtils.createDatabase(namespace)
     def toTs(arg: String): Long = TsUtils.datetimeToTs(arg)
     val eventData = Seq(
-      Row(595125622443733822L, toTs("2021-04-10 09:00:00"), "2021-04-10"),
-      Row(595125622443733822L, toTs("2021-04-10 23:00:00"), "2021-04-10"), // Query for added event
-      Row(595125622443733822L, toTs("2021-04-10 23:45:00"), "2021-04-10"), // Query for mutated event
-      Row(1L, toTs("2021-04-10 00:10:00"), "2021-04-10"), // query for added event
-      Row(1L, toTs("2021-04-10 03:10:00"), "2021-04-10") // query for mutated event
+      Row(595125622443733822L, toTs("2021-04-10 09:00:00"), "2021-04-10", "A"),
+      Row(595125622443733822L, toTs("2021-04-10 23:00:00"), "2021-04-10", "B"), // Query for added event
+      Row(595125622443733822L, toTs("2021-04-10 23:45:00"), "2021-04-10", "C"), // Query for mutated event
+      Row(1L, toTs("2021-04-10 00:10:00"), "2021-04-10", "D"), // query for added event
+      Row(1L, toTs("2021-04-10 03:10:00"), "2021-04-10", "E") // query for mutated event
     )
     val snapshotData = Seq(
       Row(1L, toTs("2021-04-04 00:30:00"), 4, "2021-04-08"),
@@ -350,12 +350,15 @@ object FetcherTestUtil {
     )
 
     // {..., event (generic event column), ...}
-    val eventSchema = StructType("listing_events_fetcher",
-                                 Array(
-                                   StructField("listing_id", LongType),
-                                   StructField("ts", LongType),
-                                   StructField("ds", StringType)
-                                 ))
+    val eventSchema = StructType(
+      "listing_events_fetcher",
+      Array(
+        StructField("listing_id", LongType),
+        StructField("ts", LongType),
+        StructField("ds", StringType),
+        StructField(Constants.RowIDColumn, StringType)
+      )
+    )
 
     val sourceData: Map[StructType, Seq[Row]] = Map(
       eventSchema -> eventData,
@@ -389,7 +392,7 @@ object FetcherTestUtil {
     val leftSource =
       Builders.Source.events(
         query = Builders.Query(
-          selects = Builders.Selects("listing_id", "ts"),
+          selects = Builders.Selects("listing_id", "ts", Constants.RowIDColumn),
           startPartition = startPartition
         ),
         table = s"$namespace.${eventSchema.name}"
@@ -433,8 +436,8 @@ object FetcherTestUtil {
 
     // Create manual struct data for UniqueTopK testing
     val eventData = Seq(
-      Row(1L, toTs("2021-04-10 09:00:00"), "2021-04-10"),
-      Row(2L, toTs("2021-04-10 23:00:00"), "2021-04-10")
+      Row(1L, toTs("2021-04-10 09:00:00"), "2021-04-10", "A"),
+      Row(2L, toTs("2021-04-10 23:00:00"), "2021-04-10", "B")
     )
 
     val structData = Seq(
@@ -466,7 +469,10 @@ object FetcherTestUtil {
     // Event schema
     val eventSchema = StructType(
       "listing_events_struct",
-      Array(StructField("listing_id", LongType), StructField("ts", LongType), StructField("ds", StringType))
+      Array(StructField("listing_id", LongType),
+            StructField("ts", LongType),
+            StructField("ds", StringType),
+            StructField(Constants.RowIDColumn, StringType))
     )
 
     // Struct snapshot schema
@@ -532,7 +538,7 @@ object FetcherTestUtil {
 
     val leftSource = Builders.Source.events(
       query = Builders.Query(
-        selects = Builders.Selects("listing_id", "ts"),
+        selects = Builders.Selects("listing_id", "ts", Constants.RowIDColumn),
         startPartition = "2021-04-01"
       ),
       table = s"$namespace.${eventSchema.name}"
@@ -734,7 +740,19 @@ object FetcherTestUtil {
 
     val joinConf = Builders
       .Join(
-        left = Builders.Source.events(Builders.Query(startPartition = today), table = queriesTable),
+        left = Builders.Source.events(
+          Builders.Query(
+            startPartition = today,
+            selects = Builders.Selects.exprs(
+              "user_id" -> "user_id",
+              "vendor_id" -> "vendor_id",
+              "ts" -> "ts",
+              "ds" -> "ds",
+              Constants.RowIDColumn -> Constants.RowIDColumn
+            )
+          ),
+          table = queriesTable
+        ),
         joinParts = Seq(
           Builders
             .JoinPart(groupBy = vendorRatingsGroupBy, keyMapping = Map("vendor_id" -> "vendor"))
@@ -773,8 +791,8 @@ object FetcherTestUtil {
     def toTs(arg: String): Long = TsUtils.datetimeToTs(arg)
 
     val listingEventData = Seq(
-      Row(1L, toTs("2021-04-10 03:10:00"), "2021-04-10"),
-      Row(2L, toTs("2021-04-10 03:10:00"), "2021-04-10")
+      Row(1L, toTs("2021-04-10 03:10:00"), "2021-04-10", "A"),
+      Row(2L, toTs("2021-04-10 03:10:00"), "2021-04-10", "B")
     )
     val ratingEventData = Seq(
       // 1L listing id event data
@@ -799,12 +817,15 @@ object FetcherTestUtil {
     )
     // Schemas
     // {..., event (generic event column), ...}
-    val listingsSchema = StructType("listing_events_fetcher",
-                                    Array(
-                                      StructField("listing_id", LongType),
-                                      StructField("ts", LongType),
-                                      StructField("ds", StringType)
-                                    ))
+    val listingsSchema = StructType(
+      "listing_events_fetcher",
+      Array(
+        StructField("listing_id", LongType),
+        StructField("ts", LongType),
+        StructField("ds", StringType),
+        StructField(Constants.RowIDColumn, StringType)
+      )
+    )
 
     val ratingsSchema = StructType(
       "listing_ratings_fetcher",
@@ -835,7 +856,7 @@ object FetcherTestUtil {
     val leftSource =
       Builders.Source.events(
         query = Builders.Query(
-          selects = Builders.Selects("listing_id", "ts"),
+          selects = Builders.Selects("listing_id", "ts", Constants.RowIDColumn),
           startPartition = startPartition
         ),
         table = s"$namespace.${listingsSchema.name}"

@@ -18,7 +18,7 @@ package ai.chronon.spark.test.join
 
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
-import ai.chronon.api.{Builders, Operation, TimeUnit, Window}
+import ai.chronon.api.{Builders, Constants, Operation, TimeUnit, Window}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.test.DataFrameGen
 import org.junit.Assert._
@@ -56,7 +56,11 @@ class NoHistoricalBackfillTest extends BaseJoinTest {
     val start = tableUtils.partitionSpec.minus(today, new Window(30, TimeUnit.DAYS))
     val end = tableUtils.partitionSpec.minus(today, new Window(5, TimeUnit.DAYS))
     val joinConf = Builders.Join(
-      left = Builders.Source.entities(Builders.Query(startPartition = start), snapshotTable = countryTable),
+      left = Builders.Source.entities(
+        Builders.Query(selects = Map("country" -> "country", Constants.RowIDColumn -> Constants.RowIDColumn),
+                       startPartition = start),
+        snapshotTable = countryTable
+      ),
       joinParts = Seq(Builders.JoinPart(groupBy = weightGroupBy)),
       metaData = Builders.MetaData(name = "test.country_no_historical_backfill",
                                    namespace = namespace,
@@ -65,7 +69,7 @@ class NoHistoricalBackfillTest extends BaseJoinTest {
     )
 
     val runner = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = end, tableUtils = tableUtils)
-    val computed = runner.computeJoin(Some(7))
+    val computed = runner.computeJoin(Some(7)).drop(Constants.RowIDColumn)
     println("showing join result")
     computed.show()
 

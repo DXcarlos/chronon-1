@@ -27,7 +27,7 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import java.time.Instant
 import scala.collection.Seq
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /** Result of analyzing join parts for reuse from production table.
   *
@@ -57,7 +57,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
 
   // Processing metadata columns that get dropped in final output
   private val processingColumns = Set(Constants.MatchedHashes, Constants.TimePartitionColumn)
-  private val hashExclusionColumn: Set[String] = processingColumns ++ Set(tableUtils.partitionColumn)
+  private val hashExclusionColumns: Set[String] = processingColumns ++ Set(tableUtils.partitionColumn)
 
   private val archiveReuseTableSuffix = "_archive_reuse"
   private val colHashTablePropsKey = "column_hashes"
@@ -79,7 +79,6 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
   val archiveReuseTable = outputTable + archiveReuseTableSuffix
 
   def run(): Unit = {
-
     // Always check to see if we need to archive the current output table
     // Occurs when columns are changed/removed/added
     // Computed based on column level semantic hashing that occurs at compile time
@@ -87,55 +86,56 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
 
     // This job benefits from a step day of 1 to avoid needing to shuffle on writing output (single partition)
     dateRange.steps(days = 1).foreach { dayStep =>
-      // Scan left input table once to get schema and potentially reuse
-      val leftInputDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(dayStep))
-
-      // Check if we can reuse columns from production table
-      val reuseAnalysis = analyzeJoinPartsForReuse(dayStep, leftInputDf)
-
-      // Get left DataFrame with potentially reused columns from production
-      val leftDf = if (reuseAnalysis.reuseTable.isDefined) {
-        logger.info(s"Reusing ${reuseAnalysis.columnsToReuse.length} columns (${reuseAnalysis.columnsToReuse
-          .mkString(", ")}) from table: ${reuseAnalysis.reuseTable.get}")
-
-        // Select left columns + reused columns from production table
-        val leftColumns = leftInputDf.schema.fieldNames.filterNot(processingColumns.contains)
-        val columnsToSelect = leftColumns ++ reuseAnalysis.columnsToReuse
-        val productionDf = tableUtils.scanDf(query = null, table = reuseAnalysis.reuseTable.get, range = Some(dayStep))
-
-        val selectedDf = productionDf.select(columnsToSelect.map(col): _*)
-
-        // Add back ts_ds column if this is an EVENTS source and the column is missing
-        if (join.left.dataModel == DataModel.EVENTS && !selectedDf.columns.contains(Constants.TimePartitionColumn)) {
-          selectedDf.withTimeBasedColumn(Constants.TimePartitionColumn)
-        } else {
-          selectedDf
-        }
-      } else {
-        leftInputDf
-      }
-
-      // Get right parts data only for join parts that need to be computed
-      val rightPartsData = getRightPartsData(dayStep, reuseAnalysis.joinPartsToCompute)
-
-      val joinedDfTry =
-        try {
-          Success(
-            rightPartsData
-              .foldLeft(leftDf) { case (partialDf, (rightPart, rightDf)) =>
-                joinWithLeft(partialDf, rightDf, rightPart)
-              }
-              // drop all processing metadata columns
-              .drop(Constants.MatchedHashes, Constants.TimePartitionColumn))
-        } catch {
-          case e: Exception =>
-            e.printStackTrace()
-            Failure(e)
-        }
-
+      val joinedDfTry = runDayStep(dayStep)
       val tableProps = createTableProperties
+      joinedDfTry.get.save(outputTable, tableProperties = tableProps, autoExpand = true, bucketByRowId = true)
+    }
+  }
 
-      joinedDfTry.get.save(outputTable, tableProps, autoExpand = true)
+  def runDayStep(dayStep: PartitionRange): Try[DataFrame] = {
+    // Scan left input table once to get schema and potentially reuse
+    val leftInputDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(dayStep))
+
+    // Check if we can reuse columns from production table
+    val reuseAnalysis = analyzeJoinPartsForReuse(dayStep, leftInputDf)
+
+    // Get left DataFrame with potentially reused columns from production
+    val leftDf = if (reuseAnalysis.reuseTable.isDefined) {
+      logger.info(s"Reusing ${reuseAnalysis.columnsToReuse.length} columns (${reuseAnalysis.columnsToReuse
+        .mkString(", ")}) from table: ${reuseAnalysis.reuseTable.get}")
+
+      // Select left columns + reused columns from production table
+      val leftColumns = leftInputDf.schema.fieldNames.filterNot(processingColumns.contains)
+      val columnsToSelect = leftColumns ++ reuseAnalysis.columnsToReuse
+      val productionDf = tableUtils.scanDf(query = null, table = reuseAnalysis.reuseTable.get, range = Some(dayStep))
+
+      val selectedDf = productionDf.select(columnsToSelect.map(col): _*)
+
+      // Add back ts_ds column if this is an EVENTS source and the column is missing
+      if (join.left.dataModel == DataModel.EVENTS && !selectedDf.columns.contains(Constants.TimePartitionColumn)) {
+        selectedDf.withTimeBasedColumn(Constants.TimePartitionColumn)
+      } else {
+        selectedDf
+      }
+    } else {
+      leftInputDf
+    }
+
+    // Get right parts data only for join parts that need to be computed
+    val rightPartsData = getRightPartsData(dayStep, reuseAnalysis.joinPartsToCompute)
+
+    try {
+      Success(
+        rightPartsData
+          .foldLeft(leftDf) { case (partialDf, (rightPart, rightDf)) =>
+            JoinUtils.joinWithLeft(partialDf, rightDf, rightPart, tableUtils)
+          }
+          // drop all processing metadata columns
+          .drop(Constants.MatchedHashes, Constants.TimePartitionColumn))
+    } catch {
+      case e: Exception =>
+        e.printStackTrace()
+        Failure(e)
     }
   }
 
@@ -158,79 +158,11 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     joinPartsToProcess.map { joinPart =>
       // Use the RelevantLeftForJoinPart utility to get the part table name
       val partTable = RelevantLeftForJoinPart.fullPartTableName(join, joinPart)
-      val effectiveRange =
-        if (join.left.dataModel == DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
-          dayStep.shift(-1)
-        } else {
-          dayStep
-        }
-      val wheres = effectiveRange.whereClauses
+      val wheres = dayStep.whereClauses
       val sql = QueryUtils.build(null, partTable, wheres)
       logger.info(s"Pulling data from joinPart table with: $sql")
       (joinPart, tableUtils.scanDfBase(null, partTable, List.empty, wheres, None))
     }.toSeq
-  }
-
-  def joinWithLeft(leftDf: DataFrame, rightDf: DataFrame, joinPart: JoinPart): DataFrame = {
-    val partLeftKeys = joinPart.rightToLeft.values.toArray
-
-    // compute join keys, besides the groupBy keys -  like ds, ts etc.,
-    val additionalKeys: Seq[String] = {
-      if (join.left.dataModel == ENTITIES) {
-        Seq(tableUtils.partitionColumn)
-      } else if (joinPart.groupBy.inferredAccuracy == Accuracy.TEMPORAL) {
-        Seq(Constants.TimeColumn, tableUtils.partitionColumn)
-      } else { // left-events + snapshot => join-key = ds_of_left_ts
-        Seq(Constants.TimePartitionColumn)
-      }
-    }
-    val keys = partLeftKeys ++ additionalKeys
-
-    // apply prefix to value columns
-    val nonValueColumns = joinPart.rightToLeft.keys.toArray ++ Array(Constants.TimeColumn,
-                                                                     tableUtils.partitionColumn,
-                                                                     Constants.TimePartitionColumn)
-    val valueColumns = rightDf.schema.names.filterNot(nonValueColumns.contains)
-    val prefixedRightDf = rightDf.prefixColumnNames(joinPart.columnPrefix, valueColumns)
-
-    // apply key-renaming to key columns
-    val newColumns = prefixedRightDf.columns.map { column =>
-      if (joinPart.rightToLeft.contains(column)) {
-        col(column).as(joinPart.rightToLeft(column))
-      } else {
-        col(column)
-      }
-    }
-
-    val keyRenamedRightDf = prefixedRightDf.select(newColumns: _*)
-
-    // adjust join keys
-    val joinableRightDf = if (additionalKeys.contains(Constants.TimePartitionColumn)) {
-      // increment one day to align with left side ts_ds
-      // because one day was decremented from the partition range for snapshot accuracy
-      keyRenamedRightDf
-        .withColumn(
-          Constants.TimePartitionColumn,
-          date_format(date_add(to_date(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format), 1),
-                      tableUtils.partitionSpec.format)
-        )
-        .drop(tableUtils.partitionColumn)
-    } else {
-      keyRenamedRightDf
-    }
-
-    logger.info(s"""
-                   |Join keys for ${joinPart.groupBy.metaData.name}: ${keys.mkString(", ")}
-                   |Left Schema:
-                   |${leftDf.schema.pretty}
-                   |Right Schema:
-                   |${joinableRightDf.schema.pretty}""".stripMargin)
-    val joinedDf = coalescedJoin(leftDf, joinableRightDf, keys)
-    logger.info(s"""Final Schema:
-                   |${joinedDf.schema.pretty}
-                   |""".stripMargin)
-
-    joinedDf
   }
 
   /** Check for columns that have mismatched semantic hashes between two hash maps
@@ -355,12 +287,12 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
 
     // Check if left schemas are compatible using the production columns we just got
     // Also check semantic hashes to ensure left columns have matching semantics
-    val currentLeftColumns = currentLeftDf.schema.fieldNames.toSet -- hashExclusionColumn
+    val currentLeftColumns = currentLeftDf.schema.fieldNames.toSet -- hashExclusionColumns
     val leftSchemaMismatches = findMismatchedHashes(currentLeftColumns, reuseTableColHashes, currentColumnHashes)
     if (leftSchemaMismatches.nonEmpty) {
       logger.info(
-        s"Left columns have mismatched semantic hashes, cannot reuse from production table. Mismatched columns: ${leftSchemaMismatches
-          .mkString(", ")}")
+        s"Left columns have mismatched semantic hashes, cannot reuse from production table. Mismatched columns from $currentLeftColumns: ${leftSchemaMismatches
+          .mkString(", ")} - $reuseTableColHashes (reuse table) vs $currentColumnHashes (current)")
       return JoinPartReuseAnalysis(None, Seq.empty, joinParts)
     }
 
@@ -379,7 +311,8 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       logger.info(s"Join part $joinPartGroupByName schema: ${partSchema.pretty}")
       val partKeyColumns = joinPart.rightToLeft.keys.toSet ++ Set(Constants.TimeColumn,
                                                                   tableUtils.partitionColumn,
-                                                                  Constants.TimePartitionColumn)
+                                                                  Constants.TimePartitionColumn,
+                                                                  Constants.RowIDColumn)
       val partValueColumns =
         partSchema.fieldNames.filterNot(partKeyColumns.contains).map(joinPart.columnPrefix + _)
 
@@ -414,4 +347,5 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       JoinPartReuseAnalysis(Option(reuseTable), columnsToReuse.toSeq, joinPartsToRejoin.toSeq)
     }
   }
+
 }

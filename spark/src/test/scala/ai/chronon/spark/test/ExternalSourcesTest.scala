@@ -132,7 +132,8 @@ class ExternalSourcesTest extends AnyFlatSpec {
         "number",
         "str",
         "context_1",
-        "context_2"
+        "context_2",
+        Constants.RowIDColumn
       ),
       schema.keyFields.fields.map(_.name).toSet
     )

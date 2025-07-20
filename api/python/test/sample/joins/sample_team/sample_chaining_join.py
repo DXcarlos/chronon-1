@@ -23,7 +23,6 @@ from ai.chronon.types import Join, JoinPart
 
 v1 = Join(
     left=test_sources.event_source,
-    row_ids=["subject", "event"],
     right_parts=[
         JoinPart(
             group_by=chaining_group_by_v1,

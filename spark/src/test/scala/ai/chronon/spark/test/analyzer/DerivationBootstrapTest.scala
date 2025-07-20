@@ -138,7 +138,7 @@ class DerivationBootstrapTest extends AnyFlatSpec {
     )
 
     val runner = new ai.chronon.spark.Join(baseJoin, today, tableUtils)
-    val outputDf = runner.computeJoin()
+    val outputDf = runner.computeJoin().drop(tableUtils.internalRowIdColumnName)
 
     assertTrue(
       outputDf.columns.toSet == Set(
@@ -248,7 +248,7 @@ class DerivationBootstrapTest extends AnyFlatSpec {
       )
 
     val runner2 = new ai.chronon.spark.Join(bootstrapJoin, today, tableUtils)
-    val computed = runner2.computeJoin()
+    val computed = runner2.computeJoin().drop(tableUtils.internalRowIdColumnName)
 
     // Comparison
     val expected = outputDf
@@ -352,7 +352,7 @@ class DerivationBootstrapTest extends AnyFlatSpec {
     )
 
     val runner = new ai.chronon.spark.Join(joinConf, today, tableUtils)
-    val outputDf = runner.computeJoin()
+    val outputDf = runner.computeJoin().drop(tableUtils.internalRowIdColumnName)
 
     // assert that no computation happened for join part since all derivations have been bootstrapped
     assertFalse(tableUtils.tableReachable(joinConf.partOutputTable(joinPart)))

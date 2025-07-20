@@ -29,7 +29,8 @@ source = Source(
         table="data.checkouts",
         query=Query(
             selects=selects(
-                "user_id"
+                user_id="user_id",
+                row_id="request_UUID",
             ),  # The primary key used to join various GroupBys together
             time_column="ts",
         ),  # The event time used to compute feature values as-of
@@ -38,7 +39,6 @@ source = Source(
 
 v1 = Join(
     left=source,
-    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=group_by) for group_by in [purchases_v1, returns_v1, users]
     ],  # Include the three GroupBys
@@ -47,7 +47,6 @@ v1 = Join(
 
 v2 = Join(
     left=source,
-    row_ids=["user_id"],
     right_parts=[
         JoinPart(group_by=group_by) for group_by in [purchases_v1, returns_v1]
     ],  # Include the two online GroupBys

@@ -19,6 +19,7 @@ package ai.chronon.spark.test.bootstrap
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
+import ai.chronon.api.Constants
 import ai.chronon.online.fetcher.Fetcher.Request
 import ai.chronon.spark.Comparison
 import ai.chronon.spark.Extensions._
@@ -173,7 +174,7 @@ class LogBootstrapTest extends AnyFlatSpec {
       )
 
     val joinJob = new ai.chronon.spark.Join(joinV2, endDs, tableUtils)
-    val computed = joinJob.computeJoin()
+    val computed = joinJob.computeJoin().drop(Constants.RowIDColumn)
 
     val overlapCount = baseOutput.join(logDf, Seq("request_id", "ds")).count()
     logger.info(s"""Debugging information:

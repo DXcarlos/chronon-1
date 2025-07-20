@@ -19,7 +19,7 @@ package ai.chronon.spark.test.join
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.planner.RelevantLeftForJoinPart
-import ai.chronon.api.{Accuracy, Builders, Operation}
+import ai.chronon.api.{Accuracy, Builders, Constants, Operation}
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.test.DataFrameGen
@@ -44,7 +44,8 @@ class SelectedJoinPartsTest extends BaseJoinTest {
     spark.sql(s"DROP TABLE IF EXISTS $itemQueriesTable")
     spark.sql(s"DROP TABLE IF EXISTS ${itemQueriesTable}_tmp")
     DataFrameGen.events(spark, itemQueries, 100, partitions = 30).save(s"${itemQueriesTable}_tmp")
-    val leftDf = tableUtils.sql(s"SELECT item, value, ts, ds FROM ${itemQueriesTable}_tmp")
+    val leftDf =
+      tableUtils.sql(s"SELECT item, value, ts, ds, ${tableUtils.internalRowIdColumnName} FROM ${itemQueriesTable}_tmp")
     leftDf.save(itemQueriesTable)
     val start = monthAgo
 
@@ -63,7 +64,8 @@ class SelectedJoinPartsTest extends BaseJoinTest {
       sources = Seq(
         Builders.Source.events(
           table = viewsTable,
-          query = Builders.Query(startPartition = start)
+          query =
+            Builders.Query(selects = Builders.Selects("user", "value", Constants.RowIDColumn), startPartition = start)
         )),
       keyColumns = Seq("item"),
       aggregations = Seq(
@@ -80,7 +82,8 @@ class SelectedJoinPartsTest extends BaseJoinTest {
       sources = Seq(
         Builders.Source.events(
           table = viewsTable,
-          query = Builders.Query(startPartition = start)
+          query =
+            Builders.Query(selects = Builders.Selects("user", "value", Constants.RowIDColumn), startPartition = start)
         )),
       keyColumns = Seq("item"),
       aggregations = Seq(
@@ -96,7 +99,8 @@ class SelectedJoinPartsTest extends BaseJoinTest {
       sources = Seq(
         Builders.Source.events(
           table = viewsTable,
-          query = Builders.Query(startPartition = start)
+          query =
+            Builders.Query(selects = Builders.Selects("user", "value", Constants.RowIDColumn), startPartition = start)
         )),
       keyColumns = Seq("item"),
       aggregations = Seq(

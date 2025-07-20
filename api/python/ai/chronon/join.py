@@ -356,7 +356,7 @@ def Join(
     left: api.Source,
     right_parts: List[api.JoinPart],
     version: int,
-    row_ids: Union[str, List[str]],
+    row_ids: Union[str, List[str]] = None,
     online_external_parts: List[api.ExternalPart] = None,
     bootstrap_parts: List[api.BootstrapPart] = None,
     bootstrap_from_log: bool = False,
@@ -478,7 +478,10 @@ def Join(
     # create a deep copy for case: multiple LeftOuterJoin use the same left,
     # validation will fail after the first iteration
     updated_left = copy.deepcopy(left)
-    if left.events and left.events.query.selects:
+
+    selects = None
+    if left.events:
+        selects = left.events.query.selects
         assert "ts" not in left.events.query.selects.keys(), (
             "'ts' is a reserved key word for Chronon,"
             " please specify the expression in timeColumn"
@@ -487,6 +490,13 @@ def Join(
         updated_left.events.query.selects.update(
             {"ts": updated_left.events.query.timeColumn}
         )
+    elif left.entities:
+        selects = left.entities.query.selects
+
+    if selects:
+        # For JoinSource, we can rely on the validation at the base join level
+        # TODO add more docs about row ID and link here
+        assert "row_id" in selects, "Left side of the join must contain `row_id` as a column."
 
     if label_part:
         label_metadata = api.MetaData(

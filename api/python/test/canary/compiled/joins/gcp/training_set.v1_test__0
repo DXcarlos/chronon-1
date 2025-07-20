@@ -16,6 +16,7 @@
       "user_id_purchase_price_average_7d": "e3351cc3265d17cfd1b99f8da7fb083d",
       "user_id_purchase_price_last10": "e3351cc3265d17cfd1b99f8da7fb083d",
       "user_id": "a673c80ffc3260ee5ca173869ba07f7c",
+      "row_id": "cd335c9bb6f12c6e71b482b33109e07c",
       "ts": "a173b2adccfe3c386f262c4cd7ffe9bd"
     },
     "online": 0,
@@ -142,6 +143,7 @@
       "query": {
         "selects": {
           "user_id": "user_id",
+          "row_id": "request_UUID",
           "ts": "ts"
         },
         "startPartition": "2023-11-01",
@@ -264,9 +266,6 @@
       },
       "useLongNames": 0
     }
-  ],
-  "rowIds": [
-    "user_id"
   ],
   "useLongNames": 0
 }

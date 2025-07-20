@@ -20,6 +20,7 @@ import ai.chronon
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
+import ai.chronon.api.Constants
 import ai.chronon.online.OnlineDerivationUtil.timeFields
 import ai.chronon.online.{fetcher, _}
 import ai.chronon.spark.Extensions._
@@ -49,6 +50,7 @@ class ConsistencyJob(session: SparkSession, joinConf: Join, endDate: String) ext
     val mapping = joinConf.leftKeyCols.map(k => k -> k)
     val selects = new util.HashMap[String, String]()
     mapping.foreach { case (key, value) => selects.put(key, value) }
+    selects.put(Constants.RowIDColumn, Constants.RowIDColumn)
     query.setSelects(selects)
     query.setTimeColumn(Constants.TimeColumn)
     query.setStartPartition(joinConf.left.query.startPartition)

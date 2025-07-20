@@ -170,16 +170,12 @@ object CompareJob {
   }
 
   def getJoinKeys(joinConf: api.Join, tableUtils: TableUtils): Array[String] = {
-    if (joinConf.isSetRowIds) {
-      joinConf.rowIds.toScala.toArray
+    val leftPartitionCol = joinConf.left.query.partitionSpec(tableUtils.partitionSpec).column
+    val keyCols = Array(Constants.RowIDColumn, leftPartitionCol)
+    if (joinConf.left.dataModel == EVENTS) {
+      keyCols ++ Seq(Constants.TimeColumn)
     } else {
-      val leftPartitionCol = joinConf.left.query.partitionSpec(tableUtils.partitionSpec).column
-      val keyCols = joinConf.leftKeyCols :+ leftPartitionCol
-      if (joinConf.left.dataModel == EVENTS) {
-        keyCols ++ Seq(Constants.TimeColumn)
-      } else {
-        keyCols
-      }
+      keyCols
     }
   }
 }

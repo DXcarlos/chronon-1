@@ -26,6 +26,7 @@ def basic_event_source(table):
             selects=selects(
                 event="event_expr",
                 group_by_subject="group_by_expr",
+                row_id="row_id_expr",
             ),
             start_partition="2021-04-09",
             time_column="ts",
@@ -41,6 +42,7 @@ event_source = EventSource(
             event="event_expr",
             group_by_subject="group_by_expr",
             subject="subject",
+            row_id="row_id_expr",
         ),
         start_partition="2021-04-09",
         time_column="ts",
@@ -59,6 +61,7 @@ entity_source = EntitySource(
         selects=selects(
             group_by_subject="group_by_subject_expr",
             entity="entity_expr",
+            row_id="row_id_expr",
         ),
         time_column="ts",
     ),
@@ -72,6 +75,7 @@ batch_entity_source = EntitySource(
         selects=selects(
             group_by_subject="group_by_subject_expr",
             entity="entity_expr",
+            row_id="row_id_expr",
         ),
         time_column="ts",
     ),
@@ -83,6 +87,7 @@ sq_v1_selects = selects(
         "viewed_unique_count_1d": "viewed_unique_count_1d",
         "s2CellId": "s2CellId",
         "place_id": "place_id",
+        "row_id": "row_id_expr",
     }
 )
 
@@ -108,6 +113,7 @@ events_until_20210409 = EventSource(
             **{
                 "group_by_subject": "group_by_subject_expr_old_version",
                 "event": "event_expr_old_version",
+                "row_id": "row_id_expr",
             }
         ),
         time_column="UNIX_TIMESTAMP(ts) * 1000",
@@ -124,6 +130,7 @@ events_after_20210409 = EventSource(
             **{
                 "group_by_subject": "possibly_different_group_by_subject_expr",
                 "event": "possibly_different_event_expr",
+                "row_id": "possibly_different_row_id_expr",
             }
         ),
         time_column="__timestamp",

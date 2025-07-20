@@ -132,6 +132,7 @@ test_deps = _SCALA_TEST_DEPS + [
     maven_artifact("org.apache.hive:hive-exec"),
     maven_artifact("org.apache.hadoop:hadoop-common"),
     maven_artifact("org.apache.hadoop:hadoop-client-api"),
+    maven_artifact_with_suffix("org.apache.iceberg:iceberg-spark-runtime-3.5"),
 ]
 
 scala_library(

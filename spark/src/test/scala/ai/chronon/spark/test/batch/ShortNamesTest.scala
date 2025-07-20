@@ -342,6 +342,7 @@ class ShortNamesTest extends AnyFlatSpec {
         "user",
         "ts",
         "user_name",
+        Constants.RowIDColumn,
         "ts_ds",
         "matched_hashes",
         "user_amount_dollars_sum_10d",

@@ -29,7 +29,7 @@ class UnionJoinTest extends BaseJoinTest {
     val viewsSource = Builders.Source.events(
       table = viewsTable,
       topic = "",
-      query = Builders.Query(selects = Builders.Selects("time_spent_ms"),
+      query = Builders.Query(selects = Builders.Selects("time_spent_ms", Constants.RowIDColumn),
                              startPartition = tableUtils.partitionSpec.minus(today, new Window(20, TimeUnit.DAYS)))
     )
 
@@ -99,7 +99,7 @@ class UnionJoinTest extends BaseJoinTest {
     val eventsSource = Builders.Source.events(
       table = eventsTable,
       query = Builders.Query(
-        selects = Builders.Selects("amount", "category"),
+        selects = Builders.Selects("amount", "category", Constants.RowIDColumn),
         startPartition = tableUtils.partitionSpec.minus(today, new Window(40, TimeUnit.DAYS)) // Increased window
       )
     )
@@ -215,7 +215,7 @@ class UnionJoinTest extends BaseJoinTest {
     val eventsSource = Builders.Source.events(
       table = eventsTable,
       query = Builders.Query(
-        selects = Builders.Selects("amount", "category"),
+        selects = Builders.Selects("amount", "category", Constants.RowIDColumn),
         startPartition = tableUtils.partitionSpec.minus(today, new Window(40, TimeUnit.DAYS)) // Increased window
       )
     )
@@ -250,10 +250,15 @@ class UnionJoinTest extends BaseJoinTest {
     // Join with derivations
     val joinWithSingleJP = Builders.Join(
       left = Builders.Source.events(
-        Builders.Query(selects =
-                         Builders.Selects("user_id", "item_id", "amount", "category"), // Select all left cols here
+        Builders.Query(selects = Builders.Selects("user_id",
+                                                  "item_id",
+                                                  "amount",
+                                                  "category",
+                                                  Constants.RowIDColumn
+                       ), // Select all left cols here
                        startPartition = start),
-        table = eventsTable),
+        table = eventsTable
+      ),
       joinParts = Seq(Builders.JoinPart(groupBy = groupByWithDerivations)),
       metaData =
         Builders.MetaData(name = "test.user_features_derived.union_join", namespace = namespace, team = "user_team")

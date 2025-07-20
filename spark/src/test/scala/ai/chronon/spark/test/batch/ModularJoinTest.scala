@@ -18,11 +18,21 @@ class ModularJoinTest extends AnyFlatSpec {
 
   import ai.chronon.spark.submission
 
-  val spark: SparkSession = submission.SparkSessionBuilder.build("ModularJoinTest", local = true)
+  val spark: SparkSession = submission.SparkSessionBuilder.build(
+    "ModularJoinTest",
+    hiveSupport = false,
+    local = true,
+    additionalConfig = Some(
+      Map(
+        "spark.sql.sources.bucketing.enabled" -> "true",
+        "spark.sql.bucketing.coalesceBucketsInJoin.enabled" -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1" // Disable broadcast joins to force bucketed joins
+      ))
+  )
   private implicit val tableUtils: TableTestUtils = TableTestUtils(spark)
 
   private val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
-  val start = tableUtils.partitionSpec.minus(today, new Window(60, TimeUnit.DAYS))
+  val start = tableUtils.partitionSpec.minus(today, new Window(35, TimeUnit.DAYS))
   private val monthAgo = tableUtils.partitionSpec.minus(today, new Window(30, TimeUnit.DAYS))
   private val yearAgo = tableUtils.partitionSpec.minus(today, new Window(365, TimeUnit.DAYS))
   private val dayAndMonthBefore = tableUtils.partitionSpec.before(monthAgo)
@@ -116,7 +126,7 @@ class ModularJoinTest extends AnyFlatSpec {
 
     val queryTable = s"$namespace.queries"
     DataFrameGen
-      .events(spark, queriesSchema, 4000, partitions = 100, partitionColumn = Some("date"))
+      .events(spark, queriesSchema, 4000, partitions = 100, partitionColumn = Some("date"), addRowID = true)
       .save(queryTable, partitionColumns = Seq("date"))
 
     // Make bootstrap part and table
@@ -148,7 +158,7 @@ class ModularJoinTest extends AnyFlatSpec {
       query = Builders.Query(
         selects = Builders.Selects("user", "ts", "unit_test_user_transactions_amount_dollars_sum_10d"),
         startPartition = start,
-        endPartition = today
+        endPartition = monthAgo
       ),
       table = s"$namespace.bootstrap",
       keyColumns = Seq("user", "ts")
@@ -210,12 +220,13 @@ class ModularJoinTest extends AnyFlatSpec {
 
     val sourceJobRange = new DateRange()
       .setStartDate(start)
-      .setEndDate(today)
+      .setEndDate(monthAgo)
 
     val sourceRunner = new SourceJob(leftSourceWithFilter, sourceMetaData, sourceJobRange)
     sourceRunner.run()
     tableUtils.sql(s"SELECT * FROM $sourceOutputTable").show()
-    val sourceExpected = spark.sql(s"SELECT *, date as ds FROM $queryTable WHERE date >= '$start' AND date <= '$today'")
+    val sourceExpected =
+      spark.sql(s"SELECT *, date as ds FROM $queryTable WHERE date >= '$start' AND date <= '$monthAgo'")
     val sourceComputed = tableUtils.sql(s"SELECT * FROM $sourceOutputTable").drop("ts_ds")
     val diff = Comparison.sideBySide(sourceComputed, sourceExpected, List("user_name", "user", "ts"))
     if (diff.count() > 0) {
@@ -231,7 +242,7 @@ class ModularJoinTest extends AnyFlatSpec {
     val bootstrapOutputTable = joinConf.metaData.bootstrapTable
     val bootstrapJobRange = new DateRange()
       .setStartDate(start)
-      .setEndDate(today)
+      .setEndDate(monthAgo)
 
     // Split bootstrap output table
     val bootstrapParts = bootstrapOutputTable.split("\\.", 2)
@@ -257,6 +268,7 @@ class ModularJoinTest extends AnyFlatSpec {
         "user",
         "ts",
         "user_name",
+        Constants.RowIDColumn,
         "ts_ds",
         "matched_hashes",
         "unit_test_user_transactions_amount_dollars_sum_10d",
@@ -275,7 +287,7 @@ class ModularJoinTest extends AnyFlatSpec {
 
     val joinPartJobRange = new DateRange()
       .setStartDate(start)
-      .setEndDate(today)
+      .setEndDate(monthAgo)
 
     // Create metadata with name and namespace directly
     val metaData = new api.MetaData()
@@ -314,7 +326,7 @@ class ModularJoinTest extends AnyFlatSpec {
 
     val mergeJobRange = new DateRange()
       .setStartDate(start)
-      .setEndDate(today)
+      .setEndDate(monthAgo)
 
     // Create metadata for merge job
     val mergeMetaData = new api.MetaData()
@@ -333,7 +345,7 @@ class ModularJoinTest extends AnyFlatSpec {
 
     val derivationRange = new DateRange()
       .setStartDate(start)
-      .setEndDate(today)
+      .setEndDate(monthAgo)
 
     // Split derivation output table
     val derivationParts = derivationOutputTable.split("\\.", 2)
@@ -365,7 +377,7 @@ class ModularJoinTest extends AnyFlatSpec {
                 |         AND ts IS NOT NULL
                 |         AND date IS NOT NULL
                 |         AND date >= '$start'
-                |         AND date <= '$today')
+                |         AND date <= '$monthAgo')
                 |  SELECT
                 |    queries.user,
                 |    queries.ts,

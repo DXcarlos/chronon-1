@@ -4,6 +4,7 @@ import ai.chronon.aggregator.test.Column
 import ai.chronon.api.Extensions._
 import ai.chronon.api._
 import ai.chronon.api.planner.RelevantLeftForJoinPart
+
 import scala.collection.JavaConverters._
 import com.google.gson.Gson
 import ai.chronon.planner.{JoinMergeNode, JoinPartNode, SourceWithFilterNode}
@@ -22,6 +23,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
   import ai.chronon.spark.submission
 
   val spark: SparkSession = submission.SparkSessionBuilder.build("MergeJobVersioningTest", local = true)
+  import spark.implicits._
   private implicit val tableUtils: TableTestUtils = TableTestUtils(spark)
 
   private val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
@@ -137,6 +139,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
       "user" -> "hash_user",
       "item" -> "hash_item",
       "ts" -> "hash_ts",
+      Constants.RowIDColumn -> Constants.RowIDColumn,
       "shared_user_price_sum" -> "hash_shared_user_price_sum",
       "removed_user_quantity_count" -> "hash_removed_user_quantity_count"
     )
@@ -157,6 +160,9 @@ class MergeJobVersioningTest extends AnyFlatSpec {
     val v0SourceRunner = new SourceJob(v0LeftSourceWithFilter, v0SourceMetaData, dateRange)
     v0SourceRunner.run()
 
+    val v0SourceRowIDs: Set[String] =
+      tableUtils.scanDf(null, v0SourceOutputTable, None).select(col(Constants.RowIDColumn)).as[String].collect().toSet
+
     // 1b. Run join part jobs for v0 (shared and removed)
     for (joinPart <- Seq(sharedJoinPart, removedJoinPart)) {
       val partTableName = RelevantLeftForJoinPart.partTableName(joinV0, joinPart)
@@ -170,7 +176,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
         .setJoinPart(joinPart)
 
       val joinPartJob = new JoinPartJob(joinPartNode, partMetaData, dateRange)
-      joinPartJob.run()
+      val result = joinPartJob.run()
     }
 
     // 1c. Run merge job for v0
@@ -185,11 +191,8 @@ class MergeJobVersioningTest extends AnyFlatSpec {
     v0MergeJob.run()
 
     // Step 2: Manually modify production table with literal values, maintaining partitioning
-    val productionTable = joinV0.metaData.outputTable
-    val existingProductionData = tableUtils.scanDf(null, productionTable, None)
-
-    existingProductionData.show()
-    print(existingProductionData.schema.pretty)
+    val v0productionTable = joinV0.metaData.outputTable
+    val existingProductionData = tableUtils.scanDf(null, v0productionTable, None)
 
     val sharedColumnName = s"shared_user_price_sum"
     val removedColumnName = s"removed_user_quantity_count"
@@ -206,40 +209,31 @@ class MergeJobVersioningTest extends AnyFlatSpec {
     // Use proper partition overwrite to maintain partitioning
     productionDataWithLiterals.write
       .mode(SaveMode.Overwrite)
-      .insertInto(productionTable)
+      .insertInto(v0productionTable)
 
-    // Step 3: Run source job for v1
-    val sourceOutputTable = JoinUtils.computeFullLeftSourceTableName(joinV1)
-    val sourceParts = sourceOutputTable.split("\\.", 2)
-    val sourceNamespace = sourceParts(0)
-    val sourceName = sourceParts(1)
-
-    val sourceMetaData = new MetaData()
-      .setName(sourceName)
-      .setOutputNamespace(sourceNamespace)
-
-    tableUtils.sql(f"SELECT * from $leftTable").show()
-    tableUtils.sql(f"SELECT distinct ds from $leftTable order by ds desc").show(100)
-
-    val leftSourceWithFilter = new SourceWithFilterNode().setSource(joinV1.left)
-    val sourceRunner = new SourceJob(leftSourceWithFilter, sourceMetaData, dateRange)
-    sourceRunner.run()
+    // Step 3: Should not need to run source job for v1
+    val v1SourceOutputTable = JoinUtils.computeFullLeftSourceTableName(joinV1)
+    assert(v1SourceOutputTable == v0SourceOutputTable,
+           "Source table names should match for v1/v0 -- left semantics same.")
 
     // Step 4: Run join part job for the added GroupBy only (shared will be reused from production)
     val addedPartTableName = RelevantLeftForJoinPart.partTableName(joinV1, addedJoinPart)
     val addedPartFullTableName = RelevantLeftForJoinPart.fullPartTableName(joinV1, addedJoinPart)
 
+    // Compute added joinPart
     val addedPartMetaData = new MetaData()
       .setName(addedPartTableName)
       .setOutputNamespace(joinV1.metaData.outputNamespace)
 
     val addedJoinPartNode = new JoinPartNode()
-      .setLeftSourceTable(sourceOutputTable)
+      .setLeftSourceTable(v1SourceOutputTable)
       .setLeftDataModel(joinV1.getLeft.dataModel)
       .setJoinPart(addedJoinPart)
 
     val addedJoinPartJob = new JoinPartJob(addedJoinPartNode, addedPartMetaData, dateRange)
     addedJoinPartJob.run()
+
+    println(s"Added join part table created: $addedPartFullTableName")
 
     // Step 5: Run MergeJob with production join reference
     val mergeNode = new JoinMergeNode()
@@ -258,6 +252,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
         "user" -> "hash_user",
         "item" -> "hash_item",
         "ts" -> "hash_ts",
+        Constants.RowIDColumn -> Constants.RowIDColumn,
         "shared_user_price_sum" -> "hash_shared_user_price_sum", // This should match production table
         "added_user_rating_average" -> "hash_added_user_rating_average" // This won't be in production
       ).asJava)
@@ -265,8 +260,10 @@ class MergeJobVersioningTest extends AnyFlatSpec {
     mergeJob.run()
 
     // Step 6: Verify results
-    val resultTable = joinV1.metaData.outputTable
-    val result = tableUtils.scanDf(null, resultTable, None)
+    val v1ResultTable = joinV1.metaData.outputTable
+    val result = tableUtils.scanDf(null, v1ResultTable, None)
+    println(s"V1 Join output: $v1ResultTable")
+    result.show()
 
     val resultRows = result.collect()
     assertTrue("Should have results", resultRows.length > 0)
@@ -379,6 +376,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
       "user" -> "hash_user",
       "product" -> "hash_product",
       "ts" -> "hash_ts",
+      Constants.RowIDColumn -> Constants.RowIDColumn,
       "user_user_price_sum" -> "hash_user_user_price_sum",
       "product_product_rating_average" -> "hash_product_product_rating_average"
     )
@@ -470,6 +468,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
         "user" -> "hash_user",
         "product" -> "hash_product",
         "ts" -> "hash_ts",
+        Constants.RowIDColumn -> Constants.RowIDColumn,
         "user_user_price_sum" -> "hash_modified_user_user_price_sum", // Different hash due to filter change
         "product_product_rating_average" -> "hash_product_product_rating_average" // Same hash (unchanged)
       ).asJava)
@@ -581,7 +580,6 @@ class MergeJobVersioningTest extends AnyFlatSpec {
     println(s"Test passed! Archive table: ${archiveTable}")
     println(s"Result schema: ${result.columns.mkString(", ")}")
     println(s"Reused column distinct values: ${reusedValues.length}")
-    println(s"Computed column non-null values: ${userValues.length}")
   }
 
   it should "archive current table but not reuse any columns when left time column changes" in {
@@ -651,7 +649,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
         left = Builders.Source.events(
           table = leftTable,
           query = Builders.Query(
-            selects = Builders.Selects("user", "product"),
+            selects = Builders.Selects("user", "product", Constants.RowIDColumn),
             timeColumn = "ts", // Simple time column
             startPartition = start
           )
@@ -667,6 +665,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
     val originalColumnHashes = Map(
       "user" -> "hash_user_original",
       "product" -> "hash_product_original",
+      Constants.RowIDColumn -> "__chronon_row_id__original",
       "user_user_price_sum" -> "hash_user_user_price_sum_original",
       "product_product_rating_average" -> "hash_product_product_rating_average_original"
     )
@@ -727,7 +726,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
         left = Builders.Source.events(
           table = leftTable,
           query = Builders.Query(
-            selects = Builders.Selects("user", "product"),
+            selects = Builders.Selects("user", "product", Constants.RowIDColumn),
             timeColumn = "CAST(ts AS DOUBLE)", // Different time column expression - changes ALL semantic hashes
             startPartition = start
           )
@@ -742,6 +741,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
       Map(
         "user" -> "hash_user_new_time", // Different hash due to time column change
         "product" -> "hash_product_new_time", // Different hash due to time column change
+        Constants.RowIDColumn -> "__chronon_row_id__new_time",
         "user_user_price_sum" -> "hash_user_user_price_sum_new_time", // Different hash due to time column change
         "product_product_rating_average" -> "hash_product_product_rating_average_new_time" // Different hash due to time column change
       ).asJava)

@@ -11,6 +11,7 @@
       "listing_id_favorite_sum_1d": "bb07e39a4b7ea81aca5baf027fd8f555",
       "listing_id": "f2f6c814b8ae1521176b22a1ae7f2d0d",
       "user_id": "493d3df28f80664abd11b19fcd33b6e6",
+      "row_id": "6c80b6474532731fdb20d0a43bcb287f",
       "ts": "ad9fd4c611e20ad833819a4ce9d752bf"
     },
     "online": 1,
@@ -138,6 +139,7 @@
         "selects": {
           "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
           "user_id": "attributes['user_id']",
+          "row_id": "request_UUID",
           "ts": "timestamp"
         },
         "timeColumn": "timestamp"
@@ -250,9 +252,6 @@
       },
       "useLongNames": 0
     }
-  ],
-  "rowIds": [
-    "user_id"
   ],
   "useLongNames": 0
 }

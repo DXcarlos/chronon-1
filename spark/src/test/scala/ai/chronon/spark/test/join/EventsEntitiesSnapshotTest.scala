@@ -52,7 +52,7 @@ class EventsEntitiesSnapshotTest extends BaseJoinTest {
 
     val dollarSource = Builders.Source.entities(
       query = Builders.Query(
-        selects = Builders.Selects("ts", "amount_dollars", "user_name", "user"),
+        selects = Builders.Selects("ts", "amount_dollars", "user_name", "user", Constants.RowIDColumn),
         startPartition = yearAgo,
         endPartition = dayAndMonthBefore,
         setups =
@@ -65,10 +65,13 @@ class EventsEntitiesSnapshotTest extends BaseJoinTest {
     val rupeeSource =
       Builders.Source.entities(
         query = Builders.Query(
-          selects = Map("ts" -> "ts",
-                        "amount_dollars" -> "CAST(amount_rupees/70 as long)",
-                        "user_name" -> "user_name",
-                        "user" -> "user"),
+          selects = Map(
+            "ts" -> "ts",
+            "amount_dollars" -> "CAST(amount_rupees/70 as long)",
+            "user_name" -> "user_name",
+            "user" -> "user",
+            Constants.RowIDColumn -> Constants.RowIDColumn
+          ),
           startPartition = monthAgo,
           setups = Seq(
             "create temporary function temp_replace_right_b as 'org.apache.hadoop.hive.ql.udf.UDFRegExpReplace'",
@@ -141,7 +144,7 @@ class EventsEntitiesSnapshotTest extends BaseJoinTest {
 
     resetUDFs()
     val runner2 = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = end, tableUtils = tableUtils)
-    val computed = runner2.computeJoin(Some(3))
+    val computed = runner2.computeJoin(Some(3)).drop(Constants.RowIDColumn)
     println(s"join start = $start")
 
     val expectedQuery = s"""
@@ -221,7 +224,7 @@ class EventsEntitiesSnapshotTest extends BaseJoinTest {
     val runner3 = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = end, tableUtils = tableUtils)
 
     val expected2 = spark.sql(expectedQuery)
-    val computed2 = runner3.computeJoin(Some(3))
+    val computed2 = runner3.computeJoin(Some(3)).drop(Constants.RowIDColumn)
     val diff2 = Comparison.sideBySide(computed2, expected2, List("user_name", "user", "ts", "ds"))
 
     if (diff2.count() > 0) {

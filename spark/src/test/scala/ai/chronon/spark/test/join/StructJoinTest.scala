@@ -34,7 +34,7 @@ class StructJoinTest extends BaseJoinTest {
 
     itemQueriesDf.save(s"${itemQueriesTable}_tmp")
     val structLeftDf = tableUtils.sql(
-      s"SELECT item, NAMED_STRUCT('item_repeat', item) as item_struct, ts, ds FROM ${itemQueriesTable}_tmp")
+      s"SELECT item, NAMED_STRUCT('item_repeat', item) as item_struct, ts, ds, ${Constants.RowIDColumn} FROM ${itemQueriesTable}_tmp")
     structLeftDf.save(itemQueriesTable)
     val start = tableUtils.partitionSpec.minus(today, new Window(100, TimeUnit.DAYS))
 
@@ -49,7 +49,8 @@ class StructJoinTest extends BaseJoinTest {
 
     val viewsSource = Builders.Source.events(
       table = viewsTable,
-      query = Builders.Query(selects = Builders.Selects("time_spent_ms", "item_struct"), startPartition = yearAgo)
+      query = Builders.Query(selects = Builders.Selects("time_spent_ms", "item_struct", Constants.RowIDColumn),
+                             startPartition = yearAgo)
     )
     spark.sql(s"DROP TABLE IF EXISTS $viewsTable")
     df.save(s"${viewsTable}_tmp", Map("tblProp1" -> "1"))

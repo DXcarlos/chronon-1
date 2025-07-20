@@ -18,13 +18,14 @@ package ai.chronon.spark.test.streaming
 
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
-import ai.chronon.api.{Builders, Operation, TimeUnit, TsUtils, Window}
+import ai.chronon.api.{Builders, Constants, Operation, TimeUnit, TsUtils, Window}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.test.DataFrameGen
 import ai.chronon.spark.{Comparison, Join}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission.SparkSessionBuilder
+import org.apache.spark.sql.functions.uuid
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -151,7 +152,10 @@ class MutationsTest extends AnyFlatSpec {
                               operation: Operation = Operation.AVERAGE): DataFrame = {
     val testNamespace = namespace(suffix)
     tableUtils.sql(s"CREATE DATABASE IF NOT EXISTS $testNamespace")
-    spark.createDataFrame(spark.sparkContext.parallelize(leftData), leftSchema).save(s"$testNamespace.$eventTable")
+    spark
+      .createDataFrame(spark.sparkContext.parallelize(leftData), leftSchema)
+      .withColumn(Constants.RowIDColumn, uuid())
+      .save(s"$testNamespace.$eventTable")
     spark
       .createDataFrame(spark.sparkContext.parallelize(snapshotData), snapshotSchema)
       .save(s"$testNamespace.$snapshotTable")
@@ -182,7 +186,7 @@ class MutationsTest extends AnyFlatSpec {
     val leftSource =
       Builders.Source.events(
         query = Builders.Query(
-          selects = Builders.Selects("listing_id", "ts", "event"),
+          selects = Builders.Selects("listing_id", "ts", "event", Constants.RowIDColumn),
           startPartition = startPartition
         ),
         table = s"$testNamespace.$eventTable"
@@ -209,7 +213,7 @@ class MutationsTest extends AnyFlatSpec {
     )
 
     val runner = new Join(joinConf, endPartition, tableUtils)
-    runner.computeJoin()
+    runner.computeJoin().drop(Constants.RowIDColumn)
   }
 
   /** Compute the no windows average based on the tables using pure sql

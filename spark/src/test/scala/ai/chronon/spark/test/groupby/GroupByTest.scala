@@ -601,11 +601,12 @@ class GroupByTest extends AnyFlatSpec {
     println("Expected input DF: ")
     expectedInputDf.show()
     println("Computed input DF: ")
-    newGroupBy.inputDf.show()
+    val computedInputDf = newGroupBy.inputDf.drop(Constants.RowIDColumn)
+    computedInputDf.show()
 
-    val diff = Comparison.sideBySide(newGroupBy.inputDf, expectedInputDf, List("listing", "user", "ds"))
+    val diff = Comparison.sideBySide(computedInputDf, expectedInputDf, List("listing", "user", "ds"))
     if (diff.count() > 0) {
-      println(s"Actual count: ${newGroupBy.inputDf.count()}")
+      println(s"Actual count: ${computedInputDf.count()}")
       println(s"Expected count: ${expectedInputDf.count()}")
       println(s"Diff count: ${diff.count()}")
       diff.show()

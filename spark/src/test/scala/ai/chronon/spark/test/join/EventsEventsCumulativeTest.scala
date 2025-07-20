@@ -17,7 +17,7 @@
 package ai.chronon.spark.test.join
 
 import ai.chronon.api.Builders
-import ai.chronon.api.{Window, TimeUnit}
+import ai.chronon.api.{Constants, Window, TimeUnit}
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
@@ -49,7 +49,7 @@ class EventsEventsCumulativeTest extends BaseJoinTest {
     spark.sql(q).show()
     val start = tableUtils.partitionSpec.minus(today, new Window(100, TimeUnit.DAYS))
     val join = new Join(joinConf = joinConf, endPartition = dayAndMonthBefore, tableUtils)
-    val computed = join.computeJoin(Some(100))
+    val computed = join.computeJoin(Some(100)).drop(Constants.RowIDColumn)
     computed.show()
 
     val expected = tableUtils.sql(s"""

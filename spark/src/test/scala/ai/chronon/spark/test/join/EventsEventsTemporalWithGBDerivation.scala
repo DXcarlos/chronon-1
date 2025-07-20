@@ -2,7 +2,7 @@ package ai.chronon.spark.test.join
 
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
-import ai.chronon.api.{Builders, Operation, TimeUnit, Window}
+import ai.chronon.api.{Builders, Constants, Operation, TimeUnit, Window}
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.test.{DataFrameGen, TableTestUtils}
@@ -15,7 +15,13 @@ class EventsEventsTemporalWithGBDerivation extends BaseJoinTest {
   val sparkSkewFree: SparkSession = submission.SparkSessionBuilder.build(
     "JoinTest",
     local = true,
-    additionalConfig = Option(Map("spark.chronon.join.backfill.mode.skewFree" -> "true"))
+    additionalConfig = Option(
+      Map(
+        "spark.chronon.join.backfill.mode.skewFree" -> "true",
+        "spark.sql.sources.bucketing.enabled" -> "true",
+        "spark.sql.bucketing.coalesceBucketsInJoin.enabled" -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1"
+      ))
   )
   protected implicit val tableUtilsSkewFree: TableTestUtils = TableTestUtils(sparkSkewFree)
 
@@ -34,7 +40,8 @@ class EventsEventsTemporalWithGBDerivation extends BaseJoinTest {
 
     val viewsSource = Builders.Source.events(
       table = viewsTable,
-      query = Builders.Query(selects = Builders.Selects("time_spent_ms"), startPartition = yearAgo)
+      query =
+        Builders.Query(selects = Builders.Selects("time_spent_ms", Constants.RowIDColumn), startPartition = yearAgo)
     )
 
     // left side
@@ -48,7 +55,7 @@ class EventsEventsTemporalWithGBDerivation extends BaseJoinTest {
     val start = tableUtilsSkewFree.partitionSpec.minus(today, new Window(100, TimeUnit.DAYS))
     (new Analyzer(tableUtilsSkewFree, joinConf, monthAgo, today)).run()
     val join = new Join(joinConf = joinConf, endPartition = dayAndMonthBefore, tableUtilsSkewFree)
-    val computed = join.computeJoin(Some(100))
+    val computed = join.computeJoin(Some(100)).drop(tableUtilsSkewFree.internalRowIdColumnName)
     computed.show()
 
     val expected = tableUtilsSkewFree.sql(s"""
@@ -131,7 +138,8 @@ class EventsEventsTemporalWithGBDerivation extends BaseJoinTest {
 
     val viewsSource = Builders.Source.events(
       table = viewsTable,
-      query = Builders.Query(selects = Builders.Selects("time_spent_ms"), startPartition = yearAgo)
+      query =
+        Builders.Query(selects = Builders.Selects("time_spent_ms", Constants.RowIDColumn), startPartition = yearAgo)
     )
 
     spark.sql(s"DROP TABLE IF EXISTS $viewsTable")

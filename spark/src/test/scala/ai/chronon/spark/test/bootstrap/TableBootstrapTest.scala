@@ -19,6 +19,7 @@ package ai.chronon.spark.test.bootstrap
 import ai.chronon.api.Extensions.JoinOps
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
+import ai.chronon.api.Constants
 import ai.chronon.spark.Comparison
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
@@ -124,7 +125,7 @@ class TableBootstrapTest extends AnyFlatSpec {
 
     // Runs through boostrap backfill which combines backfill and bootstrap
     val runner2 = new ai.chronon.spark.Join(bootstrapJoin, today, tableUtils)
-    val computed = runner2.computeJoin()
+    val computed = runner2.computeJoin().drop(Constants.RowIDColumn)
 
     // Comparison
     val expected = baseOutput

@@ -6,6 +6,7 @@ import ai.chronon.api.ScalaJavaConversions.JIterableOps
 import ai.chronon.api.{
   BooleanType,
   Builders,
+  Constants,
   DateRange,
   DoubleType,
   IntType,
@@ -145,14 +146,15 @@ class MergeJobAnalyzeReuseTest extends AnyFlatSpec {
         SparkStructField("ts", SparkLongType),
         SparkStructField("ds", SparkStringType),
         SparkStructField("price_user_price_sum", SparkDoubleType),
-        SparkStructField("user_quantity_count", SparkLongType)
+        SparkStructField("user_quantity_count", SparkLongType),
+        SparkStructField(Constants.RowIDColumn, SparkStringType)
       ))
 
     val productionData = spark.createDataFrame(
       spark.sparkContext.parallelize(
         Seq(
-          SparkRow("user1", "item1", 1000L, monthAgo, 100.0, 5L),
-          SparkRow("user2", "item2", 2000L, monthAgo, 200.0, 10L)
+          SparkRow("user1", "item1", 1000L, monthAgo, 100.0, 5L, "row_id_1"),
+          SparkRow("user2", "item2", 2000L, monthAgo, 200.0, 10L, "row_id_2")
         )),
       productionSchema
     )
@@ -166,7 +168,8 @@ class MergeJobAnalyzeReuseTest extends AnyFlatSpec {
       "item" -> "hash_item",
       "ts" -> "hash_ts",
       "price_user_price_sum" -> "hash_price_user_price_sum",
-      "user_quantity_count" -> "hash_user_quantity_count"
+      "user_quantity_count" -> "hash_user_quantity_count",
+      Constants.RowIDColumn -> "hash_chronon_row_id"
     )
 
     productionData.save(productionTable)
@@ -225,6 +228,7 @@ class MergeJobAnalyzeReuseTest extends AnyFlatSpec {
 
     // Create left DataFrame for schema compatibility check
     val leftDf = DataFrameGen.events(spark, leftSchema, 10, 1)
+    leftDf.show()
 
     // Create MergeJob with production join reference
     val mergeNode = new JoinMergeNode()
@@ -243,7 +247,7 @@ class MergeJobAnalyzeReuseTest extends AnyFlatSpec {
         "user" -> "hash_user",
         "item" -> "hash_item",
         "ts" -> "hash_ts",
-        "ds" -> "hash_ds",
+        Constants.RowIDColumn -> "hash_chronon_row_id",
         "price_user_price_sum" -> "hash_price_user_price_sum",
         "user_quantity_count" -> "hash_user_quantity_count"
       ).asJava)
@@ -368,7 +372,8 @@ class MergeJobAnalyzeReuseTest extends AnyFlatSpec {
       "item" -> "hash_item",
       "ts" -> "hash_ts",
       "ds" -> "hash_ds",
-      "user_price_sum" -> "hash_user_price_sum"
+      "user_price_sum" -> "hash_user_price_sum",
+      Constants.RowIDColumn -> "hash_chronon_row_id"
       // Note: rating column hash is missing, so it can't be reused
     )
 
@@ -446,7 +451,8 @@ class MergeJobAnalyzeReuseTest extends AnyFlatSpec {
       "ts" -> "hash_ts",
       "ds" -> "hash_ds",
       "user_price_sum" -> "hash_user_price_sum",
-      "user_rating_average" -> "hash_user_rating_average" // This won't match production table
+      "user_rating_average" -> "hash_user_rating_average", // This won't match production table
+      Constants.RowIDColumn -> "hash_chronon_row_id"
     ).asJava
 
     // Test the analyzeJoinPartsForReuse method directly
@@ -571,7 +577,8 @@ class MergeJobAnalyzeReuseTest extends AnyFlatSpec {
       "item" -> "hash_item",
       "ts" -> "hash_ts",
       "ds" -> "hash_ds",
-      "user_price_sum" -> "hash_user_price_sum_v0" // v0 hash
+      "user_price_sum" -> "hash_user_price_sum_v0", // v0 hash
+      Constants.RowIDColumn -> "hash_chronon_row_id"
     )
 
     productionData.save(productionTable)
@@ -626,7 +633,8 @@ class MergeJobAnalyzeReuseTest extends AnyFlatSpec {
       "item" -> "hash_item",
       "ts" -> "hash_ts",
       "ds" -> "hash_ds",
-      "user_price_sum" -> "hash_user_price_sum_v1" // v1 hash - different from production
+      "user_price_sum" -> "hash_user_price_sum_v1", // v1 hash - different from production
+      Constants.RowIDColumn -> "hash_chronon_row_id"
     ).asJava
 
     // Test the analyzeJoinPartsForReuse method directly

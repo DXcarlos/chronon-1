@@ -18,10 +18,11 @@ package ai.chronon.spark.test.join
 
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
-import ai.chronon.api.{Builders, TimeUnit, Window}
+import ai.chronon.api.{Builders, Constants, TimeUnit, Window}
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.test.DataFrameGen
+import org.apache.spark.sql.functions.uuid
 import org.junit.Assert._
 
 class NoAggTest extends BaseJoinTest {
@@ -34,7 +35,7 @@ class NoAggTest extends BaseJoinTest {
       Column("name", api.StringType, 10)
     )
     val namesTable = s"$namespace.names"
-    DataFrameGen.entities(spark, namesSchema, 100, partitions = 400).save(namesTable)
+    DataFrameGen.entities(spark, namesSchema, 100, partitions = 400, addRowID = false).save(namesTable)
 
     val namesSource = Builders.Source.entities(
       query =
@@ -63,14 +64,17 @@ class NoAggTest extends BaseJoinTest {
     val start = tableUtils.partitionSpec.minus(today, new Window(60, TimeUnit.DAYS))
     val end = tableUtils.partitionSpec.minus(today, new Window(15, TimeUnit.DAYS))
     val joinConf = Builders.Join(
-      left = Builders.Source.entities(Builders.Query(selects = Map("user" -> "user"), startPartition = start),
-                                      snapshotTable = usersTable),
+      left =
+        Builders.Source.entities(Builders.Query(selects =
+                                                  Map("user" -> "user", Constants.RowIDColumn -> Constants.RowIDColumn),
+                                                startPartition = start),
+                                 snapshotTable = usersTable),
       joinParts = Seq(Builders.JoinPart(groupBy = namesGroupBy)),
       metaData = Builders.MetaData(name = "test.user_features", namespace = namespace, team = "chronon")
     )
 
     val runner = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = end, tableUtils = tableUtils)
-    val computed = runner.computeJoin(Some(7))
+    val computed = runner.computeJoin(Some(7)).drop(Constants.RowIDColumn)
     println(s"join start = $start")
     val expected = tableUtils.sql(s"""
                                      |WITH

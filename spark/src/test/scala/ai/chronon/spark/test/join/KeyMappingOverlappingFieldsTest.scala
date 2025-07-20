@@ -18,7 +18,7 @@ package ai.chronon.spark.test.join
 
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
-import ai.chronon.api.{Builders, TimeUnit, Window}
+import ai.chronon.api.{Builders, Constants, TimeUnit, Window}
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.test.DataFrameGen
@@ -38,11 +38,11 @@ class KeyMappingOverlappingFieldsTest extends BaseJoinTest {
     DataFrameGen.entities(spark, namesSchema, 100, partitions = 400).save(namesTable)
 
     val namesSource = Builders.Source.entities(
-      query =
-        Builders.Query(selects =
-                         Builders.Selects.exprs("user" -> "user", "user_id" -> "user", "attribute" -> "attribute"),
-                       startPartition = yearAgo,
-                       endPartition = dayAndMonthBefore),
+      query = Builders.Query(
+        selects = Builders.Selects.exprs("user" -> "user", "user_id" -> "user", "attribute" -> "attribute"),
+        startPartition = yearAgo,
+        endPartition = dayAndMonthBefore
+      ),
       snapshotTable = namesTable
     )
 
@@ -61,7 +61,9 @@ class KeyMappingOverlappingFieldsTest extends BaseJoinTest {
     val start = tableUtils.partitionSpec.minus(today, new Window(60, TimeUnit.DAYS))
     val end = tableUtils.partitionSpec.minus(today, new Window(15, TimeUnit.DAYS))
     val joinConf = Builders.Join(
-      left = Builders.Source.entities(Builders.Query(selects = Map("user_id" -> "user_id"), startPartition = start),
+      left = Builders.Source.entities(Builders.Query(selects = Map("user_id" -> "user_id",
+                                                                   Constants.RowIDColumn -> Constants.RowIDColumn),
+                                                     startPartition = start),
                                       snapshotTable = usersTable),
       joinParts = Seq(
         Builders.JoinPart(groupBy = namesGroupBy,
@@ -73,7 +75,7 @@ class KeyMappingOverlappingFieldsTest extends BaseJoinTest {
     )
 
     val runner = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = end, tableUtils = tableUtils)
-    val computed = runner.computeJoin(Some(7))
+    val computed = runner.computeJoin(Some(7)).drop(Constants.RowIDColumn)
     assertFalse(computed.isEmpty)
   }
 }

@@ -11,6 +11,7 @@ source = Source(
             selects=selects(
               listing_id="EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
               user_id="attributes['user_id']",
+              row_id="request_UUID",
             ),
             time_column="timestamp",
         ),
@@ -20,7 +21,6 @@ source = Source(
 # Join with just a streaming GB
 canary_streaming_v1 = Join(
     left=source,
-    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=item_event_canary.actions_pubsub_v2)
     ],

@@ -246,6 +246,7 @@ class MetadataStore(fetchContext: FetchContext) {
     val valueFields = new mutable.ListBuffer[StructField]
     val valueInfos = mutable.ListBuffer.empty[JoinCodec.ValueInfo]
     var hasPartialFailure = false
+
     // collect keyFields and valueFields from joinParts/GroupBys
     joinConf.joinPartOps.foreach { joinPart =>
       getGroupByServingInfo(joinPart.groupBy.metaData.getName)
@@ -309,7 +310,10 @@ class MetadataStore(fetchContext: FetchContext) {
     }
 
     val joinName = joinConf.metaData.nameToFilePath
-    val keySchema = StructType(s"${joinName.sanitize}_key", keyFields.toArray)
+    val keyFieldsWithRowId = if (keyFields.nonEmpty) {
+      Array(StructField(Constants.RowIDColumn, StringType)) ++ keyFields
+    } else keyFields.toArray
+    val keySchema = StructType(s"${joinName.sanitize}_key", keyFieldsWithRowId)
     val keyCodec = AvroCodec.of(AvroConversions.fromChrononSchema(keySchema).toString)
     val baseValueSchema = StructType(s"${joinName.sanitize}_value", valueFields.toArray)
     val baseValueCodec = serde.AvroCodec.of(AvroConversions.fromChrononSchema(baseValueSchema).toString)

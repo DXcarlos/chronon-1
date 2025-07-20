@@ -20,13 +20,14 @@ import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
+import ai.chronon.api.Constants
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, uuid}
 
 object TestUtils {
   def createViewsGroupBy(namespace: String,
@@ -415,14 +416,19 @@ object TestUtils {
     val viewsDf = DataFrameGen
       .events(spark, viewsCols, 30, 7)
       .filter(col("user").isNotNull && col("listing").isNotNull)
+      .withColumn(Constants.RowIDColumn, uuid())
     viewsDf.show()
     viewsDf.save(viewsTable)
 
     val joinConf = Builders.Join(
       left = Builders.Source.events(
-        Builders.Query(startPartition = "2023-06-01", selects = Builders.Selects("listing", "user")),
+        Builders.Query(startPartition = "2023-06-01",
+                       selects = Builders.Selects.exprs("listing" -> "listing",
+                                                        "user" -> "user",
+                                                        Constants.RowIDColumn -> Constants.RowIDColumn)),
         table = viewsTable,
-        topic = topic),
+        topic = topic
+      ),
       joinParts = Seq(
         Builders.JoinPart(groupBy = priceGroupBy)
       ),

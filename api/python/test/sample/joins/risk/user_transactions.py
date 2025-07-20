@@ -8,13 +8,12 @@ from ai.chronon.query import Query, selects
 
 source_users = Source(
     events=EventSource(
-        table="data.users", query=Query(selects=selects("user_id"), time_column="ts")
+        table="data.users", query=Query(selects=selects("user_id", "row_id"), time_column="ts")
     )
 )
 
 txn_join = Join(
     left=source_users,
-    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=txn_group_by_user, prefix="user"),
         JoinPart(group_by=txn_group_by_merchant, prefix="merchant"),

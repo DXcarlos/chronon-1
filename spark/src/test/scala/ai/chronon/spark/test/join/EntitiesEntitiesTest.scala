@@ -18,7 +18,7 @@ package ai.chronon.spark.test.join
 
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
-import ai.chronon.api.{Builders, Operation, TimeUnit, Window}
+import ai.chronon.api.{Builders, Constants, Operation, TimeUnit, Window}
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.test.DataFrameGen
@@ -41,7 +41,9 @@ class EntitiesEntitiesTest extends BaseJoinTest {
 
     val weightSource = Builders.Source.entities(
       query = Builders
-        .Query(selects = Builders.Selects("weight"), startPartition = yearAgo, endPartition = dayAndMonthBefore)
+        .Query(selects = Builders.Selects("weight", Constants.RowIDColumn),
+               startPartition = yearAgo,
+               endPartition = dayAndMonthBefore)
         .setPartitionFormat("yyyyMMdd"),
       snapshotTable = weightTable
     )
@@ -61,7 +63,7 @@ class EntitiesEntitiesTest extends BaseJoinTest {
     val heightTable = s"$namespace.heights"
     DataFrameGen.entities(spark, heightSchema, 100, partitions = 400).save(heightTable)
     val heightSource = Builders.Source.entities(
-      query = Builders.Query(selects = Builders.Selects("height"), startPartition = monthAgo),
+      query = Builders.Query(selects = Builders.Selects("height", Constants.RowIDColumn), startPartition = monthAgo),
       snapshotTable = heightTable
     )
 
@@ -86,7 +88,7 @@ class EntitiesEntitiesTest extends BaseJoinTest {
     )
 
     val runner = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = end, tableUtils = tableUtils)
-    val computed = runner.computeJoin(Some(7))
+    val computed = runner.computeJoin(Some(7)).drop(Constants.RowIDColumn)
 
     val expected = tableUtils.sql(s"""
                                      |WITH

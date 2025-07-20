@@ -32,10 +32,17 @@ class SkipBloomFilterJoinBackfillTest extends BaseJoinTest {
   it should "test skip bloom filter join backfill" in {
     import ai.chronon.spark.submission
     val testSpark: SparkSession =
-      submission.SparkSessionBuilder.build("JoinTest",
-                                           local = true,
-                                           additionalConfig =
-                                             Some(Map("spark.chronon.backfill.bloomfilter.threshold" -> "100")))
+      submission.SparkSessionBuilder.build(
+        "JoinTest",
+        local = true,
+        additionalConfig = Some(
+          Map(
+            "spark.chronon.backfill.bloomfilter.threshold" -> "100",
+            "spark.sql.sources.bucketing.enabled" -> "true",
+            "spark.sql.bucketing.coalesceBucketsInJoin.enabled" -> "true",
+            "spark.sql.autoBroadcastJoinThreshold" -> "-1"
+          ))
+      )
     val testTableUtils = TableUtils(testSpark)
     val viewsSchema = List(
       Column("user", api.StringType, 10),
@@ -70,12 +77,19 @@ class SkipBloomFilterJoinBackfillTest extends BaseJoinTest {
 
     val start = testTableUtils.partitionSpec.minus(today, new Window(100, TimeUnit.DAYS))
     val joinConf = Builders.Join(
-      left = Builders.Source.events(Builders.Query(startPartition = start), table = itemQueriesTable),
+      left = Builders.Source.events(
+        Builders.Query(selects = Map("item" -> "item",
+                                     testTableUtils.internalRowIdColumnName -> testTableUtils.internalRowIdColumnName),
+                       startPartition = start),
+        table = itemQueriesTable
+      ),
       joinParts = Seq(Builders.JoinPart(groupBy = viewsGroupBy, prefix = "user")),
       metaData = Builders.MetaData(name = "test.item_snapshot_bloom_test", namespace = namespace, team = "chronon")
     )
     val skipBloomComputed =
-      new ai.chronon.spark.Join(joinConf = joinConf, endPartition = today, tableUtils = testTableUtils).computeJoin()
+      new ai.chronon.spark.Join(joinConf = joinConf, endPartition = today, tableUtils = testTableUtils)
+        .computeJoin()
+        .drop(testTableUtils.internalRowIdColumnName)
     val leftSideCount = testSpark.sql(s"SELECT item, ts, ds from $itemQueriesTable where ds >= '$start'").count()
     println("computed count: " + skipBloomComputed.count())
     assertEquals(leftSideCount, skipBloomComputed.count())

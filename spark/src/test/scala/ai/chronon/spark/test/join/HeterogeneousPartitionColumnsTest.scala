@@ -137,6 +137,7 @@ class HeterogeneousPartitionColumnsTest extends BaseJoinTest {
       left = Builders.Source.events(
         Builders
           .Query(
+            selects = Map("item" -> "item", Constants.RowIDColumn -> Constants.RowIDColumn),
             partitionColumn = leftCustomPartitionCol
           )
           .setPartitionFormat(leftCustomFormat),
@@ -149,7 +150,7 @@ class HeterogeneousPartitionColumnsTest extends BaseJoinTest {
     )
 
     val join = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = "2025-05-08", tableUtils = tableUtils)
-    val computed = join.computeJoin()
+    val computed = join.computeJoin().drop(Constants.RowIDColumn)
     assert(computed.collect().nonEmpty)
   }
 }

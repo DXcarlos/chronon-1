@@ -308,8 +308,14 @@ class EvalTest extends AnyFlatSpec {
 
     assertEquals(result.getExternalPartsSchema.toScala, Map("ext_return_one_value_number" -> "IntType"))
 
-    assertEquals(result.getLeftQuerySchema.toScala,
-                 Map("user_name" -> "StringType", "user" -> "StringType", "ts" -> "LongType", "ds" -> "StringType"))
+    assertEquals(
+      result.getLeftQuerySchema.toScala,
+      Map("user_name" -> "StringType",
+          "user" -> "StringType",
+          "ts" -> "LongType",
+          "ds" -> "StringType",
+          tableUtils.internalRowIdColumnName -> "StringType")
+    )
   }
 
   it should "evaluate staging query schema successfully" in {

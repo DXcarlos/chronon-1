@@ -6,6 +6,7 @@ import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.planner.SourceWithFilterNode
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.collection.{Map, Seq}
 import scala.jdk.CollectionConverters._
@@ -15,6 +16,8 @@ Runs and materializes a `Source` for a given `dateRange`. Used in the Join compu
 then each join may have a further Bootstrap computation to produce the left side for use in the final join step.
  */
 class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange)(implicit tableUtils: TableUtils) {
+  @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
+
   private val sourceWithFilter = node
   private val dateRange = range.toPartitionRange(tableUtils.partitionSpec)
   private val outputTable = metaData.outputTable
@@ -62,8 +65,17 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
         df
       }
 
-      // Save using the provided outputTable or compute one if not provided
-      dfWithTimeCol.save(outputTable, tableProperties = metaData.tableProps)
+      // Assert that row ID column is present (should be injected at Python level)
+      require(
+        dfWithTimeCol.columns.contains(Constants.RowIDColumn),
+        s"Row ID column ${Constants.RowIDColumn} must be present in source data for bucketing support"
+      )
+
+      logger.info(s"Found row ID column ${Constants.RowIDColumn} in source data for bucketing")
+      val dfWithRowId = dfWithTimeCol
+
+      // Save with bucketing on row ID column
+      dfWithRowId.save(outputTable, tableProperties = metaData.tableProps, bucketByRowId = true)
     }
   }
 

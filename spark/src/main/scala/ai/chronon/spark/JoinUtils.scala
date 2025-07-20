@@ -18,6 +18,7 @@ package ai.chronon.spark
 
 import ai.chronon.api
 import ai.chronon.api._
+import ai.chronon.api.Constants
 import ai.chronon.api.DataModel.EVENTS
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
@@ -166,6 +167,7 @@ object JoinUtils {
     }
 
     val joinedDf = leftDf.join(rightDf, keys.toSeq, joinType)
+
     // find columns that exist both on left and right that are not keys and coalesce them
     val selects = keys.map(col) ++
       leftDf.columns.flatMap { colName =>
@@ -474,4 +476,30 @@ object JoinUtils {
   def computeFullLeftSourceTableName(join: api.Join)(implicit tableUtils: TableUtils): String = {
     new JoinPlanner(join)(tableUtils.partitionSpec).leftSourceNode.metaData.outputTable
   }
+
+  def joinWithLeft(leftDf: DataFrame, rightDf: DataFrame, joinPart: JoinPart, tableUtils: TableUtils): DataFrame = {
+    val nonValueColumns = joinPart.groupBy.keyColumns.toArray ++ Array(Constants.TimeColumn,
+                                                                       tableUtils.partitionColumn,
+                                                                       Constants.TimePartitionColumn,
+                                                                       Constants.RowIDColumn)
+    // apply prefix to value columns
+    val valueColumns = rightDf.schema.names.filterNot(nonValueColumns.contains)
+    val prefixedRightDf = rightDf.prefixColumnNames(joinPart.columnPrefix, valueColumns)
+
+    logger.info(s"""
+                   |Left Schema:
+                   |${leftDf.schema.pretty}
+                   |Right Schema:
+                   |${prefixedRightDf.schema.pretty}""".stripMargin)
+
+    logger.info(s"Applied BUCKET hints with ${tableUtils.rowIdClusterNumber} buckets for bucketed join")
+    val joinedDf = coalescedJoin(leftDf, prefixedRightDf, Seq(tableUtils.partitionColumn, Constants.RowIDColumn))
+    joinedDf.explain(true)
+    logger.info(s"""Final Schema:
+                   |${joinedDf.schema.pretty}
+                   |""".stripMargin)
+
+    joinedDf
+  }
+
 }

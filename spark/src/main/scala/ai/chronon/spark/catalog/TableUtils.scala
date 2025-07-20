@@ -78,6 +78,9 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
 
   val joinPartParallelism: Int = sparkSession.conf.get("spark.chronon.join.part.parallelism", "1").toInt
 
+  val internalRowIdColumnName: String = Constants.RowIDColumn
+  val rowIdClusterNumber: Int = 100
+
   sparkSession.sparkContext.setLogLevel("ERROR")
 
   def tableReachable(tableName: String, ignoreFailure: Boolean = false): Boolean = {
@@ -214,13 +217,23 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                   tableName: String,
                   partitionColumns: List[String] = List.empty,
                   tableProperties: Map[String, String] = null,
-                  fileFormat: String): Unit = {
+                  fileFormat: String,
+                  bucketByRowId: Boolean = false): Unit = {
 
     if (!tableReachable(tableName, ignoreFailure = true)) {
       try {
+        val bucketColumnName = if (bucketByRowId) Some(internalRowIdColumnName) else None
+        val bucketNumber = if (bucketByRowId) Some(rowIdClusterNumber) else None
         sql(
           CreationUtils
-            .createTableSql(tableName, df.schema, partitionColumns, tableProperties, fileFormat, tableWriteFormat))
+            .createTableSql(tableName,
+                            df.schema,
+                            partitionColumns,
+                            tableProperties,
+                            fileFormat,
+                            tableWriteFormat,
+                            bucketColumnName,
+                            bucketNumber))
       } catch {
         case _: TableAlreadyExistsException =>
           logger.info(s"Table $tableName already exists, skipping creation")
@@ -238,14 +251,15 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                        partitionColumns: List[String] = List(partitionColumn),
                        saveMode: SaveMode = SaveMode.Overwrite,
                        fileFormat: String = "PARQUET",
-                       autoExpand: Boolean = false): Unit = {
+                       autoExpand: Boolean = false,
+                       bucketByRowId: Boolean = false): Unit = {
 
     // partitions to the last
     val colOrder = df.columns.diff(partitionColumns) ++ partitionColumns
 
     val dfRearranged = df.select(colOrder.map(colName => df.col(QuotingUtils.quoteIdentifier(colName))): _*)
 
-    createTable(dfRearranged, tableName, partitionColumns, tableProperties, fileFormat)
+    createTable(dfRearranged, tableName, partitionColumns, tableProperties, fileFormat, bucketByRowId)
 
     if (autoExpand) {
       expandTable(tableName, dfRearranged.schema)
@@ -281,8 +295,9 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     }
 
     logger.info(s"Writing to $tableName ...")
-    finalizedDf.write
-      .mode(saveMode)
+    val dataFrameWriter = finalizedDf.write.mode(saveMode)
+
+    dataFrameWriter
       // Requires table to exist before inserting.
       // Fails if schema does not match.
       // Does NOT overwrite the schema.
@@ -588,11 +603,14 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
 
     // TODO: this is a temporary fix to handle the case where the partition column is not a string.
     //  This is the case for partitioned BigQuery native tables.
+    /*
     (if (df.schema.fieldNames.contains(partitionColumn)) {
        df.withColumn(partitionColumn, date_format(df.col(partitionColumn), partitionFormat))
      } else {
        df
      }).coalesce(coalesceFactor * parallelism)
+     */
+    df
   }
 
   def whereClauses(partitionRange: PartitionRange, partitionColumn: String = partitionColumn): Seq[String] = {

@@ -64,14 +64,22 @@ object DataFrameGen {
              count: Int,
              partitions: Int,
              partitionColumn: Option[String] = None,
-             partitionFormat: Option[String] = None): DataFrame = {
+             partitionFormat: Option[String] = None,
+             addRowID: Boolean = true): DataFrame = {
     val tableUtils = TableUtils(spark)
     val partitionColumnString = partitionColumn.getOrElse(tableUtils.partitionColumn)
     val partitionFormatString = partitionFormat.getOrElse(tableUtils.partitionFormat)
     val generated =
       gen(spark, columns :+ Column(Constants.TimeColumn, LongType, partitions), count, partitionColumn, partitionFormat)
-    generated.withColumn(partitionColumnString,
-                         from_unixtime(generated.col(Constants.TimeColumn) / 1000, partitionFormatString))
+    val generatedWithPartition = generated.withColumn(
+      partitionColumnString,
+      from_unixtime(generated.col(Constants.TimeColumn) / 1000, partitionFormatString))
+
+    if (addRowID) {
+      generatedWithPartition.withColumn(Constants.RowIDColumn, uuid())
+    } else {
+      generatedWithPartition
+    }
   }
 
   //  Generates Entity data
@@ -80,13 +88,21 @@ object DataFrameGen {
                count: Int,
                partitions: Int,
                partitionColumn: Option[String] = None,
-               partitionFormat: Option[String] = None): DataFrame = {
-    val partitionColumnString = partitionColumn.getOrElse(TableUtils(spark).partitionColumn)
-    gen(spark,
-        columns :+ Column(partitionColumnString, StringType, partitions),
-        count,
-        partitionColumn,
-        partitionFormat)
+               partitionFormat: Option[String] = None,
+               addRowID: Boolean = true): DataFrame = {
+    val tableUtils = TableUtils(spark)
+    val partitionColumnString = partitionColumn.getOrElse(tableUtils.partitionColumn)
+    val generated = gen(spark,
+                        columns :+ Column(partitionColumnString, StringType, partitions),
+                        count,
+                        partitionColumn,
+                        partitionFormat)
+
+    if (addRowID) {
+      generated.withColumn(Constants.RowIDColumn, uuid())
+    } else {
+      generated
+    }
   }
 
   /** Mutations and snapshots generation.

@@ -13,7 +13,8 @@ source = Source(
         table="data.checkouts",
         query=Query(
             selects=selects(
-                "user_id"
+                user_id="user_id",
+                row_id="request_UUID",
             ),  # The primary key used to join various GroupBys together
             start_partition="2023-11-01",
             time_column="ts",
@@ -23,7 +24,6 @@ source = Source(
 
 v1_test = Join(
     left=source,
-    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=purchases.v1_test)
     ],
@@ -41,7 +41,6 @@ v1_hub = Join(
 
 v1_dev = Join(
     left=source,
-    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=purchases.v1_dev)
     ],
@@ -53,7 +52,8 @@ source_notds = Source(
         table="data.checkouts_notds",
         query=Query(
             selects=selects(
-                "user_id"
+                user_id = "user_id",
+                row_id="request_UUID",
             ),  # The primary key used to join various GroupBys together
             time_column="ts",
             partition_column="notds"
@@ -63,7 +63,6 @@ source_notds = Source(
 
 v1_test_notds = Join(
     left=source_notds,
-    row_ids=["user_id"],
     right_parts=[
         JoinPart(group_by=purchases.v1_test_notds)
     ],
@@ -72,7 +71,6 @@ v1_test_notds = Join(
 
 v1_dev_notds = Join(
     left=source_notds,
-    row_ids=["user_id"],
     right_parts=[
         JoinPart(group_by=purchases.v1_dev_notds)
     ],

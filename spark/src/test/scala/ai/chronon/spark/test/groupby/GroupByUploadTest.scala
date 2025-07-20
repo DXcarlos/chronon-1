@@ -208,7 +208,11 @@ class GroupByUploadTest extends AnyFlatSpec {
 
     val leftRatings =
       Builders.Source.entities(
-        Builders.Query(selects = Builders.Selects("review", "rating", "category_ratings", "ts")),
+        Builders.Query(selects = Builders.Selects.exprs("review" -> "review",
+                                                        "rating" -> "rating",
+                                                        "category_ratings" -> "category_ratings",
+                                                        "ts" -> "ts",
+                                                        tableUtils.internalRowIdColumnName -> "review")),
         snapshotTable = ratingsTable,
         mutationTopic = s"${ratingsTable}_mutations",
         mutationTable = s"${ratingsTable}_mutations"

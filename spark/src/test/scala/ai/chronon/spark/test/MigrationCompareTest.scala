@@ -107,7 +107,7 @@ class MigrationCompareTest extends AnyFlatSpec with BeforeAndAfterAll {
 
     // Run the staging query to generate the corresponding table for comparison
     val stagingQueryConf = Builders.StagingQuery(
-      query = s"select item, ts, ds from ${joinConf.metaData.outputTable}",
+      query = s"select item, ts, ds, ${tableUtils.internalRowIdColumnName} from ${joinConf.metaData.outputTable}",
       startPartition = ninetyDaysAgo,
       metaData = Builders.MetaData(name = "test.item_snapshot_features_sq_4",
                                    namespace = namespace,

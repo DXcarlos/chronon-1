@@ -124,9 +124,11 @@ object UnionJoin {
     val selectedLeftDf = if (produceFinalJoinOutput) {
       leftDf
     } else {
-      val keyColumns = joinPart.leftToRight.keys.toSeq :+ Constants.TimeColumn :+ tableUtils.partitionColumn
+      val keyColumns =
+        joinPart.leftToRight.keys.toSeq :+ Constants.TimeColumn :+ tableUtils.partitionColumn :+ Constants.RowIDColumn
       val existingColumns = leftDf.columns.toSet
       val columnsToSelect = keyColumns.filter(existingColumns.contains)
+      // If row_id is present, there should be no dupes. This will have the correct behavior downstream.
       leftDf.select(columnsToSelect.map(F.col): _*).dropDuplicates(keyColumns)
     }
 

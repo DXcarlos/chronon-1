@@ -11,7 +11,9 @@ object CreationUtils {
                      partitionColumns: List[String],
                      tableProperties: Map[String, String],
                      fileFormatString: String,
-                     tableTypeString: String): String = {
+                     tableTypeString: String,
+                     bucketColumnName: Option[String] = None,
+                     bucketNumber: Option[Int] = None): String = {
 
     require(
       tableTypeString.isEmpty || ALLOWED_TABLE_TYPES.contains(tableTypeString.toLowerCase),
@@ -24,24 +26,39 @@ object CreationUtils {
 
     val createFragment =
       s"""CREATE TABLE $tableName (
-         |    ${noPartitions.toDDL}
+         |    ${schema.toDDL}
          |)
          |${if (tableTypeString.isEmpty) "" else f"USING ${tableTypeString}"}
          |""".stripMargin
 
-    val partitionFragment = if (partitionColumns != null && partitionColumns.nonEmpty) {
+    val partitionFragment = if (
+      (partitionColumns != null && partitionColumns.nonEmpty) || (bucketColumnName.isDefined && bucketNumber.isDefined)
+    ) {
 
-      val partitionDefinitions = schema
-        .filter(field => partitionColumns.contains(field.name))
-        .map(field => s"${field.name} ${field.dataType.catalogString}")
+      val partitionDefinitions = if (partitionColumns != null && partitionColumns.nonEmpty) {
+        schema
+          .filter(field => partitionColumns.contains(field.name))
+          .map(field => s"${field.name}")
+      } else {
+        List.empty[String]
+      }
 
       s"""PARTITIONED BY (
-         |    ${partitionDefinitions.mkString(",\n    ")}
+         |    ${partitionDefinitions.mkString(",\n    ")}${bucketColumnName
+        .map((bucketCol) => s",\nbucket(${bucketNumber.get}, ${bucketCol})")
+        .getOrElse("")}
+         |
          |)""".stripMargin
-
     } else {
       ""
     }
+
+//    val bucketFragment = if (bucketColumnName.isDefined && bucketNumber.isDefined) {
+//      // Todo: add `SORTED BY (${bucketColumnName.get})` below?
+//      s"CLUSTERED BY (${bucketColumnName.get}) INTO ${bucketNumber.get} BUCKETS"
+//    } else {
+//      ""
+//    }
 
     val propertiesFragment = if (tableProperties != null && tableProperties.nonEmpty) {
       s"""TBLPROPERTIES (
@@ -55,7 +72,6 @@ object CreationUtils {
     }
 
     Seq(createFragment, partitionFragment, propertiesFragment).mkString("\n")
-
   }
 
   // Needs provider

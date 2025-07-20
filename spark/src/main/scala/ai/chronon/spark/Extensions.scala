@@ -141,13 +141,15 @@ object Extensions {
     def save(tableName: String,
              tableProperties: Map[String, String] = null,
              partitionColumns: Seq[String] = List(tableUtils.partitionColumn),
-             autoExpand: Boolean = false): Unit = {
+             autoExpand: Boolean = false,
+             bucketByRowId: Boolean = false): Unit = {
 
       TableUtils(df.sparkSession).insertPartitions(df,
                                                    tableName,
                                                    tableProperties,
                                                    partitionColumns.toList,
-                                                   autoExpand = autoExpand)
+                                                   autoExpand = autoExpand,
+                                                   bucketByRowId = bucketByRowId)
     }
 
     def prefixColumnNames(prefix: String, columns: Seq[String]): DataFrame = {

@@ -17,6 +17,7 @@
 package ai.chronon.spark.test.join
 
 import ai.chronon.api.Builders
+import ai.chronon.api.Constants
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.spark._
@@ -28,9 +29,17 @@ class VersioningTest extends BaseJoinTest {
   it should "test versioning" in {
     val joinConf = getEventsEventsTemporal("versioning")
 
+    val itemQueriesTable = joinConf.getLeft.getEvents.table
+    val start = joinConf.getLeft.getEvents.getQuery.getStartPartition
+    val queriesBare =
+      tableUtils.sql(s"SELECT item, ts, ds from $itemQueriesTable where ds >= '$start' and ds <= '$dayAndMonthBefore'")
+
     // Run the old join to ensure that tables exist
     val oldJoin = new Join(joinConf = joinConf, endPartition = dayAndMonthBefore, tableUtils)
-    oldJoin.computeJoin(Some(100))
+    val oldDf = oldJoin.computeJoin(Some(100))
+    assert(oldDf.count() == queriesBare.count(),
+           s"Join output count ${oldDf.count()} does not match left count ${queriesBare.count()}")
+    println(s"OLD DF COUNT: ${oldDf.count()}")
 
     // Make sure that there is no versioning-detected changes at this phase
     val joinPartsToRecomputeNoChange = JoinUtils.tablesToRecompute(joinConf, joinConf.metaData.outputTable, tableUtils)
@@ -59,7 +68,9 @@ class VersioningTest extends BaseJoinTest {
     assertEquals(addPartRecompute.size, 1)
     assertEquals(addPartRecompute, Seq(addPartJoinConf.metaData.outputTable))
     // Compute to ensure that it works and to set the stage for the next assertion
-    addPartJoin.computeJoin(Some(100))
+    //addPartJoin.computeJoin(Some(100))
+    val addPartDf = addPartJoin.computeJoin(Some(100))
+    assert(addPartDf.count() == oldDf.count(), "Final output counts should match after adding a join part")
 
     // Test modifying only one of two joinParts
     val rightModJoinConf = addPartJoinConf.deepCopy()
@@ -74,12 +85,11 @@ class VersioningTest extends BaseJoinTest {
     rightModJoinConf.getJoinParts.get(0).setPrefix("user_4")
     val rightModBothJoin = new Join(joinConf = rightModJoinConf, endPartition = dayAndMonthBefore, tableUtils)
     // Compute to ensure that it works
-    val computed = rightModBothJoin.computeJoin(Some(100))
+    val computed = rightModBothJoin.computeJoin(Some(100)).drop(Constants.RowIDColumn)
+    println(s"computed DF COUNT: ${computed.count()}")
 
     // Now assert that the actual output is correct after all these runs
     computed.show()
-    val itemQueriesTable = joinConf.getLeft.getEvents.table
-    val start = joinConf.getLeft.getEvents.getQuery.getStartPartition
     val viewsTable = s"$namespace.view_versioning"
 
     val expected = tableUtils.sql(s"""
@@ -105,8 +115,6 @@ class VersioningTest extends BaseJoinTest {
     expected.show()
 
     val diff = Comparison.sideBySide(expected, computed, List("item", "ts", "ds"))
-    val queriesBare =
-      tableUtils.sql(s"SELECT item, ts, ds from $itemQueriesTable where ds >= '$start' and ds <= '$dayAndMonthBefore'")
     assertEquals(queriesBare.count(), computed.count())
     if (diff.count() > 0) {
       println(s"Diff count: ${diff.count()}")

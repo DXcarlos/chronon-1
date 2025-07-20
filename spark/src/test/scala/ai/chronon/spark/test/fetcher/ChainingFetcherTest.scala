@@ -64,16 +64,17 @@ class ChainingFetcherTest extends AnyFlatSpec {
         StructField("user", LongType),
         StructField("listing", LongType),
         StructField("ts", LongType),
-        StructField("ds", StringType)
+        StructField("ds", StringType),
+        StructField(Constants.RowIDColumn, StringType)
       )
     )
     val viewsData = Seq(
-      Row(12L, 59L, toTs("2021-04-15 10:00:00"), "2021-04-15"),
-      Row(12L, 1L, toTs("2021-04-15 08:00:00"), "2021-04-15"),
-      Row(12L, 123L, toTs("2021-04-15 12:00:00"), "2021-04-15"),
-      Row(88L, 1L, toTs("2021-04-15 11:00:00"), "2021-04-15"),
-      Row(88L, 59L, toTs("2021-04-15 01:10:00"), "2021-04-15"),
-      Row(88L, 456L, toTs("2021-04-15 12:00:00"), "2021-04-15")
+      Row(12L, 59L, toTs("2021-04-15 10:00:00"), "2021-04-15", "A"),
+      Row(12L, 1L, toTs("2021-04-15 08:00:00"), "2021-04-15", "B"),
+      Row(12L, 123L, toTs("2021-04-15 12:00:00"), "2021-04-15", "C"),
+      Row(88L, 1L, toTs("2021-04-15 11:00:00"), "2021-04-15", "D"),
+      Row(88L, 59L, toTs("2021-04-15 01:10:00"), "2021-04-15", "E"),
+      Row(88L, 456L, toTs("2021-04-15 12:00:00"), "2021-04-15", "F")
     )
     // {listing, ts, rating, ds}
     val ratingSchema = StructType(
@@ -154,19 +155,22 @@ class ChainingFetcherTest extends AnyFlatSpec {
     // User search listing event. Schema: user, listing, ts, ds
     val searchSchema = StructType(
       "user_search_listing_event",
-      Array(StructField("user", LongType),
-            StructField("listing", LongType),
-            StructField("ts", LongType),
-            StructField("ds", StringType))
+      Array(
+        StructField("user", LongType),
+        StructField("listing", LongType),
+        StructField("ts", LongType),
+        StructField("ds", StringType),
+        StructField(Constants.RowIDColumn, StringType)
+      ) // row id for chaining)
     )
 
     val searchData = Seq(
-      Row(12L, 59L, toTs("2021-04-18 10:00:00"), "2021-04-18"),
-      Row(12L, 123L, toTs("2021-04-18 13:45:00"), "2021-04-18"),
-      Row(88L, 1L, toTs("2021-04-18 00:10:00"), "2021-04-18"),
-      Row(88L, 59L, toTs("2021-04-18 23:10:00"), "2021-04-18"),
-      Row(88L, 456L, toTs("2021-04-18 03:10:00"), "2021-04-18"),
-      Row(68L, 123L, toTs("2021-04-17 23:55:00"), "2021-04-18")
+      Row(12L, 59L, toTs("2021-04-18 10:00:00"), "2021-04-18", "A"),
+      Row(12L, 123L, toTs("2021-04-18 13:45:00"), "2021-04-18", "B"),
+      Row(88L, 1L, toTs("2021-04-18 00:10:00"), "2021-04-18", "C"),
+      Row(88L, 59L, toTs("2021-04-18 23:10:00"), "2021-04-18", "D"),
+      Row(88L, 456L, toTs("2021-04-18 03:10:00"), "2021-04-18", "E"),
+      Row(68L, 123L, toTs("2021-04-17 23:55:00"), "2021-04-18", "F")
     ).toList
 
     TestUtils.makeDf(spark, searchSchema, searchData).save(s"$namespace.${searchSchema.name}")

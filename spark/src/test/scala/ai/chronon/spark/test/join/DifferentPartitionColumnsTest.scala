@@ -18,7 +18,7 @@ package ai.chronon.spark.test.join
 
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
-import ai.chronon.api.{Builders, Operation, TimeUnit, Window}
+import ai.chronon.api.{Builders, Constants, Operation, TimeUnit, Window}
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.test.DataFrameGen
@@ -81,14 +81,18 @@ class DifferentPartitionColumnsTest extends BaseJoinTest {
     val start = tableUtils.partitionSpec.minus(today, new Window(60, TimeUnit.DAYS))
     val end = tableUtils.partitionSpec.minus(today, new Window(15, TimeUnit.DAYS))
     val joinConf = Builders.Join(
-      left = Builders.Source.entities(Builders.Query(startPartition = start), snapshotTable = countryTable),
+      left = Builders.Source.entities(
+        Builders.Query(selects = Map("country" -> "country", Constants.RowIDColumn -> Constants.RowIDColumn),
+                       startPartition = start),
+        snapshotTable = countryTable
+      ),
       joinParts = Seq(Builders.JoinPart(groupBy = weightGroupBy), Builders.JoinPart(groupBy = heightGroupBy)),
       metaData =
         Builders.MetaData(name = "test.country_features_partition_test", namespace = namespace, team = "chronon")
     )
 
     val runner = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = end, tableUtils = tableUtils)
-    val computed = runner.computeJoin(Some(7))
+    val computed = runner.computeJoin(Some(7)).drop(Constants.RowIDColumn)
     val expected = tableUtils.sql(s"""
                                      |WITH
                                      |   countries AS (SELECT country, ds from $countryTable where ds >= '$start' and ds <= '$end'),

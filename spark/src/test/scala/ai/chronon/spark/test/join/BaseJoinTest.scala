@@ -40,7 +40,16 @@ abstract class BaseJoinTest extends AnyFlatSpec {
 
   import ai.chronon.spark.submission
 
-  val spark: SparkSession = submission.SparkSessionBuilder.build("JoinTest", local = true)
+  val spark: SparkSession = submission.SparkSessionBuilder.build(
+    "JoinTest",
+    local = true,
+    additionalConfig = Some(
+      Map(
+        "spark.sql.sources.bucketing.enabled" -> "true",
+        "spark.sql.bucketing.coalesceBucketsInJoin.enabled" -> "true",
+        "spark.sql.autoBroadcastJoinThreshold" -> "-1"
+      ))
+  )
   protected implicit val tableUtils: TableTestUtils = TableTestUtils(spark)
 
   protected val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
@@ -92,10 +101,15 @@ abstract class BaseJoinTest extends AnyFlatSpec {
     // left side
     val itemQueries = List(Column("item", api.StringType, 100))
     val itemQueriesTable = s"$namespace.item_queries"
+    tableUtils.sql(s"DROP TABLE IF EXISTS $itemQueriesTable").drop(Constants.RowIDColumn)
     val itemQueriesDf = DataFrameGen
       .events(spark, itemQueries, 1000, partitions = 100)
+
     // duplicate the events
-    itemQueriesDf.union(itemQueriesDf).save(itemQueriesTable) // .union(itemQueriesDf)
+    val duplicated = itemQueriesDf.union(itemQueriesDf)
+
+    // Add row ID here to avoid duplicating it
+    duplicated.withColumn(Constants.RowIDColumn, uuid()).save(itemQueriesTable)
 
     val start = tableUtils.partitionSpec.minus(today, new Window(100, TimeUnit.DAYS))
     val suffix = if (nameSuffix.isEmpty) "" else s"_$nameSuffix"

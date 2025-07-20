@@ -217,7 +217,7 @@ class Join(joinConf: api.Join,
         Success(
           rightPartsData
             .foldLeft(bootstrapDf) { case (partialDf, (rightPart, rightDf)) =>
-              joinWithLeft(partialDf, rightDf, rightPart)
+              JoinUtils.joinWithLeft(partialDf, rightDf, rightPart, tableUtils)
             }
             // drop all processing metadata columns
             .drop(Constants.MatchedHashes, Constants.TimePartitionColumn))
@@ -369,7 +369,7 @@ class Join(joinConf: api.Join,
         Success(
           rightResults
             .foldLeft(bootstrapDf.addTimebasedColIfExists()) { case (partialDf, (rightPart, rightDf)) =>
-              joinWithLeft(partialDf, rightDf, rightPart)
+              JoinUtils.joinWithLeft(partialDf, rightDf, rightPart, tableUtils)
             }
             // drop all processing metadata columns
             .drop(Constants.MatchedHashes, Constants.TimePartitionColumn))
