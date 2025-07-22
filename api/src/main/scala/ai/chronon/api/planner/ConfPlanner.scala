@@ -6,8 +6,6 @@ import ai.chronon.planner.{ConfPlan, Node, NodeContent}
 
 import scala.collection.Seq
 
-case class Mode(name: String, nodes: Seq[Node], cron: String)
-
 /** Base class for Chronon orchestration node planning. Corresponds 1:1 with a Chronon
   * conf type (e.g. Join, GroupBy, StagingQuery, ...).
   * The concrete planner implementations are responsible for constructing all the Nodes of the conf (for various
