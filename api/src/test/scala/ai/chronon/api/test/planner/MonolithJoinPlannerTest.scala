@@ -1,17 +1,15 @@
 package ai.chronon.api.test.planner
 
-import ai.chronon.api.planner.{LocalRunner, MonolithJoinPlanner}
 import ai.chronon.api
 import ai.chronon.api.Builders.{Join, MetaData}
-import ai.chronon.api.{ExecutionInfo, PartitionSpec}
+import ai.chronon.api.planner.{LocalRunner, MonolithJoinPlanner}
+import ai.chronon.api.{Builders, ExecutionInfo, PartitionSpec}
 import ai.chronon.planner.{ConfPlan, Mode}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.nio.file.Paths
 import scala.jdk.CollectionConverters._
-import ai.chronon.api.Builders
-import ai.chronon.api.Extensions.MetadataOps
 
 class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
 

@@ -1,6 +1,6 @@
 package ai.chronon.api.planner
 
-import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, WindowUtils}
+import ai.chronon.api.Extensions.{GroupByOps, WindowUtils}
 import ai.chronon.api.{Join, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.planner
 import ai.chronon.planner.Node

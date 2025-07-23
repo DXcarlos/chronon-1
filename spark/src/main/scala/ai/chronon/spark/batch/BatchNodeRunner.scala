@@ -204,9 +204,16 @@ object BatchNodeRunner extends NodeRunner {
 
       val maybeMissingPartitions = inputTablesToRange.map {
         case (tableName, maybePartitionRange) => {
-          tableName -> maybePartitionRange.map((requestedPR) =>
+          tableName -> maybePartitionRange.map((requestedPR) => {
             // Need to normalize back again to the default spec before diffing against the existing partitions.
-            requestedPR.translate(tableUtils.partitionSpec).partitions.diff(allInputTablePartitions(tableName)))
+            try {
+              requestedPR.translate(tableUtils.partitionSpec).partitions.diff(allInputTablePartitions(tableName))
+            } catch {
+              case e: Exception =>
+                logger.error(s"Error computing missing partitions for table $tableName.")
+                throw e
+            }
+          })
         }
       }
       val kvStoreUpdates = kvStore.multiPut(allInputTablePartitions.map { case (tableName, allPartitions) =>
