@@ -23,6 +23,7 @@ from ai.chronon.join import ContextualSource, DataType, ExternalPart, ExternalSo
 
 v1 = Join(
     left=test_sources.staging_entities,
+    row_ids="place_id",
     right_parts=[JoinPart(group_by=sample_group_by.v1)],
     online_external_parts=[
         ExternalPart(
@@ -52,5 +53,6 @@ v1 = Join(
     table_properties={
         "config_json": """{"sample_key": "sample_value"}"""
     },
-    output_namespace="sample_namespace"
+    output_namespace="sample_namespace",
+    version=0,
 )

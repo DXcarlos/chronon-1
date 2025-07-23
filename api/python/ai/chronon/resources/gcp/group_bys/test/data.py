@@ -30,4 +30,5 @@ group_by_v1 = GroupBy(
             operation=Operation.LAST_K(10),
         ),
     ],
+    version=0,
 )

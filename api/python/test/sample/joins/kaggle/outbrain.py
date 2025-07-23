@@ -22,6 +22,8 @@ from ai.chronon.join import Join, JoinPart
 training_set = Join(  # left equi join
     left=outbrain_left_events(
         "uuid", "display_id", "ad_id", "document_id", "clicked", "geo_location", "platform"),
+    row_ids="uuid",
     right_parts=[JoinPart(group_by=group_by) for group_by in [ad_doc, ad_uuid, ad_streaming, ad_platform]],
-    use_long_names = True
+    use_long_names = True,
+    version=0,
 )

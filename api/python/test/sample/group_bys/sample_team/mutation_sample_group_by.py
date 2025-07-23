@@ -30,4 +30,5 @@ v0 = GroupBy(
     keys=["group_by_subject"],
     aggregations=[Aggregation(input_column="entity", operation=Operation.LAST)],
     accuracy=Accuracy.TEMPORAL,
+    version=0,
 )

@@ -54,7 +54,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
                           groupBy.metaData.name + "__upload",
                           groupByTableDeps,
                           Some(stepDays),
-                          Some(groupBy.metaData.uploadTable))
+                          Some(groupBy.metaData.uploadTable))(PartitionSpec.daily)
 
     val node = new GroupByUploadNode().setGroupBy(eraseExecutionInfo)
     toNode(metaData, _.setGroupByUpload(node), semanticGroupBy(groupBy))

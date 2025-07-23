@@ -27,6 +27,7 @@ from ai.chronon.types import Join, JoinPart, LabelParts
 
 v1 = Join(
     left=test_sources.event_source,
+    row_ids="group_by_subject",
     output_namespace="sample_namespace",
     right_parts=[
         JoinPart(
@@ -48,4 +49,5 @@ v1 = Join(
     ),
     online=False,
     use_long_names=True,
+    version=0,
 )

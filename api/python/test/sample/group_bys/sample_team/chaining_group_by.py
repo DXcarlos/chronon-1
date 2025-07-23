@@ -26,4 +26,5 @@ chaining_group_by_v1 = GroupBy(
         "description": "sample description",
     },
     output_namespace="sample_namespace",
+    version=0,
 )

@@ -42,4 +42,5 @@ v1 = StagingQuery(
             "spec": "sample_namespace.sample_table/ds={{ macros.ds_add(ds, 1) }}",
         }
     ],
+    version=0,
     )

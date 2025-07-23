@@ -10,6 +10,7 @@ import com.google.api.gax.rpc.UnaryCallable
 import com.google.cloud.dataproc.v1.JobControllerClient.ListJobsPagedResponse
 import com.google.cloud.dataproc.v1._
 import com.google.cloud.dataproc.v1.stub.JobControllerStub
+import com.google.protobuf.Empty
 import org.junit.Assert.assertEquals
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
@@ -888,6 +889,69 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     verify(mockDataprocClient, never()).createClusterAsync(any())
   }
 
+  it should "recreate the cluster if it is in a bad state" in {
+    val mockDataprocClient = mock[ClusterControllerClient]
+
+    val mockErrorCluster = Cluster
+      .newBuilder()
+      .setStatus(ClusterStatus.newBuilder().setState(ClusterStatus.State.ERROR))
+      .build()
+    val mockRunningCluster = Cluster
+      .newBuilder()
+      .setStatus(ClusterStatus.newBuilder().setState(ClusterStatus.State.RUNNING))
+      .build()
+
+    when(mockDataprocClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(mockErrorCluster)
+      .thenReturn(mockRunningCluster)
+
+    val mockDeleteOperationFuture = mock[OperationFuture[Empty, ClusterOperationMetadata]]
+    val mockDeleteRetryingFuture = mock[RetryingFuture[OperationSnapshot]]
+    val mockDeleteMetadataFuture = mock[ApiFuture[ClusterOperationMetadata]]
+
+    when(mockDataprocClient.deleteClusterAsync(any[DeleteClusterRequest]))
+      .thenReturn(mockDeleteOperationFuture)
+    when(mockDeleteOperationFuture.getPollingFuture).thenReturn(mockDeleteRetryingFuture)
+    when(mockDeleteOperationFuture.peekMetadata()).thenReturn(mockDeleteMetadataFuture)
+
+    val mockOperationFuture = mock[OperationFuture[Cluster, ClusterOperationMetadata]]
+    val mockRetryingFuture = mock[RetryingFuture[OperationSnapshot]]
+    val mockMetadataFuture = mock[ApiFuture[ClusterOperationMetadata]]
+
+    when(mockDataprocClient.createClusterAsync(any[CreateClusterRequest]))
+      .thenReturn(mockOperationFuture)
+    when(mockOperationFuture.getPollingFuture).thenReturn(mockRetryingFuture)
+    when(mockOperationFuture.peekMetadata()).thenReturn(mockMetadataFuture)
+    when(mockOperationFuture.get(anyLong(), any[TimeUnit])).thenReturn(mockRunningCluster)
+
+    when(mockDataprocClient.createClusterAsync(any[CreateClusterRequest]))
+      .thenReturn(mockOperationFuture)
+
+    val region = "test-region"
+    val projectId = "test-project"
+
+    val clusterConfigStr = """{
+      "masterConfig": {
+        "numInstances": 1,
+        "machineTypeUri": "n1-standard-4"
+      },
+      "workerConfig": {
+        "numInstances": 2,
+        "machineTypeUri": "n1-standard-4"
+      }
+    }"""
+
+    val clusterName =
+      DataprocSubmitter.getOrCreateCluster("test-cluster",
+                                           Option(Map("dataproc.config" -> clusterConfigStr)),
+                                           projectId,
+                                           region,
+                                           mockDataprocClient)
+
+    assert(clusterName.equals("test-cluster"))
+    verify(mockDataprocClient).createClusterAsync(any())
+  }
+
   it should "test getZiplineVersionOfDataprocJob successfully" in {
     val jobId = "mock-job-id"
     val mockJob = mock[Job]
@@ -1008,10 +1072,13 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
         spark.submission.FlinkJob,
         Map(
           MainClass -> "ai.chronon.flink.FlinkKafkaItemEventDriver",
+          MetadataName -> "test-item-event-data",
+          ZiplineVersion -> "0.1.0",
           FlinkMainJarURI -> "gs://zipline-jars/flink_kafka_ingest-assembly-0.1.0-SNAPSHOT.jar",
           JarURI -> "gs://zipline-jars/cloud_gcp_bigtable.jar",
+          JobId -> ("kafka-driver-" + UUID.randomUUID().toString),
           // This is where we write out checkpoints / persist state while the job is running
-          FlinkStateUri -> "gs://zl-warehouse/flink-state"
+          FlinkCheckpointUri -> "gs://zl-warehouse/flink-state"
         ),
         Map.empty,
         List.empty,

@@ -15,6 +15,7 @@ source = Source(
             selects=selects(
                 "user_id"
             ),  # The primary key used to join various GroupBys together
+            start_partition="2023-11-01",
             time_column="ts",
         ),  # The event time used to compute feature values as-of
     )
@@ -22,16 +23,20 @@ source = Source(
 
 v1_test = Join(
     left=source,
+    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=purchases.v1_test)
     ],
+    version=0,
 )
 
 v1_dev = Join(
     left=source,
+    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=purchases.v1_dev)
     ],
+    version=0,
 )
 
 source_notds = Source(
@@ -49,14 +54,18 @@ source_notds = Source(
 
 v1_test_notds = Join(
     left=source_notds,
+    row_ids=["user_id"],
     right_parts=[
         JoinPart(group_by=purchases.v1_test_notds)
     ],
+    version=0,
 )
 
 v1_dev_notds = Join(
     left=source_notds,
+    row_ids=["user_id"],
     right_parts=[
         JoinPart(group_by=purchases.v1_dev_notds)
     ],
+    version=0,
 )

@@ -430,6 +430,7 @@ def get_output_col_names(aggregation):
 
 
 def GroupBy(
+    version: int,
     sources: Union[List[_ANY_SOURCE_TYPE], _ANY_SOURCE_TYPE],
     keys: List[str],
     aggregations: Optional[List[ttypes.Aggregation]],
@@ -451,6 +452,7 @@ def GroupBy(
 ) -> ttypes.GroupBy:
     """
 
+    :param version: TODO
     :param sources:
         can be constructed as entities or events or joinSource::
 
@@ -673,6 +675,7 @@ def GroupBy(
         executionInfo=exec_info,
         tags=tags if tags else None,
         columnTags=column_tags if column_tags else None,
+        version=str(version),
     )
 
     group_by = ttypes.GroupBy(

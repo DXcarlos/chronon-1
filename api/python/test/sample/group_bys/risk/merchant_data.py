@@ -25,5 +25,5 @@ source_merchants = Source(
 )
 
 merchant_group_by = GroupBy(
-    sources=[source_merchants], keys=["merchant_id"], aggregations=None
+    sources=[source_merchants], keys=["merchant_id"], aggregations=None, version=0
 )

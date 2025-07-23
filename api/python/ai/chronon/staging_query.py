@@ -38,6 +38,7 @@ class TableDependency:
 def StagingQuery(
     name: str,
     query: str,
+    version: int,
     output_namespace: Optional[str] = None,
     start_partition: Optional[str] = None,
     table_properties: Optional[Dict[str, str]] = None,
@@ -159,6 +160,7 @@ def StagingQuery(
         tags=tags,
         customJson=custom_json,
         tableProperties=table_properties,
+        version=str(version)
     )
 
     thrift_deps = []

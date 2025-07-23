@@ -23,6 +23,7 @@ from ai.chronon.join import Join, JoinPart
 
 v1 = Join(
     left=test_sources.event_source,
+    row_ids=["group_by_subject", "event"],
     right_parts=[
         JoinPart(
             group_by=sample_non_prod_group_by.v1,
@@ -30,4 +31,5 @@ v1 = Join(
         ),
     ],
     online=True,
+    version=0,
 )

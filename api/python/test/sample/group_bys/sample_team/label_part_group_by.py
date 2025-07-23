@@ -13,6 +13,7 @@ label_part_group_by = GroupBy(
         ),
     ],
     online=False,
+    version=0,
 )
 
 label_part_group_by_2 = GroupBy(
@@ -20,4 +21,5 @@ label_part_group_by_2 = GroupBy(
     keys=["group_by_subject"],
     aggregations=None,
     online=False,
+    version=0,
 )

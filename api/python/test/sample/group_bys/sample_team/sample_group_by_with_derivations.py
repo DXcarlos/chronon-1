@@ -35,4 +35,5 @@ v1 = GroupBy(
         )
     ],
     output_namespace="sample_namespace",
+    version=0,
 )

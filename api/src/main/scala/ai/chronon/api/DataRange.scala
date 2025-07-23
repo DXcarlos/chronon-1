@@ -202,6 +202,32 @@ object PartitionRange {
     rangesToString(ranges)
   }
 
+  // takes a collapsed string and expands it back to individual partitions
+  // eg: "(2020-01-01 -> 2020-01-03), (2020-01-05 -> 2020-01-05), (2020-01-07 -> 2020-01-08)"
+  // will return: ["2020-01-01", "2020-01-02", "2020-01-03", "2020-01-05", "2020-01-07", "2020-01-08"]
+  def expandDates(collapsedString: String)(implicit partitionSpec: PartitionSpec): Seq[String] = {
+    if (collapsedString == null || collapsedString.trim.isEmpty) return Seq.empty
+
+    try {
+      // Parse the collapsed string format: "(start -> end), (start -> end), ..."
+      val rangePattern = """\(([^)]+)\)""".r
+      val ranges = rangePattern.findAllIn(collapsedString).map(_.stripPrefix("(").stripSuffix(")")).toSeq
+
+      ranges.flatMap { rangeStr =>
+        val parts = rangeStr.split(" -> ").map(_.trim)
+        if (parts.length == 2) {
+          val start = parts(0)
+          val end = parts(1)
+          PartitionRange(start, end).partitions
+        } else {
+          Seq.empty
+        }
+      }
+    } catch {
+      case _: Exception => Seq.empty
+    }
+  }
+
   def toTimeRange(partitionRange: PartitionRange): TimeRange = {
     val spec = partitionRange.partitionSpec
     val shiftedEnd = spec.after(partitionRange.end)

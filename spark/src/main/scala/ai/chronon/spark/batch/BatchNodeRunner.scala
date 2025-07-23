@@ -5,7 +5,7 @@ import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
 import ai.chronon.api.{MetaData, PartitionRange, PartitionSpec, ThriftJsonCodec}
 import ai.chronon.online.Api
 import ai.chronon.online.KVStore.PutRequest
-import ai.chronon.planner.{GroupByUploadNode, MonolithJoinNode, Node, NodeContent, StagingQueryNode}
+import ai.chronon.planner._
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.submission.SparkSessionBuilder
@@ -13,6 +13,7 @@ import ai.chronon.spark.{GroupByUpload, Join}
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 import org.slf4j.{Logger, LoggerFactory}
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -45,6 +46,43 @@ object BatchNodeRunner extends NodeRunner {
 
   @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
+  def checkPartitions(conf: ExternalSourceSensorNode,
+                      metadata: MetaData,
+                      tableUtils: TableUtils,
+                      range: PartitionRange): Try[Unit] = {
+    val tableName = conf.sourceName
+    val retryCount = if (conf.isSetRetryCount) conf.retryCount else 3L
+    val retryIntervalMin = if (conf.isSetRetryIntervalMin) conf.retryIntervalMin else 3L
+
+    val spec = metadata.executionInfo.tableDependencies.asScala
+      .find(_.tableInfo.table == tableName)
+      .map(_.tableInfo.partitionSpec(tableUtils.partitionSpec))
+
+    @tailrec
+    def retry(attempt: Long): Try[Unit] = {
+      val result = Try {
+        val partitionsInRange =
+          tableUtils.partitions(tableName, partitionRange = Option(range), tablePartitionSpec = spec)
+        val missingPartitions = range.partitions.diff(partitionsInRange)
+        if (missingPartitions.nonEmpty) {
+          throw new RuntimeException(
+            s"Input table ${tableName} is missing partitions: ${missingPartitions.mkString(", ")}")
+        } else {
+          logger.info(s"Input table ${tableName} has the requested range present: ${range}.")
+        }
+      }
+      result match {
+        case Success(value) => Success(value)
+        case Failure(exception) if attempt < retryCount =>
+          logger.warn(s"Attempt ${attempt + 1} failed, retrying in ${retryIntervalMin} minutes", exception)
+          Thread.sleep(retryIntervalMin * 60 * 1000)
+          retry(attempt + 1)
+        case failure => failure
+      }
+    }
+    retry(0)
+  }
+
   private def createTableUtils(name: String): TableUtils = {
     val spark = SparkSessionBuilder.build(s"batch-node-runner-${name}")
     TableUtils(spark)
@@ -59,6 +97,15 @@ object BatchNodeRunner extends NodeRunner {
         runGroupByUpload(metadata, conf.getGroupByUpload, range, tableUtils)
       case NodeContent._Fields.STAGING_QUERY =>
         runStagingQuery(metadata, conf.getStagingQuery, range, tableUtils)
+      case NodeContent._Fields.EXTERNAL_SOURCE_SENSOR => {
+
+        checkPartitions(conf.getExternalSourceSensor, metadata, tableUtils, range) match {
+          case Success(_) => System.exit(0)
+          case Failure(exception) =>
+            logger.error(s"ExternalSourceSensor check failed.", exception)
+            System.exit(1)
+        }
+      }
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported NodeContent type: ${conf.getSetField}")
     }
@@ -132,13 +179,13 @@ object BatchNodeRunner extends NodeRunner {
 
   def runFromArgs(api: Api, confPath: String, startDs: String, endDs: String): Try[Unit] = {
     Try {
-      val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
-      val kvStore = api.genKvStore
       val node = ThriftJsonCodec.fromJsonFile[Node](confPath, check = true)
       val metadata = node.metaData
+      val tableUtils = createTableUtils(metadata.name)
+      val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
+      val kvStore = api.genKvStore
 
       logger.info(s"Starting batch node runner for '${metadata.name}'")
-      val tableUtils = createTableUtils(metadata.name)
       val inputTablesToRange = Option(metadata.executionInfo.getTableDependencies)
         .map(_.asScala.toArray)
         .getOrElse(Array.empty)

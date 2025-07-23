@@ -47,8 +47,8 @@ class EventsEntitiesSnapshotTest extends BaseJoinTest {
     val rupeeTable = s"$namespace.rupee_transactions"
     spark.sql(s"DROP TABLE IF EXISTS $dollarTable")
     spark.sql(s"DROP TABLE IF EXISTS $rupeeTable")
-    DataFrameGen.entities(spark, dollarTransactions, 300, partitions = 200).save(dollarTable, Map("tblProp1" -> "1"))
-    DataFrameGen.entities(spark, rupeeTransactions, 500, partitions = 80).save(rupeeTable)
+    DataFrameGen.entities(spark, dollarTransactions, 3000, partitions = 200).save(dollarTable, Map("tblProp1" -> "1"))
+    DataFrameGen.entities(spark, rupeeTransactions, 5000, partitions = 80).save(rupeeTable)
 
     val dollarSource = Builders.Source.entities(
       query = Builders.Query(
@@ -95,7 +95,7 @@ class EventsEntitiesSnapshotTest extends BaseJoinTest {
 
     val queryTable = s"$namespace.queries"
     DataFrameGen
-      .events(spark, queriesSchema, 300, partitions = 90, partitionColumn = Some("date"))
+      .events(spark, queriesSchema, 3000, partitions = 90, partitionColumn = Some("date"))
       .save(queryTable, partitionColumns = Seq("date"))
 
     val start = tableUtils.partitionSpec.minus(today, new Window(60, TimeUnit.DAYS))
@@ -186,6 +186,7 @@ class EventsEntitiesSnapshotTest extends BaseJoinTest {
                            | AND from_unixtime(queries.ts/1000, 'yyyy-MM-dd') = date_add(grouped_transactions.ds, 1)
                            | WHERE queries.user_name IS NOT NULL AND queries.user IS NOT NULL
                            |""".stripMargin
+
     val expected = spark.sql(expectedQuery)
     val queries = tableUtils.sql(
       s"SELECT user_name, user, ts, date as ds from $queryTable where user IS NOT NULL AND user_name IS NOT null AND ts IS NOT NULL AND date IS NOT NULL AND date >= '$start' AND date <= '$end'")

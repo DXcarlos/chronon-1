@@ -52,6 +52,7 @@ def ctr_group_by(*keys, accuracy):
             ),
         ],
         accuracy=accuracy,
+        version=0,
     )
 
 

@@ -1,12 +1,22 @@
 {
   "metaData": {
-    "name": "gcp.item_event_join.canary_combined_v1",
+    "name": "gcp.item_event_join.canary_streaming_v1__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "data",
+    "columnHashes": {
+      "listing_id_add_cart_sum_1d": "6b9c42bf45158c93b823dcf0b5bea7ab",
+      "listing_id_view_sum_1d": "c92a7a66f21979b327788447d063fe2b",
+      "listing_id_purchase_sum_1d": "12f0cd5674381064326148e7eb352a40",
+      "listing_id_favorite_sum_1d": "bb07e39a4b7ea81aca5baf027fd8f555",
+      "listing_id": "f2f6c814b8ae1521176b22a1ae7f2d0d",
+      "user_id": "493d3df28f80664abd11b19fcd33b6e6",
+      "ts": "ad9fd4c611e20ad833819a4ce9d752bf"
+    },
     "online": 1,
     "production": 0,
     "sourceFile": "joins/gcp/item_event_join.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
     "samplePercent": 100.0,
     "executionInfo": {
       "env": {
@@ -138,11 +148,25 @@
     {
       "groupBy": {
         "metaData": {
-          "name": "gcp.item_event_canary.actions_pubsub_v2",
+          "name": "gcp.item_event_canary.actions_pubsub_v2__0",
           "team": "gcp",
+          "version": "0",
           "outputNamespace": "data",
+          "columnHashes": {
+            "add_cart_sum_1d": "ed104cb5e34d9ac3c193cda31fec5db4",
+            "view_sum_1d": "d4bc995b2e1955c153a0d1d78927f07c",
+            "purchase_sum_1d": "8461cac7c35b38bae99562beb4060578",
+            "favorite_sum_1d": "ecce467f5cef9f4f6742ce4a0650499b",
+            "listing_id": "63b9f4d87c1cc4fb39f6f5230ae29034"
+          },
           "online": 1,
           "executionInfo": {
+            "env": {
+              "common": {
+                "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092"
+              },
+              "modeEnvironments": {}
+            },
             "conf": {
               "common": {
                 "spark.chronon.partition.column": "_DATE"
@@ -156,7 +180,7 @@
         "sources": [
           {
             "events": {
-              "table": "data.item_events_parquet_compat",
+              "table": "data.item_events_parquet_compat_partitioned",
               "topic": "pubsub://test-item-event-data/serde=pubsub_schema/project=canary-443022/schemaId=item-event/tasks=4/subscription=test-item-event-data-sub",
               "query": {
                 "selects": {
@@ -206,7 +230,7 @@
             "argMap": {},
             "windows": [
               {
-                "length": 7,
+                "length": 1,
                 "timeUnit": 1
               }
             ]
@@ -225,106 +249,10 @@
         ]
       },
       "useLongNames": 0
-    },
-    {
-      "groupBy": {
-        "metaData": {
-          "name": "gcp.purchases.v1_test",
-          "team": "gcp",
-          "outputNamespace": "data",
-          "online": 1,
-          "executionInfo": {
-            "scheduleCron": "@daily",
-            "historicalBackfill": 0
-          }
-        },
-        "sources": [
-          {
-            "events": {
-              "table": "data.purchases",
-              "query": {
-                "selects": {
-                  "user_id": "user_id",
-                  "purchase_price": "purchase_price"
-                },
-                "timeColumn": "ts"
-              }
-            }
-          }
-        ],
-        "keyColumns": [
-          "user_id"
-        ],
-        "aggregations": [
-          {
-            "inputColumn": "purchase_price",
-            "operation": 7,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 6,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 8,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 13,
-            "argMap": {
-              "k": "10"
-            }
-          }
-        ],
-        "backfillStartDate": "2023-11-01"
-      },
-      "useLongNames": 0
     }
+  ],
+  "rowIds": [
+    "user_id"
   ],
   "useLongNames": 0
 }

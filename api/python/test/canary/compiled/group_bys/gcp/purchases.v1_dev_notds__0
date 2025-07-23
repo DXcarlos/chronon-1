@@ -1,13 +1,25 @@
 {
   "metaData": {
-    "name": "gcp.training_set.v1_dev",
+    "name": "gcp.purchases.v1_dev_notds__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "data",
-    "online": 0,
-    "production": 0,
-    "sourceFile": "joins/gcp/training_set.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_with_offset_0\", \"spec\": \"data.checkouts/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
-    "samplePercent": 100.0,
+    "columnHashes": {
+      "purchase_price_sum_3d": "da634937507b662e72ba6e65a7dbc5ae",
+      "purchase_price_sum_14d": "da634937507b662e72ba6e65a7dbc5ae",
+      "purchase_price_sum_30d": "da634937507b662e72ba6e65a7dbc5ae",
+      "purchase_price_count_3d": "da634937507b662e72ba6e65a7dbc5ae",
+      "purchase_price_count_14d": "da634937507b662e72ba6e65a7dbc5ae",
+      "purchase_price_count_30d": "da634937507b662e72ba6e65a7dbc5ae",
+      "purchase_price_average_3d": "da634937507b662e72ba6e65a7dbc5ae",
+      "purchase_price_average_14d": "da634937507b662e72ba6e65a7dbc5ae",
+      "purchase_price_average_30d": "da634937507b662e72ba6e65a7dbc5ae",
+      "purchase_price_last10": "da634937507b662e72ba6e65a7dbc5ae",
+      "user_id": "8168060cd2596194d5a1132ce4fd7a84"
+    },
+    "online": 1,
+    "sourceFile": "group_bys/gcp/purchases.py",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_notds_with_offset_0\", \"spec\": \"data.purchases_notds/notds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "env": {
         "common": {
@@ -118,121 +130,94 @@
           }
         }
       },
-      "scheduleCron": "@daily"
+      "scheduleCron": "@daily",
+      "historicalBackfill": 0
     }
   },
-  "left": {
-    "events": {
-      "table": "data.checkouts",
-      "query": {
-        "selects": {
-          "user_id": "user_id",
-          "ts": "ts"
-        },
-        "timeColumn": "ts"
+  "sources": [
+    {
+      "events": {
+        "table": "data.purchases_notds",
+        "query": {
+          "selects": {
+            "user_id": "user_id",
+            "purchase_price": "purchase_price"
+          },
+          "startPartition": "2023-11-01",
+          "timeColumn": "ts",
+          "partitionColumn": "notds"
+        }
       }
     }
-  },
-  "joinParts": [
+  ],
+  "keyColumns": [
+    "user_id"
+  ],
+  "aggregations": [
     {
-      "groupBy": {
-        "metaData": {
-          "name": "gcp.purchases.v1_dev",
-          "team": "gcp",
-          "outputNamespace": "data",
-          "online": 1,
-          "executionInfo": {
-            "scheduleCron": "@daily",
-            "historicalBackfill": 0
-          }
+      "inputColumn": "purchase_price",
+      "operation": 7,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
         },
-        "sources": [
-          {
-            "events": {
-              "table": "data.purchases",
-              "query": {
-                "selects": {
-                  "user_id": "user_id",
-                  "purchase_price": "purchase_price"
-                },
-                "timeColumn": "ts"
-              }
-            }
-          }
-        ],
-        "keyColumns": [
-          "user_id"
-        ],
-        "aggregations": [
-          {
-            "inputColumn": "purchase_price",
-            "operation": 7,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 6,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 8,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 13,
-            "argMap": {
-              "k": "10"
-            }
-          }
-        ],
-        "backfillStartDate": "2023-11-01"
-      },
-      "useLongNames": 0
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 6,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 8,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 13,
+      "argMap": {
+        "k": "10"
+      }
     }
   ],
-  "useLongNames": 0
+  "backfillStartDate": "2023-11-01"
 }

@@ -18,14 +18,15 @@ package ai.chronon.spark.test.join
 
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
-import ai.chronon.api.{Join, _}
-import ai.chronon.spark._
+import ai.chronon.api._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.test.DataFrameGen
 
 class HeterogeneousPartitionColumnsTest extends BaseJoinTest {
 
   it should "test hetergeneous partition columns" in {
+    val rowCount = 10000
+
     // Test for different partition columns and formats in the same join
     // First GroupBy with default format
     val namespace = "test_heterogeneous"
@@ -38,7 +39,7 @@ class HeterogeneousPartitionColumnsTest extends BaseJoinTest {
     )
 
     val viewsTable = s"$namespace.view_events_hetero"
-    DataFrameGen.events(spark, viewsSchema, count = 100, partitions = 200).drop("ts").save(viewsTable)
+    DataFrameGen.events(spark, viewsSchema, count = rowCount, partitions = 200).drop("ts").save(viewsTable)
 
     // ViewsSource --> Default partition column
     val viewsSource = Builders.Source.events(
@@ -75,7 +76,7 @@ class HeterogeneousPartitionColumnsTest extends BaseJoinTest {
       .events(
         spark,
         clicksSchema,
-        count = 100,
+        count = rowCount,
         partitions = 200,
         partitionColumn = Some(customPartitionCol),
         partitionFormat = Some(customFormat)
@@ -124,7 +125,7 @@ class HeterogeneousPartitionColumnsTest extends BaseJoinTest {
     val leftDf = DataFrameGen.events(
       spark,
       itemQueries,
-      100,
+      rowCount,
       partitions = 200,
       partitionColumn = Some(leftCustomPartitionCol),
       partitionFormat = Some(leftCustomFormat)

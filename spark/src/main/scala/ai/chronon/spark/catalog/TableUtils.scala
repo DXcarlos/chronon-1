@@ -153,6 +153,25 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       .getOrElse(partitions)
   }
 
+  def tableCoversRange(table: String, range: PartitionRange): Boolean = {
+    try {
+      val requiredPartitions = range.partitions.toSet
+      val coveredPartitions = partitions(table).toSet
+
+      val isFullyCovered = requiredPartitions.subsetOf(coveredPartitions)
+      if (!isFullyCovered) {
+        logger.info(
+          s"Production table $table does not cover full range. Required: $requiredPartitions, Available: $coveredPartitions")
+      }
+
+      isFullyCovered
+    } catch {
+      case e: Exception =>
+        logger.warn(s"Error checking production table coverage: ${e.getMessage}")
+        false
+    }
+  }
+
   // Given a table and a query extract the schema of the columns involved as input.
   def getColumnsFromQuery(query: String): Seq[String] = {
     val parser = sparkSession.sessionState.sqlParser

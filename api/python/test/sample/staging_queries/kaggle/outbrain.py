@@ -41,4 +41,5 @@ base_table = StagingQuery(
         TableDependency(table="kaggle_outbrain.clicks_train", partition_column="ds"),
         TableDependency(table="kaggle_outbrain.events", partition_column="ds")
     ],
+    version=0,
 )

@@ -30,4 +30,5 @@ v1 = GroupBy(
     online=False,
     production=False,
     output_namespace="sample_namespace",
+    version=0,
 )

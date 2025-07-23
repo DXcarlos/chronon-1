@@ -345,21 +345,16 @@ object FlinkJob {
     val groupByName = jobArgs.groupbyName()
     val onlineClassName = jobArgs.onlineClass()
     val props = jobArgs.apiProps.map(identity)
-    val kafkaBootstrap = jobArgs.kafkaBootstrap.toOption
     val validateMode = jobArgs.validate()
     val validateRows = jobArgs.validateRows()
     val maybeParentJobId = jobArgs.parentJobId.toOption
     val enableDebug = jobArgs.enableDebug()
 
-    val propsWithStreamingParams = props ++ Map(
-      KafkaFlinkSource.KafkaBootstrap -> kafkaBootstrap.getOrElse("")
-    )
-
     val api = buildApi(onlineClassName, props)
     val metadataStore = new MetadataStore(FetchContext(api.genKvStore, MetadataDataset))
 
     if (validateMode) {
-      val validationResults = ValidationFlinkJob.run(metadataStore, propsWithStreamingParams, groupByName, validateRows)
+      val validationResults = ValidationFlinkJob.run(metadataStore, props, groupByName, validateRows)
       if (validationResults.map(_.totalMismatches).sum > 0) {
         val validationSummary = s"Total records: ${validationResults.map(_.totalRecords).sum}, " +
           s"Total matches: ${validationResults.map(_.totalMatches).sum}, " +
@@ -373,7 +368,7 @@ object FlinkJob {
     val flinkJob =
       maybeServingInfo
         .map { servingInfo =>
-          buildFlinkJob(groupByName, propsWithStreamingParams, api, servingInfo, enableDebug)
+          buildFlinkJob(groupByName, props, api, servingInfo, enableDebug)
         }
         .recover { case e: Exception =>
           throw new IllegalArgumentException(s"Unable to lookup serving info for GroupBy: '$groupByName'", e)

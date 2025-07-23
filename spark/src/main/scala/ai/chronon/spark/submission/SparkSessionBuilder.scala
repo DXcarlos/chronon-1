@@ -101,7 +101,7 @@ object SparkSessionBuilder {
           "spark.sql.catalog.spark_catalog" -> "org.apache.spark.sql.delta.catalog.DeltaCatalog",
           "spark.chronon.table_write.format" -> "delta"
         )
-        (configMap, "ai.chronon.spark.ChrononDeltaLakeKryoRegistrator")
+        (configMap, "ai.chronon.spark.submission.ChrononDeltaLakeKryoRegistrator")
       case _ => (Map.empty, "ai.chronon.spark.submission.ChrononKryoRegistrator")
     }
 

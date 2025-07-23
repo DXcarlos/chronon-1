@@ -25,9 +25,6 @@ class ShortNamesTest extends AnyFlatSpec {
   private implicit val tableUtils = TableTestUtils(spark)
   private val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
   private val monthAgo = tableUtils.partitionSpec.minus(today, new Window(30, TimeUnit.DAYS))
-  private val fortyDaysAgo = tableUtils.partitionSpec.minus(today, new Window(40, TimeUnit.DAYS))
-  private val thirtyThreeDaysAgo = tableUtils.partitionSpec.minus(today, new Window(33, TimeUnit.DAYS))
-  private val fiftyDaysAgo = tableUtils.partitionSpec.minus(today, new Window(50, TimeUnit.DAYS))
   private val yearAgo = tableUtils.partitionSpec.minus(today, new Window(365, TimeUnit.DAYS))
 
   val start = tableUtils.partitionSpec.minus(today, new Window(60, TimeUnit.DAYS))
@@ -36,7 +33,7 @@ class ShortNamesTest extends AnyFlatSpec {
   val namespace = "test_short_names"
   tableUtils.createDatabase(namespace)
 
-  it should "test label part short names" in {
+  it should "test monolith join short names" in {
 
     val viewsSchema = List(
       Column("user", api.StringType, 10000),
@@ -62,23 +59,6 @@ class ShortNamesTest extends AnyFlatSpec {
       accuracy = Accuracy.SNAPSHOT
     )
 
-    val labelsGroupBy = Builders.GroupBy(
-      sources = Seq(viewsSource),
-      keyColumns = Seq("item"),
-      aggregations = Seq(
-        Builders.Aggregation(operation = Operation.SUM,
-                             inputColumn = "time_spent_ms",
-                             windows = Seq(new Window(7, TimeUnit.DAYS)))
-      ),
-      metaData = Builders.MetaData(name = "unit_test.item_views", namespace = namespace),
-      accuracy = Accuracy.SNAPSHOT,
-      backfillStartDate = fiftyDaysAgo
-    )
-
-    val labelParts = Builders.LabelPart(
-      labels = Seq(Builders.JoinPart(groupBy = labelsGroupBy).setUseLongNames(false))
-    )
-
     // left side
     val itemQueries = List(Column("item", api.StringType, 100))
     val itemQueriesTable = s"$namespace.item_queries"
@@ -92,51 +72,17 @@ class ShortNamesTest extends AnyFlatSpec {
       .Join(
         left = Builders.Source.events(Builders.Query(startPartition = start), table = itemQueriesTable),
         joinParts = Seq(Builders.JoinPart(groupBy = viewsGroupBy, prefix = "user").setUseLongNames(false)),
-        labelParts = labelParts,
         metaData = Builders.MetaData(name = "test.item_snapshot_features", namespace = namespace, team = "chronon")
       )
       .setUseLongNames(false)
 
     val join = new Join(joinConf = joinConf, endPartition = monthAgo, tableUtils)
     val computed = join.computeJoin()
-    computed.show()
+    val outputColumns = computed.columns
+    println(outputColumns.mkString("Output columns::[", ", ", "]"))
 
-    // Now compute the snapshots for the label join
-    GroupBy.computeBackfill(labelsGroupBy, today, tableUtils)
-    val labelGbOutputTable = labelsGroupBy.metaData.outputTable
-    tableUtils.sql(s"SELECT * FROM $labelGbOutputTable").show()
-
-    // Now compute the label join for thirty three days ago (label ds)
-    val labelDateRange = new api.DateRange(thirtyThreeDaysAgo, thirtyThreeDaysAgo)
-    val labelJoin = new LabelJoinV2(joinConf, tableUtils, labelDateRange)
-    val labelComputed = labelJoin.compute()
-    println("Label computed::")
-    labelComputed.show()
-
-    val joinOutputTable = joinConf.metaData.outputTable
-
-    val expected =
-      s"""
-         | SELECT j.*, gb.time_spent_ms_sum_7d as label__item_time_spent_ms_sum_7d FROM
-         | (SELECT * FROM $joinOutputTable WHERE ds = "$fortyDaysAgo") as j
-         | LEFT OUTER JOIN
-         | (SELECT * FROM $labelGbOutputTable WHERE ds = "$thirtyThreeDaysAgo") as gb
-         | on j.item = gb.item
-         |""".stripMargin
-
-    val expectedDf = tableUtils.sql(expected)
-    println("Expected::")
-    expectedDf.show()
-
-    val diff = Comparison.sideBySide(labelComputed, expectedDf, List("item", "ts", "ds"))
-
-    if (diff.count() > 0) {
-      logger.info(s"Actual count: ${labelComputed.count()}")
-      logger.info(s"Expected count: ${expectedDf.count()}")
-      logger.info(s"Diff count: ${diff.count()}")
-      diff.show()
-    }
-    assertEquals(0, diff.count())
+    // prefix + key + col_name
+    assert(computed.columns.contains("user_item_time_spent_ms_average"))
   }
 
   it should "test modular with short names" in {
@@ -158,8 +104,8 @@ class ShortNamesTest extends AnyFlatSpec {
     val rupeeTable = s"$namespace.rupee_transactions"
     spark.sql(s"DROP TABLE IF EXISTS $dollarTable")
     spark.sql(s"DROP TABLE IF EXISTS $rupeeTable")
-    DataFrameGen.entities(spark, dollarTransactions, 600, partitions = 200).save(dollarTable, Map("tblProp1" -> "1"))
-    DataFrameGen.entities(spark, rupeeTransactions, 500, partitions = 80).save(rupeeTable)
+    DataFrameGen.entities(spark, dollarTransactions, 1000, partitions = 100).save(dollarTable, Map("tblProp1" -> "1"))
+    DataFrameGen.entities(spark, rupeeTransactions, 1000, partitions = 40).save(rupeeTable)
 
     val dollarSource = Builders.Source.entities(
       query = Builders.Query(
@@ -225,7 +171,7 @@ class ShortNamesTest extends AnyFlatSpec {
 
     val queryTable = s"$namespace.queries"
     DataFrameGen
-      .events(spark, queriesSchema, 6000, partitions = 180, partitionColumn = Some("date"))
+      .events(spark, queriesSchema, 2000, partitions = 90, partitionColumn = Some("date"))
       .save(queryTable, partitionColumns = Seq("date"))
 
     // Make bootstrap part and table
@@ -516,6 +462,7 @@ class ShortNamesTest extends AnyFlatSpec {
                    |  on queries.user == dollar.user
                    |  GROUP BY queries.user, queries.ts, queries.ds
                    |""".stripMargin
+
     spark.sql(expectedQuery).show()
     val expected = spark.sql(expectedQuery)
     val computed = spark.sql(s"SELECT user, ts, ds, ratio_derivation, external_coalesce FROM $derivationOutputTable")

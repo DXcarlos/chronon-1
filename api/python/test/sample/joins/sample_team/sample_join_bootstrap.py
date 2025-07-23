@@ -62,6 +62,7 @@ v1 = Join(
             ),
         )
     ],
+    version=0,
 )
 
 v2 = Join(
@@ -78,4 +79,5 @@ v2 = Join(
         )
     ],
     use_long_names=True,
+    version=0,
 )

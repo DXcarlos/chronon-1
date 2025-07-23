@@ -20,15 +20,19 @@ source = Source(
 # Join with just a streaming GB
 canary_streaming_v1 = Join(
     left=source,
+    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=item_event_canary.actions_pubsub_v2)
     ],
+    version=0,
     online=True,
 )
 
 # Join with just a batch GB
 canary_batch_v1 = Join(
     left=source,
+    row_ids="listing_id",
+    version=0,
     right_parts=[
         JoinPart(group_by=purchases.v1_test)
     ],
@@ -38,6 +42,8 @@ canary_batch_v1 = Join(
 # Join with a streaming and batch GB
 canary_combined_v1 = Join(
     left=source,
+    row_ids=["user_id"],
+    version=0,
     right_parts=[
         JoinPart(group_by=item_event_canary.actions_pubsub_v2),
         JoinPart(group_by=purchases.v1_test)

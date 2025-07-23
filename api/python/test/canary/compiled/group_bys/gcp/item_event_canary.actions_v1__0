@@ -1,13 +1,19 @@
 {
   "metaData": {
-    "name": "gcp.training_set.v1_test",
+    "name": "gcp.item_event_canary.actions_v1__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "data",
-    "online": 0,
-    "production": 0,
-    "sourceFile": "joins/gcp/training_set.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_with_offset_0\", \"spec\": \"data.checkouts/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
-    "samplePercent": 100.0,
+    "columnHashes": {
+      "add_cart_sum_1d": "f79226e7757c6aa927fc1007d6749a94",
+      "view_sum_1d": "cbf9c10a17d7f4669437872708303738",
+      "purchase_sum_1d": "8e26d6cb81cb2f557be0d86f88836b4e",
+      "favorite_sum_1d": "b2d5bbaffe0b5b5d3e186bb0022ee041",
+      "listing_id": "27435c7763a514975682fcc80c73e199"
+    },
+    "online": 1,
+    "sourceFile": "group_bys/gcp/item_event_canary.py",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "env": {
         "common": {
@@ -15,7 +21,7 @@
           "JOB_MODE": "local[*]",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
           "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
-          "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+          "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
           "CUSTOMER_ID": "dev",
@@ -34,7 +40,7 @@
             "JOB_MODE": "local[*]",
             "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
             "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
-            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+            "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
             "CUSTOMER_ID": "dev",
@@ -51,7 +57,7 @@
       },
       "conf": {
         "common": {
-          "spark.chronon.partition.column": "ds",
+          "spark.chronon.partition.column": "_DATE",
           "spark.chronon.cloud_provider": "gcp",
           "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
           "spark.chronon.partition.format": "yyyy-MM-dd",
@@ -80,7 +86,7 @@
         },
         "modeConfigs": {
           "backfill": {
-            "spark.chronon.partition.column": "ds",
+            "spark.chronon.partition.column": "_DATE",
             "spark.chronon.cloud_provider": "gcp",
             "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
             "spark.chronon.partition.format": "yyyy-MM-dd",
@@ -118,121 +124,78 @@
           }
         }
       },
-      "scheduleCron": "@daily"
+      "scheduleCron": "@daily",
+      "historicalBackfill": 0
     }
   },
-  "left": {
-    "events": {
-      "table": "data.checkouts",
-      "query": {
-        "selects": {
-          "user_id": "user_id",
-          "ts": "ts"
-        },
-        "timeColumn": "ts"
+  "sources": [
+    {
+      "events": {
+        "table": "data.item_events_parquet_compat_partitioned",
+        "topic": "kafka://test-item-event-data/serde=custom/provider_class=ai.chronon.flink.deser.MockCustomSchemaProvider/schema_name=item_event/security.protocol=SASL_SSL/sasl.mechanism=OAUTHBEARER/sasl.login.callback.handler.class=com.google.cloud.hosted.kafka.auth.GcpLoginCallbackHandler/sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;",
+        "query": {
+          "selects": {
+            "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
+            "add_cart": "IF(event_type = 'backend_add_to_cart', 1, 0)",
+            "view": "IF(event_type = 'view_listing', 1, 0)",
+            "purchase": "IF(event_type = 'backend_cart_payment', 1, 0)",
+            "favorite": "IF(event_type = 'backend_favorite_item2', 1, 0)"
+          },
+          "wheres": [
+            "event_type in ('backend_add_to_cart', 'view_listing', 'backend_cart_payment', 'backend_favorite_item2')"
+          ],
+          "timeColumn": "timestamp"
+        }
       }
     }
-  },
-  "joinParts": [
-    {
-      "groupBy": {
-        "metaData": {
-          "name": "gcp.purchases.v1_test",
-          "team": "gcp",
-          "outputNamespace": "data",
-          "online": 1,
-          "executionInfo": {
-            "scheduleCron": "@daily",
-            "historicalBackfill": 0
-          }
-        },
-        "sources": [
-          {
-            "events": {
-              "table": "data.purchases",
-              "query": {
-                "selects": {
-                  "user_id": "user_id",
-                  "purchase_price": "purchase_price"
-                },
-                "timeColumn": "ts"
-              }
-            }
-          }
-        ],
-        "keyColumns": [
-          "user_id"
-        ],
-        "aggregations": [
-          {
-            "inputColumn": "purchase_price",
-            "operation": 7,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 6,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 8,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 13,
-            "argMap": {
-              "k": "10"
-            }
-          }
-        ],
-        "backfillStartDate": "2023-11-01"
-      },
-      "useLongNames": 0
-    }
   ],
-  "useLongNames": 0
+  "keyColumns": [
+    "listing_id"
+  ],
+  "aggregations": [
+    {
+      "inputColumn": "add_cart",
+      "operation": 7,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "view",
+      "operation": 7,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase",
+      "operation": 7,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "favorite",
+      "operation": 7,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        }
+      ]
+    }
+  ]
 }

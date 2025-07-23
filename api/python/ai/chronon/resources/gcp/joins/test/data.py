@@ -25,4 +25,6 @@ v1 = Join(
     right_parts=[
         JoinPart(group_by=group_by_v1)
     ],
+    row_ids="user_id",
+    version=0,
 )

@@ -36,7 +36,8 @@ def test_parse_configs_relative_source_file():
     with patch('ai.chronon.cli.compile.parse_configs.from_file') as mock_from_file, \
          patch('ai.chronon.cli.compile.serializer.thrift_simple_json') as mock_serialize, \
          patch('glob.glob', return_value=[test_file_path]), \
-         patch('ai.chronon.cli.compile.parse_teams.update_metadata'):
+         patch('ai.chronon.cli.compile.parse_teams.update_metadata'), \
+         patch('ai.chronon.cli.compile.parse_configs.populate_column_hashes'):
         
         # Configure mock return values
         mock_from_file.return_value = {"team.test_group_by.test_var": mock_obj}

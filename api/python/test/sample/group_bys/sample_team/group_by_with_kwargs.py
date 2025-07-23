@@ -36,4 +36,5 @@ v1 = GroupBy(
         Aggregation(input_column="event", operation=Operation.SUM, windows=["7d"]),
     ],
     online=True,
+    version=0,
 )

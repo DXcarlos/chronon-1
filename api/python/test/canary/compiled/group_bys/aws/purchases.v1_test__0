@@ -1,8 +1,22 @@
 {
   "metaData": {
-    "name": "aws.purchases.v1_test",
+    "name": "aws.purchases.v1_test__0",
     "team": "aws",
+    "version": "0",
     "outputNamespace": "data",
+    "columnHashes": {
+      "purchase_price_sum_3d": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "purchase_price_sum_14d": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "purchase_price_sum_30d": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "purchase_price_count_3d": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "purchase_price_count_14d": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "purchase_price_count_30d": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "purchase_price_average_3d": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "purchase_price_average_14d": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "purchase_price_average_30d": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "purchase_price_last10": "5814df4e6a1e2eb06b9fab89e70ea97d",
+      "user_id": "dec6601a613992b4b6cdc50ac8014a29"
+    },
     "online": 1,
     "sourceFile": "group_bys/aws/purchases.py",
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
@@ -45,6 +59,7 @@
             "user_id": "user_id",
             "purchase_price": "purchase_price"
           },
+          "startPartition": "2023-11-01",
           "timeColumn": "ts"
         }
       }

@@ -41,6 +41,7 @@ v1 = GroupBy(
     sources=[source],
     keys=["user_id"],  # We are aggregating by user
     online=True,
+    version=0,
     aggregations=[
         Aggregation(
             input_column="refund_amt", operation=Operation.SUM, windows=window_sizes

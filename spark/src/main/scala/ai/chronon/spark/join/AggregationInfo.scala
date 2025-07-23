@@ -42,20 +42,6 @@ case class AggregationInfo(hopsAggregator: HopsAggregator,
 
   type Rows = mutable.WrappedArray[SparkRow]
 
-  @transient lazy val aggregatingUdf: UserDefinedFunction = {
-    val parent = this
-
-    udf(
-      new UDF2[Rows, Rows, Array[CGenericRow]] {
-        override def call(leftRows: Rows, rightRows: Rows): Array[CGenericRow] = {
-          val result = sawtoothAggregate(parent)(leftRows, rightRows)
-          result
-        }
-      },
-      spark.ArrayType(outputSparkSchema)
-    )
-  }
-
   def aggregate(leftRows: Rows, rightRows: Rows): Array[CGenericRow] = {
     sawtoothAggregate(this)(leftRows, rightRows)
   }

@@ -134,6 +134,7 @@ def test_validator_ok():
                 operation=group_by.Operation.APPROX_PERCENTILE([0.5, 0.75]),
             ),
         ),
+        version=0,
     )
     assert all(
         [
@@ -153,23 +154,27 @@ def test_validator_ok():
                     operation=group_by.Operation.APPROX_PERCENTILE([1.5]),
                 ),
             ),
+            version=0
         )
     with pytest.raises(AssertionError):
         group_by.GroupBy(
             sources=event_source("table"),
             keys=["subject"],
             aggregations=None,
+            version=0,
         )
     with pytest.raises(AssertionError):
         group_by.GroupBy(
             sources=entity_source("table", "mutationTable"),
             keys=["subject"],
             aggregations=None,
+            version=0
         )
     group_by.GroupBy(
         sources=entity_source("table", None),
         keys=["subject"],
         aggregations=None,
+        version=0,
     )
 
 
@@ -201,6 +206,7 @@ def test_select_sanitization():
             event_id=ttypes.Aggregation(operation=ttypes.Operation.LAST),
             cnt=ttypes.Aggregation(operation=ttypes.Operation.COUNT),
         ),
+        version=0,
     )
     required_selects = set(["key1", "key2", "event_id", "cnt"])
     assert set(gb.sources[0].events.query.selects.keys()) == required_selects
@@ -234,6 +240,7 @@ def test_snapshot_with_hour_aggregation():
                 ),
             ),
             backfill_start_date="2021-01-04",
+            version=0,
         )
 
 
@@ -251,6 +258,7 @@ def test_additional_metadata():
             )
         ],
         tags={"to_deprecate": "true"},
+        version=0,
     )
     assert gb.metaData.tags["to_deprecate"]
 
@@ -271,6 +279,7 @@ def test_windows_as_strings():
             )
         ],
         tags={"to_deprecate": "true"},
+        version=0
     )
 
     windows = gb.aggregations[0].windows

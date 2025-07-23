@@ -332,7 +332,11 @@ abstract class JoinBase(val joinConfCloned: api.Join,
 
     val wholeRange = PartitionRange(unfilledRanges.minBy(_.start).start, unfilledRanges.maxBy(_.end).end)
 
-    val runSmallMode = JoinUtils.runSmallMode(tableUtils, leftDf(joinConfCloned, wholeRange, tableUtils).get)
+    val leftDataOpt = leftDf(joinConfCloned, wholeRange, tableUtils)
+    require(leftDataOpt.nonEmpty,
+            s"left side of the join ${joinConfCloned.metaData.name} produced empty data in range $wholeRange")
+
+    val runSmallMode = JoinUtils.runSmallMode(tableUtils, leftDataOpt.get)
 
     val effectiveRanges = if (runSmallMode) {
       Seq(wholeRange)

@@ -116,6 +116,8 @@ object SawtoothUdf {
     // compute windows up-to 5min accuracy for the queries
     val nonRealtimeIrs = sawtoothAggregator.computeWindows(hops, headStartTimes)
 
+    assert(headStartTimes.length == nonRealtimeIrs.length)
+
     // STEP-4. join tailAccurate - Irs with headTimeStamps and headEvents
     // to achieve realtime accuracy
     val result = Array.fill[CGenericRow](leftRows.size)(null)

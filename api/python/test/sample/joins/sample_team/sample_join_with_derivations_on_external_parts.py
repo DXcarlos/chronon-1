@@ -34,6 +34,7 @@ from ai.chronon.join import (
 
 v1 = Join(
     left=test_sources.event_source,
+    row_ids="subject",
     right_parts=[
         JoinPart(
             group_by=event_sample_group_by.v1,
@@ -84,5 +85,6 @@ v1 = Join(
             name="*",
             expression="*"
         )
-    ]
+    ],
+    version=0,
 )

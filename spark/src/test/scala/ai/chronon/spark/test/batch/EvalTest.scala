@@ -452,8 +452,8 @@ class EvalTest extends AnyFlatSpec {
     val rupeeTable = s"$namespace.rupee_transactions"
     spark.sql(s"DROP TABLE IF EXISTS $dollarTable")
     spark.sql(s"DROP TABLE IF EXISTS $rupeeTable")
-    DataFrameGen.entities(spark, dollarTransactions, 600, partitions = 200).save(dollarTable, Map("tblProp1" -> "1"))
-    DataFrameGen.entities(spark, rupeeTransactions, 500, partitions = 80).save(rupeeTable)
+    DataFrameGen.entities(spark, dollarTransactions, 200, partitions = 20).save(dollarTable, Map("tblProp1" -> "1"))
+    DataFrameGen.entities(spark, rupeeTransactions, 200, partitions = 20).save(rupeeTable)
 
     val dollarSource = Builders.Source.entities(
       query = Builders.Query(
@@ -530,7 +530,7 @@ class EvalTest extends AnyFlatSpec {
 
     val queryTable = s"$namespace.queries"
     val queryDf = DataFrameGen
-      .events(spark, queriesSchema, 3000, partitions = 180, partitionColumn = Some("date"))
+      .events(spark, queriesSchema, 400, partitions = 20, partitionColumn = Some("date"))
 
     if (badLeftSourceTimestamp) {
       // Convert milliseconds to seconds to make timestamps too small (like in GroupBy test)

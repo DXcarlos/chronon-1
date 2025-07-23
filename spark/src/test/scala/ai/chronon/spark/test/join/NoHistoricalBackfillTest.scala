@@ -19,7 +19,6 @@ package ai.chronon.spark.test.join
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.{Builders, Operation, TimeUnit, Window}
-import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.test.DataFrameGen
 import org.junit.Assert._
@@ -27,6 +26,7 @@ import org.junit.Assert._
 class NoHistoricalBackfillTest extends BaseJoinTest {
 
   it should "test entities entities no historical backfill" in {
+    val rowCount = 10000
     // Only backfill latest partition if historical_backfill is turned off
     val weightSchema = List(
       Column("user", api.StringType, 10),
@@ -34,7 +34,7 @@ class NoHistoricalBackfillTest extends BaseJoinTest {
       Column("weight", api.DoubleType, 500)
     )
     val weightTable = s"$namespace.weights_no_historical_backfill"
-    DataFrameGen.entities(spark, weightSchema, 100, partitions = 400).save(weightTable)
+    DataFrameGen.entities(spark, weightSchema, rowCount, partitions = 400).save(weightTable)
 
     val weightSource = Builders.Source.entities(
       query = Builders.Query(selects = Builders.Selects("weight"), startPartition = yearAgo, endPartition = today),
@@ -51,7 +51,7 @@ class NoHistoricalBackfillTest extends BaseJoinTest {
     // left side
     val countrySchema = List(Column("country", api.StringType, 10))
     val countryTable = s"$namespace.countries_no_historical_backfill"
-    DataFrameGen.entities(spark, countrySchema, 100, partitions = 30).save(countryTable)
+    DataFrameGen.entities(spark, countrySchema, rowCount, partitions = 30).save(countryTable)
 
     val start = tableUtils.partitionSpec.minus(today, new Window(30, TimeUnit.DAYS))
     val end = tableUtils.partitionSpec.minus(today, new Window(5, TimeUnit.DAYS))

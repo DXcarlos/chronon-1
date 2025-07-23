@@ -75,11 +75,11 @@ set -xo pipefail
 # hardcoding the s3 path here because that's where the underlying location of the data is for this glue database `data`
 # Faster to just aws s3 rm than to aws glue delete-table-version + delete-partition and then finally delete-table
 if [[ "$ENVIRONMENT" == "canary" ]]; then
-  aws s3 rm s3://zipline-warehouse-canary/data/aws_purchases_v1_test --recursive
-  aws glue delete-table --database-name data --name quickstart_purchases_v1_test
+  aws s3 rm s3://zipline-warehouse-canary/data/aws_purchases_v1_test__0 --recursive
+  aws glue delete-table --database-name data --name quickstart_purchases_v1_test__0
 else
-  aws s3 rm s3://zipline-warehouse-dev/data/aws_purchases_v1_dev --recursive
-  aws glue delete-table --database-name data --name quickstart_purchases_v1_dev
+  aws s3 rm s3://zipline-warehouse-dev/data/aws_purchases_v1_dev__0 --recursive
+  aws glue delete-table --database-name data --name quickstart_purchases_v1_dev__0
 fi
 
 
@@ -183,9 +183,9 @@ touch tmp_backfill.out
 if [ "$create_cluster" = true ]; then
   echo "Creating a new EMR cluster"
   if [[ "$ENVIRONMENT" == "canary" ]]; then
-    zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/aws/purchases.v1_test --end-ds 20250220 --create-cluster --cluster-instance-count=2 --cluster-idle-timeout=60 2>&1 | tee tmp_backfill.out
+    zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/aws/purchases.v1_test__0 --end-ds 20250220 --create-cluster --cluster-instance-count=2 --cluster-idle-timeout=60 2>&1 | tee tmp_backfill.out
   else
-    zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/aws/purchases.v1_dev --end-ds 20250220 --create-cluster --cluster-instance-count=2 --cluster-idle-timeout=60 2>&1 | tee tmp_backfill.out
+    zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/aws/purchases.v1_dev__0 --end-ds 20250220 --create-cluster --cluster-instance-count=2 --cluster-idle-timeout=60 2>&1 | tee tmp_backfill.out
   fi
   EMR_SUBMITTER_ID_CLUSTER_STR="EMR job id"
   CLUSTER_ID=$(cat tmp_backfill.out | grep "$EMR_SUBMITTER_ID_CLUSTER_STR"  | cut -d " " -f4) # expecting the cluster id to be the 4th field
@@ -197,9 +197,9 @@ else
   CLUSTER_ID=$CANARY_CLUSTER_ID
   echo "Using existing EMR cluster $CLUSTER_ID"
   if [[ "$ENVIRONMENT" == "canary" ]]; then
-    EMR_CLUSTER_ID=$CLUSTER_ID zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/aws/purchases.v1_test --end-ds 20250220 2>&1 | tee tmp_backfill.out
+    EMR_CLUSTER_ID=$CLUSTER_ID zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/aws/purchases.v1_test__0 --end-ds 20250220 2>&1 | tee tmp_backfill.out
   else
-    EMR_CLUSTER_ID=$CLUSTER_ID zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/aws/purchases.v1_dev --end-ds 20250220 2>&1 | tee tmp_backfill.out
+    EMR_CLUSTER_ID=$CLUSTER_ID zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/group_bys/aws/purchases.v1_dev__0 --end-ds 20250220 2>&1 | tee tmp_backfill.out
   fi
 
   EMR_SUBMITER_ID_STEP_STR="EMR step id"

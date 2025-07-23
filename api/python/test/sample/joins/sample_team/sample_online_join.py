@@ -28,6 +28,7 @@ from ai.chronon.types import EnvironmentVariables, Join, JoinPart
 
 v1 = Join(
     left=test_sources.event_source,
+    row_ids=["subject", "group_by_subject"],
     right_parts=[
         JoinPart(
             group_by=event_sample_group_by.v1,
@@ -50,4 +51,5 @@ v1 = Join(
     online=True,
     check_consistency=True,
     use_long_names=True,
+    version=0
 )

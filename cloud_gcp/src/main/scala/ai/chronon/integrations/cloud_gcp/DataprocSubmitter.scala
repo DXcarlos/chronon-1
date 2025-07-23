@@ -522,10 +522,33 @@ object DataprocSubmitter {
         if (
           cluster != null && Set(ClusterStatus.State.RUNNING,
                                  ClusterStatus.State.UPDATING,
-                                 ClusterStatus.State.CREATING).contains(cluster.getStatus.getState)
+                                 ClusterStatus.State.CREATING,
+                                 ClusterStatus.State.STARTING,
+                                 ClusterStatus.State.REPAIRING).contains(cluster.getStatus.getState)
         ) {
-          println(s"Dataproc cluster $clusterName already exists and is healthy.")
+          val currentStatus = waitForClusterReadiness(clusterName, projectId, region, dataprocClient)
+
+          println(s"Dataproc cluster $clusterName already exists and is in state ${currentStatus.getState}.")
           clusterName
+        } else if (cluster != null) {
+          if (maybeClusterConfig.isDefined && maybeClusterConfig.get.contains("dataproc.config")) {
+            // Print to stderr so that it flushes immediately
+            System.err.println(
+              s"Dataproc cluster $clusterName is in bad state ${cluster.getStatus.getState}. " +
+                s"Deleting and recreating it with the provided config.")
+            recreateDataprocCluster(
+              clusterName,
+              projectId,
+              region,
+              dataprocClient,
+              maybeClusterConfig.get.getOrElse("dataproc.config", "")
+            )
+
+          } else {
+            throw new Exception(
+              s"Dataproc cluster $clusterName is in bad state ${cluster.getStatus.getState}. " +
+                s"Please provide a cluster config in teams.py to recreate it.")
+          }
         } else if (maybeClusterConfig.isDefined && maybeClusterConfig.get.contains("dataproc.config")) {
           // Print to stderr so that it flushes immediately
           System.err.println(
@@ -609,7 +632,7 @@ object DataprocSubmitter {
     try {
       val operation = dataprocClient
         .createClusterAsync(createRequest)
-        .get(15, java.util.concurrent.TimeUnit.MINUTES)
+        .get(30, java.util.concurrent.TimeUnit.MINUTES)
       if (operation == null) {
         throw new RuntimeException("Failed to create Dataproc cluster.")
       }
@@ -620,20 +643,8 @@ object DataprocSubmitter {
       case e: Exception =>
         throw new RuntimeException(s"Error creating Dataproc cluster: ${e.getMessage}", e)
     }
-
-    // Check status of the cluster creation
-    var currentStatus = dataprocClient.getCluster(projectId, region, clusterName).getStatus
-    var currentState = currentStatus.getState
-    while (
-      currentState != ClusterStatus.State.RUNNING &&
-      currentState != ClusterStatus.State.ERROR &&
-      currentState != ClusterStatus.State.STOPPING
-    ) {
-      println(s"Waiting for Dataproc cluster $clusterName to be in RUNNING state. Current state: $currentState")
-      Thread.sleep(30000) // Wait for 30 seconds before checking again
-      currentStatus = dataprocClient.getCluster(projectId, region, clusterName).getStatus
-      currentState = currentStatus.getState
-    }
+    val currentStatus = waitForClusterReadiness(clusterName, projectId, region, dataprocClient)
+    val currentState = currentStatus.getState
     currentState match {
       case ClusterStatus.State.RUNNING =>
         println(s"Dataproc cluster $clusterName is running.")
@@ -644,6 +655,64 @@ object DataprocSubmitter {
       case _ =>
         throw new RuntimeException(s"Dataproc cluster $clusterName is in unexpected state: $currentState.")
     }
+  }
+
+  /** Creates a Dataproc cluster with the given name, project ID, region, and configuration.
+    *
+    * @param clusterName The name of the cluster to create.
+    * @param projectId The GCP project ID.
+    * @param region The region where the cluster will be created.
+    * @param dataprocClient The ClusterControllerClient to interact with the Dataproc API.
+    * @param clusterConfigStr The JSON string representing the cluster configuration.
+    * @return The name of the created cluster.
+    */
+  def recreateDataprocCluster(clusterName: String,
+                              projectId: String,
+                              region: String,
+                              dataprocClient: ClusterControllerClient,
+                              clusterConfigStr: String): String = {
+    val deleteClusterRequest = DeleteClusterRequest
+      .newBuilder()
+      .setProjectId(projectId)
+      .setRegion(region)
+      .setClusterName(clusterName)
+      .build()
+    dataprocClient.deleteClusterAsync(deleteClusterRequest).get()
+
+    println(s"Dataproc cluster $clusterName deleted successfully. Creating a new cluster.")
+
+    createDataprocCluster(clusterName, projectId, region, dataprocClient, clusterConfigStr)
+
+  }
+
+  def waitForClusterReadiness(clusterName: String,
+                              projectId: String,
+                              region: String,
+                              dataprocClient: ClusterControllerClient): ClusterStatus = {
+    // Check status of the cluster creation
+    var currentStatus = dataprocClient.getCluster(projectId, region, clusterName).getStatus
+    var currentState = currentStatus.getState
+    // Maximum time to wait for the cluster to become RUNNING (30 minutes)
+    val maxWaitTime = 30 * 60 * 1000
+    val startTime = System.currentTimeMillis()
+    while (
+      currentState != ClusterStatus.State.RUNNING &&
+      currentState != ClusterStatus.State.UPDATING &&
+      currentState != ClusterStatus.State.ERROR &&
+      currentState != ClusterStatus.State.STOPPING
+    ) {
+      if (System.currentTimeMillis() - startTime > maxWaitTime) {
+        throw new RuntimeException(
+          s"Timeout waiting for cluster $clusterName to reach healthy state"
+        )
+      }
+      println(s"Waiting for Dataproc cluster $clusterName to be in healthy state. Current state: $currentState")
+      Thread.sleep(30000) // Wait for 30 seconds before checking again
+      currentStatus = dataprocClient.getCluster(projectId, region, clusterName).getStatus
+      currentState = currentStatus.getState
+    }
+    currentStatus
+
   }
 
   def run(args: Array[String],

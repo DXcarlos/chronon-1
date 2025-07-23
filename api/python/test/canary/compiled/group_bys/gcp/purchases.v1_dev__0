@@ -1,11 +1,25 @@
 {
   "metaData": {
-    "name": "gcp.item_event_canary.actions_v1",
+    "name": "gcp.purchases.v1_dev__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "data",
+    "columnHashes": {
+      "purchase_price_sum_3d": "2c42b925d5a6a06963a6c662690cc685",
+      "purchase_price_sum_14d": "2c42b925d5a6a06963a6c662690cc685",
+      "purchase_price_sum_30d": "2c42b925d5a6a06963a6c662690cc685",
+      "purchase_price_count_3d": "2c42b925d5a6a06963a6c662690cc685",
+      "purchase_price_count_14d": "2c42b925d5a6a06963a6c662690cc685",
+      "purchase_price_count_30d": "2c42b925d5a6a06963a6c662690cc685",
+      "purchase_price_average_3d": "2c42b925d5a6a06963a6c662690cc685",
+      "purchase_price_average_14d": "2c42b925d5a6a06963a6c662690cc685",
+      "purchase_price_average_30d": "2c42b925d5a6a06963a6c662690cc685",
+      "purchase_price_last10": "2c42b925d5a6a06963a6c662690cc685",
+      "user_id": "6f8238329684939675059c835732a008"
+    },
     "online": 1,
-    "sourceFile": "group_bys/gcp/item_event_canary.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
+    "sourceFile": "group_bys/gcp/purchases.py",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "env": {
         "common": {
@@ -49,7 +63,7 @@
       },
       "conf": {
         "common": {
-          "spark.chronon.partition.column": "_DATE",
+          "spark.chronon.partition.column": "ds",
           "spark.chronon.cloud_provider": "gcp",
           "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
           "spark.chronon.partition.format": "yyyy-MM-dd",
@@ -78,7 +92,7 @@
         },
         "modeConfigs": {
           "backfill": {
-            "spark.chronon.partition.column": "_DATE",
+            "spark.chronon.partition.column": "ds",
             "spark.chronon.cloud_provider": "gcp",
             "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
             "spark.chronon.partition.format": "yyyy-MM-dd",
@@ -123,71 +137,86 @@
   "sources": [
     {
       "events": {
-        "table": "data.item_events_parquet_compat",
-        "topic": "kafka://test-item-event-data/provider_class=ai.chronon.flink.deser.MockCustomSchemaProvider/schema_name=item_event/security.protocol=SASL_SSL/sasl.mechanism=OAUTHBEARER/sasl.login.callback.handler.class=com.google.cloud.hosted.kafka.auth.GcpLoginCallbackHandler/sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;",
+        "table": "data.purchases",
         "query": {
           "selects": {
-            "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
-            "add_cart": "IF(event_type = 'backend_add_to_cart', 1, 0)",
-            "view": "IF(event_type = 'view_listing', 1, 0)",
-            "purchase": "IF(event_type = 'backend_cart_payment', 1, 0)",
-            "favorite": "IF(event_type = 'backend_favorite_item2', 1, 0)"
+            "user_id": "user_id",
+            "purchase_price": "purchase_price"
           },
-          "wheres": [
-            "event_type in ('backend_add_to_cart', 'view_listing', 'backend_cart_payment', 'backend_favorite_item2')"
-          ],
-          "timeColumn": "timestamp"
+          "startPartition": "2023-11-01",
+          "timeColumn": "ts"
         }
       }
     }
   ],
   "keyColumns": [
-    "listing_id"
+    "user_id"
   ],
   "aggregations": [
     {
-      "inputColumn": "add_cart",
+      "inputColumn": "purchase_price",
       "operation": 7,
       "argMap": {},
       "windows": [
         {
-          "length": 1,
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
           "timeUnit": 1
         }
       ]
     },
     {
-      "inputColumn": "view",
-      "operation": 7,
+      "inputColumn": "purchase_price",
+      "operation": 6,
       "argMap": {},
       "windows": [
         {
-          "length": 1,
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
           "timeUnit": 1
         }
       ]
     },
     {
-      "inputColumn": "purchase",
-      "operation": 7,
+      "inputColumn": "purchase_price",
+      "operation": 8,
       "argMap": {},
       "windows": [
         {
-          "length": 7,
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
           "timeUnit": 1
         }
       ]
     },
     {
-      "inputColumn": "favorite",
-      "operation": 7,
-      "argMap": {},
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        }
-      ]
+      "inputColumn": "purchase_price",
+      "operation": 13,
+      "argMap": {
+        "k": "10"
+      }
     }
-  ]
+  ],
+  "backfillStartDate": "2023-11-01"
 }

@@ -121,7 +121,7 @@ def is_streaming(source: api.Source) -> bool:
     )
 
 
-def get_underlying_source(
+def _get_underlying_source(
     source: api.Source,
 ) -> Union[api.EventSource, api.EntitySource, api.JoinSource]:
     if source.entities:
@@ -131,9 +131,18 @@ def get_underlying_source(
     else:
         return source.joinSource
 
+def get_root_source(
+    source: api.Source,
+) -> Union[api.EventSource, api.EntitySource]:
+    if source.entities:
+        return source.entities
+    elif source.events:
+        return source.events
+    else:
+        return get_root_source(source.joinSource.join.left)
 
 def get_query(source: api.Source) -> api.Query:
-    return get_underlying_source(source).query
+    return _get_underlying_source(source).query
 
 
 def get_table(source: api.Source) -> str:

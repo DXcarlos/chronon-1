@@ -150,7 +150,8 @@ class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(Strin
     if (sortedEndTimes == null || sortedEndTimes.isEmpty) return
 
     if (sortedInputs == null || sortedInputs.isEmpty) {
-      sortedEndTimes.foreach(query => consumer(query, windowedAggregator.finalize(baseIR)))
+      val finalized = windowedAggregator.finalize(baseIR)
+      sortedEndTimes.foreach(query => consumer(query, finalized))
       return
     }
 
@@ -163,34 +164,16 @@ class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(Strin
       baseIR
     }
 
-    var queryFinalized = if (baseIR == null) {
-      new Array[Any](windowedAggregator.length)
-    } else {
-      windowedAggregator.finalize(queryIr)
-    }
-
     while (queryIdx < sortedEndTimes.length) {
 
-      var didClone = false
-
       while (inputIdx < sortedInputs.length && sortedInputs(inputIdx).ts < sortedEndTimes(queryIdx).ts) {
-
-        // clone only if necessary - queryIrs differ between consecutive endTimes
-        if (!didClone) {
-          queryIr = windowedAggregator.clone(queryIr)
-          didClone = true
-        }
-
-        windowedAggregator.update(queryIr, sortedInputs(inputIdx))
+        queryIr = windowedAggregator.update(queryIr, sortedInputs(inputIdx))
         inputIdx += 1
       }
 
-      // re-use the finalized values if there are no events between two query times.
-      if (didClone) {
-        queryFinalized = windowedAggregator.finalize(queryIr)
-      }
+      val clonedIr = windowedAggregator.clone(queryIr)
+      consumer(sortedEndTimes(queryIdx), windowedAggregator.finalize(clonedIr))
 
-      consumer(sortedEndTimes(queryIdx), queryFinalized)
       queryIdx += 1
     }
   }

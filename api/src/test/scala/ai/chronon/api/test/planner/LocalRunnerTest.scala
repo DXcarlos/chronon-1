@@ -31,7 +31,7 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
     }
 
     // Verify specific test configuration exists
-    val testJoinConf = joinConfs.find(_.metaData.name == "gcp.training_set.v1_test")
+    val testJoinConf = joinConfs.find(_.metaData.name == "gcp.training_set.v1_test__0")
     testJoinConf should be(defined)
     testJoinConf.get.metaData.team shouldBe "gcp"
     testJoinConf.get.joinParts should not be empty
@@ -50,7 +50,7 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
     }
 
     // Verify specific test configuration exists
-    val testGroupByConf = groupByConfs.find(_.metaData.name == "gcp.purchases.v1_test")
+    val testGroupByConf = groupByConfs.find(_.metaData.name == "gcp.purchases.v1_test__0")
     testGroupByConf should be(defined)
     testGroupByConf.get.metaData.team shouldBe "gcp"
     testGroupByConf.get.sources should have size 1

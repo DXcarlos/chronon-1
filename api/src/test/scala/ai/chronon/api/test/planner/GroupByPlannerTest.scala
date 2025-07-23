@@ -41,6 +41,9 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
     uploadNode.get.content should not be null
     uploadNode.get.content.getGroupByUpload should not be null
     uploadNode.get.content.getGroupByUpload.groupBy should not be null
+    // upload node should use the daily partition spec
+    uploadNode.get.metaData.executionInfo.outputTableInfo.partitionColumn should equal(PartitionSpec.daily.column)
+    uploadNode.get.metaData.executionInfo.outputTableInfo.partitionFormat should equal(PartitionSpec.daily.format)
 
     // Backfill node should have content
     backfillNode.get.content should not be null

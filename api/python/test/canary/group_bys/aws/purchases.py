@@ -13,6 +13,7 @@ source = Source(
         topic=None, # See the 'returns' GroupBy for an example that has a streaming source configured. In this case, this would be the streaming source topic that can be listened to for realtime events
         query=Query(
             selects=selects("user_id","purchase_price"), # Select the fields we care about
+            start_partition="2023-11-01",
             time_column="ts") # The event time
     ))
 
@@ -23,6 +24,7 @@ v1_dev = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,
+    version=0,
     aggregations=[Aggregation(
         input_column="purchase_price",
         operation=Operation.SUM,
@@ -50,6 +52,7 @@ v1_test = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,
+    version=0,
     aggregations=[Aggregation(
         input_column="purchase_price",
         operation=Operation.SUM,

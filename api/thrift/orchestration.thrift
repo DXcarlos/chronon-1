@@ -177,7 +177,8 @@ enum NodeRunStatus {
     WAITING = 1,
     RUNNING = 2,
     SUCCEEDED = 3,
-    FAILED = 4
+    FAILED = 4,
+    CANCELLED = 5
 }
 
 enum WorkflowStatus {

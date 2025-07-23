@@ -38,15 +38,19 @@ source = Source(
 
 v1 = Join(
     left=source,
+    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=group_by) for group_by in [purchases_v1, returns_v1, users]
     ],  # Include the three GroupBys
+    version=0,
 )
 
 v2 = Join(
     left=source,
+    row_ids=["user_id"],
     right_parts=[
         JoinPart(group_by=group_by) for group_by in [purchases_v1, returns_v1]
     ],  # Include the two online GroupBys
     online=True,
+    version=0,
 )

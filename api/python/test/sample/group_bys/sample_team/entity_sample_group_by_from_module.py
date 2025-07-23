@@ -28,4 +28,5 @@ v1 = GroupBy(
         Aggregation(input_column="entity", operation=Operation.LAST, windows=["7d"]),
     ],
     online=True,
+    version=0,
 )

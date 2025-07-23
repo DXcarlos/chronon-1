@@ -39,4 +39,5 @@ checkouts_query = StagingQuery(
         TableDependency(table="data.purchases", partition_column="ds"),
         TableDependency(table="data.checkouts_external", partition_column="ds")
     ],
+    version=0
 )

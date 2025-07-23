@@ -26,6 +26,7 @@ from ai.chronon.join import Join, JoinPart
 
 v1 = Join(
     left=test_sources.staging_entities,
+    row_ids="impressed_unique_count_1d",
     right_parts=[
         JoinPart(
             group_by=sample_group_by_from_module.v1,
@@ -37,4 +38,5 @@ v1 = Join(
             prefix="entity"
         ),
     ],
+    version=0,
 )

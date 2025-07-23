@@ -30,6 +30,7 @@ v1 = GroupBy(
     },
     output_namespace="sample_namespace",
     online=True,
+    version=0,
 )
 
 require_backfill = GroupBy(
@@ -42,6 +43,7 @@ require_backfill = GroupBy(
     production=False,
     output_namespace="sample_namespace",
     backfill_start_date="2023-01-01",
+    version=0,
     derivations=[
         Derivation(name="derived_field", expression=""),
         Derivation(name="*", expression="*"),

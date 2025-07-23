@@ -1,13 +1,25 @@
 {
   "metaData": {
-    "name": "gcp.training_set.v1_test_notds",
+    "name": "gcp.purchases.v1_test__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "data",
-    "online": 0,
-    "production": 0,
-    "sourceFile": "joins/gcp/training_set.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_notds_with_offset_0\", \"spec\": \"data.checkouts_notds/notds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_notds_with_offset_0\", \"spec\": \"data.purchases_notds/notds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
-    "samplePercent": 100.0,
+    "columnHashes": {
+      "purchase_price_sum_3d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "purchase_price_sum_14d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "purchase_price_sum_30d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "purchase_price_count_3d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "purchase_price_count_14d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "purchase_price_count_30d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "purchase_price_average_3d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "purchase_price_average_14d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "purchase_price_average_30d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "purchase_price_last10": "50b9729a1f8ccdf67aa78fd61a86cd40",
+      "user_id": "9fad95bded671ff91134aaca67b4828a"
+    },
+    "online": 1,
+    "sourceFile": "group_bys/gcp/purchases.py",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "env": {
         "common": {
@@ -118,123 +130,93 @@
           }
         }
       },
-      "scheduleCron": "@daily"
+      "scheduleCron": "@daily",
+      "historicalBackfill": 0
     }
   },
-  "left": {
-    "events": {
-      "table": "data.checkouts_notds",
-      "query": {
-        "selects": {
-          "user_id": "user_id",
-          "ts": "ts"
-        },
-        "timeColumn": "ts",
-        "partitionColumn": "notds"
+  "sources": [
+    {
+      "events": {
+        "table": "data.purchases",
+        "query": {
+          "selects": {
+            "user_id": "user_id",
+            "purchase_price": "purchase_price"
+          },
+          "startPartition": "2023-11-01",
+          "timeColumn": "ts"
+        }
       }
     }
-  },
-  "joinParts": [
+  ],
+  "keyColumns": [
+    "user_id"
+  ],
+  "aggregations": [
     {
-      "groupBy": {
-        "metaData": {
-          "name": "gcp.purchases.v1_test_notds",
-          "team": "gcp",
-          "outputNamespace": "data",
-          "online": 1,
-          "executionInfo": {
-            "scheduleCron": "@daily",
-            "historicalBackfill": 0
-          }
+      "inputColumn": "purchase_price",
+      "operation": 7,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
         },
-        "sources": [
-          {
-            "events": {
-              "table": "data.purchases_notds",
-              "query": {
-                "selects": {
-                  "user_id": "user_id",
-                  "purchase_price": "purchase_price"
-                },
-                "timeColumn": "ts",
-                "partitionColumn": "notds"
-              }
-            }
-          }
-        ],
-        "keyColumns": [
-          "user_id"
-        ],
-        "aggregations": [
-          {
-            "inputColumn": "purchase_price",
-            "operation": 7,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 6,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 8,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 13,
-            "argMap": {
-              "k": "10"
-            }
-          }
-        ],
-        "backfillStartDate": "2023-11-01"
-      },
-      "useLongNames": 0
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 6,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 8,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 13,
+      "argMap": {
+        "k": "10"
+      }
     }
   ],
-  "useLongNames": 0
+  "backfillStartDate": "2023-11-01"
 }

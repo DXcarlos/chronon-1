@@ -1,8 +1,22 @@
 {
   "metaData": {
-    "name": "aws.purchases.v1_dev",
+    "name": "aws.purchases.v1_dev__0",
     "team": "aws",
+    "version": "0",
     "outputNamespace": "data",
+    "columnHashes": {
+      "purchase_price_sum_3d": "bd4c481c4e592608ace5a2930f61d45a",
+      "purchase_price_sum_14d": "bd4c481c4e592608ace5a2930f61d45a",
+      "purchase_price_sum_30d": "bd4c481c4e592608ace5a2930f61d45a",
+      "purchase_price_count_3d": "bd4c481c4e592608ace5a2930f61d45a",
+      "purchase_price_count_14d": "bd4c481c4e592608ace5a2930f61d45a",
+      "purchase_price_count_30d": "bd4c481c4e592608ace5a2930f61d45a",
+      "purchase_price_average_3d": "bd4c481c4e592608ace5a2930f61d45a",
+      "purchase_price_average_14d": "bd4c481c4e592608ace5a2930f61d45a",
+      "purchase_price_average_30d": "bd4c481c4e592608ace5a2930f61d45a",
+      "purchase_price_last10": "bd4c481c4e592608ace5a2930f61d45a",
+      "user_id": "677635fb8fabe631108435c5cffe73ce"
+    },
     "online": 1,
     "sourceFile": "group_bys/aws/purchases.py",
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
@@ -45,6 +59,7 @@
             "user_id": "user_id",
             "purchase_price": "purchase_price"
           },
+          "startPartition": "2023-11-01",
           "timeColumn": "ts"
         }
       }

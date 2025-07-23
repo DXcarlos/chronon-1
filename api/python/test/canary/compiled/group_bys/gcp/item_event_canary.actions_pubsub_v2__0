@@ -1,11 +1,19 @@
 {
   "metaData": {
-    "name": "gcp.item_event_canary.actions_pubsub_v2",
+    "name": "gcp.item_event_canary.actions_pubsub_v2__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "data",
+    "columnHashes": {
+      "add_cart_sum_1d": "ed104cb5e34d9ac3c193cda31fec5db4",
+      "view_sum_1d": "d4bc995b2e1955c153a0d1d78927f07c",
+      "purchase_sum_1d": "8461cac7c35b38bae99562beb4060578",
+      "favorite_sum_1d": "ecce467f5cef9f4f6742ce4a0650499b",
+      "listing_id": "63b9f4d87c1cc4fb39f6f5230ae29034"
+    },
     "online": 1,
     "sourceFile": "group_bys/gcp/item_event_canary.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "env": {
         "common": {
@@ -13,7 +21,7 @@
           "JOB_MODE": "local[*]",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
           "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
-          "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+          "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
           "CUSTOMER_ID": "dev",
@@ -32,7 +40,7 @@
             "JOB_MODE": "local[*]",
             "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
             "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
-            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+            "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
             "CUSTOMER_ID": "dev",
@@ -123,7 +131,7 @@
   "sources": [
     {
       "events": {
-        "table": "data.item_events_parquet_compat",
+        "table": "data.item_events_parquet_compat_partitioned",
         "topic": "pubsub://test-item-event-data/serde=pubsub_schema/project=canary-443022/schemaId=item-event/tasks=4/subscription=test-item-event-data-sub",
         "query": {
           "selects": {
@@ -173,7 +181,7 @@
       "argMap": {},
       "windows": [
         {
-          "length": 7,
+          "length": 1,
           "timeUnit": 1
         }
       ]

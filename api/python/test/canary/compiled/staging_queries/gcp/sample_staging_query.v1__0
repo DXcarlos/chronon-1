@@ -1,13 +1,14 @@
 {
   "metaData": {
-    "name": "gcp.sample_staging_query.v1",
+    "name": "gcp.sample_staging_query.v1__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "sample_namespace",
     "tableProperties": {
       "sample_config_json": "{\"sample_key\": \"sample value\"}"
     },
     "sourceFile": "staging_queries/gcp/sample_staging_query.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_v1_test_with_offset_1\", \"spec\": \"data.gcp_training_set_v1_test/ds={{ macros.ds_add(ds, 1) }}/_HR=23:00\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_v1_test__0_with_offset_1\", \"spec\": \"data.gcp_training_set_v1_test__0/ds={{ macros.ds_add(ds, 1) }}/_HR=23:00\"}]}",
     "executionInfo": {
       "env": {
         "common": {
@@ -121,7 +122,7 @@
       "scheduleCron": "@daily"
     }
   },
-  "query": "\nSELECT\n    *\nFROM data.gcp_training_set_v1_test\nWHERE ds BETWEEN '{ start_date }' AND '{ end_date }'\n",
+  "query": "\nSELECT\n    *\nFROM data.gcp_training_set_v1_test__0\nWHERE ds BETWEEN '{ start_date }' AND '{ end_date }'\n",
   "startPartition": "2020-03-01",
   "setups": [
     "CREATE TEMPORARY FUNCTION S2_CELL AS 'com.sample.hive.udf.S2CellId'"
@@ -129,7 +130,7 @@
   "tableDependencies": [
     {
       "tableInfo": {
-        "table": "data.gcp_training_set_v1_test",
+        "table": "data.gcp_training_set_v1_test__0",
         "partitionColumn": "ds"
       },
       "startOffset": {

@@ -28,9 +28,10 @@ import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.stats.CompareJob
 import ai.chronon.spark.submission.SparkSessionBuilder
 import org.apache.spark.sql.SparkSession
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.flatspec.AnyFlatSpec
 
-class MigrationCompareTest extends AnyFlatSpec {
+class MigrationCompareTest extends AnyFlatSpec with BeforeAndAfterAll {
   lazy val spark: SparkSession = SparkSessionBuilder.build("MigrationCompareTest", local = true)
   private val tableUtils = TableUtils(spark)
   private val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
@@ -39,7 +40,7 @@ class MigrationCompareTest extends AnyFlatSpec {
   private val monthAgo = tableUtils.partitionSpec.minus(today, new Window(30, TimeUnit.DAYS))
   private val yearAgo = tableUtils.partitionSpec.minus(today, new Window(365, TimeUnit.DAYS))
   tableUtils.createDatabase(namespace)
-
+  private val (joinConf: api.Join, stagingQueryConf: api.StagingQuery) = setupTestData()
   def setupTestData(): (api.Join, api.StagingQuery) = {
     // ------------------------------------------JOIN------------------------------------------
     val viewsSchema = List(
@@ -95,7 +96,6 @@ class MigrationCompareTest extends AnyFlatSpec {
   }
 
   it should "migrate compare" in {
-    val (joinConf, stagingQueryConf) = setupTestData()
 
     val (compareDf, metricsDf, metrics: DataMetrics) =
       new CompareJob(tableUtils, joinConf, stagingQueryConf, ninetyDaysAgo, today).run()
@@ -104,7 +104,6 @@ class MigrationCompareTest extends AnyFlatSpec {
   }
 
   it should "migrate compare with less columns" in {
-    val (joinConf, _) = setupTestData()
 
     // Run the staging query to generate the corresponding table for comparison
     val stagingQueryConf = Builders.StagingQuery(
@@ -122,7 +121,6 @@ class MigrationCompareTest extends AnyFlatSpec {
   }
 
   it should "migrate compare with windows" in {
-    val (joinConf, stagingQueryConf) = setupTestData()
 
     val (compareDf, metricsDf, metrics: DataMetrics) =
       new CompareJob(tableUtils, joinConf, stagingQueryConf, ninetyDaysAgo, today).run()
@@ -131,7 +129,6 @@ class MigrationCompareTest extends AnyFlatSpec {
   }
 
   it should "migrate compare with less data" in {
-    val (joinConf, _) = setupTestData()
 
     val stagingQueryConf = Builders.StagingQuery(
       query = s"select * from ${joinConf.metaData.outputTable} where ds BETWEEN '${monthAgo}' AND '${today}'",

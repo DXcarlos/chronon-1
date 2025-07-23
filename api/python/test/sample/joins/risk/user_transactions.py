@@ -14,10 +14,12 @@ source_users = Source(
 
 txn_join = Join(
     left=source_users,
+    row_ids="user_id",
     right_parts=[
         JoinPart(group_by=txn_group_by_user, prefix="user"),
         JoinPart(group_by=txn_group_by_merchant, prefix="merchant"),
         JoinPart(group_by=user_group_by, prefix="user"),
         JoinPart(group_by=merchant_group_by, prefix="merchant"),
     ],
+    version=0,
 )

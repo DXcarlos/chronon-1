@@ -27,6 +27,9 @@ object FlinkKafkaItemEventDriver {
     val kafkaBootstrap: ScallopOption[String] =
       opt[String](required = true, descr = "Kafka bootstrap server in host:port format")
     val kafkaTopic: ScallopOption[String] = opt[String](required = true, descr = "Kafka topic to write to")
+    val parentJobId: ScallopOption[String] =
+      opt[String](required = false,
+                  descr = "Parent job id that invoked the Flink job. For example, the Dataproc job id.")
     val eventDelayMillis: ScallopOption[Int] =
       opt[Int](required = false,
                descr = "Delay to use between event publishes (dictates the eps)",
@@ -40,6 +43,7 @@ object FlinkKafkaItemEventDriver {
     val dataFileName = jobArgs.dataFileName()
     val bootstrapServers = jobArgs.kafkaBootstrap()
     val kafkaTopic = jobArgs.kafkaTopic()
+    val parentJobId = jobArgs.parentJobId()
     val eventDelayMillis = jobArgs.eventDelayMillis()
 
     // Configure GCS source

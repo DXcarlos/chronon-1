@@ -33,10 +33,13 @@ def generate_java_files_using_thrift(ctx):
 def create_jar_file(ctx, input_directories):
     jar_file = ctx.actions.declare_file(ctx.label.name + ".srcjar")
 
-    jar_cmds = ["jar cf " + jar_file.path]
+    # Get jar binary path from environment variable or use default
+    jar_binary = ctx.var.get("JAR_BINARY_PATH", "jar")
+    
+    jar_cmd_parts = [jar_binary, "cf", jar_file.path]
     for input_directory in input_directories:
-        jar_cmds.append("-C " + input_directory.path + " .")
-    jar_cmd = " ".join(jar_cmds)
+        jar_cmd_parts.extend(["-C", input_directory.path, "."])
+    jar_cmd = " ".join(jar_cmd_parts)
 
     ctx.actions.run_shell(
         outputs = [jar_file],

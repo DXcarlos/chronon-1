@@ -1,12 +1,32 @@
 {
   "metaData": {
-    "name": "gcp.training_set.v1_dev_notds",
+    "name": "gcp.item_event_join.canary_combined_v1__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "data",
-    "online": 0,
+    "columnHashes": {
+      "listing_id_add_cart_sum_1d": "6b9c42bf45158c93b823dcf0b5bea7ab",
+      "listing_id_view_sum_1d": "c92a7a66f21979b327788447d063fe2b",
+      "listing_id_purchase_sum_1d": "12f0cd5674381064326148e7eb352a40",
+      "listing_id_favorite_sum_1d": "bb07e39a4b7ea81aca5baf027fd8f555",
+      "user_id_purchase_price_sum_3d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_sum_14d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_sum_30d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_count_3d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_count_14d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_count_30d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_average_3d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_average_14d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_average_30d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_last10": "5609e04d61a47a8cafc67970785a3a59",
+      "listing_id": "f2f6c814b8ae1521176b22a1ae7f2d0d",
+      "user_id": "493d3df28f80664abd11b19fcd33b6e6",
+      "ts": "ad9fd4c611e20ad833819a4ce9d752bf"
+    },
+    "online": 1,
     "production": 0,
-    "sourceFile": "joins/gcp/training_set.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_notds_with_offset_0\", \"spec\": \"data.checkouts_notds/notds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_notds_with_offset_0\", \"spec\": \"data.purchases_notds/notds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
+    "sourceFile": "joins/gcp/item_event_join.py",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
     "samplePercent": 100.0,
     "executionInfo": {
       "env": {
@@ -123,14 +143,14 @@
   },
   "left": {
     "events": {
-      "table": "data.checkouts_notds",
+      "table": "data.item_events_parquet_compat",
       "query": {
         "selects": {
-          "user_id": "user_id",
-          "ts": "ts"
+          "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
+          "user_id": "attributes['user_id']",
+          "ts": "timestamp"
         },
-        "timeColumn": "ts",
-        "partitionColumn": "notds"
+        "timeColumn": "timestamp"
       }
     }
   },
@@ -138,9 +158,128 @@
     {
       "groupBy": {
         "metaData": {
-          "name": "gcp.purchases.v1_dev_notds",
+          "name": "gcp.item_event_canary.actions_pubsub_v2__0",
           "team": "gcp",
+          "version": "0",
           "outputNamespace": "data",
+          "columnHashes": {
+            "add_cart_sum_1d": "ed104cb5e34d9ac3c193cda31fec5db4",
+            "view_sum_1d": "d4bc995b2e1955c153a0d1d78927f07c",
+            "purchase_sum_1d": "8461cac7c35b38bae99562beb4060578",
+            "favorite_sum_1d": "ecce467f5cef9f4f6742ce4a0650499b",
+            "listing_id": "63b9f4d87c1cc4fb39f6f5230ae29034"
+          },
+          "online": 1,
+          "executionInfo": {
+            "env": {
+              "common": {
+                "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092"
+              },
+              "modeEnvironments": {}
+            },
+            "conf": {
+              "common": {
+                "spark.chronon.partition.column": "_DATE"
+              },
+              "modeConfigs": {}
+            },
+            "scheduleCron": "@daily",
+            "historicalBackfill": 0
+          }
+        },
+        "sources": [
+          {
+            "events": {
+              "table": "data.item_events_parquet_compat_partitioned",
+              "topic": "pubsub://test-item-event-data/serde=pubsub_schema/project=canary-443022/schemaId=item-event/tasks=4/subscription=test-item-event-data-sub",
+              "query": {
+                "selects": {
+                  "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
+                  "add_cart": "IF(event_type = 'backend_add_to_cart', 1, 0)",
+                  "view": "IF(event_type = 'view_listing', 1, 0)",
+                  "purchase": "IF(event_type = 'backend_cart_payment', 1, 0)",
+                  "favorite": "IF(event_type = 'backend_favorite_item2', 1, 0)"
+                },
+                "wheres": [
+                  "event_type in ('backend_add_to_cart', 'view_listing', 'backend_cart_payment', 'backend_favorite_item2')"
+                ],
+                "timeColumn": "timestamp"
+              }
+            }
+          }
+        ],
+        "keyColumns": [
+          "listing_id"
+        ],
+        "aggregations": [
+          {
+            "inputColumn": "add_cart",
+            "operation": 7,
+            "argMap": {},
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "inputColumn": "view",
+            "operation": 7,
+            "argMap": {},
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "inputColumn": "purchase",
+            "operation": 7,
+            "argMap": {},
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "inputColumn": "favorite",
+            "operation": 7,
+            "argMap": {},
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              }
+            ]
+          }
+        ]
+      },
+      "useLongNames": 0
+    },
+    {
+      "groupBy": {
+        "metaData": {
+          "name": "gcp.purchases.v1_test__0",
+          "team": "gcp",
+          "version": "0",
+          "outputNamespace": "data",
+          "columnHashes": {
+            "purchase_price_sum_3d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_sum_14d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_sum_30d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_count_3d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_count_14d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_count_30d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_average_3d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_average_14d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_average_30d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_last10": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "user_id": "9fad95bded671ff91134aaca67b4828a"
+          },
           "online": 1,
           "executionInfo": {
             "scheduleCron": "@daily",
@@ -150,14 +289,14 @@
         "sources": [
           {
             "events": {
-              "table": "data.purchases_notds",
+              "table": "data.purchases",
               "query": {
                 "selects": {
                   "user_id": "user_id",
                   "purchase_price": "purchase_price"
                 },
-                "timeColumn": "ts",
-                "partitionColumn": "notds"
+                "startPartition": "2023-11-01",
+                "timeColumn": "ts"
               }
             }
           }
@@ -235,6 +374,9 @@
       },
       "useLongNames": 0
     }
+  ],
+  "rowIds": [
+    "user_id"
   ],
   "useLongNames": 0
 }

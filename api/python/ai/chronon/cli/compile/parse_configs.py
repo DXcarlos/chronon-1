@@ -2,9 +2,10 @@ import copy
 import glob
 import importlib
 import os
-from typing import List
+from typing import Any, List
 
 from ai.chronon import airflow_helpers
+from ai.chronon.api.ttypes import GroupBy, Join
 from ai.chronon.cli.compile import parse_teams, serializer
 from ai.chronon.cli.compile.compile_context import CompileContext
 from ai.chronon.cli.compile.display.compiled_obj import CompiledObj
@@ -31,6 +32,8 @@ def from_folder(
 
             for name, obj in results_dict.items():
                 parse_teams.update_metadata(obj, compile_context.teams_dict)
+                # Populate columnHashes field with semantic hashes
+                populate_column_hashes(obj)
 
                 # Airflow deps must be set AFTER updating metadata
                 airflow_helpers.set_airflow_deps(obj)
@@ -99,9 +102,40 @@ def from_file(file_path: str, cls: type, input_dir: str):
             copied_obj = copy.deepcopy(obj)
 
             name = f"{mod_path}.{var_name}"
+            
+            # Add version suffix if version is set
+            name = name + "__" + str(copied_obj.metaData.version)
+            
             copied_obj.metaData.name = name
             copied_obj.metaData.team = mod_path.split(".")[0]
 
             result[name] = copied_obj
 
     return result
+
+def populate_column_hashes(obj: Any):
+    """
+    Populate the columnHashes field in the object's metadata with semantic hashes
+    for each output column.
+    """
+    # Import here to avoid circular imports
+    from ai.chronon.cli.compile.column_hashing import (
+        compute_group_by_columns_hashes,
+        compute_join_column_hashes,
+    )
+
+    if isinstance(obj, GroupBy):
+        # For GroupBy objects, get column hashes
+        column_hashes = compute_group_by_columns_hashes(obj, exclude_keys=False)
+        obj.metaData.columnHashes = column_hashes
+
+    elif isinstance(obj, Join):
+        # For Join objects, get column hashes
+        column_hashes = compute_join_column_hashes(obj)
+        obj.metaData.columnHashes = column_hashes
+
+        if obj.joinParts:
+            for jp in (obj.joinParts or []):
+                group_by = jp.groupBy
+                group_by_hashes = compute_group_by_columns_hashes(group_by)
+                group_by.metaData.columnHashes = group_by_hashes

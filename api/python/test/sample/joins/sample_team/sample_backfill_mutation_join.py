@@ -23,7 +23,9 @@ from ai.chronon.join import Join, JoinPart
 
 v0 = Join(
     left=test_sources.event_source,
+    row_ids="subject",
     right_parts=[JoinPart(group_by=mutation_sample_group_by.v0)],
     online=False,
+    version=0,
 )
 

@@ -62,4 +62,5 @@ ad_streaming = GroupBy(
         ),
     ],
     accuracy=Accuracy.TEMPORAL,  # Here we use temporal accuracy so that training data backfills mimic streaming updates
+    version=0,
 )

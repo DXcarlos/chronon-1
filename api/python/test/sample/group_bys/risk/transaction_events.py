@@ -40,6 +40,7 @@ def create_txn_group_by(source, key):
                 windows=["1d"],
             ),
         ],
+        version=0,
     )
 
 

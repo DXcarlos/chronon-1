@@ -36,4 +36,5 @@ v2 = GroupBy(
     },
     accuracy=Accuracy.SNAPSHOT,
     output_namespace="sample_namespace",
+    version=0,
 )

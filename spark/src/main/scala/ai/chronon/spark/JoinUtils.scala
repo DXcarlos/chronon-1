@@ -100,7 +100,7 @@ object JoinUtils {
       .getOrElse(df)
 
     if (!allowEmpty && result.isEmpty) {
-      logger.info(s"Left side query below produced 0 rows in range $effectiveLeftRange, and allowEmpty=false.")
+      logger.info(s"Left side query produced 0 rows in range $effectiveLeftRange, and allowEmpty=false.")
       return None
     }
 

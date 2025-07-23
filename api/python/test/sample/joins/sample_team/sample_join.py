@@ -25,6 +25,7 @@ from ai.chronon.types import EnvironmentVariables, LabelParts
 v1 = Join(
     left=test_sources.staging_entities,
     right_parts=[JoinPart(group_by=sample_group_by.v1)],
+    row_ids="place_id",
     table_properties={"config_json": """{"sample_key": "sample_value"}"""},
     output_namespace="sample_namespace",
     env_vars=EnvironmentVariables(
@@ -33,32 +34,41 @@ v1 = Join(
         }
     ),
     online=True,
-    label_part=LabelParts([JoinPart(group_by=label_part_group_by.label_part_group_by)], 1, 1)
+    label_part=LabelParts([JoinPart(group_by=label_part_group_by.label_part_group_by)], 1, 1),
+    version=0,
 )
 
 never = Join(
     left=test_sources.staging_entities,
     right_parts=[JoinPart(group_by=sample_group_by.v1)],
+    row_ids=["s2CellId", "place_id"],
     output_namespace="sample_namespace",
     offline_schedule="@never",
+    version=0,
 )
 
 group_by_of_group_by = Join(
     left=test_sources.staging_entities,
     right_parts=[JoinPart(group_by=sample_group_by_group_by.v1)],
+    row_ids="s2CellId",
     output_namespace="sample_namespace",
+    version=0,
 )
 
 consistency_check = Join(
     left=test_sources.staging_entities,
     right_parts=[JoinPart(group_by=sample_group_by.v1)],
+    row_ids="place_id",
     output_namespace="sample_namespace",
     check_consistency=True,
+    version=0,
 )
 
 no_log_flattener = Join(
     left=test_sources.staging_entities,
     right_parts=[JoinPart(group_by=sample_group_by.v1)],
+    row_ids=["place_id"],
     output_namespace="sample_namespace",
     sample_percent=0.0,
+    version=0,
 )

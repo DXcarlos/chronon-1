@@ -1,13 +1,25 @@
 {
   "metaData": {
-    "name": "gcp.item_event_join.canary_batch_v1",
+    "name": "gcp.purchases.v1_test_notds__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "data",
+    "columnHashes": {
+      "purchase_price_sum_3d": "ff8fca8d015c942b760d0e08e9f729fe",
+      "purchase_price_sum_14d": "ff8fca8d015c942b760d0e08e9f729fe",
+      "purchase_price_sum_30d": "ff8fca8d015c942b760d0e08e9f729fe",
+      "purchase_price_count_3d": "ff8fca8d015c942b760d0e08e9f729fe",
+      "purchase_price_count_14d": "ff8fca8d015c942b760d0e08e9f729fe",
+      "purchase_price_count_30d": "ff8fca8d015c942b760d0e08e9f729fe",
+      "purchase_price_average_3d": "ff8fca8d015c942b760d0e08e9f729fe",
+      "purchase_price_average_14d": "ff8fca8d015c942b760d0e08e9f729fe",
+      "purchase_price_average_30d": "ff8fca8d015c942b760d0e08e9f729fe",
+      "purchase_price_last10": "ff8fca8d015c942b760d0e08e9f729fe",
+      "user_id": "393f5e98e4ffd73344977d7ac9780627"
+    },
     "online": 1,
-    "production": 0,
-    "sourceFile": "joins/gcp/item_event_join.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
-    "samplePercent": 100.0,
+    "sourceFile": "group_bys/gcp/purchases.py",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_notds_with_offset_0\", \"spec\": \"data.purchases_notds/notds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "env": {
         "common": {
@@ -118,122 +130,94 @@
           }
         }
       },
-      "scheduleCron": "@daily"
+      "scheduleCron": "@daily",
+      "historicalBackfill": 0
     }
   },
-  "left": {
-    "events": {
-      "table": "data.item_events_parquet_compat",
-      "query": {
-        "selects": {
-          "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
-          "user_id": "attributes['user_id']",
-          "ts": "timestamp"
-        },
-        "timeColumn": "timestamp"
+  "sources": [
+    {
+      "events": {
+        "table": "data.purchases_notds",
+        "query": {
+          "selects": {
+            "user_id": "user_id",
+            "purchase_price": "purchase_price"
+          },
+          "startPartition": "2023-11-01",
+          "timeColumn": "ts",
+          "partitionColumn": "notds"
+        }
       }
     }
-  },
-  "joinParts": [
+  ],
+  "keyColumns": [
+    "user_id"
+  ],
+  "aggregations": [
     {
-      "groupBy": {
-        "metaData": {
-          "name": "gcp.purchases.v1_test",
-          "team": "gcp",
-          "outputNamespace": "data",
-          "online": 1,
-          "executionInfo": {
-            "scheduleCron": "@daily",
-            "historicalBackfill": 0
-          }
+      "inputColumn": "purchase_price",
+      "operation": 7,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
         },
-        "sources": [
-          {
-            "events": {
-              "table": "data.purchases",
-              "query": {
-                "selects": {
-                  "user_id": "user_id",
-                  "purchase_price": "purchase_price"
-                },
-                "timeColumn": "ts"
-              }
-            }
-          }
-        ],
-        "keyColumns": [
-          "user_id"
-        ],
-        "aggregations": [
-          {
-            "inputColumn": "purchase_price",
-            "operation": 7,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 6,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 8,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 3,
-                "timeUnit": 1
-              },
-              {
-                "length": 14,
-                "timeUnit": 1
-              },
-              {
-                "length": 30,
-                "timeUnit": 1
-              }
-            ]
-          },
-          {
-            "inputColumn": "purchase_price",
-            "operation": 13,
-            "argMap": {
-              "k": "10"
-            }
-          }
-        ],
-        "backfillStartDate": "2023-11-01"
-      },
-      "useLongNames": 0
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 6,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 8,
+      "argMap": {},
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "inputColumn": "purchase_price",
+      "operation": 13,
+      "argMap": {
+        "k": "10"
+      }
     }
   ],
-  "useLongNames": 0
+  "backfillStartDate": "2023-11-01"
 }

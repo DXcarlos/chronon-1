@@ -17,7 +17,7 @@ import gc
 import importlib
 import logging
 from collections import Counter
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import ai.chronon.api.common.ttypes as common
 import ai.chronon.api.ttypes as api
@@ -355,10 +355,11 @@ def BootstrapPart(
 def Join(
     left: api.Source,
     right_parts: List[api.JoinPart],
+    version: int,
+    row_ids: Union[str, List[str]],
     online_external_parts: List[api.ExternalPart] = None,
     bootstrap_parts: List[api.BootstrapPart] = None,
     bootstrap_from_log: bool = False,
-    row_ids: List[str] = None,
     skew_keys: Dict[str, List[str]] = None,
     derivations: List[api.Derivation] = None,
     label_part: api.LabelParts = None,
@@ -470,6 +471,10 @@ def Join(
     :param step_days:
         The maximum number of days to output at once
     """
+    # Normalize row_ids
+    if isinstance(row_ids, str):
+        row_ids = [row_ids]
+
     # create a deep copy for case: multiple LeftOuterJoin use the same left,
     # validation will fail after the first iteration
     updated_left = copy.deepcopy(left)
@@ -542,6 +547,7 @@ def Join(
         consistencyCheck=check_consistency,
         consistencySamplePercent=consistency_sample_percent,
         executionInfo=exec_info,
+        version=str(version),
     )
 
     join = api.Join(

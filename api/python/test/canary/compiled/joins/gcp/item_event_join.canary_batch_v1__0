@@ -1,12 +1,28 @@
 {
   "metaData": {
-    "name": "gcp.item_event_join.canary_streaming_v1",
+    "name": "gcp.item_event_join.canary_batch_v1__0",
     "team": "gcp",
+    "version": "0",
     "outputNamespace": "data",
+    "columnHashes": {
+      "user_id_purchase_price_sum_3d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_sum_14d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_sum_30d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_count_3d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_count_14d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_count_30d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_average_3d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_average_14d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_average_30d": "5609e04d61a47a8cafc67970785a3a59",
+      "user_id_purchase_price_last10": "5609e04d61a47a8cafc67970785a3a59",
+      "listing_id": "f2f6c814b8ae1521176b22a1ae7f2d0d",
+      "user_id": "493d3df28f80664abd11b19fcd33b6e6",
+      "ts": "ad9fd4c611e20ad833819a4ce9d752bf"
+    },
     "online": 1,
     "production": 0,
     "sourceFile": "joins/gcp/item_event_join.py",
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
     "samplePercent": 100.0,
     "executionInfo": {
       "env": {
@@ -138,17 +154,25 @@
     {
       "groupBy": {
         "metaData": {
-          "name": "gcp.item_event_canary.actions_pubsub_v2",
+          "name": "gcp.purchases.v1_test__0",
           "team": "gcp",
+          "version": "0",
           "outputNamespace": "data",
+          "columnHashes": {
+            "purchase_price_sum_3d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_sum_14d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_sum_30d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_count_3d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_count_14d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_count_30d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_average_3d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_average_14d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_average_30d": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "purchase_price_last10": "50b9729a1f8ccdf67aa78fd61a86cd40",
+            "user_id": "9fad95bded671ff91134aaca67b4828a"
+          },
           "online": 1,
           "executionInfo": {
-            "conf": {
-              "common": {
-                "spark.chronon.partition.column": "_DATE"
-              },
-              "modeConfigs": {}
-            },
             "scheduleCron": "@daily",
             "historicalBackfill": 0
           }
@@ -156,76 +180,94 @@
         "sources": [
           {
             "events": {
-              "table": "data.item_events_parquet_compat",
-              "topic": "pubsub://test-item-event-data/serde=pubsub_schema/project=canary-443022/schemaId=item-event/tasks=4/subscription=test-item-event-data-sub",
+              "table": "data.purchases",
               "query": {
                 "selects": {
-                  "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
-                  "add_cart": "IF(event_type = 'backend_add_to_cart', 1, 0)",
-                  "view": "IF(event_type = 'view_listing', 1, 0)",
-                  "purchase": "IF(event_type = 'backend_cart_payment', 1, 0)",
-                  "favorite": "IF(event_type = 'backend_favorite_item2', 1, 0)"
+                  "user_id": "user_id",
+                  "purchase_price": "purchase_price"
                 },
-                "wheres": [
-                  "event_type in ('backend_add_to_cart', 'view_listing', 'backend_cart_payment', 'backend_favorite_item2')"
-                ],
-                "timeColumn": "timestamp"
+                "startPartition": "2023-11-01",
+                "timeColumn": "ts"
               }
             }
           }
         ],
         "keyColumns": [
-          "listing_id"
+          "user_id"
         ],
         "aggregations": [
           {
-            "inputColumn": "add_cart",
+            "inputColumn": "purchase_price",
             "operation": 7,
             "argMap": {},
             "windows": [
               {
-                "length": 1,
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
                 "timeUnit": 1
               }
             ]
           },
           {
-            "inputColumn": "view",
-            "operation": 7,
+            "inputColumn": "purchase_price",
+            "operation": 6,
             "argMap": {},
             "windows": [
               {
-                "length": 1,
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
                 "timeUnit": 1
               }
             ]
           },
           {
-            "inputColumn": "purchase",
-            "operation": 7,
+            "inputColumn": "purchase_price",
+            "operation": 8,
             "argMap": {},
             "windows": [
               {
-                "length": 7,
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
                 "timeUnit": 1
               }
             ]
           },
           {
-            "inputColumn": "favorite",
-            "operation": 7,
-            "argMap": {},
-            "windows": [
-              {
-                "length": 1,
-                "timeUnit": 1
-              }
-            ]
+            "inputColumn": "purchase_price",
+            "operation": 13,
+            "argMap": {
+              "k": "10"
+            }
           }
-        ]
+        ],
+        "backfillStartDate": "2023-11-01"
       },
       "useLongNames": 0
     }
+  ],
+  "rowIds": [
+    "listing_id"
   ],
   "useLongNames": 0
 }

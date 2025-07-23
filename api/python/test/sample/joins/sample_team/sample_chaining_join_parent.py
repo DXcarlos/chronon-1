@@ -8,6 +8,7 @@ from ai.chronon.types import Join, JoinPart
 
 parent_join = Join(
     left=test_sources.event_source,
+    row_ids="group_by_subject",
     right_parts=[
         JoinPart(
             group_by=event_sample_group_by.v1,
@@ -21,4 +22,5 @@ parent_join = Join(
     online=True,
     check_consistency=True,
     historical_backfill=False,
+    version=0,
 )

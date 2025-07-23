@@ -22,4 +22,5 @@ v1 = StagingQuery(
     dependencies=[
         TableDependency(table=get_join_output_table_name(training_set.v1_test, True), partition_column="ds", additional_partitions=["_HR=23:00"], offset=1)
     ],
+    version=0,
 )

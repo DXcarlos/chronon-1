@@ -101,6 +101,7 @@ scala_library(
         maven_artifact("org.apache.logging.log4j:log4j-api"),
         maven_artifact("org.apache.logging.log4j:log4j-core"),
         maven_artifact_with_suffix("org.rogach:scallop"),
+        maven_artifact("com.google.code.gson:gson"),
     ],
 )
 

@@ -284,7 +284,7 @@ struct MetaData {
 
     2: optional string team
 
-    // will be set by the compiler based on changes to column lineage - do not manually set
+    // will be set by the compiler based on what user sets (currently only for GB and Join)
     3: optional string version
 
     4: optional string outputNamespace
@@ -302,6 +302,10 @@ struct MetaData {
     20: optional map<string, string> tags
     // column -> tag_key -> tag_value
     21: optional map<string, map<string, string>> columnTags
+    // A map of output column name to semantic hash for that column
+    // Includes the source expression of the input column, the source table, filters, and key and time expressions
+    // Does not need to include anything that effects the output name (i.e. aggregation operation, window, bucket)
+    22: optional map<string, string> columnHashes
 
     // marking this as true means that the conf can be served online
     // once marked online, a conf cannot be changed - compiling the conf won't be allowed

@@ -25,4 +25,4 @@ source_users = Source(
     )
 )
 
-user_group_by = GroupBy(sources=[source_users], keys=["user_id"], aggregations=None)
+user_group_by = GroupBy(sources=[source_users], keys=["user_id"], aggregations=None, version=0)

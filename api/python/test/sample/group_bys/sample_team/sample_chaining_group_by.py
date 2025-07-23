@@ -36,6 +36,7 @@ from ai.chronon.types import (
 
 parent_join = Join(
     left=test_sources.event_source,
+    row_ids="event",
     right_parts=[
         JoinPart(
             group_by=event_sample_group_by.v1,
@@ -48,6 +49,7 @@ parent_join = Join(
     ],
     online=True,
     check_consistency=True,
+    version=0,
 )
 
 chaining_group_by_v1 = GroupBy(
@@ -76,4 +78,5 @@ chaining_group_by_v1 = GroupBy(
         "description": "sample description",
     },
     output_namespace="test_namespace",
+    version=0,
 )

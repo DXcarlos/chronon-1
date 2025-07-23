@@ -20,22 +20,29 @@ import logging
 import re
 import textwrap
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Tuple
 
 import ai.chronon.api.common.ttypes as common
 from ai.chronon.api.ttypes import (
     Accuracy,
     Aggregation,
     Derivation,
-    ExternalPart,
+    EventSource,
     GroupBy,
     Join,
     JoinPart,
     Source,
 )
-from ai.chronon.group_by import get_output_col_names
+from ai.chronon.cli.compile.column_hashing import (
+    compute_group_by_columns_hashes,
+    get_pre_derived_group_by_columns,
+    get_pre_derived_group_by_features,
+    get_pre_derived_join_features,
+    get_pre_derived_source_keys,
+)
 from ai.chronon.logger import get_logger
 from ai.chronon.repo.serializer import thrift_simple_json
+from ai.chronon.utils import get_query, get_root_source
 
 # Fields that indicate status of the entities.
 SKIPPED_FIELDS = frozenset(["metaData"])
@@ -61,132 +68,6 @@ def _is_batch_upload_needed(group_by: GroupBy) -> bool:
 def is_identifier(s: str) -> bool:
     identifier_regex = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*")
     return re.fullmatch(identifier_regex, s) is not None
-
-
-def get_pre_derived_group_by_features(group_by: GroupBy) -> List[str]:
-    output_columns = []
-    # For group_bys with aggregations, aggregated columns
-    if group_by.aggregations:
-        for agg in group_by.aggregations:
-            output_columns.extend(get_output_col_names(agg))
-    # For group_bys without aggregations, selected fields from query
-    else:
-        for source in group_by.sources:
-            output_columns.extend(get_pre_derived_source_keys(source))
-    return output_columns
-
-
-def get_pre_derived_group_by_columns(group_by: GroupBy) -> List[str]:
-    output_columns = get_pre_derived_group_by_features(group_by)
-    output_columns.extend(group_by.keyColumns)
-    return output_columns
-
-
-def get_group_by_output_columns(group_by: GroupBy, exclude_keys: bool = False) -> List[str]:
-    """
-    From the group_by object, get the final output columns after derivations.
-    """
-    all_output_columns = set(get_pre_derived_group_by_columns(group_by))
-    if exclude_keys:
-        output_columns = all_output_columns - set(group_by.keyColumns)
-    else:
-        output_columns = all_output_columns
-    if group_by.derivations:
-        return build_derived_columns(output_columns, group_by.derivations)
-    else:
-        return list(output_columns)
-
-
-def get_pre_derived_join_internal_features(join: Join) -> List[str]:
-    internal_features = []
-    for jp in join.joinParts:
-        pre_derived_group_by_features = set(
-            get_pre_derived_group_by_features(jp.groupBy)
-        )
-        derived_group_by_features = build_derived_columns(
-            pre_derived_group_by_features, jp.groupBy.derivations
-        )
-        for col in derived_group_by_features:
-            prefix = jp.prefix + "_" if jp.prefix else ""
-            if join.useLongNames is False:
-                gb_prefix = jp.groupBy.metaData.name.replace(".", "_")
-            else:
-                key_str = "_".join(jp.groupBy.keyColumns)
-                gb_prefix = prefix + key_str
-            internal_features.append(prefix + gb_prefix + "_" + col)
-    return internal_features
-
-
-def get_pre_derived_source_keys(source: Source) -> List[str]:
-    if source.events:
-        return list(source.events.query.selects.keys())
-    elif source.entities:
-        return list(source.entities.query.selects.keys())
-    elif source.joinSource:
-        return list(source.joinSource.query.selects.keys())
-
-
-# The logic should be consistent with the full name logic defined
-# in https://github.com/airbnb/chronon/blob/main/api/src/main/scala/ai/chronon/api/Extensions.scala#L677.
-def get_external_part_full_name(external_part: ExternalPart) -> str:
-    prefix = external_part.prefix + "_" if external_part.prefix else ""
-    name = external_part.source.metadata.name
-    sanitized_name = re.sub("[^a-zA-Z0-9_]", "_", name)
-    return "ext_" + prefix + sanitized_name
-
-
-# The external columns name logic should be consistent with the logic defined in fetcher.scala
-# https://github.com/airbnb/chronon/blob/main/online/src/main/scala/ai/chronon/online/Fetcher.scala#L371
-def get_pre_derived_external_features(join: Join) -> List[str]:
-    external_cols = []
-    if join.onlineExternalParts:
-        for external_part in join.onlineExternalParts:
-            original_external_columns = [
-                param.name for param in external_part.source.valueSchema.params
-            ]
-            prefix = get_external_part_full_name(external_part) + "_"
-            for col in original_external_columns:
-                external_cols.append(prefix + col)
-    return external_cols
-
-
-def get_pre_derived_join_features(join: Join) -> List[str]:
-    return get_pre_derived_join_internal_features(
-        join
-    ) + get_pre_derived_external_features(join)
-
-
-def build_derived_columns(
-    pre_derived_columns: Set[str], derivations: List[Derivation]
-) -> List[str]:
-    """
-    Build the derived columns from pre-derived columns and derivations.
-    """
-    # if derivations contain star, then all columns are included except the columns which are renamed
-    output_columns = pre_derived_columns
-    if derivations:
-        found = any(derivation.expression == "*" for derivation in derivations)
-        if not found:
-            output_columns.clear()
-        for derivation in derivations:
-            if found and is_identifier(derivation.expression):
-                output_columns.remove(derivation.expression)
-            if derivation.name != "*":
-                output_columns.add(derivation.name)
-    return list(output_columns)
-
-
-def get_join_output_columns(join: Join) -> List[str]:
-    """
-    From the join object, get the final output columns after derivations.
-    """
-    output_columns = set(
-        get_pre_derived_join_features(join) + get_pre_derived_source_keys(join.left)
-    )
-    if join.derivations:
-        return build_derived_columns(output_columns, join.derivations)
-    else:
-        return list(output_columns)
 
 
 def _source_has_topic(source: Source) -> bool:
@@ -232,9 +113,12 @@ def detect_feature_name_collisions(
         jp_prefix_str = f"{prefix}_" if prefix else ""
         key_str = "_".join(gb.keyColumns)
         prefix_str = jp_prefix_str + key_str + "_"
+        cols = compute_group_by_columns_hashes(gb, exclude_keys=True)
+        if not cols:
+            print('HERE')
         cols = {
             f"{prefix_str}{base_col}"
-            for base_col in get_group_by_output_columns(gb, exclude_keys=True)
+            for base_col in list(compute_group_by_columns_hashes(gb, exclude_keys=True).keys())
         }
         gb_name = gb.metaData.name
         for col in cols:
@@ -564,12 +448,12 @@ class ConfValidator(object):
         # Only validate the join derivation when the underlying groupBy is valid
         group_by_correct = all(not errors for errors in group_by_errors)
         if join.derivations and group_by_correct:
-            features = get_pre_derived_join_features(join)
+            features = list(get_pre_derived_join_features(join).keys())
             # For online joins keys are not included in output schema
             if join.metaData.online:
                 columns = features
             else:
-                keys = get_pre_derived_source_keys(join.left)
+                keys = list(get_pre_derived_source_keys(join.left).keys())
                 columns = features + keys
             errors.extend(self._validate_derivations(columns, join.derivations))
 
@@ -587,6 +471,7 @@ class ConfValidator(object):
                 errors.append(label_part_collisions)
 
         return errors
+    
 
 
     def _validate_group_by(self, group_by: GroupBy) -> List[BaseException]:
@@ -621,6 +506,35 @@ class ConfValidator(object):
                            )
             )
 
+        def _validate_bounded_event_source():
+            if group_by.aggregations is None:
+                return
+            
+            unbounded_event_sources = [
+                str(src)
+                for src in group_by.sources 
+                if isinstance(get_root_source(src), EventSource) and get_query(src).startPartition is None
+            ]
+
+            if not unbounded_event_sources:
+                return
+            
+            unwindowed_aggregations = [str(agg) for agg in group_by.aggregations if agg.windows is None]
+
+            if not unwindowed_aggregations:
+                return
+            
+            nln = "\n"
+
+            errors.append(
+                ValueError(
+                    f"""group_by {group_by.metaData.name} uses unwindowed aggregations [{nln}{f",{nln}".join(unwindowed_aggregations)}{nln}] 
+                    on unbounded event sources: [{nln}{f",{nln}".join(unbounded_event_sources)}{nln}]. 
+                    Please set a start_partition on the source, or a window on the aggregation.""")
+                )
+            
+        _validate_bounded_event_source()
+
         # group by that are marked explicitly offline should not be present in
         # materialized online joins.
         if group_by.metaData.online is False and online_joins:
@@ -648,9 +562,9 @@ class ConfValidator(object):
         if group_by.derivations:
             # For online group_by keys are not included in output schema
             if group_by.metaData.online:
-                columns = get_pre_derived_group_by_features(group_by)
+                columns = list(get_pre_derived_group_by_features(group_by).keys())
             else:
-                columns = get_pre_derived_group_by_columns(group_by)
+                columns = list(get_pre_derived_group_by_columns(group_by).keys())
             errors.extend(self._validate_derivations(columns, group_by.derivations))
 
         for source in group_by.sources:

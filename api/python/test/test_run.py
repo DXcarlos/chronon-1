@@ -51,7 +51,7 @@ def context():
 @pytest.fixture
 def test_conf_location():
     """Sample test conf for tests"""
-    return "compiled/joins/sample_team/sample_online_join.v1"
+    return "compiled/joins/sample_team/sample_online_join.v1__0"
 
 
 def reset_env(default_env):
@@ -136,7 +136,7 @@ def test_environment(teams_json, repo, test_conf_location):
     # derived from args.
     assert (
         os.environ["APP_NAME"]
-        == "chronon_joins_backfill_production_sample_team.sample_online_join.v1"
+        == "chronon_joins_backfill_production_sample_team.sample_online_join.v1__0"
     )
 
     # Check dev backfill for a team sets parameters accordingly.
@@ -156,11 +156,11 @@ def test_environment(teams_json, repo, test_conf_location):
     reset_env(default_environment)
     ctx = context()
     ctx.params["mode"] = "backfill"
-    ctx.params["conf"] = "production/joins/sample_team/sample_join.v1"
+    ctx.params["conf"] = "production/joins/sample_team/sample_join.v1__0"
     ctx.params["repo"] = repo
     ctx.params["env"] = "production"
     run.set_runtime_env_v3(ctx.params, test_conf_location)
-    assert os.environ['APP_NAME'] == 'chronon_joins_backfill_production_sample_team.sample_online_join.v1'
+    assert os.environ['APP_NAME'] == 'chronon_joins_backfill_production_sample_team.sample_online_join.v1__0'
     # from conf env.
     assert os.environ["EXECUTOR_MEMORY"] == "9G"
 
@@ -172,7 +172,7 @@ def test_environment(teams_json, repo, test_conf_location):
     ctx.params["repo"] = repo
     run.set_runtime_env_v3(ctx.params, test_conf_location)
     # without conf still works.
-    assert os.environ["APP_NAME"] == "chronon_joins_metadata-export_dev_sample_team.sample_online_join.v1"
+    assert os.environ["APP_NAME"] == "chronon_joins_metadata-export_dev_sample_team.sample_online_join.v1__0"
 
     reset_env(default_environment)
     ctx = context()
@@ -180,7 +180,7 @@ def test_environment(teams_json, repo, test_conf_location):
     ctx.params["conf"] = "production/joins//"
     ctx.params["repo"] = repo
     run.set_runtime_env_v3(ctx.params, test_conf_location)
-    assert os.environ["APP_NAME"] == "chronon_joins_metadata-upload_dev_sample_team.sample_online_join.v1"
+    assert os.environ["APP_NAME"] == "chronon_joins_metadata-upload_dev_sample_team.sample_online_join.v1__0"
     reset_env(default_environment)
 
 

@@ -16,7 +16,7 @@ case object Iceberg extends Format {
       throw new NotImplementedError("subPartitionsFilter is not supported on this format")
     }
 
-    getIcebergPartitions(tableName, partitionFilters)
+    getIcebergPartitions(tableName, partitionColumn)
   }
 
   override def partitions(tableName: String, partitionFilters: String)(implicit
@@ -26,7 +26,7 @@ case object Iceberg extends Format {
         "For single partition retrieval, please use 'partition' method.")
   }
 
-  private def getIcebergPartitions(tableName: String, partitionFilters: String)(implicit
+  private def getIcebergPartitions(tableName: String, partitionColumn: String)(implicit
       sparkSession: SparkSession): List[String] = {
 
     val partitionsDf = sparkSession.read
@@ -40,7 +40,7 @@ case object Iceberg extends Format {
       // Hour filter is currently buggy in iceberg. https://github.com/apache/iceberg/issues/4718
       // so we collect and then filter.
       partitionsDf
-        .select(date_format(col(s"partition.${tableUtils.partitionColumn}"), partitionFmt), col("partition.hr"))
+        .select(date_format(col(s"partition.$partitionColumn"), partitionFmt), col("partition.hr"))
         .collect()
         .filter(_.get(1) == null)
         .map(_.getString(0))
@@ -49,7 +49,7 @@ case object Iceberg extends Format {
     } else {
 
       partitionsDf
-        .select(date_format(col(s"partition.${tableUtils.partitionColumn}"), partitionFmt))
+        .select(date_format(col(s"partition.$partitionColumn"), partitionFmt))
         .collect()
         .map(_.getString(0))
         .toList
