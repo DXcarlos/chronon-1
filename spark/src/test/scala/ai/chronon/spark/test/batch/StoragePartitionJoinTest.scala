@@ -9,7 +9,6 @@ import ai.chronon.planner.{JoinMergeNode, JoinPartNode, SourceWithFilterNode}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark._
 import ai.chronon.spark.batch._
-import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.test.{DataFrameGen, TableTestUtils}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.Exchange
@@ -26,8 +25,8 @@ class StoragePartitionJoinTest extends AnyFlatSpec {
 
   val correctConfigsForSPJ = Map(
     // V1 bucketing configurations
-    "spark.sql.sources.bucketing.enabled" -> "true",
-    "spark.sql.bucketing.coalesceBucketsInJoin.enabled" -> "true",
+    "spark.sql.sources.bucketing.enabled" -> "false",
+    "spark.sql.bucketing.coalesceBucketsInJoin.enabled" -> "false",
     "spark.sql.autoBroadcastJoinThreshold" -> "-1", // Disable broadcast joins to force bucketed joins
     "spark.sql.adaptive.enabled" -> "true",
 
@@ -61,9 +60,6 @@ class StoragePartitionJoinTest extends AnyFlatSpec {
     "spark.chronon.table_write.format" -> "iceberg"
   )
 
-  // Flip some of the required arguments for SPJ
-  val incorrectConfigsForSpj = correctConfigsForSPJ - "spark.sql.autoBroadcastJoinThreshold"
-
   val spark: SparkSession = submission.SparkSessionBuilder.build(
     "StoragePartitionJoinTest",
     hiveSupport = true,
@@ -79,6 +75,25 @@ class StoragePartitionJoinTest extends AnyFlatSpec {
 
   private val namespace = "test_namespace_storage_partition_join"
   tableUtils.createDatabase(namespace)
+
+  def setSPJConfigs(enable: Boolean): Unit = {
+    val value = enable.toString
+
+    val spjConfigs = Map(
+      "spark.sql.sources.bucketing.enabled" -> value,
+      "spark.sql.bucketing.coalesceBucketsInJoin.enabled" -> value,
+      "spark.sql.adaptive.enabled" -> value,
+      "spark.sql.sources.v2.bucketing.enabled" -> value,
+      "spark.sql.sources.v2.bucketing.pushPartValues.enabled" -> value,
+      "spark.sql.iceberg.planning.preserve-data-grouping" -> value,
+      "spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled" -> value,
+      "spark.sql.requireAllClusterKeysForCoPartition" -> (!enable).toString // this one is inverted
+    )
+
+    spjConfigs.foreach { case (key, v) =>
+      spark.conf.set(key, v)
+    }
+  }
 
   def getPhysicalPlan(df: org.apache.spark.sql.DataFrame): String = {
     val physicalPlan = df.queryExecution.executedPlan.toString
@@ -318,12 +333,7 @@ class StoragePartitionJoinTest extends AnyFlatSpec {
   }
 
   it should "NOT storage partitioned join due to incorrect configuration" in {
-    val spark: SparkSession = submission.SparkSessionBuilder.build(
-      "StoragePartitionJoinTest",
-      hiveSupport = true,
-      local = true,
-      additionalConfig = Some(incorrectConfigsForSpj)
-    )
+    setSPJConfigs(false)
     val tableUtils: TableTestUtils = TableTestUtils(spark)
 
     val joinedDf = setupAndGetMergeDF(tableUtils)
@@ -332,8 +342,9 @@ class StoragePartitionJoinTest extends AnyFlatSpec {
     joinedDf.explain(true)
 
     // Step 5: Analyze physical plan to verify no shuffles
-    verifyNoShuffle(joinedDf, "Storage Partition Bucketed Join")
+    assertThrows[AssertionError](verifyNoShuffle(joinedDf, "Storage Partition Bucketed Join"))
 
     println("✓ Shuffles detected as expected when incorrect configs are used")
+    setSPJConfigs(true)
   }
 }
