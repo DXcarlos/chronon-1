@@ -493,7 +493,7 @@ object JoinUtils {
                    |${prefixedRightDf.schema.pretty}""".stripMargin)
 
     val joinedDf = coalescedJoin(leftDf, prefixedRightDf, Seq(tableUtils.partitionColumn, Constants.RowIDColumn))
-    joinedDf.explain(true)
+
     logger.info(s"""Final Schema:
                    |${joinedDf.schema.pretty}
                    |""".stripMargin)

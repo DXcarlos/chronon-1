@@ -293,11 +293,13 @@ class ChainingFetcherTest extends AnyFlatSpec {
     responseDf.show()
 
     // remove user during comparison since `user` is not the key
-    val diff = Comparison.sideBySide(responseDf.drop(ignoreCol),
-                                     expectedDf.drop(ignoreCol),
-                                     keyishColumns,
-                                     aName = "online",
-                                     bName = "offline")
+    val diff = Comparison.sideBySide(
+      responseDf.drop(ignoreCol).drop(Constants.RowIDColumn),
+      expectedDf.drop(ignoreCol).drop(Constants.RowIDColumn),
+      keyishColumns,
+      aName = "online",
+      bName = "offline"
+    )
     assertEquals(expectedDf.count(), responseDf.count())
     if (diff.count() > 0) {
       logger.info(s"Total count: ${responseDf.count()}")
