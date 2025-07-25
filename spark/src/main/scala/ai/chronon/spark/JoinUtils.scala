@@ -492,7 +492,6 @@ object JoinUtils {
                    |Right Schema:
                    |${prefixedRightDf.schema.pretty}""".stripMargin)
 
-    logger.info(s"Applied BUCKET hints with ${tableUtils.rowIdClusterNumber} buckets for bucketed join")
     val joinedDf = coalescedJoin(leftDf, prefixedRightDf, Seq(tableUtils.partitionColumn, Constants.RowIDColumn))
     joinedDf.explain(true)
     logger.info(s"""Final Schema:

@@ -310,7 +310,7 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
       rightDf
         .withColumn(
           Constants.TimePartitionColumn,
-          date_format(date_add(to_date(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format), 1),
+          date_format(to_date(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format),
                       tableUtils.partitionSpec.format)
         )
     } else {
