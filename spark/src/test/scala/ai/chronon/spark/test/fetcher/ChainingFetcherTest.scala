@@ -122,7 +122,7 @@ class ChainingFetcherTest extends AnyFlatSpec {
     val leftSource =
       Builders.Source.events(
         query = Builders.Query(
-          selects = Builders.Selects("user", "listing", "ts"),
+          selects = Builders.Selects("user", "listing", "ts", Constants.RowIDColumn),
           startPartition = startPartition
         ),
         table = s"$namespace.${viewsSchema.name}"
@@ -198,7 +198,7 @@ class ChainingFetcherTest extends AnyFlatSpec {
     val leftSource =
       Builders.Source.events(
         query = Builders.Query(
-          selects = Builders.Selects("user", "listing", "ts"),
+          selects = Builders.Selects("user", "listing", "ts", Constants.RowIDColumn),
           startPartition = startPartition,
           endPartition = endPartition
         ),
