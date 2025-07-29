@@ -85,8 +85,6 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
     // val partMetrics = Metrics.Context(metrics, joinPart) -- TODO is this metrics context sufficient, or should we pass thru for monolith join?
     val partMetrics = Metrics.Context(Metrics.Environment.JoinOffline, joinPart.groupBy)
 
-    val rightRange = JoinUtils.shiftDays(node.leftDataModel, joinPart, leftRange)
-
     // Can kill the option after we deprecate monolith join job
     jobContext.leftDf.foreach { leftDf =>
       try {
@@ -98,7 +96,7 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
 
         // Cache join part data into intermediate table
         if (filledDf.isDefined) {
-          logger.info(s"Writing to join part table: $partTable for partition range $rightRange")
+          logger.info(s"Writing to join part table: $partTable for partition range $leftRange")
           // Apply bucketing on row ID column if it exists in the DataFrame
           filledDf.get.save(partTable, tableProperties = jobContext.tableProps.toMap, bucketByRowId = true)
         } else {
@@ -116,7 +114,7 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
     }
 
     if (tableUtils.tableReachable(partTable)) {
-      Some(tableUtils.scanDf(query = null, partTable, range = Some(rightRange)))
+      Some(tableUtils.scanDf(query = null, partTable, range = Some(leftRange)))
     } else {
       // Happens when everything is handled by bootstrap
       None
@@ -294,7 +292,7 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
 
     val keys = partLeftKeys ++ additionalKeys
 
-    val allLeftCols = keys ++ additionalLeftColumnsToInclude
+    val allLeftCols = keys ++ additionalLeftColumnsToInclude :+ tableUtils.partitionColumn
     // Filter down left to only the columns that we want to keep on the joined output for the Joinpart
     val leftDfWithRelevantCols =
       if (node.leftDataModel == DataModel.EVENTS && !leftDf.columns.contains(Constants.TimePartitionColumn)) {
@@ -310,7 +308,7 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
       rightDf
         .withColumn(
           Constants.TimePartitionColumn,
-          date_format(to_date(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format),
+          date_format(date_add(to_date(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format), 1),
                       tableUtils.partitionSpec.format)
         )
     } else {

@@ -4,7 +4,7 @@ import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.Builders.Derivation
 import ai.chronon.api.Constants.{ContextualSourceName, MetadataDataset}
-import ai.chronon.api.Extensions.{JoinOps, MetadataOps}
+import ai.chronon.api.Extensions.{JoinOps, MetadataOps, SourceOps}
 import ai.chronon.api.{
   Accuracy,
   BooleanType,
@@ -171,10 +171,15 @@ object FetcherTestUtil {
     val mockApi = new MockApi(kvStoreFunc, namespace)
     mockApi.setFlagStore(tilingEnabledFlagStore)
 
+    println("left table:")
+    tableUtils.loadTable(joinConf.left.table).show()
+
     val joinedDf = new ai.chronon.spark.Join(joinConf, endDs, tableUtils).computeJoin()
     val joinTable = s"$namespace.join_test_expected_${joinConf.metaData.cleanName}"
     joinedDf.save(joinTable)
     val endDsExpected = tableUtils.sql(s"SELECT * FROM $joinTable WHERE ds='$endDs'")
+    println("join result:")
+    endDsExpected.show()
 
     joinConf.joinParts.toScala.foreach(jp =>
       OnlineUtils.serve(tableUtils,

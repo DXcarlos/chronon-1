@@ -34,7 +34,7 @@ class EventsEventsSnapshotTest extends BaseJoinTest {
     )
 
     val viewsTable = s"$namespace.view_events"
-    DataFrameGen.events(spark, viewsSchema, count = 100, partitions = 200).drop("ts").save(viewsTable)
+    DataFrameGen.events(spark, viewsSchema, count = 1000, partitions = 200).drop("ts").save(viewsTable)
 
     val viewsSource = Builders.Source.events(
       query =
@@ -56,10 +56,11 @@ class EventsEventsSnapshotTest extends BaseJoinTest {
     val itemQueries = List(Column("item", api.StringType, 100))
     val itemQueriesTable = s"$namespace.item_queries"
     DataFrameGen
-      .events(spark, itemQueries, 100, partitions = 100)
+      .events(spark, itemQueries, 100, partitions = 10)
       .save(itemQueriesTable)
 
-    val start = tableUtils.partitionSpec.minus(today, new Window(100, TimeUnit.DAYS))
+    val start = tableUtils.partitionSpec.minus(today, new Window(5, TimeUnit.DAYS))
+    val end = tableUtils.partitionSpec.minus(today, new Window(5, TimeUnit.DAYS))
 
     val joinConf = Builders.Join(
       left = Builders.Source.events(Builders.Query(startPartition = start), table = itemQueriesTable),
@@ -67,23 +68,25 @@ class EventsEventsSnapshotTest extends BaseJoinTest {
       metaData = Builders.MetaData(name = "test.item_snapshot_features_2", namespace = namespace, team = "chronon")
     )
 
-    (new Analyzer(tableUtils, joinConf, monthAgo, today)).run()
-    val join = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = monthAgo, tableUtils = tableUtils)
-    val computed = join.computeJoin().drop(Constants.RowIDColumn)
+    (new Analyzer(tableUtils, joinConf, start, today)).run()
+    val join = new ai.chronon.spark.Join(joinConf = joinConf, endPartition = end, tableUtils = tableUtils)
+    val computed = join.computeJoin(overrideStartPartition = Option(start)).drop(Constants.RowIDColumn)
+    println("Computed:")
     computed.show()
 
     val expected = tableUtils.sql(s"""
                                      |WITH
-                                     |   queries AS (SELECT item, ts, ds from $itemQueriesTable where ds >= '$start' and ds <= '$monthAgo')
+                                     |   queries AS (SELECT item, ts, ds from $itemQueriesTable where ds >= '$start' and ds <= '$end')
                                      | SELECT queries.item,
                                      |        queries.ts,
                                      |        queries.ds,
                                      |        AVG(IF(queries.ds > $viewsTable.ds, time_spent_ms, null)) as user_unit_test_item_views_time_spent_ms_average
                                      | FROM queries left outer join $viewsTable
                                      |  ON queries.item = $viewsTable.item
-                                     | WHERE ($viewsTable.item IS NOT NULL) AND $viewsTable.ds >= '$yearAgo' AND $viewsTable.ds <= '$dayAndMonthBefore'
+                                     | WHERE ($viewsTable.item IS NOT NULL) AND $viewsTable.ds >= '$yearAgo' AND $viewsTable.ds <= '$end'
                                      | GROUP BY queries.item, queries.ts, queries.ds, from_unixtime(queries.ts/1000, 'yyyy-MM-dd')
                                      |""".stripMargin)
+    println("Expected:")
     expected.show()
 
     val diff = Comparison.sideBySide(computed, expected, List("item", "ts", "ds"))
