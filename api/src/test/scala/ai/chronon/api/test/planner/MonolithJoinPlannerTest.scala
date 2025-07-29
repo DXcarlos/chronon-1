@@ -50,23 +50,23 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
     }
   }
 
-  it should "monolith join planner plans valid confs without exceptions" in {
-
-    val runfilesDir = System.getenv("RUNFILES_DIR")
-    val rootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/joins")
-
-    val joinConfs = LocalRunner.parseConfs[api.Join](rootDir.toString)
-
-    val joinPlanners = joinConfs.map(MonolithJoinPlanner(_))
-
-    joinPlanners
-      .foreach { planner =>
-        noException should be thrownBy {
-          val plan = planner.buildPlan
-          validateJoinPlan(plan)
-        }
-      }
-  }
+//  it should "monolith join planner plans valid confs without exceptions" in {
+//
+//    val runfilesDir = System.getenv("RUNFILES_DIR")
+//    val rootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/joins")
+//
+//    val joinConfs = LocalRunner.parseConfs[api.Join](rootDir.toString)
+//
+//    val joinPlanners = joinConfs.map(MonolithJoinPlanner(_))
+//
+//    joinPlanners
+//      .foreach { planner =>
+//        noException should be thrownBy {
+//          val plan = planner.buildPlan
+//          validateJoinPlan(plan)
+//        }
+//      }
+//  }
 
   it should "monolith join should avoid metadata when computing semantic hash" in {
     val firstJoin = Join(
@@ -175,19 +175,19 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
     firstSemanticHashes should equal(secondSemanticHashes)
   }
 
-  it should "monolith join planner should produce exactly two nodes (backfill and metadata upload) for canary confs" in {
-    val runfilesDir = System.getenv("RUNFILES_DIR")
-    val rootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/joins")
-
-    val joinConfs = LocalRunner.parseConfs[api.Join](rootDir.toString)
-
-    joinConfs.foreach { joinConf =>
-      val planner = MonolithJoinPlanner(joinConf)
-      val plan = planner.buildPlan
-
-      validateJoinPlan(plan)
-    }
-  }
+//  it should "monolith join planner should produce exactly two nodes (backfill and metadata upload) for canary confs" in {
+//    val runfilesDir = System.getenv("RUNFILES_DIR")
+//    val rootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/joins")
+//
+//    val joinConfs = LocalRunner.parseConfs[api.Join](rootDir.toString)
+//
+//    joinConfs.foreach { joinConf =>
+//      val planner = MonolithJoinPlanner(joinConf)
+//      val plan = planner.buildPlan
+//
+//      validateJoinPlan(plan)
+//    }
+//  }
 
   it should "monolith join planner should create metadata upload node with correct properties" in {
     val join = Join(

@@ -9,36 +9,35 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import java.nio.file.Files
 
-/** Comprehensive test suite for Apache Iceberg Storage Partitioned Join (SPJ) optimization.
-  * Tests verify that SPJ correctly eliminates exchange stages when joining partitioned tables.
-  */
+/**
+ * Comprehensive test suite for Apache Iceberg Storage Partitioned Join (SPJ) optimization.
+ * Tests verify that SPJ correctly eliminates exchange stages when joining partitioned tables.
+ */
 class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterAll with BeforeAndAfterEach {
 
   private var spark: SparkSession = _
   private val regions = Seq("North", "South", "East", "West")
 
-  private var warehouseDir: java.nio.file.Path = _
-
   override def beforeAll(): Unit = {
-    warehouseDir = Files.createTempDirectory("storage-partition-join-test")
-    spark = SparkSession
-      .builder()
+    spark = SparkSession.builder()
       .appName("IcebergSPJTest")
       .master("local[*]")
       .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
       .config("spark.sql.catalog.spark_catalog", "org.apache.iceberg.spark.SparkSessionCatalog")
-      .config("spark.sql.warehouse.dir", warehouseDir.toString)
+      .config("spark.sql.warehouse.dir", s"${System.getProperty("java.io.tmpdir")}/warehouse")
       .config("spark.sql.shuffle.partitions", "4")
       .config("spark.sql.autoBroadcastJoinThreshold", "-1")
       .config("spark.sql.catalog.spark_catalog.type", "hadoop")
-      .config("spark.sql.catalog.spark_catalog.warehouse", warehouseDir.toString)
+      .config("spark.sql.catalog.spark_catalog.warehouse", Files.createTempDirectory("storage-partition-join-test").toString)
       .enableHiveSupport()
       .getOrCreate()
+
+    spark.sparkContext.setLogLevel("WARN")
   }
 
   override def afterAll(): Unit = {
-    if (warehouseDir != null) {
-      org.apache.commons.io.FileUtils.deleteDirectory(warehouseDir.toFile)
+    if (spark != null) {
+      spark.stop()
     }
   }
 
@@ -49,8 +48,9 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     }
   }
 
-  /** Configure Spark session for SPJ optimization
-    */
+  /**
+   * Configure Spark session for SPJ optimization
+   */
   private def enableSPJ(): Unit = {
     spark.conf.set("spark.sql.sources.v2.bucketing.enabled", "true")
     spark.conf.set("spark.sql.iceberg.planning.preserve-data-grouping", "true")
@@ -61,18 +61,21 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     spark.conf.set("spark.sql.adaptive.enabled", "false") // Disable AQE for predictable plans
   }
 
-  /** Disable SPJ optimization
-    */
+  /**
+   * Disable SPJ optimization
+   */
   private def disableSPJ(): Unit = {
     spark.conf.set("spark.sql.sources.v2.bucketing.enabled", "false")
     spark.conf.set("spark.sql.iceberg.planning.preserve-data-grouping", "false")
   }
 
-  /** Create test tables with matching partition schemes
-    */
+  /**
+   * Create test tables with matching partition schemes
+   */
   private def createTestTables(): Unit = {
     // Create customers table with bucketed partitioning
-    spark.sql("""
+    spark.sql(
+      """
       CREATE TABLE customers (
         customer_id BIGINT,
         customer_name STRING,
@@ -84,7 +87,8 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     """)
 
     // Create orders table with identical partitioning
-    spark.sql("""
+    spark.sql(
+      """
       CREATE TABLE orders (
         order_id BIGINT,
         customer_id BIGINT,
@@ -102,6 +106,7 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
 
     spark.createDataFrame(customerData).write.mode("append").insertInto("customers")
 
+
     // Insert test data for orders
     val orderData = (1 to 5000).flatMap { orderId =>
       val customerId = (orderId % 1000) + 1
@@ -112,48 +117,54 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     spark.createDataFrame(orderData).write.mode("append").insertInto("orders")
   }
 
-  /** Check if a Spark plan contains Exchange operators
-    */
+  /**
+   * Check if a Spark plan contains Exchange operators
+   */
   private def hasExchange(plan: SparkPlan): Boolean = {
     val planString = plan.toString
     planString.contains("Exchange") || planString.contains("ShuffleExchange")
   }
 
-  /** Count Exchange operators in a plan
-    */
+  /**
+   * Count Exchange operators in a plan
+   */
   private def countExchanges(plan: SparkPlan): Int = {
     val planString = plan.toString
-    val exchangeLines =
-      planString.split("\n").filter(line => line.contains("Exchange") || line.contains("ShuffleExchange"))
+    val exchangeLines = planString.split("\n").filter(line => 
+      line.contains("Exchange") || line.contains("ShuffleExchange"))
     exchangeLines.length
   }
 
-  /** Assert that a DataFrame's execution plan contains no Exchange operators
-    */
+  /**
+   * Assert that a DataFrame's execution plan contains no Exchange operators
+   */
   private def assertNoExchange(df: DataFrame, message: String = ""): Unit = {
     val plan = df.queryExecution.executedPlan
     val exchangeCount = countExchanges(plan)
     assert(exchangeCount == 0,
-           s"Expected no Exchange operators but found $exchangeCount. $message\nPlan:\n${plan.toString}")
+      s"Expected no Exchange operators but found $exchangeCount. $message\nPlan:\n${plan.toString}")
   }
 
-  /** Assert that a DataFrame's execution plan contains Exchange operators
-    */
+  /**
+   * Assert that a DataFrame's execution plan contains Exchange operators
+   */
   private def assertHasExchange(df: DataFrame, message: String = ""): Unit = {
     val plan = df.queryExecution.executedPlan
-    assert(hasExchange(plan), s"Expected Exchange operators in plan but found none. $message\nPlan:\n${plan.toString}")
+    assert(hasExchange(plan),
+      s"Expected Exchange operators in plan but found none. $message\nPlan:\n${plan.toString}")
   }
 
-  /** Analyze execution plan details
-    */
+  /**
+   * Analyze execution plan details
+   */
   private case class PlanAnalysis(
-      hasExchange: Boolean,
-      exchangeCount: Int,
-      hasShuffle: Boolean,
-      hasBatchScan: Boolean,
-      hasSort: Boolean,
-      planString: String
-  )
+                           hasExchange: Boolean,
+                           exchangeCount: Int,
+                           hasShuffle: Boolean,
+                           hasBatchScan: Boolean,
+                           hasSort: Boolean,
+                           planString: String
+                         )
 
   private def analyzePlan(df: DataFrame): PlanAnalysis = {
     val plan = df.queryExecution.executedPlan
@@ -178,8 +189,8 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     val orders = spark.table("orders")
 
     val joinDf = customers.join(orders,
-                                customers("region") === orders("region") &&
-                                  customers("customer_id") === orders("customer_id"))
+      customers("region") === orders("region") &&
+        customers("customer_id") === orders("customer_id"))
 
     assertNoExchange(joinDf, "SPJ should eliminate exchange for co-partitioned join")
 
@@ -196,8 +207,8 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     val orders = spark.table("orders")
 
     val joinDf = customers.join(orders,
-                                customers("region") === orders("region") &&
-                                  customers("customer_id") === orders("customer_id"))
+      customers("region") === orders("region") &&
+        customers("customer_id") === orders("customer_id"))
 
     assertHasExchange(joinDf, "Join without SPJ should contain exchange")
   }
@@ -211,16 +222,16 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     // Get results without SPJ
     disableSPJ()
     val joinWithoutSPJ = customers.join(orders,
-                                        customers("region") === orders("region") &&
-                                          customers("customer_id") === orders("customer_id"))
+      customers("region") === orders("region") &&
+        customers("customer_id") === orders("customer_id"))
     val countWithoutSPJ = joinWithoutSPJ.count()
     val samplesWithoutSPJ = joinWithoutSPJ.orderBy("order_id").limit(10).collect()
 
     // Get results with SPJ
     enableSPJ()
     val joinWithSPJ = customers.join(orders,
-                                     customers("region") === orders("region") &&
-                                       customers("customer_id") === orders("customer_id"))
+      customers("region") === orders("region") &&
+        customers("customer_id") === orders("customer_id"))
     val countWithSPJ = joinWithSPJ.count()
     val samplesWithSPJ = joinWithSPJ.orderBy("order_id").limit(10).collect()
 
@@ -228,6 +239,7 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     countWithSPJ shouldEqual countWithoutSPJ
     samplesWithSPJ should contain theSameElementsInOrderAs samplesWithoutSPJ
   }
+
 
   it should "require all partition columns in join condition" in {
     createTestTables()
@@ -240,7 +252,8 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     val partialJoin = customers.join(orders, Seq("region"))
 
     // This should still have exchange because not all partition columns are used
-    assertHasExchange(partialJoin, "SPJ requires all partition columns in join condition")
+    assertHasExchange(partialJoin,
+      "SPJ requires all partition columns in join condition")
   }
 
   it should "handle missing partition values with pushPartValues enabled" in {
@@ -255,9 +268,9 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     val orders = spark.table("orders")
 
     val leftJoin = customers.join(orders,
-                                  customers("region") === orders("region") &&
-                                    customers("customer_id") === orders("customer_id"),
-                                  "left")
+      customers("region") === orders("region") &&
+        customers("customer_id") === orders("customer_id"),
+      "left")
 
     // SPJ should still work with missing partitions when pushPartValues is enabled
     assertNoExchange(leftJoin, "SPJ should handle missing partitions")
@@ -301,8 +314,8 @@ class IcebergSparkSPJTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     val orders = spark.table("orders")
 
     val joinDf = customers.join(orders,
-                                customers("region") === orders("region") &&
-                                  customers("customer_id") === orders("customer_id"))
+      customers("region") === orders("region") &&
+        customers("customer_id") === orders("customer_id"))
 
     val analysis = analyzePlan(joinDf)
 

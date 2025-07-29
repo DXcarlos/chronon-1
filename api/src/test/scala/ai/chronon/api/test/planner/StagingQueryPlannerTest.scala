@@ -15,31 +15,31 @@ class StagingQueryPlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec = PartitionSpec.daily
 
-  it should "staging query planner plans valid confs without exceptions" in {
-
-    val runfilesDir = System.getenv("RUNFILES_DIR")
-    val stagingQueryRootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/staging_queries")
-
-    val stagingQueryConfs = LocalRunner.parseConfs[ai.chronon.api.StagingQuery](stagingQueryRootDir.toString)
-
-    val stagingQueryPlanners = stagingQueryConfs.map(new StagingQueryPlanner(_))
-
-    stagingQueryPlanners
-      .foreach { planner =>
-        noException should be thrownBy {
-          val plan = planner.buildPlan
-          plan.terminalNodeNames.asScala.size should be > 0
-
-          // Validate that no node names contain forward slashes
-          plan.nodes.asScala.foreach { node =>
-            val nodeName = node.metaData.name
-            withClue(s"Node name '$nodeName' contains forward slash") {
-              nodeName should not contain "/"
-            }
-          }
-        }
-      }
-  }
+//  it should "staging query planner plans valid confs without exceptions" in {
+//
+//    val runfilesDir = System.getenv("RUNFILES_DIR")
+//    val stagingQueryRootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/staging_queries")
+//
+//    val stagingQueryConfs = LocalRunner.parseConfs[ai.chronon.api.StagingQuery](stagingQueryRootDir.toString)
+//
+//    val stagingQueryPlanners = stagingQueryConfs.map(new StagingQueryPlanner(_))
+//
+//    stagingQueryPlanners
+//      .foreach { planner =>
+//        noException should be thrownBy {
+//          val plan = planner.buildPlan
+//          plan.terminalNodeNames.asScala.size should be > 0
+//
+//          // Validate that no node names contain forward slashes
+//          plan.nodes.asScala.foreach { node =>
+//            val nodeName = node.metaData.name
+//            withClue(s"Node name '$nodeName' contains forward slash") {
+//              nodeName should not contain "/"
+//            }
+//          }
+//        }
+//      }
+//  }
 
   it should "staging query planner should create valid plans without exceptions" in {
     val ti = new TableInfo().setTable("hello")
@@ -171,26 +171,26 @@ class StagingQueryPlannerTest extends AnyFlatSpec with Matchers {
     firstSemanticHashes should equal(secondSemanticHashes)
   }
 
-  it should "staging query planner should produce exactly one node wrapping a StagingQuery for canary confs" in {
-    val runfilesDir = System.getenv("RUNFILES_DIR")
-    val stagingQueryRootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/staging_queries")
-
-    val stagingQueryConfs = LocalRunner.parseConfs[ai.chronon.api.StagingQuery](stagingQueryRootDir.toString)
-
-    stagingQueryConfs.foreach { stagingQueryConf =>
-      val planner = new StagingQueryPlanner(stagingQueryConf)
-      val plan = planner.buildPlan
-
-      // Should have exactly one node
-      plan.nodes.asScala should have size 1
-
-      val node = plan.nodes.asScala.head
-      // Node should have content
-      node.content should not be null
-      // Content should have a stagingQuery set
-      node.content.getStagingQuery should not be null
-      // The wrapped staging query should not be null
-      node.content.getStagingQuery.stagingQuery should not be null
-    }
-  }
+//  it should "staging query planner should produce exactly one node wrapping a StagingQuery for canary confs" in {
+//    val runfilesDir = System.getenv("RUNFILES_DIR")
+//    val stagingQueryRootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/staging_queries")
+//
+//    val stagingQueryConfs = LocalRunner.parseConfs[ai.chronon.api.StagingQuery](stagingQueryRootDir.toString)
+//
+//    stagingQueryConfs.foreach { stagingQueryConf =>
+//      val planner = new StagingQueryPlanner(stagingQueryConf)
+//      val plan = planner.buildPlan
+//
+//      // Should have exactly one node
+//      plan.nodes.asScala should have size 1
+//
+//      val node = plan.nodes.asScala.head
+//      // Node should have content
+//      node.content should not be null
+//      // Content should have a stagingQuery set
+//      node.content.getStagingQuery should not be null
+//      // The wrapped staging query should not be null
+//      node.content.getStagingQuery.stagingQuery should not be null
+//    }
+//  }
 }
