@@ -6,10 +6,10 @@ module(
 # Core Bazel dependencies
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "rules_license", version = "1.0.0")
-bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "platforms", version = "0.0.11")
 bazel_dep(name = "rules_java", version = "8.12.0")
 bazel_dep(name = "rules_proto", version = "7.0.2")
-bazel_dep(name = "rules_jvm_external", version = "6.7")
+bazel_dep(name = "rules_jvm_external", version = "6.8")
 bazel_dep(name = "contrib_rules_jvm", version = "0.24.0")
 bazel_dep(name = "rules_python", version = "0.40.0")
 
@@ -45,7 +45,6 @@ scala_deps.scalatest()
 # Maven dependencies extension
 maven = use_extension("@rules_jvm_external//:extensions.bzl", "maven")
 maven.install(
-    name = "maven",
     artifacts = [
         # Scala 2.12 libraries
         "org.scala-lang:scala-library:2.12.20",
@@ -190,7 +189,8 @@ maven.install(
         "com.google.protobuf:protobuf-java:3.25.1",
 
         # Curator
-        "org.apache.curator:apache-curator:5.5.0",
+        "org.apache.curator:curator-framework:5.5.0",
+        "org.apache.curator:curator-recipes:5.5.0",
 
         # Additional Hadoop
         "org.apache.hadoop:hadoop-yarn-api:3.4.1",
@@ -278,7 +278,7 @@ maven.install(
         # "org.scala-lang:scala-library",
         # "org.scala-lang:scala-reflect",
     ],
-    fail_if_repin_required = True,
+    lock_file = "//:maven_install.json",
     fetch_sources = True,
     repositories = [
         "https://repo1.maven.org/maven2/",
