@@ -33,7 +33,7 @@ class FetcherMetadataTest extends AnyFlatSpec {
     val src = Source.fromResource(joinPath)
     println(s"conf resource path for dir walker: ${confResource.getPath}")
 
-    val runFilesResource = Runfiles.create().rlocation("chronon/spark/src/test/resources/")
+    val runFilesResource = Runfiles.create().rlocation("_main/spark/src/test/resources/")
 
     val expected = {
       try src.mkString
