@@ -55,8 +55,7 @@ object Constants {
   val TileColumn: String = "__tile"
   val TimedKvRDDKeySchemaKey: String = "__keySchema"
   val TimedKvRDDValueSchemaKey: String = "__valueSchema"
-  val StatsKeySchema: StructType =
-    StructType("keySchema", Array(StructField("JoinPath", StringType)))
+  val StatsKeySchema: StructType = StructType("keySchema", Array(StructField("JoinPath", StringType)))
   val ExternalPrefix: String = "ext"
   val ContextualSourceName: String = "contextual"
   val ContextualPrefix: String = s"${ExternalPrefix}_${ContextualSourceName}"
@@ -75,8 +74,7 @@ object Constants {
   val FetchTimeout: Duration = Duration(10, concurrent.TimeUnit.MINUTES)
   val DefaultCharset: Charset = Charset.forName("UTF-8")
 
-  val extensionsToIgnore: Array[String] =
-    Array(".class", ".csv", ".java", ".scala", ".py", ".pyc", ".DS_Store")
+  val extensionsToIgnore: Array[String] = Array(".class", ".csv", ".java", ".scala", ".py", ".pyc", ".DS_Store")
   val foldersToIgnore: Array[String] = Array(".git")
 
   // A negative integer within the safe range for both long and double in JavaScript, Java, Scala, Python

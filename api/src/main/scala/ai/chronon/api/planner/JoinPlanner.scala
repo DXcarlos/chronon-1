@@ -23,11 +23,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     val copied = join.deepCopy()
     copied.metaData.unsetExecutionInfo()
     Option(copied.joinParts).foreach(_.iterator().toScala.foreach(_.groupBy.metaData.unsetExecutionInfo()))
-    Option(copied.labelParts).foreach(
-      _.labels
-        .iterator()
-        .toScala
-        .foreach(_.groupBy.metaData.unsetExecutionInfo()))
+    Option(copied.labelParts).foreach(_.labels.iterator().toScala.foreach(_.groupBy.metaData.unsetExecutionInfo()))
     copied.unsetOnlineExternalParts()
     copied
   }
@@ -40,9 +36,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       .setExcludeKeys(join.skewKeys)
 
     val leftSourceHash = ThriftJsonCodec.hexDigest(result)
-    val leftSourceTable = left.table
-      .replace(".", "__")
-      .sanitize // source_namespace.table -> source_namespace__table
+    val leftSourceTable = left.table.replace(".", "__").sanitize // source_namespace.table -> source_namespace__table
     val outputTableName =
       leftSourceTable + "__" + leftSourceHash + "/source_cache" // source__<source_namespace>__<table>__<hash>
 
@@ -130,9 +124,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     toNode(metaData, _.setJoinPart(result), copy)
   }
 
-  private val joinPartNodes: Seq[Node] = join.joinParts.toScala.map {
-    buildJoinPartNode
-  }.toSeq
+  private val joinPartNodes: Seq[Node] = join.joinParts.toScala.map { buildJoinPartNode }.toSeq
 
   val mergeNode: Node = {
     val result = new JoinMergeNode()
@@ -214,8 +206,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       .map(_.metaData.outputTable)
       .getOrElse(mergeNode.metaData.outputTable)
 
-    val labelPartDeps =
-      TableDependencies.fromJoin(join) :+ TableDependencies.fromTable(inputTable)
+    val labelPartDeps = TableDependencies.fromJoin(join) :+ TableDependencies.fromTable(inputTable)
 
     val metaData = MetaDataUtils
       .layer(

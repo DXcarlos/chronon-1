@@ -91,35 +91,29 @@ class DateMacroSpec extends AnyFlatSpec with Matchers {
   it should "apply both bounds correctly" in {
     // Input 01-05, lower_bound 01-10, upper_bound 01-15 => 01-10
     adjustDate("2023-01-05", partitionSpec)(
-      Map("lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")
-    ) shouldBe "2023-01-10"
+      Map("lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")) shouldBe "2023-01-10"
 
     // Input 01-20, lower_bound 01-10, upper_bound 01-15 => 01-15
     adjustDate("2023-01-20", partitionSpec)(
-      Map("lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")
-    ) shouldBe "2023-01-15"
+      Map("lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")) shouldBe "2023-01-15"
 
     // Input 01-12, lower_bound 01-10, upper_bound 01-15 => 01-12 (within bounds)
     adjustDate("2023-01-12", partitionSpec)(
-      Map("lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")
-    ) shouldBe "2023-01-12"
+      Map("lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")) shouldBe "2023-01-12"
   }
 
   it should "handle all three parameters correctly" in {
     // Input 01-01, offset +5 (to 01-06), lower_bound 01-10, upper_bound 01-15 => 01-10
     adjustDate("2023-01-01", partitionSpec)(
-      Map("offset" -> "5", "lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")
-    ) shouldBe "2023-01-10"
+      Map("offset" -> "5", "lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")) shouldBe "2023-01-10"
 
     // Input 01-01, offset +15 (to 01-16), lower_bound 01-10, upper_bound 01-15 => 01-15
     adjustDate("2023-01-01", partitionSpec)(
-      Map("offset" -> "15", "lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")
-    ) shouldBe "2023-01-15"
+      Map("offset" -> "15", "lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")) shouldBe "2023-01-15"
 
     // Input 01-01, offset +12 (to 01-13), lower_bound 01-10, upper_bound 01-15 => 01-13 (within bounds)
     adjustDate("2023-01-01", partitionSpec)(
-      Map("offset" -> "12", "lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")
-    ) shouldBe "2023-01-13"
+      Map("offset" -> "12", "lower_bound" -> "2023-01-10", "upper_bound" -> "2023-01-15")) shouldBe "2023-01-13"
   }
 
   it should "throw an exception when lower_bound > upper_bound" in {

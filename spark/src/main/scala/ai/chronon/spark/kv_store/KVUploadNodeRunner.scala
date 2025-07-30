@@ -7,6 +7,7 @@ import ai.chronon.api._
 import ai.chronon.online.Api
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
 import ai.chronon.planner.{Node, NodeContent}
+import ai.chronon.spark.batch.BatchNodeRunner.DefaultTablePartitionsDataset
 import org.rogach.scallop.ScallopConf
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -80,6 +81,8 @@ class KVUploadNodeRunner(api: Api) extends NodeRunner {
         throw e
     }
   }
+
+  //  override def tablePartitionsDataset(): String = tablePartitionsDataset
 }
 
 object KVUploadNodeRunner {
@@ -91,6 +94,9 @@ object KVUploadNodeRunner {
                                   descr =
                                     "Fully qualified Online.Api based class. We expect the jar to be on the class path")
     val apiProps: Map[String, String] = props[String]('Z', descr = "Props to configure API Store")
+    val tablePartitionsDataset = opt[String](required = true,
+                                             descr = "Name of table in kv store to use to keep track of partitions",
+                                             default = Option(DefaultTablePartitionsDataset))
     verify()
   }
 

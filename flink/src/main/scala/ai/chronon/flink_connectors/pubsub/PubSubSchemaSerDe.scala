@@ -34,10 +34,8 @@ class PubSubSchemaSerDe(topicInfo: TopicInfo) extends SerDe {
         schemaClient.close()
       }
 
-    require(
-      schema.getType == com.google.pubsub.v1.Schema.Type.AVRO,
-      s"Unsupported schema type: ${schema.getType}. Only Avro is supported."
-    )
+    require(schema.getType == com.google.pubsub.v1.Schema.Type.AVRO,
+            s"Unsupported schema type: ${schema.getType}. Only Avro is supported.")
     val avroSchema: Schema = AvroCodec.of(schema.getDefinition).schema
     val chrononSchema: StructType = AvroConversions.toChrononSchema(avroSchema).asInstanceOf[StructType]
     (schema.getDefinition, chrononSchema)

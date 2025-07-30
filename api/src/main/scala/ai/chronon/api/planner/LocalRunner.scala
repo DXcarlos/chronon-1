@@ -28,20 +28,19 @@ object LocalRunner {
     .map(ThriftJsonCodec.fromJsonFile(_, check = true))
 
   def processConfigurations(confSubfolder: String, confType: String)(implicit
-      partitionSpec: PartitionSpec
-  ): Seq[ConfPlan] = {
+      partitionSpec: PartitionSpec): Seq[ConfPlan] = {
     confType match {
       case "joins" => {
         val confs = parseConfs[Join](confSubfolder)
-        confs.map(c => MonolithJoinPlanner(c)).map(_.buildPlan)
+        confs.map((c) => MonolithJoinPlanner(c)).map(_.buildPlan)
       }
       case "staging_queries" => {
         val confs = parseConfs[StagingQuery](confSubfolder)
-        confs.map(c => new StagingQueryPlanner(c)).map(_.buildPlan)
+        confs.map((c) => new StagingQueryPlanner(c)).map(_.buildPlan)
       }
       case "groupbys" => {
         val confs = parseConfs[GroupBy](confSubfolder)
-        confs.map(c => new GroupByPlanner(c)).map(_.buildPlan)
+        confs.map((c) => new GroupByPlanner(c)).map(_.buildPlan)
       }
       case _ =>
         throw new UnsupportedOperationException(
@@ -50,7 +49,9 @@ object LocalRunner {
     }
   }
 
-  /** To run: bazel build //api:planner_deploy.jar bazel run -- //api:planner <path-to-confs> <conf_type>
+  /** To run:
+    * bazel build //api:planner_deploy.jar
+    * bazel run -- //api:planner <path-to-confs> <conf_type>
     * @param args
     */
   def main(args: Array[String]): Unit = {

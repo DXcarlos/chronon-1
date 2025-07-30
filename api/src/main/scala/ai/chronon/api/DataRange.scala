@@ -31,10 +31,8 @@ case class TimeRange(start: Long, end: Long)(implicit partitionSpec: PartitionSp
     PartitionRange(partitionSpec.at(start), partitionSpec.at(end))
   }
 
-  def pretty: String =
-    s"start:[${TsUtils.toStr(start)}]-end:[${TsUtils.toStr(end)}]"
-  override def toString: String =
-    s"[${TsUtils.toStr(start)}-${TsUtils.toStr(end)}]"
+  def pretty: String = s"start:[${TsUtils.toStr(start)}]-end:[${TsUtils.toStr(end)}]"
+  override def toString: String = s"[${TsUtils.toStr(start)}-${TsUtils.toStr(end)}]"
 }
 // start and end can be null - signifies unbounded-ness
 case class PartitionRange(start: String, end: String)(implicit val partitionSpec: PartitionSpec)
@@ -78,8 +76,8 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
   }
 
   def whereClauses: Seq[String] = {
-    (Option(start).map(s => s"${partitionSpec.column} >= '$s'") ++ Option(end)
-      .map(e => s"${partitionSpec.column} <= '$e'")).toSeq
+    (Option(start).map(s => s"${partitionSpec.column} >= '$s'") ++ Option(end).map(e =>
+      s"${partitionSpec.column} <= '$e'")).toSeq
   }
 
   def steps(days: Int): Seq[PartitionRange] = {
@@ -115,8 +113,7 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
       val newStart = if (start == null) {
         null
       } else {
-        val startTimeMillis =
-          partitionSpec.epochMillis(start) // Already represents 00:00:00.000
+        val startTimeMillis = partitionSpec.epochMillis(start) // Already represents 00:00:00.000
         partitionSpec.at(startTimeMillis + millis)
       }
 
@@ -157,10 +154,8 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
 
   def translate(otherSpec: PartitionSpec): PartitionRange = {
 
-    val newStart =
-      Option(start).map(d => partitionSpec.translate(d, otherSpec)).orNull
-    val newEnd =
-      Option(end).map(d => partitionSpec.translate(d, otherSpec)).orNull
+    val newStart = Option(start).map(d => partitionSpec.translate(d, otherSpec)).orNull
+    val newEnd = Option(end).map(d => partitionSpec.translate(d, otherSpec)).orNull
 
     PartitionRange(newStart, newEnd)(otherSpec)
   }

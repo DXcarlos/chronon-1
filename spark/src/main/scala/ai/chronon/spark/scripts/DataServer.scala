@@ -36,8 +36,7 @@ class DataServer(driftSeries: Seq[TileDriftSeries], summarySeries: Seq[TileSumma
 
     private def convertToBytesMap[T <: TBase[_, _]: Manifest: ClassTag](
         series: T,
-        keyF: T => TileSeriesKey
-    ): Map[String, String] = {
+        keyF: T => TileSeriesKey): Map[String, String] = {
       val serializerInstance = SerdeUtils.compactSerializer.get()
       val encoder = Base64.getEncoder
       val keyBytes = serializerInstance.serialize(keyF(series))

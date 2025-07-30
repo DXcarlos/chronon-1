@@ -178,6 +178,8 @@ object JobSubmitterConstants {
   val OriginalModeArgKeyword = "--original-mode"
   val ZiplineVersionArgKeyword = "--zipline-version"
   val GroupByNameArgKeyword = "--groupby-name"
+  val OnlineClassArgKeyword = "--online-class"
+  val ApiPropsArgPrefix = "-Z"
   val LocalZiplineVersionArgKeyword = "--local-zipline-version"
   val StreamingManifestPathArgKeyword = "--streaming-manifest-path"
   val StreamingCheckpointPathArgKeyword = "--streaming-checkpoint-path"
@@ -216,6 +218,7 @@ object JobSubmitterConstants {
   val GcpProjectIdEnvVar = "GCP_PROJECT_ID"
   val GcpRegionEnvVar = "GCP_REGION"
   val GcpDataprocClusterNameEnvVar = "GCP_DATAPROC_CLUSTER_NAME"
+  val GcpEnableUploadKVClientEnvVar = "ENABLE_UPLOAD_CLIENTS"
 
   val TablePartitionsDatasetNameArgKeyword = "--table-partitions-dataset"
 

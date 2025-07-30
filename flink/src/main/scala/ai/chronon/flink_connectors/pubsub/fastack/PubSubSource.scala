@@ -15,20 +15,20 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-/** Flink source that reads messages from Pub/Sub given various params (project, subscription, etc.) Uses the injected
-  * DeserializationSchema to first convert PubSubMessages -> Array[Byte] and the the underlying Chronon deserialization
-  * schema to convert the bytes to the desired Chronon type (typically a Mutation)
+/** Flink source that reads messages from Pub/Sub given various params (project, subscription, etc.)
+  * Uses the injected DeserializationSchema to first convert PubSubMessages -> Array[Byte] and the the underlying
+  * Chronon deserialization schema to convert the bytes to the desired Chronon type (typically a Mutation)
   *
   * This source uses the streaming pull model of Pub/Sub. We create & start a subscriber in the open/run methods and
   * register a callback (MessageReceiver) that is invoked whenever a new message is pulled from Pub/Sub. The PubSub
   * subscriber will register threads and pull messages in parallel under the hood.
   *
-  * This source chooses to ACK messages immediately after pulling them rather than waiting for checkpointing every n
-  * secs. Allows us to stay clear of tight ACK deadlines and drowning under Pub/Sub retransmits if the message volume is
-  * high / checkpoints fail a couple of times in a row, etc.
+  * This source chooses to ACK messages immediately after pulling them rather than waiting for checkpointing every n secs.
+  * Allows us to stay clear of tight ACK deadlines and drowning under Pub/Sub retransmits if the message volume is high / checkpoints
+  * fail a couple of times in a row, etc.
   *
-  * This comes at the cost of accuracy (e.g. lost messages if the job fails after pulling but before processing), but we
-  * do batch correct daily in GroupByUploads.
+  * This comes at the cost of accuracy (e.g. lost messages if the job fails after pulling but before processing), but we do
+  * batch correct daily in GroupByUploads.
   */
 class PubSubSource[OUT](
     groupByName: String,

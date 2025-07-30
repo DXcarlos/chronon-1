@@ -1,6 +1,7 @@
 package ai.chronon.api.planner
 
-import ai.chronon.api.{PartitionSpec, StagingQuery}
+import ai.chronon.api.{StagingQuery, PartitionSpec}
+import ai.chronon.api.Extensions._
 import ai.chronon.planner.ConfPlan
 import scala.collection.JavaConverters._
 import ai.chronon.planner.StagingQueryNode
@@ -21,7 +22,8 @@ case class StagingQueryPlanner(stagingQuery: StagingQuery)(implicit outputPartit
       "backfill",
       stagingQuery.metaData.name + "__backfill",
       TableDependencies.fromStagingQuery(stagingQuery),
-      Some(1) // Default step days for staging queries
+      Some(1), // Default step days for staging queries
+      Some(stagingQuery.metaData.outputTable)
     )
 
     val node = new StagingQueryNode().setStagingQuery(stagingQuery)

@@ -2,8 +2,8 @@ package ai.chronon.online.metrics
 
 import ai.chronon.online.metrics.Metrics.Context
 
-/** Generic interface for reporting metrics. Specific implementations of this cater to different metrics systems (e.g.,
-  * StatsD, OpenTelemetry).
+/** Generic interface for reporting metrics. Specific implementations of this cater to different metrics systems
+  * (e.g., StatsD, OpenTelemetry).
   */
 trait MetricsReporter extends Serializable {
 

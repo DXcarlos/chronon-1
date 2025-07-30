@@ -19,12 +19,9 @@ object TableDependencies {
     val joinPartDeps = joinParts.flatMap((jp) => fromGroupBy(jp.groupBy))
     val leftDep = fromSource(join.left)
     val bootstrap =
-      scala
-        .Option(join.bootstrapParts)
-        .map(_.toScala.toArray[BootstrapPart])
-        .getOrElse(Array.empty[BootstrapPart])
-    val bootstrapDeps = bootstrap.map(bp => fromTable(bp.table, bp.query))
-    leftDep.toSeq ++ joinPartDeps.toSeq ++ bootstrapDeps.toSeq
+      scala.Option(join.bootstrapParts).map(_.toScala.toArray[BootstrapPart]).getOrElse(Array.empty[BootstrapPart])
+    val bootstrapDeps = bootstrap.map((bp) => fromTable(bp.table, bp.query))
+    (leftDep.toSeq ++ joinPartDeps.toSeq ++ bootstrapDeps.toSeq)
   }
 
   def fromGroupBy(groupBy: api.GroupBy, leftDataModel: Option[DataModel] = None): Seq[TableDependency] =
@@ -32,10 +29,7 @@ object TableDependencies {
       .iterator()
       .toScala
       .flatMap { source =>
-        val lookback =
-          if (source.dataModel == DataModel.EVENTS && !source.isCumulative)
-            groupBy.maxWindow
-          else None
+        val lookback = if (source.dataModel == DataModel.EVENTS && !source.isCumulative) groupBy.maxWindow else None
 
         def dep(shift: Option[Window] = None, forMutations: Boolean = false): Option[TableDependency] =
           TableDependencies.fromSource(source, lookback, shift)
@@ -45,8 +39,7 @@ object TableDependencies {
           case (Some(api.DataModel.EVENTS), Accuracy.TEMPORAL, DataModel.ENTITIES) =>
             dep(shift = Some(source.partitionInterval)) ++ dep(forMutations = true)
 
-          case (Some(api.DataModel.EVENTS), Accuracy.SNAPSHOT, _) =>
-            dep(shift = Some(source.partitionInterval))
+          case (Some(api.DataModel.EVENTS), Accuracy.SNAPSHOT, _) => dep(shift = Some(source.partitionInterval))
 
           case _ => dep()
 
@@ -54,12 +47,10 @@ object TableDependencies {
       }
       .toSeq
 
-  def fromSource(
-      source: api.Source,
-      maxWindowOpt: Option[Window] = None,
-      shift: Option[Window] = None,
-      forMutations: Boolean = false
-  ): Option[TableDependency] = {
+  def fromSource(source: api.Source,
+                 maxWindowOpt: Option[Window] = None,
+                 shift: Option[Window] = None,
+                 forMutations: Boolean = false): Option[TableDependency] = {
 
     if (forMutations && source.mutationsTable.isEmpty) return None
 
@@ -86,8 +77,7 @@ object TableDependencies {
         }
     }
 
-    val inputTable =
-      if (forMutations) source.mutationsTable.get else source.rawTable
+    val inputTable = if (forMutations) source.mutationsTable.get else source.rawTable
 
     val tableDep = new TableDependency()
       .setTableInfo(
@@ -119,8 +109,7 @@ object TableDependencies {
         .setStartOffset(shift.getOrElse(WindowUtils.zero()))
         .setEndOffset(shift.getOrElse(WindowUtils.zero()))
 
-    val offset =
-      Option(query.partitionLag).orElse(shift).getOrElse(WindowUtils.zero())
+    val offset = Option(query.partitionLag).orElse(shift).getOrElse(WindowUtils.zero())
 
     new TableDependency()
       .setTableInfo(

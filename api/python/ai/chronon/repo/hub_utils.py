@@ -94,21 +94,21 @@ def get_branch(path):
     try:
         default_branch = gitpython_utils.get_default_origin_branch(path)
         current_branch = gitpython_utils.get_current_branch(path)
-
-        if current_branch == default_branch:
-            raise RuntimeError(
-                f"You're currently on the production branch {default_branch}, please checkout a new branch"
-                + "before running to ensure that your changes do not interfere with production."
-            )
-
-        else:
-            print(f"Identified branch: {current_branch}")
-            return current_branch
-
     except Exception as e:
         raise ValueError(
             f"Failed to get git branch for {path}. Make sure your Chronon directory is in a git repository."
         ) from e
+    if current_branch == default_branch:
+        raise RuntimeError(
+            f"You're currently on the production branch {default_branch}, please checkout a new branch"
+            + "before running to ensure that your changes do not interfere with production."
+        )
+
+    else:
+        print(f"Identified branch: {current_branch}")
+        return current_branch
+
+
 
 
 def upload_to_branch(chronon_root, zipline_hub, local_repo_entities: dict[str, Conf]):

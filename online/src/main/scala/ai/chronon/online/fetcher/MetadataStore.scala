@@ -22,7 +22,6 @@ import ai.chronon.api.ScalaJavaConversions.IteratorOps
 import ai.chronon.api._
 import ai.chronon.api.thrift.TBase
 import ai.chronon.online.KVStore.{ListRequest, ListResponse, PutRequest}
-import ai.chronon.online.MetadataEndPoint.NameByTeamEndPointName
 import ai.chronon.online.OnlineDerivationUtil.buildDerivedFields
 import ai.chronon.online._
 import ai.chronon.online.serde._
@@ -84,53 +83,6 @@ class MetadataStore(fetchContext: FetchContext) {
             th
           ))
       }
-  }
-
-  private def getEntityListByTeam[T <: TBase[_, _]: Manifest](team: String): Try[Seq[String]] = {
-    val clazz = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
-    val dataset = NameByTeamEndPointName
-    fetchContext.kvStore
-      .getStringArray(team, dataset, fetchContext.timeoutMillis)
-      .recoverWith { case th: Throwable =>
-        Failure(
-          new RuntimeException(
-            s"Couldn't fetch ${clazz.getName} for key $team. Perhaps metadata upload wasn't successful.",
-            th
-          ))
-      }
-  }
-
-  lazy val getGroupByListByTeam: TTLCache[String, Try[Seq[String]]] = {
-    new TTLCache[String, Try[Seq[String]]](
-      { team =>
-        getEntityListByTeam[GroupBy]("group_bys/" + team)
-          .recover { case e: java.util.NoSuchElementException =>
-            logger.error(
-              s"Failed to fetch conf for team $team at group_bys/$team, please check metadata upload to make sure the metadata has been uploaded")
-            throw e
-          }
-      },
-      { team =>
-        Metrics.Context(environment = "group_by.list.fetch", groupBy = team)
-      }
-    )
-  }
-
-  lazy val getJoinListByTeam: TTLCache[String, Try[Seq[String]]] = {
-    new TTLCache[String, Try[Seq[String]]](
-      { team =>
-        getEntityListByTeam[Join]("joins/" + team)
-          .recover { case e: java.util.NoSuchElementException =>
-            logger.error(
-              s"Failed to fetch conf for team $team at joins/$team, please check metadata upload to make sure the metadata has been uploaded")
-            throw e
-          }
-      },
-      { team =>
-        import ai.chronon.online.metrics
-        metrics.Metrics.Context(environment = "join.list.fetch", groupBy = team)
-      }
-    )
   }
 
   lazy val getJoinConf: TTLCache[String, Try[JoinOps]] = new TTLCache[String, Try[JoinOps]](

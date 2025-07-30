@@ -59,8 +59,7 @@ class RowAggregator(val inputSchema: Seq[(String, DataType)], val aggregationPar
         case e: Exception =>
           throw new RuntimeException(
             s"Failed to create ${spec.operation} aggregator for ${spec.inputColumn} column of type $inputType",
-            e
-          )
+            e)
       }
     }
   }.toArray

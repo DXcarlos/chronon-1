@@ -146,8 +146,7 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
     logger.info(
       s"Creating BigTableStore for $projectId and $instanceId. " +
         s"Params: profileId: $maybeAppProfileId, adminClientEnabled: $enableUploadClients, " +
-        s"num procs = ${Runtime.getRuntime.availableProcessors()}"
-    )
+        s"num procs = ${Runtime.getRuntime.availableProcessors()}")
     new BigTableKVStoreImpl(dataClient, maybeAdminClient, maybeBQClient, conf)
   }
 
@@ -169,10 +168,8 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
       )
   }
 
-  private def setClientRetrySettings(
-      dataSettingsBuilder: BigtableDataSettings.Builder,
-      conf: Map[String, String]
-  ): Unit = {
+  private def setClientRetrySettings(dataSettingsBuilder: BigtableDataSettings.Builder,
+                                     conf: Map[String, String]): Unit = {
     // pull retry settings from env vars
     val initialRpcTimeoutDuration =
       getOptional(BigTableInitialRpcTimeoutDuration, conf)

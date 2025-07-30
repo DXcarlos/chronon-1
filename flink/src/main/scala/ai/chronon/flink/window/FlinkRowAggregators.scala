@@ -25,15 +25,16 @@ import org.slf4j.LoggerFactory
 import java.lang
 import scala.util.Failure
 import scala.util.Success
- import scala.util.Try
- import scala.collection.Seq
- 
-/** Wrapper Flink aggregator around Chronon's RowAggregator. Relies on Flink to pass in the correct set of events for the
-  * tile. As the aggregates produced by this function are used on the serving side along with other pre-aggregates, we
-  * don't 'finalize' the Chronon RowAggregator and instead return the intermediate representation.
-   *
-   * (This cannot be a RichAggregateFunction because Flink does not support Rich functions in windows.)
-   */
+import scala.util.Try
+import scala.collection.Seq
+
+/** Wrapper Flink aggregator around Chronon's RowAggregator. Relies on Flink to pass in
+  * the correct set of events for the tile. As the aggregates produced by this function
+  * are used on the serving side along with other pre-aggregates, we don't 'finalize' the
+  * Chronon RowAggregator and instead return the intermediate representation.
+  *
+  * (This cannot be a RichAggregateFunction because Flink does not support Rich functions in windows.)
+  */
 class FlinkRowAggregationFunction(
     groupBy: GroupBy,
     inputSchema: Seq[(String, DataType)],
@@ -53,16 +54,14 @@ class FlinkRowAggregationFunction(
   }
 
   private val reversalIndex = {
-     val result = inputSchema.indexWhere(_._1 == Constants.ReversalColumn)
- 
-     if (isMutation)
-      require(
-        result >= 0,
-        s"Please specify source.query.reversal_column for CDC sources, only found, ${inputSchema.map(_._1)}"
-      )
- 
-     result
-   }
+    val result = inputSchema.indexWhere(_._1 == Constants.ReversalColumn)
+
+    if (isMutation)
+      require(result >= 0,
+              s"Please specify source.query.reversal_column for CDC sources, only found, ${inputSchema.map(_._1)}")
+
+    result
+  }
 
   /*
    * Initialize the transient rowAggregator.
@@ -205,22 +204,20 @@ class FlinkRowAggProcessFunction(
       new DropwizardHistogramWrapper(
         new com.codahale.metrics.Histogram(new ExponentiallyDecayingReservoir())
       )
-     )
-   }
- 
-  /** Process events emitted from the aggregate function. Output format: (keys, encoded tile IR, timestamp of the event
-    * being processed)
-     */
-   override def process(
-       keys: java.util.List[Any],
-       context: ProcessWindowFunction[TimestampedIR, TimestampedTile, java.util.List[Any], TimeWindow]#Context,
-       elements: lang.Iterable[TimestampedIR],
-      out: Collector[TimestampedTile]
-  ): Unit = {
-     val startTime = System.currentTimeMillis()
- 
-     val windowEnd = context.window.getEnd
+    )
+  }
 
+  /** Process events emitted from the aggregate function.
+    * Output format: (keys, encoded tile IR, timestamp of the event being processed)
+    */
+  override def process(
+      keys: java.util.List[Any],
+      context: ProcessWindowFunction[TimestampedIR, TimestampedTile, java.util.List[Any], TimeWindow]#Context,
+      elements: lang.Iterable[TimestampedIR],
+      out: Collector[TimestampedTile]): Unit = {
+    val startTime = System.currentTimeMillis()
+
+    val windowEnd = context.window.getEnd
     val irEntry = elements.iterator.next()
     val isComplete = context.currentWatermark >= windowEnd
 

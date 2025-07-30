@@ -51,10 +51,8 @@ class LocalTableExporter(tableUtils: TableUtils, exportDir: String, formatParam:
       writer.save(tmpOutputDir.getAbsolutePath)
 
       val rawOutputs = tmpOutputDir.listFiles.filter(_.getName.endsWith(format))
-      assert(
-        rawOutputs.size == 1,
-        s"Unexpected number of raw output files: ${rawOutputs.map(_.getName).mkString("[", ", ", "]")}"
-      )
+      assert(rawOutputs.size == 1,
+             s"Unexpected number of raw output files: ${rawOutputs.map(_.getName).mkString("[", ", ", "]")}")
 
       FileUtils.moveFile(rawOutputs.head.getAbsoluteFile, outputFile)
     } finally {

@@ -186,7 +186,7 @@ class WelfordState(ir: Array[Any]) {
         case newCount if newCount == weightN => an
         case newCount =>
           val scaling = weightK / newCount
-          if (scaling < 0.1) an + (ak - an) * scaling
+          if (scaling < 0.1) (an + (ak - an) * scaling)
           else (weightN * an + weightK * ak) / newCount
       }
 
@@ -447,18 +447,18 @@ class FrequentItems[T: FrequentItemsFriendly](val mapSize: Int, val errorType: E
     val items = ir.sketch.getFrequentItems(errorType).map(sk => sk.getItem -> sk.getEstimate)
     val heap = mutable.PriorityQueue[(T, Long)]()(Ordering.by(_._2))
 
-    items.foreach { case (key, value) =>
+    items.foreach({ case (key, value) =>
       if (heap.size < mapSize) {
         heap.enqueue((key, value))
       } else if (heap.head._2 < value) {
         heap.dequeue()
         heap.enqueue((key, value))
       }
-    }
+    })
 
     val result = new util.HashMap[String, Long]()
     val entries = heap.dequeueAll.toList
-    entries.foreach { case (k, v) => result.put(String.valueOf(k), v) }
+    entries.foreach({ case (k, v) => result.put(String.valueOf(k), v) })
     result
   }
 
@@ -479,7 +479,7 @@ class FrequentItems[T: FrequentItemsFriendly](val mapSize: Int, val errorType: E
     val sketch = new ItemsSketch[T](sketchSize)
     val sketchType = implicitly[FrequentItemsFriendly[T]].sketchType
 
-    values.asScala.foreach { case (k, v) => sketch.update(k, v) }
+    values.asScala.foreach({ case (k, v) => sketch.update(k, v) })
 
     ItemsSketchIR(sketch, sketchType)
   }
@@ -791,14 +791,10 @@ class UniqueTopKHelper[T](inputType: DataType, k: Int, maxSizeOpt: Option[Int] =
       val sortKeyField = structType.fields.find(_.name == "sort_key")
       val uniqueIdField = structType.fields.find(_.name == "unique_id")
 
-      require(
-        sortKeyField.isDefined && sortKeyField.get.fieldType == StringType,
-        "Struct must have 'sort_key' field of type String"
-      )
-      require(
-        uniqueIdField.isDefined && uniqueIdField.get.fieldType == LongType,
-        "Struct must have 'unique_id' field of type Long"
-      )
+      require(sortKeyField.isDefined && sortKeyField.get.fieldType == StringType,
+              "Struct must have 'sort_key' field of type String")
+      require(uniqueIdField.isDefined && uniqueIdField.get.fieldType == LongType,
+              "Struct must have 'unique_id' field of type Long")
 
       val sortKeyIndex = structType.fields.indexWhere(_.name == "sort_key")
       val uniqueIdIndex = structType.fields.indexWhere(_.name == "unique_id")

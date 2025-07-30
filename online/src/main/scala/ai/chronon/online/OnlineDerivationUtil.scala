@@ -40,9 +40,10 @@ object OnlineDerivationUtil {
 
   private def buildDerivationFunctionWithSql(
       catalystUtil: PooledCatalystUtil
-  ): DerivationFunc = { { case (keys: Map[String, Any], values: Map[String, Any]) =>
-    reintroduceExceptions(catalystUtil.performSql(keys ++ values).headOption.orNull, values)
-  }
+  ): DerivationFunc = {
+    { case (keys: Map[String, Any], values: Map[String, Any]) =>
+      reintroduceExceptions(catalystUtil.performSql(keys ++ values).headOption.orNull, values)
+    }
   }
 
   def buildDerivationFunction(
@@ -51,9 +52,9 @@ object OnlineDerivationUtil {
       baseValueSchema: StructType
   ): DerivationFunc = {
 
-    if (derivationsScala.isEmpty) { { case (_, values: Map[String, Any]) =>
-      values
-    }
+    if (derivationsScala.isEmpty) {
+
+      { case (_, values: Map[String, Any]) => values }
 
     } else if (derivationsScala.areDerivationsRenameOnly) {
 

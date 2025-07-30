@@ -109,11 +109,13 @@ class AvroCodec(val schemaStr: String) extends Serializable {
   }
 }
 
-/** Consumed by row aggregator after decoding. Mutations follow the same schema as input for value indices. However there
-  * are two main differences. * ts and reversal columns are required for computation * Mutation ts takes on the role of
-  * ts. Since the schema is the same with the sole difference of the added columns, we add these columns on the tail of
-  * the Array and extract them accordingly. i.e. for mutations: reversal index = ArrayRow.length -
-  * (Constants.MutationAvroColumns.length - (index of reversal in Constants.MutationAvroColumns)
+/** Consumed by row aggregator after decoding.
+  * Mutations follow the same schema as input for value indices. However there are two main differences.
+  *  * ts and reversal columns are required for computation
+  *  * Mutation ts takes on the role of ts.
+  * Since the schema is the same with the sole difference of the added columns, we add these columns on the tail
+  * of the Array and extract them accordingly.
+  * i.e. for mutations: reversal index = ArrayRow.length - (Constants.MutationAvroColumns.length - (index of reversal in Constants.MutationAvroColumns)
   */
 class ArrayRow(values: Array[Any], millis: Long, mutation: Boolean = false) extends Row {
   override def get(index: Int): Any = values(index)
@@ -138,8 +140,7 @@ object AvroCodec {
     str =>
       new ThreadLocal[AvroCodec] {
         override def initialValue(): AvroCodec = new AvroCodec(str)
-      }
-  )
+      })
 
   def of(schemaStr: String): AvroCodec = ofThreaded(schemaStr).get()
 }

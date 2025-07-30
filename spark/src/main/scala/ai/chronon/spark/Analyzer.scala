@@ -267,13 +267,13 @@ class Analyzer(tableUtils: TableUtils,
     logger.info(s"Join range to fill $rangeToFill")
     val unfilledRanges = tableUtils
       .unfilledRanges(
-         joinConf.metaData.outputTable,
-         rangeToFill,
-         Some(Seq(joinConf.left.table)),
+        joinConf.metaData.outputTable,
+        rangeToFill,
+        Some(Seq(joinConf.left.table)),
         inputPartitionSpecs = Seq(joinConf.left.query.partitionSpec(tableUtils.partitionSpec))
-       )
-       .getOrElse(Seq.empty)
- 
+      )
+      .getOrElse(Seq.empty)
+
     joinConf.joinParts.toScala.foreach { part =>
       val (aggMetadata, gbKeySchema) =
         analyzeGroupBy(part.groupBy,

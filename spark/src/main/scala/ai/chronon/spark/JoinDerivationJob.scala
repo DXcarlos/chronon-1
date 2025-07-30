@@ -18,8 +18,7 @@ True left columns are keys, ts, and anything else selected on left source.
 Source -> True left table -> Bootstrap table (sourceTable here)
  */
 class JoinDerivationJob(node: JoinDerivationNode, metaData: MetaData, range: DateRange)(implicit
-    tableUtils: TableUtils
-) {
+    tableUtils: TableUtils) {
   implicit val partitionSpec = tableUtils.partitionSpec
   private val join = node.join
   private val dateRange = range.toPartitionRange
