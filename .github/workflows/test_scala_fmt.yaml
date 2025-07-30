@@ -32,7 +32,8 @@ jobs:
           export LANG=en_US.UTF-8
           export LC_ALL=en_US.UTF-8
 
-      - name: Check Scalafmt
-        run: |
-          bazel query 'kind("scala_library.*", //...)' | xargs -I {} bazel run \
-            {}.format-test
+# TODO(nikhil): bring this back in a follow up pr after other large PRs are merged and apply repo wide scalafmt changes
+#      - name: Check Scalafmt
+#        run: |
+#          bazel query 'kind("scala_library.*", //...)' | xargs -I {} bazel run \
+#            {}.format-test
