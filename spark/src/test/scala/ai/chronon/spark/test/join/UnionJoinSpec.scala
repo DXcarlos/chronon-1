@@ -5,7 +5,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 import org.scalatest.matchers.should.Matchers
 
-import scala.collection.{immutable, Seq}
+import scala.collection.{Seq, immutable}
 
 class UnionJoinSpec extends BaseJoinTest with Matchers {
 

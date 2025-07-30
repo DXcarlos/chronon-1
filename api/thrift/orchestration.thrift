@@ -24,7 +24,8 @@ enum NodeRunStatus {
     WAITING = 1,
     RUNNING = 2,
     SUCCEEDED = 3,
-    FAILED = 4
+    FAILED = 4,
+    CANCELLED = 5
 }
 
 enum WorkflowStatus {
@@ -32,7 +33,10 @@ enum WorkflowStatus {
     SUBMITTED = 1,
     RUNNING = 2,
     SUCCEEDED = 3,
-    FAILED = 4
+    FAILED = 4,
+    WAITING = 5
+
+    // workflow status progression: SUBMITTED -> WAITING -> RUNNING -> SUCCEEDED/FAILED
 }
 
 struct Conf {
@@ -151,6 +155,7 @@ struct WorkflowResponse {
     8: optional string endPartition
     10: optional list<string> terminalNodes
     11: optional ConfType confType
+    12: optional string submissionTime
 }
 
 struct WorkflowListRequest {
