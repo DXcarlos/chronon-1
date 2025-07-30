@@ -45,10 +45,8 @@ class VersioningTest extends BaseJoinTest {
     println(leftChangeRecompute)
     assertEquals(leftChangeRecompute.size, 3)
     val partTable = s"${leftChangeJoinConf.metaData.outputTable}_user_unit_test_item_views"
-    assertEquals(
-      leftChangeRecompute,
-      Seq(partTable, leftChangeJoinConf.metaData.bootstrapTable, leftChangeJoinConf.metaData.outputTable)
-    )
+    assertEquals(leftChangeRecompute,
+                 Seq(partTable, leftChangeJoinConf.metaData.bootstrapTable, leftChangeJoinConf.metaData.outputTable))
 
     // Test adding a joinPart
     val addPartJoinConf = joinConf.deepCopy()
@@ -116,8 +114,7 @@ class VersioningTest extends BaseJoinTest {
       diff
         .replaceWithReadableTime(
           Seq("ts", "a_user_3_unit_test_item_views_ts_max", "b_user_3_unit_test_item_views_ts_max"),
-          true
-        )
+          true)
         .show()
     }
     assertEquals(0, diff.count())

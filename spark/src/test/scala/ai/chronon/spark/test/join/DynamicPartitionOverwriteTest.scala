@@ -56,13 +56,11 @@ class DynamicPartitionOverwriteTest extends BaseJoinTest {
     tableUtils.loadTable(f"${namespace}.table").show(truncate = false)
 
     val updatedExpected =
-      (rows.map(r => r.ds -> r.value).toMap ++ dynamicPartitions.map(r => r.ds -> r.value).toMap).map { case (k, v) =>
-        TestRow(k, v)
+      (rows.map((r) => r.ds -> r.value).toMap ++ dynamicPartitions.map((r) => r.ds -> r.value).toMap).map {
+        case (k, v) => TestRow(k, v)
       }.toList
 
-    assertEquals(
-      updatedExpected.sorted,
-      tableUtils.loadTable(f"${namespace}.table").as[TestRow].collect().toList.sorted
-    )
+    assertEquals(updatedExpected.sorted,
+                 tableUtils.loadTable(f"${namespace}.table").as[TestRow].collect().toList.sorted)
   }
 }

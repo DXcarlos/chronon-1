@@ -43,8 +43,7 @@ class ApproxDistinctTest extends AnyFlatSpec with Matchers {
         types.StructField("int_col", types.IntegerType, nullable = true),
         types.StructField("string_col", types.StringType, nullable = true),
         types.StructField("double_col", types.DoubleType, nullable = true)
-      )
-    )
+      ))
 
     val data = Seq(
       Row(1, "A", null),

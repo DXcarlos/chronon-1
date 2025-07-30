@@ -20,8 +20,7 @@ class NullnessCountersAggregatorTest extends AnyFlatSpec with Matchers with Befo
       Seq(
         StructField("id", IntegerType, nullable = false),
         StructField("string_array", ArrayType(StringType, containsNull = true), nullable = true)
-      )
-    )
+      ))
 
     val data = Seq(
       Row(1, Array("a", null, "c", null)),

@@ -82,10 +82,8 @@ class StatsComputeTest extends AnyFlatSpec {
     val df = DataFrameGen.events(spark, schema, 100000, 10)
     val stats = new StatsCompute(df, Seq("user"), "generatedTest")
     val aggregator =
-      StatsGenerator.buildAggregator(
-        stats.metrics,
-        StructType.from("generatedTest", toChrononSchema(stats.selectedDf.schema))
-      )
+      StatsGenerator.buildAggregator(stats.metrics,
+                                     StructType.from("generatedTest", toChrononSchema(stats.selectedDf.schema)))
     val daily = stats.dailySummary(aggregator, timeBucketMinutes = 0).toFlatDf
 
     logger.info("Daily Stats")
@@ -113,10 +111,8 @@ class StatsComputeTest extends AnyFlatSpec {
       .drop(Constants.TimeColumn)
     val stats = new StatsCompute(df, Seq("user"), "noTsTest")
     val aggregator =
-      StatsGenerator.buildAggregator(
-        stats.metrics,
-        StructType.from("noTsTest", toChrononSchema(stats.selectedDf.schema))
-      )
+      StatsGenerator.buildAggregator(stats.metrics,
+                                     StructType.from("noTsTest", toChrononSchema(stats.selectedDf.schema)))
     val daily = stats.dailySummary(aggregator, timeBucketMinutes = 0).toFlatDf
 
     logger.info("Daily Stats")
@@ -131,8 +127,8 @@ class StatsComputeTest extends AnyFlatSpec {
     denormalized.show(truncate = false)
   }
 
-  /** Test to make sure aggregations are generated when it makes sense. Example, percentiles are not currently supported
-    * for byte.
+  /** Test to make sure aggregations are generated when it makes sense.
+    * Example, percentiles are not currently supported for byte.
     */
   it should "generated summary byte" in {
     val schema = List(
@@ -145,10 +141,8 @@ class StatsComputeTest extends AnyFlatSpec {
       .withColumn("byte_column", lit(byteSample))
     val stats = new StatsCompute(df, Seq("user"), "byteTest")
     val aggregator =
-      StatsGenerator.buildAggregator(
-        stats.metrics,
-        StructType.from("byteTest", toChrononSchema(stats.selectedDf.schema))
-      )
+      StatsGenerator.buildAggregator(stats.metrics,
+                                     StructType.from("byteTest", toChrononSchema(stats.selectedDf.schema)))
     val daily = stats.dailySummary(aggregator, timeBucketMinutes = 0).toFlatDf
 
     logger.info("Daily Stats")

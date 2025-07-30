@@ -66,14 +66,14 @@ class GroupByDerivationsTest extends AnyFlatSpec {
     val derivedValues = applyDeriveFunc(deriveFn, request, baseFeatureMap)
 
     // Verify the derived values match expectations
-    derivedValues should contain key "int_val"
+    derivedValues should contain key ("int_val")
     derivedValues("int_val") shouldEqual 100
 
-    derivedValues should contain key "id_last2_1d"
+    derivedValues should contain key ("id_last2_1d")
     val idLast2Values = derivedValues("id_last2_1d").asInstanceOf[util.List[String]]
     idLast2Values.toScala shouldEqual List("test_user_123", "test_user_123")
 
-    derivedValues should contain key "id2_last2_1d"
+    derivedValues should contain key ("id2_last2_1d")
     val id2Last2Values = derivedValues("id2_last2_1d").asInstanceOf[util.List[String]]
     id2Last2Values.toScala shouldEqual List("test_user_123", "test_user_123")
 
@@ -93,7 +93,7 @@ class GroupByDerivationsTest extends AnyFlatSpec {
     )
 
     val derivedValues2 = applyDeriveFunc(deriveFn, request, baseFeatureMap2)
-    derivedValues2 should contain key "id_last2_1d"
+    derivedValues2 should contain key ("id_last2_1d")
     val idLast2Values2 = derivedValues2("id_last2_1d").asInstanceOf[util.List[String]]
     idLast2Values2.toScala shouldEqual List("test_user_123", "test_user_123")
   }
@@ -136,17 +136,11 @@ object GroupByDerivationsTest {
         StructField("id", StringType),
         StructField("int_val", IntType),
         StructField("double_val", DoubleType),
-        StructField(
-          "named_struct",
-          StructType("named_struct", Array(StructField("id", StringType), StructField("int_val", IntType)))
-        ),
-        StructField(
-          "another_named_struct",
-          StructType(
-            "another_named_struct",
-            Array(StructField("id", StringType), StructField("double_val", DoubleType))
-          )
-        )
+        StructField("named_struct",
+                    StructType("named_struct", Array(StructField("id", StringType), StructField("int_val", IntType)))),
+        StructField("another_named_struct",
+                    StructType("another_named_struct",
+                               Array(StructField("id", StringType), StructField("double_val", DoubleType))))
       )
     )
     groupByServingInfo.setSelectedAvroSchema(AvroConversions.fromChrononSchema(selectedSchema).toString(true))

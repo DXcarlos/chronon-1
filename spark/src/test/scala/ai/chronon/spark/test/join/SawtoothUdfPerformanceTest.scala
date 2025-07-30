@@ -1,24 +1,24 @@
- package ai.chronon.spark.test.join
- 
- import ai.chronon.aggregator.row.RowAggregator
-import ai.chronon.aggregator.test.{Column, NaiveAggregator, TestRow => TRow, Timer}
- import ai.chronon.aggregator.windowing.FiveMinuteResolution
- import ai.chronon.api.Extensions.AggregationOps
- import ai.chronon.api._
- import ai.chronon.spark.join.{AggregationInfo, CGenericRow, SawtoothUdf, UnionJoin}
- import ai.chronon.spark.test.DataFrameGen
-import org.apache.spark.sql.{types, DataFrame}
- import org.scalatest.matchers.should.Matchers
- import org.slf4j.{Logger, LoggerFactory}
- 
- import java.util
- import scala.collection.JavaConverters._
- 
-/** Performance test for SawtoothUdf that compares against a naive implementation Uses DataFrameGen to generate large
-  * test datasets and focuses on LAST_K aggregation
-   */
- class SawtoothUdfPerformanceTest extends BaseJoinTest with Matchers {
- 
+package ai.chronon.spark.test.join
+
+import ai.chronon.aggregator.row.RowAggregator
+import ai.chronon.aggregator.test.{Column, NaiveAggregator, Timer, TestRow => TRow}
+import ai.chronon.aggregator.windowing.FiveMinuteResolution
+import ai.chronon.api.Extensions.AggregationOps
+import ai.chronon.api._
+import ai.chronon.spark.join.{AggregationInfo, CGenericRow, SawtoothUdf, UnionJoin}
+import ai.chronon.spark.test.DataFrameGen
+import org.apache.spark.sql.{DataFrame, types}
+import org.scalatest.matchers.should.Matchers
+import org.slf4j.{Logger, LoggerFactory}
+
+import java.util
+import scala.collection.JavaConverters._
+
+/** Performance test for SawtoothUdf that compares against a naive implementation
+  * Uses DataFrameGen to generate large test datasets and focuses on LAST_K aggregation
+  */
+class SawtoothUdfPerformanceTest extends BaseJoinTest with Matchers {
+
   private val logger: Logger = LoggerFactory.getLogger(getClass)
 
   "SawtoothUdf.sawtoothAggregate" should "correctly compute LAST_K with large dataset" in {
@@ -45,8 +45,8 @@ import org.apache.spark.sql.{types, DataFrame}
     // Generate right dataframe
     val rightDf = DataFrameGen
       .gen(spark, rightColumns, numItems)
-      .orderBy(Constants.TimeColumn) // Sort by timestamp
       .dropDuplicates(Constants.TimeColumn)
+      .orderBy(Constants.TimeColumn) // Sort by timestamp
       .cache()
 
     // Convert to SparkRows for the test
@@ -152,24 +152,24 @@ import org.apache.spark.sql.{types, DataFrame}
     // Convert naive results to comparable format
     val naiveItemLists = naiveResults.map { ir =>
       rowAggregator.finalize(ir)(0).asInstanceOf[util.List[_]]
-     }
- 
-     // Sample some results to verify (checking all would be too verbose)
+    }
+
+    // Sample some results to verify (checking all would be too verbose)
 //    val sampleIndices = (0 until math.min(10, result.size)).toList
- 
+
     for (i <- result.indices) {
-       val sawtoothItems = extractLastKItems(result(i))
-       val naiveItems = naiveItemLists(i)
- 
+      val sawtoothItems = extractLastKItems(result(i))
+      val naiveItems = naiveItemLists(i)
+
       val naiveSize = Option(naiveItems).map(_.size).getOrElse(0)
       val sawtoothSize = Option(sawtoothItems).map(_.size).getOrElse(0)
 
       // Verify size
       sawtoothSize shouldBe naiveSize
 
-       // Both should be limited to k or less
-       sawtoothItems.size should be <= k
- 
+      // Both should be limited to k or less
+      sawtoothItems.size should be <= k
+
       val computedStr = sawtoothItems.mkString(", ")
       val expectedStr = naiveItems.asScala.mkString(", ")
 
@@ -179,12 +179,11 @@ import org.apache.spark.sql.{types, DataFrame}
         println(expectedStr)
         print("--")
       }
- 
-      computedStr shouldEqual expectedStr
-     }
- 
-     timer.publish("Result verification")
 
+      computedStr shouldEqual expectedStr
+    }
+
+    timer.publish("Result verification")
 
     // Verify performance difference
     logger.info("Test completed successfully!")

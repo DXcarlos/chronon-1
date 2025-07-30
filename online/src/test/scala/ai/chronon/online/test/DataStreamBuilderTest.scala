@@ -64,14 +64,10 @@ class DataStreamBuilderTest extends AnyFlatSpec {
   }
 
   it should "topic info parsing" in {
-    checkTopicInfo(
-      parse("kafka://topic_name/schema=test_schema/host=X/port=Y"),
-      TopicInfo("topic_name", "kafka", Map("schema" -> "test_schema", "host" -> "X", "port" -> "Y"))
-    )
-    checkTopicInfo(
-      parse("topic_name/host=X/port=Y"),
-      TopicInfo("topic_name", "kafka", Map("host" -> "X", "port" -> "Y"))
-    )
+    checkTopicInfo(parse("kafka://topic_name/schema=test_schema/host=X/port=Y"),
+                   TopicInfo("topic_name", "kafka", Map("schema" -> "test_schema", "host" -> "X", "port" -> "Y")))
+    checkTopicInfo(parse("topic_name/host=X/port=Y"),
+                   TopicInfo("topic_name", "kafka", Map("host" -> "X", "port" -> "Y")))
     checkTopicInfo(parse("topic_name"), TopicInfo("topic_name", "kafka", Map.empty))
   }
 

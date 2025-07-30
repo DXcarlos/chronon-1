@@ -63,8 +63,8 @@ class NoAggTest extends BaseJoinTest {
     val start = tableUtils.partitionSpec.minus(today, new Window(60, TimeUnit.DAYS))
     val end = tableUtils.partitionSpec.minus(today, new Window(15, TimeUnit.DAYS))
     val joinConf = Builders.Join(
-      left = Builders.Source
-        .entities(Builders.Query(selects = Map("user" -> "user"), startPartition = start), snapshotTable = usersTable),
+      left = Builders.Source.entities(Builders.Query(selects = Map("user" -> "user"), startPartition = start),
+                                      snapshotTable = usersTable),
       joinParts = Seq(Builders.JoinPart(groupBy = namesGroupBy)),
       metaData = Builders.MetaData(name = "test.user_features", namespace = namespace, team = "chronon")
     )
@@ -94,8 +94,7 @@ class NoAggTest extends BaseJoinTest {
     println("showing query result")
     expected.show()
     println(
-      s"Left side count: ${spark.sql(s"SELECT user, ds from $namesTable where ds >= '$start' and ds <= '$end'").count()}"
-    )
+      s"Left side count: ${spark.sql(s"SELECT user, ds from $namesTable where ds >= '$start' and ds <= '$end'").count()}")
     println(s"Actual count: ${computed.count()}")
     println(s"Expected count: ${expected.count()}")
     val diff = Comparison.sideBySide(computed, expected, List("user", "ds"))

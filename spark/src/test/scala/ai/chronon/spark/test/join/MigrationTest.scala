@@ -36,10 +36,8 @@ class MigrationTest extends BaseJoinTest {
     val viewsTable = s"$namespace.view_events"
     val viewsSource = Builders.Source.events(
       table = viewsTable,
-      query = Builders.Query(
-        selects = Builders.Selects("time_spent_ms"),
-        startPartition = tableUtils.partitionSpec.minus(ds, new Window(200, TimeUnit.DAYS))
-      )
+      query = Builders.Query(selects = Builders.Selects("time_spent_ms"),
+                             startPartition = tableUtils.partitionSpec.minus(ds, new Window(200, TimeUnit.DAYS)))
     )
 
     val groupBy = Builders.GroupBy(

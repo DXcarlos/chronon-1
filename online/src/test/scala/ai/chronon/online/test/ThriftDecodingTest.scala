@@ -52,10 +52,8 @@ class ThriftDecodingTest extends AnyFlatSpec {
     val gson = new Gson()
     // decoder will pull out data from the nested fields
     val json = gson.toJson(decoder.apply(dks))
-    assertEquals(
-      json,
-      """[null,[["derived_col1","group_by_aggregate_col"],["derived_col2","group_by_aggregate_col_345"]]]"""
-    )
+    assertEquals(json,
+                 """[null,[["derived_col1","group_by_aggregate_col"],["derived_col2","group_by_aggregate_col_345"]]]""")
 
     val (der_name, der_expr) =
       "derivations_avg_expr_length" ->

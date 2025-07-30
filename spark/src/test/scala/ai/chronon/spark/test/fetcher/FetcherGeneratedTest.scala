@@ -30,7 +30,7 @@ class FetcherGeneratedTest extends AnyFlatSpec {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   val sessionName = "FetcherGeneratedTest"
   val spark: SparkSession = submission.SparkSessionBuilder.build(sessionName, local = true)
-  implicit private val tableUtils = TableUtils(spark)
+  private val tableUtils = TableUtils(spark)
   private val topic = "test_topic"
   TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
   private val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
@@ -43,6 +43,6 @@ class FetcherGeneratedTest extends AnyFlatSpec {
                                          tableUtils.partitionSpec.at(System.currentTimeMillis()),
                                          namespace,
                                          consistencyCheck = true,
-                                         dropDsOnWrite = false)
+                                         dropDsOnWrite = false)(spark)
   }
 }

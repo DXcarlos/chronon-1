@@ -58,8 +58,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
       Array(
         (ts1, 1000L),
         (ts2, 2000L)
-      )
-    )
+      ))
 
     // After pivot, we expect:
     // [1.0, 2.0, 3.0]  -->  [[1.0, 4.0],
@@ -87,8 +86,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
       Array(
         (ts1, 1000L),
         (ts2, 2000L)
-      )
-    )
+      ))
 
     val expectedHistogram = Map(
       "A" -> List(10L, Constants.magicNullLong).asJava,
@@ -115,8 +113,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
         (ts1, 1000L),
         (ts2, 2000L),
         (ts3, 3000L)
-      )
-    )
+      ))
 
     result.getCount.asScala.toList shouldEqual List(100L, Constants.magicNullLong, 300L)
   }
@@ -152,8 +149,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
       Array(
         (ts1, 1000L),
         (ts2, 2000L)
-      )
-    )
+      ))
 
     // Check length percentiles transposition
     val expectedLengthPercentiles = List(
@@ -186,8 +182,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
       Array(
         (ts1, 1000L),
         (ts2, 2000L)
-      )
-    )
+      ))
 
     // After pivot, we expect nulls to be replaced with magicNullDouble
     val expected = List(
@@ -253,8 +248,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
       Array(
         (drift1, 1000L),
         (drift2, 2000L)
-      )
-    )
+      ))
 
     result.getPercentileDriftSeries.asScala shouldEqual List(0.5, 0.6)
     result.getHistogramDriftSeries.asScala shouldEqual List(0.3, 0.4)
@@ -284,8 +278,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
         (drift1, 1000L),
         (drift2, 2000L),
         (drift3, 3000L)
-      )
-    )
+      ))
 
     result.getPercentileDriftSeries.asScala.map(Option(_).map(_.doubleValue)) shouldEqual
       List(Some(0.5), Some(Constants.magicNullDouble), Some(0.7))
@@ -325,8 +318,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
       Array(
         (drift1, 1000L),
         (drift2, 2000L)
-      )
-    )
+      ))
 
     result.getPercentileDriftSeries.asScala shouldEqual List(0.5, 0.6)
     result.getHistogramDriftSeries.asScala shouldBe null // never set
@@ -345,8 +337,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
       Array(
         (drift1, 1000L),
         (drift2, 2000L)
-      )
-    )
+      ))
 
     val series = result.getPercentileDriftSeries.asScala.toList
     series.size shouldBe 2
@@ -369,8 +360,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
         (ts1, 1000L),
         (ts2, 2000L),
         (ts3, 3000L)
-      )
-    )
+      ))
 
     result.getCount.asScala shouldEqual List(Long.MaxValue, Constants.magicNullLong, 100L)
   }
@@ -386,8 +376,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
         (ts1, 1000L),
         (ts2, 2000L),
         (ts3, 3000L)
-      )
-    )
+      ))
 
     // Since all values are unset, they should all be magicNullLong rather than null
     result.getCount.asScala.toList shouldEqual List.fill(3)(Constants.magicNullLong)
@@ -411,8 +400,7 @@ class PivotUtilsTest extends AnyFlatSpec with Matchers {
         (ts1, 1000L),
         (ts2, 2000L),
         (ts3, 3000L)
-      )
-    )
+      ))
 
     result.getCount.asScala shouldEqual List(100L, Constants.magicNullLong, 300L)
     result.getNullCount.asScala shouldEqual List(10L, 20L, Constants.magicNullLong)
