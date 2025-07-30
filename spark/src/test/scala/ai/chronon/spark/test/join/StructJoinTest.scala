@@ -34,7 +34,8 @@ class StructJoinTest extends BaseJoinTest {
 
     itemQueriesDf.save(s"${itemQueriesTable}_tmp")
     val structLeftDf = tableUtils.sql(
-      s"SELECT item, NAMED_STRUCT('item_repeat', item) as item_struct, ts, ds FROM ${itemQueriesTable}_tmp")
+      s"SELECT item, NAMED_STRUCT('item_repeat', item) as item_struct, ts, ds FROM ${itemQueriesTable}_tmp"
+    )
     structLeftDf.save(itemQueriesTable)
     val start = tableUtils.partitionSpec.minus(today, new Window(100, TimeUnit.DAYS))
 

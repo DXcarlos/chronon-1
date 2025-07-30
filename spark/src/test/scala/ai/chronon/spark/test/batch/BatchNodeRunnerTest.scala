@@ -18,11 +18,10 @@ package ai.chronon.spark.test.batch
 
 import ai.chronon.api.Extensions._
 import ai.chronon.api._
-import ai.chronon.api.planner.{MetaDataUtils, TableDependencies}
+import ai.chronon.api.planner.TableDependencies
 import ai.chronon.online.KVStore.PutRequest
-import ai.chronon.planner.{ExternalSourceSensorNode, MonolithJoinNode, Node, NodeContent}
+import ai.chronon.planner.{MonolithJoinNode, Node, NodeContent}
 import ai.chronon.spark.batch.BatchNodeRunner
-import ai.chronon.spark.batch.BatchNodeRunner.DefaultTablePartitionsDataset
 import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.test.{MockKVStore, TableTestUtils}
 import ai.chronon.spark.utils.MockApi
@@ -73,23 +72,17 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
                          outputTable: String,
                          partitionColumn: String = "ds",
                          partitionFormat: String = "yyyy-MM-dd"): MetaData = {
-    implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
-
+    val outputTableInfo = new TableInfo(
+    ).setTable(outputTable).setPartitionColumn(partitionColumn).setPartitionFormat(partitionFormat)
     val query = new Query().setPartitionColumn(partitionColumn).setPartitionFormat(partitionFormat)
     val tableDependency = TableDependencies.fromTable(inputTable, query)
-
-    val baseMetadata = new MetaData()
+    val executionInfo = new ExecutionInfo(
+    ).setStepDays(1).setTableDependencies(Seq(tableDependency).asJava).setOutputTableInfo(outputTableInfo)
+    new MetaData()
+      .setName("test_batch_node")
+      .setExecutionInfo(executionInfo)
       .setOutputNamespace("test_db")
       .setTeam("test_team")
-
-    MetaDataUtils.layer(
-      baseMetadata = baseMetadata,
-      modeName = "test_mode",
-      nodeName = "test_batch_node",
-      tableDependencies = Seq(tableDependency),
-      stepDays = Some(1),
-      outputTableOverride = Some(outputTable)
-    )
   }
 
   def createTestNodeContent(inputTable: String = "test_db.input_table",
@@ -195,14 +188,6 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
   }
 
   override def beforeEach(): Unit = {
-    // Drop all test tables to ensure fresh start
-    spark.sql("DROP TABLE IF EXISTS test_db.input_table")
-    spark.sql("DROP TABLE IF EXISTS test_db.left_table")
-    spark.sql("DROP TABLE IF EXISTS test_db.output_table")
-    spark.sql("DROP TABLE IF EXISTS test_db.input_table_alt")
-    spark.sql("DROP TABLE IF EXISTS test_db.output_table_alt")
-    spark.sql("DROP TABLE IF EXISTS test_db.left_table_alt")
-
     setupTestTables()
     mockKVStore.reset()
   }
@@ -211,7 +196,7 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
 
     val configPath = createTestConfigFile(twoDaysAgo, yesterday)
 
-    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, twoDaysAgo, yesterday, DefaultTablePartitionsDataset)
+    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, twoDaysAgo, yesterday)
 
     result match {
       case Success(_) =>
@@ -228,7 +213,7 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
 
         // Verify dataset name
         assertTrue("Should use TABLE_PARTITIONS dataset",
-                   mockKVStore.putRequests.forall(_.dataset == DefaultTablePartitionsDataset))
+                   mockKVStore.putRequests.forall(_.dataset == "TABLE_PARTITIONS"))
 
       case Failure(exception) =>
         fail(s"runFromArgs should have succeeded but failed with: ${exception.getMessage}")
@@ -239,7 +224,7 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
 
     val configPath = createTestConfigFile(twoDaysAgo, today) // today's partition doesn't exist
 
-    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, twoDaysAgo, today, DefaultTablePartitionsDataset)
+    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, twoDaysAgo, today)
 
     result match {
       case Success(_) =>
@@ -272,7 +257,7 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
 
     val configPath = createTestConfigFile(twoDaysAgo, yesterday)
 
-    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, twoDaysAgo, yesterday, DefaultTablePartitionsDataset)
+    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, twoDaysAgo, yesterday)
 
     result match {
       case Success(_) =>
@@ -300,8 +285,7 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
 
     val configPath = createTestConfigFile(futureDate1, futureDate2)
 
-    val result =
-      BatchNodeRunner.runFromArgs(mockApi, configPath, futureDate1, futureDate2, DefaultTablePartitionsDataset)
+    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, futureDate1, futureDate2)
 
     result match {
       case Success(_) =>
@@ -335,7 +319,7 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
     val threeDaysAgo = tableUtils.partitionSpec.before(twoDaysAgo)
     val configPath = createTestConfigFile(threeDaysAgo, today)
 
-    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, threeDaysAgo, today, DefaultTablePartitionsDataset)
+    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, threeDaysAgo, today)
 
     result match {
       case Success(_) =>
@@ -417,7 +401,7 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
       partitionFormat = "yyyyMMdd"
     )
 
-    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, twoDaysAgo, yesterday, DefaultTablePartitionsDataset)
+    val result = BatchNodeRunner.runFromArgs(mockApi, configPath, twoDaysAgo, yesterday)
 
     result match {
       case Success(_) =>
@@ -443,113 +427,6 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
 
       case Failure(exception) =>
         fail(s"runFromArgs should have succeeded but failed with: ${exception.getMessage}")
-    }
-  }
-
-  "BatchNodeRunner.checkPartitions" should "succeed when all partitions are available" in {
-    val sensorNode = new ExternalSourceSensorNode()
-      .setSourceName("test_db.input_table")
-      .setRetryCount(0L)
-      .setRetryIntervalMin(1L)
-
-    val metadata = createTestMetadata("test_db.input_table", "test_db.output_table")
-    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
-
-    val result = BatchNodeRunner.checkPartitions(sensorNode, metadata, tableUtils, range)
-
-    result match {
-      case Success(_) =>
-      // Test passed
-      case Failure(exception) =>
-        fail(s"checkPartitions should have succeeded but failed with: ${exception.getMessage}")
-    }
-  }
-
-  it should "fail when partitions are missing and no retries configured" in {
-    val sensorNode = new ExternalSourceSensorNode()
-      .setSourceName("test_db.external_table")
-      .setRetryCount(0L)
-      .setRetryIntervalMin(1L)
-
-    val metadata = createTestMetadata("test_db.external_table", "test_db.output_table")
-    val range = PartitionRange(today, today)(tableUtils.partitionSpec) // today's partition doesn't exist
-
-    val result = BatchNodeRunner.checkPartitions(sensorNode, metadata, tableUtils, range)
-
-    result match {
-      case Success(_) =>
-        fail("checkPartitions should have failed due to missing partitions")
-      case Failure(exception) =>
-        assertTrue("Exception should mention missing partitions", exception.getMessage.contains("missing partitions"))
-        assertTrue("Exception should mention table name", exception.getMessage.contains("test_db.external_table"))
-        assertTrue("Exception should mention specific partition", exception.getMessage.contains(today))
-    }
-  }
-
-  it should "use default retry values when not set" in {
-    val sensorNode = new ExternalSourceSensorNode()
-      .setSourceName("test_db.external_table")
-    // Not setting retryCount and retryIntervalMin to test defaults
-
-    val metadata = createTestMetadata("test_db.external_table", "test_db.output_table")
-    val range = PartitionRange(today, today)(tableUtils.partitionSpec) // today's partition doesn't exist
-
-    val result = BatchNodeRunner.checkPartitions(sensorNode, metadata, tableUtils, range)
-
-    result match {
-      case Success(_) =>
-        fail("checkPartitions should have failed due to missing partitions")
-      case Failure(exception) =>
-        // Should fail immediately with default retry count of 0
-        assertTrue("Exception should mention missing partitions", exception.getMessage.contains("missing partitions"))
-    }
-  }
-
-  it should "retry when configured but eventually fail if partitions never appear" in {
-    val sensorNode = new ExternalSourceSensorNode()
-      .setSourceName("test_db.external_table")
-      .setRetryCount(2L) // Will try 3 times total (initial + 2 retries)
-      .setRetryIntervalMin(0L) // Set to 0 to avoid actual delays in test
-
-    val metadata = createTestMetadata("test_db.external_table", "test_db.output_table")
-    val range = PartitionRange(today, today)(tableUtils.partitionSpec) // today's partition doesn't exist
-
-    val startTime = System.currentTimeMillis()
-    val result = BatchNodeRunner.checkPartitions(sensorNode, metadata, tableUtils, range)
-    val endTime = System.currentTimeMillis()
-
-    result match {
-      case Success(_) =>
-        fail("checkPartitions should have failed due to missing partitions")
-      case Failure(exception) =>
-        assertTrue("Exception should mention missing partitions", exception.getMessage.contains("missing partitions"))
-        // Since we set retry interval to 0, the test should complete quickly
-        assertTrue("Test should complete within reasonable time", (endTime - startTime) < 5000)
-    }
-  }
-
-  it should "handle non-existent table gracefully" in {
-    val sensorNode = new ExternalSourceSensorNode()
-      .setSourceName("test_db.nonexistent_table")
-      .setRetryCount(0L)
-      .setRetryIntervalMin(1L)
-
-    val metadata = createTestMetadata("test_db.nonexistent_table", "test_db.output_table")
-    val range = PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec)
-
-    val result = BatchNodeRunner.checkPartitions(sensorNode, metadata, tableUtils, range)
-
-    result match {
-      case Success(_) =>
-        fail("checkPartitions should have failed for nonexistent table")
-      case Failure(exception) =>
-        // Should fail with some kind of table not found or similar error
-        assertTrue(
-          "Exception should indicate table issue",
-          exception.getMessage.contains("nonexistent_table") ||
-            exception.getMessage.toLowerCase.contains("not found") ||
-            exception.getMessage.toLowerCase.contains("table")
-        )
     }
   }
 

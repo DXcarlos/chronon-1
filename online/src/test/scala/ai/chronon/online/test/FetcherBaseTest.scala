@@ -208,7 +208,8 @@ class FetcherBaseTest extends AnyFlatSpec with MockitoSugar with Matchers with M
       request -> Success(
         Map(
           "key" -> "value"
-        ))
+        )
+      )
     )
 
     val result = baseFetcher.parseGroupByResponse("prefix_", request, response)
@@ -224,7 +225,8 @@ class FetcherBaseTest extends AnyFlatSpec with MockitoSugar with Matchers with M
       request2 -> Success(
         Map(
           "key" -> "value"
-        ))
+        )
+      )
     )
 
     val result = baseFetcher.parseGroupByResponse("prefix_", request, response)
@@ -240,7 +242,8 @@ class FetcherBaseTest extends AnyFlatSpec with MockitoSugar with Matchers with M
       request2 -> Success(
         Map(
           "key" -> "value"
-        ))
+        )
+      )
     )
 
     val result = baseFetcher.parseGroupByResponse("prefix_", request, response)

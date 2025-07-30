@@ -1,5 +1,7 @@
-load("@io_bazel_rules_scala_config//:config.bzl", "SCALA_MAJOR_VERSION", "SCALA_VERSION")
 load("@rules_jvm_external//:defs.bzl", "artifact")
+
+# Hardcoded Scala versions for bzlmod migration
+_SCALA_MAJOR_VERSION = "2.12"
 
 def jar(org, name, rev = None, classifier = None):
     if rev:
@@ -11,5 +13,5 @@ def jar(org, name, rev = None, classifier = None):
         return "{}:{}:{}".format(org, name, rev)
 
 def scala_jar(org, name, rev = None, classifier = None):
-    name = "{}_{}".format(name, SCALA_MAJOR_VERSION)
+    name = "{}_{}".format(name, _SCALA_MAJOR_VERSION)
     return jar(org, name, rev, classifier)

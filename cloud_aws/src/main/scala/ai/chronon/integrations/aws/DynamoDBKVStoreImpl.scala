@@ -255,8 +255,10 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbClient) extends KVStore {
     }
   }
 
-  private def extractTimedValues(response: Try[util.List[util.Map[String, AttributeValue]]],
-                                 defaultTimestamp: Long): Try[Seq[TimedValue]] = {
+  private def extractTimedValues(
+      response: Try[util.List[util.Map[String, AttributeValue]]],
+      defaultTimestamp: Long
+  ): Try[Seq[TimedValue]] = {
     response.map { ddbResponseList =>
       ddbResponseList.toScala.map { ddbResponseMap =>
         val responseMap = ddbResponseMap.toScala

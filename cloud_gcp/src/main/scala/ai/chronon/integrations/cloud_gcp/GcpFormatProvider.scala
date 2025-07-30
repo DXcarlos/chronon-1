@@ -15,11 +15,11 @@ import scala.util.{Failure, Success, Try}
 class GcpFormatProvider(override val sparkSession: SparkSession) extends DefaultFormatProvider(sparkSession) {
 
   /** Order of Precedence for Default Project:
-    * - Explicitly configured project in code (e.g., setProjectId()).
-    * - GOOGLE_CLOUD_PROJECT environment variable.
-    * - project_id from the ADC service account JSON file.
-    * - Active project in the gcloud CLI configuration.
-    * - No default project: An error will occur if no project ID is available.
+    *   - Explicitly configured project in code (e.g., setProjectId()).
+    *   - GOOGLE_CLOUD_PROJECT environment variable.
+    *   - project_id from the ADC service account JSON file.
+    *   - Active project in the gcloud CLI configuration.
+    *   - No default project: An error will occur if no project ID is available.
     */
 
   override def readFormat(tableName: String): scala.Option[Format] = {

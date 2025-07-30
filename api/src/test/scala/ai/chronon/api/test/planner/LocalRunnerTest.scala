@@ -13,8 +13,8 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec: PartitionSpec = PartitionSpec.daily
 
-  private val runfilesDir = System.getenv("RUNFILES_DIR")
-  private val canaryResourcePath = s"$runfilesDir/chronon/spark/src/test/resources/canary/compiled"
+  private val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
+  private val canaryResourcePath = s"$runfilesDir/_main/spark/src/test/resources/canary/compiled"
   private val joinConfigPath = s"$canaryResourcePath/joins"
   private val groupByConfigPath = s"$canaryResourcePath/group_bys"
   private val stagingQueryConfigPath = s"$canaryResourcePath/staging_queries"

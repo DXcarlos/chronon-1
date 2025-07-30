@@ -1,8 +1,8 @@
 load("@rules_java//java:defs.bzl", "java_binary", "java_library")
-load("@io_bazel_rules_scala//scala:scala.bzl", "scala_binary")
+load("@rules_scala//scala:scala.bzl", "scala_binary")
 
-load("@io_bazel_rules_scala//scala:advanced_usage/scala.bzl", "make_scala_library")
-load("@io_bazel_rules_scala//scala/scalafmt:phase_scalafmt_ext.bzl", "ext_scalafmt")
+load("@rules_scala//scala:advanced_usage/scala.bzl", "make_scala_library")
+load("@rules_scala//scala/scalafmt:phase_scalafmt_ext.bzl", "ext_scalafmt")
 scala_library = make_scala_library(ext_scalafmt)
 
 def jvm_binary(

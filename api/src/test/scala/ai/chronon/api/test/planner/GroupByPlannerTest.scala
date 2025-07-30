@@ -79,13 +79,13 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
     val groupBy = buildGroupBy()
     val plannerWithNonZeroStepDays = GroupByPlanner(groupBy)
     val plan = plannerWithNonZeroStepDays.buildPlan
-    plan.nodes.asScala.foreach((node) => node.metaData.executionInfo.stepDays shouldNot be(0))
+    plan.nodes.asScala.foreach(node => node.metaData.executionInfo.stepDays shouldNot be(0))
   }
 
   it should "GB planner handles valid confs" in {
 
-    val runfilesDir = System.getenv("RUNFILES_DIR")
-    val gbRootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/group_bys")
+    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
+    val gbRootDir = Paths.get(runfilesDir, "_main/spark/src/test/resources/canary/compiled/group_bys")
 
     val gbConfs = LocalRunner.parseConfs[ai.chronon.api.GroupBy](gbRootDir.toString)
 

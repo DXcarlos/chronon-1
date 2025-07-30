@@ -29,7 +29,7 @@ import ai.chronon.online.serde._
 import org.apache.avro.generic.GenericData
 
 import scala.collection.JavaConverters._
-import scala.collection.{Seq, mutable}
+import scala.collection.{mutable, Seq}
 
 object TileCodec {
   def buildRowAggregator(groupBy: GroupBy, inputSchema: Seq[(String, DataType)]): RowAggregator = {
@@ -51,10 +51,10 @@ object TileCodec {
   }
 }
 
-/** TileCodec is a helper class that allows for the creation of pre-aggregated tiles of feature values.
-  * These pre-aggregated tiles can be used in the serving layer to compute the final feature values along
-  * with batch pre-aggregates produced by GroupByUploads.
-  * The pre-aggregated tiles are serialized as Avro and indicate whether the tile is complete or not (partial aggregates)
+/** TileCodec is a helper class that allows for the creation of pre-aggregated tiles of feature values. These
+  * pre-aggregated tiles can be used in the serving layer to compute the final feature values along with batch
+  * pre-aggregates produced by GroupByUploads. The pre-aggregated tiles are serialized as Avro and indicate whether the
+  * tile is complete or not (partial aggregates)
   */
 class TileCodec(groupBy: GroupBy, inputSchema: Seq[(String, DataType)]) {
 

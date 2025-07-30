@@ -8,8 +8,8 @@ import org.apache.flink.streaming.api.functions.sink.RichSinkFunction
 import org.apache.flink.streaming.api.functions.sink.SinkFunction
 
 /** Sink that captures metrics around feature freshness. We capture the time taken from event creation to KV store sink
-  * Ideally we expect this to match the Kafka persistence -> sink time. They can diverge if the event object is created and held on
-  * in the source service for some time before the event is submitted to Kafka.
+  * Ideally we expect this to match the Kafka persistence -> sink time. They can diverge if the event object is created
+  * and held on in the source service for some time before the event is submitted to Kafka.
   */
 class MetricsSink(groupByName: String) extends RichSinkFunction[WriteResponse] {
 

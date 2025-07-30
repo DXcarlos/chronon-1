@@ -39,7 +39,8 @@ class StatsCompute(inputDf: DataFrame, keys: Seq[String], name: String) extends 
   private val noKeysDf: DataFrame = inputDf.select(
     inputDf.columns
       .filter(colName => !keys.contains(colName))
-      .map(colName => new Column(colName)): _*)
+      .map(colName => new Column(colName)): _*
+  )
   implicit val tableUtils: TableUtils = TableUtils(inputDf.sparkSession)
 
   val timeColumns: Seq[String] =
@@ -56,7 +57,8 @@ class StatsCompute(inputDf: DataFrame, keys: Seq[String], name: String) extends 
             case StatsGenerator.InputTransform.Raw    => functions.col(m.name)
             case StatsGenerator.InputTransform.One    => functions.lit(true)
           })
-        .toSeq: _*)
+        .toSeq: _*
+    )
     .toDF(timeColumns.toSeq ++ metrics.map(m => s"${m.name}${m.suffix}").toSeq: _*)
 
   /** Given a summary Dataframe that computed the stats. Add derived data (example: null rate, median, etc) */
@@ -79,7 +81,8 @@ class StatsCompute(inputDf: DataFrame, keys: Seq[String], name: String) extends 
           .getQuantiles(StatsGenerator.finalizedPercentilesMerged)
           .zip(StatsGenerator.finalizedPercentilesMerged)
           .map(f => f._2.toString -> f._1.toString)
-          .toMap).toOption)
+          .toMap
+      ).toOption)
     val addedPercentilesDf = percentileColumns.foldLeft(withNullRatesDF) { (tmpDf, column) =>
       tmpDf.withColumn(s"${column}_finalized", percentileFinalizerUdf(col(column)))
     }
@@ -89,8 +92,8 @@ class StatsCompute(inputDf: DataFrame, keys: Seq[String], name: String) extends 
   /** Navigate the dataframe and compute statistics partitioned by date stamp
     *
     * Partitioned by day version of the normalized summary. Useful for scheduling a job that computes daily stats.
-    * Returns a KvRdd to be able to be pushed into a KvStore for fetching and merging. As well as a dataframe for
-    * storing in hive.
+    * Returns a KvRdd to be able to be pushed into a KvStore for fetching and merging. As well as a dataframe for storing
+    * in hive.
     *
     * For entity on the left we use daily partition as the key. For events we bucket by timeBucketMinutes (def. 1 hr)
     * Since the stats are mergeable coarser granularities can be obtained through fetcher merging.

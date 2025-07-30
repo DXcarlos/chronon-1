@@ -196,7 +196,7 @@ scala_test_suite(
 scala_test_suite(
     name = "groupby_test",
     srcs = glob(["src/test/scala/ai/chronon/spark/test/groupby/*.scala"]),
-    data = glob(["spark/src/test/resources/**/*"]),
+    data = ["//spark/src/test/resources:test-resources"],
     # defined in prelude_bazel file
     jvm_flags = _JVM_FLAGS_FOR_ACCESSING_BASE_JAVA_CLASSES,
     visibility = ["//visibility:public"],
@@ -206,7 +206,7 @@ scala_test_suite(
 scala_test_suite(
     name = "join_test",
     srcs = glob(["src/test/scala/ai/chronon/spark/test/join/*.scala"]),
-    data = glob(["spark/src/test/resources/**/*"]),
+    data = ["//spark/src/test/resources:test-resources"],
     # defined in prelude_bazel file
     jvm_flags = _JVM_FLAGS_FOR_ACCESSING_BASE_JAVA_CLASSES,
     tags = ["large"],
@@ -217,7 +217,7 @@ scala_test_suite(
 scala_test_suite(
     name = "analyzer_test",
     srcs = glob(["src/test/scala/ai/chronon/spark/test/analyzer/*.scala"]),
-    data = glob(["spark/src/test/resources/**/*"]),
+    data = ["//spark/src/test/resources:test-resources"],
     # defined in prelude_bazel file
     jvm_flags = _JVM_FLAGS_FOR_ACCESSING_BASE_JAVA_CLASSES,
     visibility = ["//visibility:public"],
@@ -227,7 +227,7 @@ scala_test_suite(
 scala_test_suite(
     name = "streaming_test",
     srcs = glob(["src/test/scala/ai/chronon/spark/test/streaming/*.scala"]),
-    data = glob(["src/test/resources/**/*"]),
+    data = ["//spark/src/test/resources:test-resources"],
     # defined in prelude_bazel file
     jvm_flags = _JVM_FLAGS_FOR_ACCESSING_BASE_JAVA_CLASSES,
     visibility = ["//visibility:public"],
@@ -253,10 +253,3 @@ jvm_binary(
     runtime_deps = [":lib"],
 )
 
-create_shaded_library(
-    name = "shaded_snakeyaml",
-    inline_rules = [
-        "rule org.yaml.snakeyaml.** org.yaml.shaded_snakeyaml.@1",
-    ],
-    input_artifact = "org.yaml:snakeyaml",
-)

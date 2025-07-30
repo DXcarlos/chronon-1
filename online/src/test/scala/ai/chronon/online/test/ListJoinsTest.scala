@@ -62,7 +62,8 @@ class ListJoinsTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfter wi
 
     // first response will have a continuation key
     val first = Future(
-      ListResponse(ListRequest(MetadataDataset, Map.empty), listResponseValues.head, Map(ContinuationKey -> "1")))
+      ListResponse(ListRequest(MetadataDataset, Map.empty), listResponseValues.head, Map(ContinuationKey -> "1"))
+    )
     // second response will not have a continuation key
     val second = Future(ListResponse(ListRequest(MetadataDataset, Map.empty), listResponseValues.last, Map.empty))
 

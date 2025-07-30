@@ -30,7 +30,7 @@ class FetcherDeterministicTest extends AnyFlatSpec {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   val sessionName = "FetcherDeterministicTest"
   val spark: SparkSession = submission.SparkSessionBuilder.build(sessionName, local = true)
-  private val tableUtils = TableUtils(spark)
+  implicit private val tableUtils = TableUtils(spark)
   TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
 
   it should "test temporal fetch join deterministic" in {
@@ -40,6 +40,6 @@ class FetcherDeterministicTest extends AnyFlatSpec {
                                          "2021-04-10",
                                          namespace,
                                          consistencyCheck = false,
-                                         dropDsOnWrite = true)(spark)
+                                         dropDsOnWrite = true)
   }
 }

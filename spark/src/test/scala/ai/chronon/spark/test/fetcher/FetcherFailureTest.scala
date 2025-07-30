@@ -62,8 +62,10 @@ class FetcherFailureTest extends AnyFlatSpec {
     val joinConf = FetcherTestUtil.generateRandomData(namespace, tableUtils, spark, topic, today, yesterday, 5, 5)
     implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
     val kvStoreFunc = () =>
-      OnlineUtils.buildInMemoryKVStore("FetcherFailureTest#test_kv_store_partial_failure",
-                                       hardFailureOnInvalidDataset = true)
+      OnlineUtils.buildInMemoryKVStore(
+        "FetcherFailureTest#test_kv_store_partial_failure",
+        hardFailureOnInvalidDataset = true
+      )
     val inMemoryKvStore = kvStoreFunc()
     val mockApi = new MockApi(kvStoreFunc, namespace)
 

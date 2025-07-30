@@ -241,9 +241,12 @@ class Eval(implicit tableUtils: TableUtils) {
       val (gbEval, gbSchemaRawOpt) = gbToEvalResult.getOrElseUpdate(gbName, evalGroupBy(part.groupBy))
 
       // Get the gbSchemaFormatted and modify name to contain the prefix
-      val jpSchemaFormatted = Option(gbEval.getAggSchema).map(_.toScala.map { case (name, dataTypeStr) =>
-        (columnPrefix + name, dataTypeStr)
-      }.toMap)
+      val jpSchemaFormatted = Option(gbEval.getAggSchema).map(
+        _.toScala
+          .map { case (name, dataTypeStr) =>
+            (columnPrefix + name, dataTypeStr)
+          }
+          .toMap)
 
       // Also prefix the raw schema for derivation handling
       val jpSchemaRawOpt = gbSchemaRawOpt.map { schema =>

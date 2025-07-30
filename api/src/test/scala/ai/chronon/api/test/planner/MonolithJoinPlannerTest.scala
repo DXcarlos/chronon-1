@@ -52,8 +52,8 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
 
   it should "monolith join planner plans valid confs without exceptions" in {
 
-    val runfilesDir = System.getenv("RUNFILES_DIR")
-    val rootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/joins")
+    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
+    val rootDir = Paths.get(runfilesDir, "_main/spark/src/test/resources/canary/compiled/joins")
 
     val joinConfs = LocalRunner.parseConfs[api.Join](rootDir.toString)
 
@@ -142,7 +142,7 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
 
     val plannerWithNonZeroStepDays = MonolithJoinPlanner(joinWithNonZeroStepDays)
     val plan = plannerWithNonZeroStepDays.buildPlan
-    plan.nodes.asScala.foreach((node) => node.metaData.executionInfo.stepDays should equal(1))
+    plan.nodes.asScala.foreach(node => node.metaData.executionInfo.stepDays should equal(1))
   }
 
   it should "monolith join planner should produce same semantic hash with different executionInfo" in {

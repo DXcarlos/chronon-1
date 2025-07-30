@@ -57,8 +57,8 @@ object CatalystUtil {
   }
 
   case class PoolKey(expressions: Seq[(String, String)], inputSchema: StructType)
-  val poolMap: PoolMap[PoolKey, CatalystUtil] = new PoolMap[PoolKey, CatalystUtil](pi =>
-    new CatalystUtil(pi.inputSchema, pi.expressions))
+  val poolMap: PoolMap[PoolKey, CatalystUtil] =
+    new PoolMap[PoolKey, CatalystUtil](pi => new CatalystUtil(pi.inputSchema, pi.expressions))
 }
 
 class PoolMap[Key, Value](createFunc: Key => Value, maxSize: Int = 100, initialSize: Int = 2) {

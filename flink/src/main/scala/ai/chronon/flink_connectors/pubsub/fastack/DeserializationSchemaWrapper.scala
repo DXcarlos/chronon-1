@@ -19,7 +19,8 @@ class DeserializationSchemaWrapper[T](deserializationSchema: DeserializationSche
 
   override def deserialize(message: PubsubMessage): T = {
     throw new UnsupportedOperationException(
-      "Use the deserialize(message: PubSubMessage, out: Collector[T]) method instead.");
+      "Use the deserialize(message: PubSubMessage, out: Collector[T]) method instead."
+    );
   }
 
   override def deserialize(message: PubsubMessage, out: Collector[T]): Unit = {

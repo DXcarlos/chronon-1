@@ -174,16 +174,21 @@ object PivotUtils {
       .setPercentileDriftSeries(doubleIterator(_.isSetPercentileDrift, _.getPercentileDrift) |> collectDoubles)
       .setHistogramDriftSeries(doubleIterator(_.isSetHistogramDrift, _.getHistogramDrift) |> collectDoubles)
       .setCountChangePercentSeries(doubleIterator(_.isSetCountChangePercent, _.getCountChangePercent) |> collectDoubles)
-      .setNullRatioChangePercentSeries(doubleIterator(_.isSetNullRatioChangePercent,
-                                                      _.getNullRatioChangePercent) |> collectDoubles)
-      .setInnerCountChangePercentSeries(doubleIterator(_.isSetInnerCountChangePercent,
-                                                       _.getInnerCountChangePercent) |> collectDoubles)
-      .setInnerNullCountChangePercentSeries(doubleIterator(_.isSetInnerNullCountChangePercent,
-                                                           _.getInnerNullCountChangePercent) |> collectDoubles)
-      .setLengthPercentilesDriftSeries(doubleIterator(_.isSetLengthPercentilesDrift,
-                                                      _.getLengthPercentilesDrift) |> collectDoubles)
-      .setStringLengthPercentilesDriftSeries(doubleIterator(_.isSetStringLengthPercentilesDrift,
-                                                            _.getStringLengthPercentilesDrift) |> collectDoubles)
+      .setNullRatioChangePercentSeries(
+        doubleIterator(_.isSetNullRatioChangePercent, _.getNullRatioChangePercent) |> collectDoubles
+      )
+      .setInnerCountChangePercentSeries(
+        doubleIterator(_.isSetInnerCountChangePercent, _.getInnerCountChangePercent) |> collectDoubles
+      )
+      .setInnerNullCountChangePercentSeries(
+        doubleIterator(_.isSetInnerNullCountChangePercent, _.getInnerNullCountChangePercent) |> collectDoubles
+      )
+      .setLengthPercentilesDriftSeries(
+        doubleIterator(_.isSetLengthPercentilesDrift, _.getLengthPercentilesDrift) |> collectDoubles
+      )
+      .setStringLengthPercentilesDriftSeries(
+        doubleIterator(_.isSetStringLengthPercentilesDrift, _.getStringLengthPercentilesDrift) |> collectDoubles
+      )
       .setTimestamps(timestamps.iterator.map(JLong.valueOf) |> collect)
   }
 }

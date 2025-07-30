@@ -81,7 +81,8 @@ class SourceIdentityDeserializationSchema(deserSchemaProvider: SerDe, groupBy: G
 
   override def deserialize(message: Array[Byte]): Row = {
     throw new UnsupportedOperationException(
-      "Use the deserialize(message: Array[Byte], out: Collector[Row]) method instead.")
+      "Use the deserialize(message: Array[Byte], out: Collector[Row]) method instead."
+    )
   }
 }
 
@@ -145,7 +146,8 @@ class SourceProjectionDeserializationSchema(deserSchemaProvider: SerDe, groupBy:
 
   override def deserialize(messageBytes: Array[Byte]): ProjectedEvent = {
     throw new UnsupportedOperationException(
-      "Use the deserialize(message: Array[Byte], out: Collector[Map[String, Any]]) method instead.")
+      "Use the deserialize(message: Array[Byte], out: Collector[Map[String, Any]]) method instead."
+    )
   }
 
   private def doSparkExprEval(inputEvent: Array[Any]): Seq[Map[String, Any]] = {

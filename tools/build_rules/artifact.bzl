@@ -1,10 +1,12 @@
-load("@io_bazel_rules_scala_config//:config.bzl", "SCALA_MAJOR_VERSION", "SCALA_VERSION")
 load("@rules_jvm_external//:defs.bzl", _rje_artifact = "artifact")
 load("@rules_java//java:defs.bzl", "java_import")
 load("//tools/build_rules:jar_library.bzl", "jar_library")
-load("//tools/build_rules/dependencies:maven_repository.bzl", "MAVEN_REPOSITORY_NAME")
-load("//tools/build_rules/dependencies:scala_repository.bzl", "SCALA_REPOSITORY_NAME")
-load("@com_github_johnynek_bazel_jar_jar//:jar_jar.bzl", "jar_jar")
+# Maven repository name for bzlmod
+MAVEN_REPOSITORY_NAME = "maven"
+
+# Hardcoded Scala versions for bzlmod migration
+_SCALA_VERSION = "2.12.20"
+_SCALA_MAJOR_VERSION = "2.12"
 
 # Converts to bazel friendly target name specification with underscores
 def get_safe_name(coord):
@@ -44,35 +46,10 @@ def maven_artifact(coord):
     return _get_artifact(coord, MAVEN_REPOSITORY_NAME)
 
 def maven_artifact_with_suffix(coord):
-    full_coord = coord + "_" + SCALA_MAJOR_VERSION
+    full_coord = coord + "_" + _SCALA_MAJOR_VERSION
     return _get_artifact(full_coord, MAVEN_REPOSITORY_NAME)
 
 def scala_artifact(coord):
-    return _get_artifact(coord, SCALA_REPOSITORY_NAME)
+    # In bzlmod, route scala artifacts to the main maven repository
+    return _get_artifact(coord, MAVEN_REPOSITORY_NAME)
 
-def create_shaded_library(
-        name,
-        input_artifact,
-        inline_rules,
-        visibility = None):
-    """Creates a shaded version of a Maven artifact using jar_jar.
-
-    Args:
-        name: The name of the final java_import target
-        input_artifact: Maven coordinate of the jar to shade
-        inline_rules: List of jar_jar rules to apply
-        visibility: Visibility of the java_import target
-    """
-    jar_jar_name = name + "_jar_jar"
-
-    jar_jar(
-        name = jar_jar_name,
-        input_jar = maven_artifact(input_artifact),
-        inline_rules = inline_rules,
-    )
-
-    java_import(
-        name = name,
-        jars = [jar_jar_name + ".jar"],
-        visibility = visibility,
-    )

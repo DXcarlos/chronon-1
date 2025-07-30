@@ -30,7 +30,7 @@ class FetcherTiledTest extends AnyFlatSpec {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   val sessionName = "FetcherTiledTest"
   val spark: SparkSession = submission.SparkSessionBuilder.build(sessionName, local = true)
-  private val tableUtils = TableUtils(spark)
+  implicit private val tableUtils = TableUtils(spark)
   TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
 
   it should "test temporal tiled fetch join deterministic" in {
@@ -41,6 +41,6 @@ class FetcherTiledTest extends AnyFlatSpec {
                                          namespace,
                                          consistencyCheck = false,
                                          dropDsOnWrite = true,
-                                         enableTiling = true)(spark)
+                                         enableTiling = true)
   }
 }

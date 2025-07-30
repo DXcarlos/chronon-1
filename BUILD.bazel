@@ -1,0 +1,2 @@
+# Export scalafmt config for bazel
+exports_files([".scalafmt.conf"])

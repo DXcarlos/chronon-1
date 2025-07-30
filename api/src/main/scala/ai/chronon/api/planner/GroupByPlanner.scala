@@ -19,25 +19,30 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
   private def eraseExecutionInfo: GroupBy = {
     val result = groupBy.deepCopy()
     result.metaData.unsetExecutionInfo()
-    result
-  }
+     result
+   }
+ 
+  private val groupByTableDeps: Seq[TableDependency] =
+    TableDependencies.fromGroupBy(groupBy)
+ 
+   def backfillNode: Node = {
+     val defaultStepDays = if (groupBy.dataModel == DataModel.EVENTS) 15 else 1
+     val effectiveStepDays =
+      Option(groupBy.metaData.executionInfo)
+        .filter(_.isSetStepDays)
+        .map(_.stepDays)
+        .getOrElse(defaultStepDays)
 
-  private val groupByTableDeps: Seq[TableDependency] = TableDependencies.fromGroupBy(groupBy)
-
-  def backfillNode: Node = {
-    val defaultStepDays = if (groupBy.dataModel == DataModel.EVENTS) 15 else 1
-    val effectiveStepDays =
-      Option(groupBy.metaData.executionInfo).filter(_.isSetStepDays).map(_.stepDays).getOrElse(defaultStepDays)
-
-    val metaData = MetaDataUtils.layer(groupBy.metaData,
-                                       "backfill",
-                                       groupBy.metaData.name + "__backfill",
-                                       groupByTableDeps,
-                                       Option(effectiveStepDays),
-                                       Some(groupBy.metaData.outputTable))
-
-    val node = new GroupByBackfillNode().setGroupBy(eraseExecutionInfo)
-
+    val metaData = MetaDataUtils.layer(
+      groupBy.metaData,
+      "backfill",
+      groupBy.metaData.name + "__backfill",
+      groupByTableDeps,
+      Option(effectiveStepDays)
+    )
+ 
+     val node = new GroupByBackfillNode().setGroupBy(eraseExecutionInfo)
+ 
     toNode(metaData, _.setGroupByBackfill(node), semanticGroupBy(groupBy))
   }
 
@@ -54,7 +59,8 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
                           "upload",
                           groupBy.metaData.name + "__upload",
                           groupByTableDeps,
-                          Some(stepDays))
+                          Some(stepDays),
+                          Some(groupBy.metaData.uploadTable))
 
     val node = new GroupByUploadNode().setGroupBy(eraseExecutionInfo)
     toNode(metaData, _.setGroupByUpload(node), semanticGroupBy(groupBy))
@@ -64,7 +70,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
     val tableDep = new TableDependency()
       .setTableInfo(
         new TableInfo()
-          .setTable(uploadNode.metaData.outputTable)
+          .setTable(groupBy.metaData.uploadTable)
           .setPartitionColumn(outputPartitionSpec.column)
           .setPartitionFormat(outputPartitionSpec.format)
           .setPartitionInterval(WindowUtils.hours(outputPartitionSpec.spanMillis))
@@ -79,7 +85,8 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
         GroupByPlanner.UploadToKV,
         groupBy.metaData.name + s"__${GroupByPlanner.UploadToKV}",
         uploadToKVTableDeps,
-        None
+        None,
+        Some(groupBy.metaData.name + s"__${GroupByPlanner.UploadToKV}")
       )
 
     val node = new GroupByUploadToKVNode().setGroupBy(eraseExecutionInfo)
@@ -89,13 +96,13 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
   def streamingNode: Option[Node] = {
     groupBy.streamingSource.map { _ =>
       // Streaming node has table dependency on the upload to KV
-      val tableDep = new TableDependency()
-        .setTableInfo(
-          new TableInfo()
-            .setTable(uploadToKVNode.metaData.outputTable)
-        )
-        .setStartOffset(WindowUtils.zero())
-        .setEndOffset(WindowUtils.zero())
+       val tableDep = new TableDependency()
+         .setTableInfo(
+           new TableInfo()
+            .setTable(groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}")
+         )
+         .setStartOffset(WindowUtils.zero())
+         .setEndOffset(WindowUtils.zero())
       val streamingTableDeps = Seq(tableDep)
 
       val metaData =
@@ -104,21 +111,25 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
           GroupByPlanner.Streaming,
           groupBy.metaData.name + s"__${GroupByPlanner.Streaming}",
           streamingTableDeps,
-          None
+          None,
+          Some(groupBy.metaData.name + s"__${GroupByPlanner.Streaming}")
         )
 
       val node = new GroupByStreamingNode().setGroupBy(eraseExecutionInfo)
       toNode(metaData, _.setGroupByStreaming(node), semanticGroupBy(groupBy))
     }
-  }
+   }
+ 
+   override def buildPlan: ConfPlan = {
+    val allNodes =
+      Seq(backfillNode, uploadNode, uploadToKVNode) ++ streamingNode.toSeq
+ 
+    val deployTerminalNode =
+      streamingNode.map(_.metaData.name).getOrElse(uploadToKVNode.metaData.name)
+ 
+     val terminalNodeNames = Map(
+       ai.chronon.planner.Mode.BACKFILL -> backfillNode.metaData.name,
 
-  override def buildPlan: ConfPlan = {
-    val allNodes = Seq(backfillNode, uploadNode, uploadToKVNode) ++ streamingNode.toSeq
-
-    val deployTerminalNode = streamingNode.map(_.metaData.name).getOrElse(uploadToKVNode.metaData.name)
-
-    val terminalNodeNames = Map(
-      ai.chronon.planner.Mode.BACKFILL -> backfillNode.metaData.name,
       ai.chronon.planner.Mode.DEPLOY -> deployTerminalNode
     )
 

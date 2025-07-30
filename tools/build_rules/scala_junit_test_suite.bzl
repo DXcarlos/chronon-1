@@ -1,4 +1,4 @@
-load("@io_bazel_rules_scala//scala:scala.bzl", "scala_test")
+load("@rules_scala//scala:scala.bzl", "scala_test")
 
 def scala_junit_suite(name, srcs, deps, resources = None, data = None, visibility = None):
     """

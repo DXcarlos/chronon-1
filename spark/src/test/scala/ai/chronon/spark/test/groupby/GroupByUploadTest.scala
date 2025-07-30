@@ -222,13 +222,15 @@ class GroupByUploadTest extends AnyFlatSpec {
           snapshotTable = reviewsTable,
           mutationTopic = s"${reviewsTable}_mutations",
           mutationTable = s"${reviewsTable}_mutations"
-        )),
+        )
+      ),
       keyColumns = collection.Seq("review"),
       aggregations = Seq(
         Builders.Aggregation(
           operation = Operation.LAST,
           inputColumn = "listing"
-        ))
+        )
+      )
     )
 
     val joinConf = Builders.Join(
@@ -244,7 +246,8 @@ class GroupByUploadTest extends AnyFlatSpec {
           join = joinConf,
           query = Builders.Query(selects =
             Builders.Selects("review", "review_attrs_listing_last", "rating", "category_ratings", "ts"))
-        )),
+        )
+      ),
       keyColumns = collection.Seq("review_attrs_listing_last"),
       aggregations = Seq(
         Builders.Aggregation(
@@ -286,14 +289,12 @@ class GroupByUploadTest extends AnyFlatSpec {
     val api = new MockApi(kvStoreFunc, "chaining_test")
     val fetcher = api.buildFetcher(debug = true)
     val requestResponse = Seq(
-      Fetcher.Request("listing_ratings",
-                      Map("review_attrs_listing_last" -> "listing1"),
-                      Some(ts("08-15 05:00"))) -> 4.5,
+      Fetcher
+        .Request("listing_ratings", Map("review_attrs_listing_last" -> "listing1"), Some(ts("08-15 05:00"))) -> 4.5,
       Fetcher.Request("listing_ratings", Map("review_attrs_listing_last" -> "listing1"), Some(ts("08-15 08:00"))) -> 4,
       Fetcher.Request("listing_ratings", Map("review_attrs_listing_last" -> "listing1"), Some(ts("08-15 11:00"))) -> 2,
-      Fetcher.Request("listing_ratings",
-                      Map("review_attrs_listing_last" -> "listing2"),
-                      Some(ts("08-15 07:00"))) -> null,
+      Fetcher
+        .Request("listing_ratings", Map("review_attrs_listing_last" -> "listing2"), Some(ts("08-15 07:00"))) -> null,
       Fetcher.Request("listing_ratings", Map("review_attrs_listing_last" -> "listing2"), Some(ts("08-15 10:00"))) -> 3
     )
     val responseF = fetcher.fetchGroupBys(requestResponse.map(_._1))

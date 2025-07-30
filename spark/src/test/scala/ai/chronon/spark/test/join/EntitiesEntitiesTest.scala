@@ -122,7 +122,8 @@ class EntitiesEntitiesTest extends BaseJoinTest {
     println("showing query result")
     expected.show()
     println(
-      s"Left side count: ${spark.sql(s"SELECT country, ds from $countryTable where ds >= '$start' and ds <= '$end'").count()}")
+      s"Left side count: ${spark.sql(s"SELECT country, ds from $countryTable where ds >= '$start' and ds <= '$end'").count()}"
+    )
     println(s"Actual count: ${computed.count()}")
     println(s"Expected count: ${expected.count()}")
     val diff = Comparison.sideBySide(computed, expected, List("country", "ds"))

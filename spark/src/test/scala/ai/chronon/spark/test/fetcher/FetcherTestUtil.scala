@@ -1,17 +1,18 @@
 package ai.chronon.spark.test.fetcher
 
-import ai.chronon.aggregator.test.Column
-import ai.chronon.api
-import ai.chronon.api.Builders.Derivation
+ import ai.chronon.aggregator.test.Column
+ import ai.chronon.api
+ import ai.chronon.api.Builders.Derivation
 import ai.chronon.api.Constants.MetadataDataset
 import ai.chronon.api.Extensions.{JoinOps, MetadataOps}
-import ai.chronon.api.{
-  Accuracy,
-  BooleanType,
-  Builders,
-  DoubleType,
-  IntType,
-  ListType,
+ import ai.chronon.api.{
+   Accuracy,
+   BooleanType,
+   Builders,
+  Constants,
+   DoubleType,
+   IntType,
+   ListType,
   LongType,
   Operation,
   StringType,
@@ -19,47 +20,47 @@ import ai.chronon.api.{
   StructType,
   TimeUnit,
   TsUtils,
-  Window,
-  Constants
-}
-import ai.chronon.api.ScalaJavaConversions._
-import ai.chronon.online._
-import ai.chronon.online.{fetcher, _}
+  Window
+ }
+ import ai.chronon.api.ScalaJavaConversions._
+ import ai.chronon.online._
 import ai.chronon.online.fetcher.FetchContext
-import ai.chronon.spark.Extensions._
-import ai.chronon.online.fetcher.Fetcher.{Request, Response}
-import ai.chronon.online.serde.{SparkConversions, _}
-import ai.chronon.spark.catalog.TableUtils
+ import ai.chronon.spark.Extensions._
+ import ai.chronon.online.fetcher.Fetcher.{Request, Response}
+ import ai.chronon.online.serde.SparkConversions
+ import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.stats.ConsistencyJob
 import ai.chronon.spark.test.{DataFrameGen, OnlineUtils, SchemaEvolutionUtils}
-import ai.chronon.spark.utils.MockApi
-import ai.chronon.spark.{Join => _, _}
+ import ai.chronon.spark.utils.MockApi
+ import ai.chronon.spark.{Join => _, _}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.functions.{avg, col, lit}
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.slf4j.{Logger, LoggerFactory}
-
-import java.util.TimeZone
+ import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.junit.Assert.assertEquals
+ import org.slf4j.{Logger, LoggerFactory}
+ 
 import java.util.concurrent.Executors
 import java.{lang, util}
-import scala.collection.Seq
-import scala.compat.java8.FutureConverters
-import scala.concurrent.duration.{Duration, SECONDS}
+ import scala.collection.Seq
+ import scala.compat.java8.FutureConverters
+ import scala.concurrent.duration.{Duration, SECONDS}
 import scala.concurrent.{Await, ExecutionContext}
-
-object FetcherTestUtil {
-  @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
-  def joinResponses(spark: SparkSession,
-                    requests: Array[Request],
-                    mockApi: MockApi,
-                    useJavaFetcher: Boolean = false,
-                    runCount: Int = 1,
-                    samplePercent: Double = -1,
-                    logToHive: Boolean = false,
-                    debug: Boolean = false)(implicit ec: ExecutionContext): (List[Response], DataFrame) = {
-    val chunkSize = 100
-    @transient lazy val fetcher = mockApi.buildFetcher(debug)
-    @transient lazy val javaFetcher = mockApi.buildJavaFetcher()
+ 
+ object FetcherTestUtil {
+   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
+  def joinResponses(
+      spark: SparkSession,
+      requests: Array[Request],
+      mockApi: MockApi,
+      useJavaFetcher: Boolean = false,
+      runCount: Int = 1,
+      samplePercent: Double = -1,
+      logToHive: Boolean = false,
+      debug: Boolean = false
+  )(implicit ec: ExecutionContext): (List[Response], DataFrame) = {
+     val chunkSize = 100
+     @transient lazy val fetcher = mockApi.buildFetcher(debug)
+     @transient lazy val javaFetcher = mockApi.buildJavaFetcher()
 
     def fetchOnce = {
       var latencySum: Long = 0
@@ -83,13 +84,14 @@ object FetcherTestUtil {
               .toScala(javaResponse)
               .map(
                 _.toScala.map(jres =>
-                  Response(
-                    Request(jres.request.name, jres.request.keys.toScala.toMap, Option(jres.request.atMillis)),
-                    jres.values.toScala.map(_.toScala)
-                  )))
-          } else {
-            fetcher.fetchJoin(r)
-          }
+                   Response(
+                     Request(jres.request.name, jres.request.keys.toScala.toMap, Option(jres.request.atMillis)),
+                     jres.values.toScala.map(_.toScala)
+                  ))
+              )
+           } else {
+             fetcher.fetchJoin(r)
+           }
 
           // fix mis-typed keys in the request
           val fixedResponses =
@@ -143,18 +145,21 @@ object FetcherTestUtil {
       logger.info(s"logged count: ${loggedDf.count()}")
       loggedDf.show()
     }
-    result -> loggedDf
-  }
-
+     result -> loggedDf
+   }
+ 
   // Compute a join until endDs and compare the result of fetching the aggregations with the computed join values.
   def compareTemporalFetch(joinConf: api.Join,
                            endDs: String,
                            namespace: String,
                            consistencyCheck: Boolean,
                            dropDsOnWrite: Boolean,
-                           enableTiling: Boolean = false)(implicit spark: SparkSession): Unit = {
+                           enableTiling: Boolean = false)(implicit tableUtils: TableUtils): Unit = {
+
     implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
-    implicit val tableUtils: TableUtils = TableUtils(spark)
+    val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
+    val spark = tableUtils.sparkSession
+
     val kvStoreFunc = () => OnlineUtils.buildInMemoryKVStore("FetcherTest")
     val inMemoryKvStore = kvStoreFunc()
 
@@ -229,7 +234,6 @@ object FetcherTestUtil {
       correctedLaggedResponse.save(mockApi.logTable, partitionColumns = Seq(tableUtils.partitionColumn, "name"))
 
       // build flattened log table
-      val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
       SchemaEvolutionUtils.runLogSchemaGroupBy(mockApi, today, today)
       val flattenerJob = new LogFlattenerJob(spark, joinConf, today, mockApi.logTable, mockApi.schemaTable)
       flattenerJob.buildLogTable()
@@ -251,7 +255,7 @@ object FetcherTestUtil {
         val all: Map[String, AnyRef] =
           res.request.keys ++
             res.values.get ++
-            Map(tableUtils.partitionColumn -> tableUtils.partitionSpec.at(System.currentTimeMillis())) ++
+            Map(tableUtils.partitionColumn -> today) ++
             Map(Constants.TimeColumn -> lang.Long.valueOf(res.request.atMillis.get))
         val values: Array[Any] = columns.map(all.get(_).orNull)
         SparkConversions
@@ -264,7 +268,6 @@ object FetcherTestUtil {
     val keyishColumns = keys.toList ++ List(tableUtils.partitionColumn, Constants.TimeColumn)
     val responseRdd = tableUtils.sparkSession.sparkContext.parallelize(responseRows.toSeq)
     var responseDf = tableUtils.sparkSession.createDataFrame(responseRdd, endDsExpected.schema)
-    val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
     if (endDs != today) {
       responseDf = responseDf.drop("ds").withColumn("ds", lit(endDs))
     }
@@ -274,7 +277,7 @@ object FetcherTestUtil {
     responseDf.show()
 
     val diff = Comparison.sideBySide(responseDf, endDsExpected, keyishColumns, aName = "online", bName = "offline")
-    assert(endDsQueries.count() == responseDf.count())
+    assertEquals(endDsQueries.count(), responseDf.count())
     if (diff.count() > 0) {
       logger.info("queries:")
       endDsQueries.show()
@@ -286,12 +289,12 @@ object FetcherTestUtil {
         .select("ts_string", diff.schema.fieldNames: _*)
         .show()
     }
-    assert(diff.count() == 0)
+    assertEquals(0, diff.count())
   }
 
-  /** Generate deterministic data for testing and checkpointing IRs and streaming data.
-    */
-  def generateMutationData(namespace: String, tableUtils: TableUtils, spark: SparkSession): api.Join = {
+   /** Generate deterministic data for testing and checkpointing IRs and streaming data.
+     */
+   def generateMutationData(namespace: String, tableUtils: TableUtils, spark: SparkSession): api.Join = {
     tableUtils.createDatabase(namespace)
     def toTs(arg: String): Long = TsUtils.datetimeToTs(arg)
     val eventData = Seq(
@@ -330,16 +333,18 @@ object FetcherTestUtil {
       Row(595125622443733822L, toTs("2021-04-10 10:00:00"), 4, "2021-04-10", toTs("2021-04-10 23:30:00"), true),
       Row(595125622443733822L, toTs("2021-04-10 10:00:00"), 3, "2021-04-10", toTs("2021-04-10 23:30:00"), false)
     )
-    // Schemas
-    val snapshotSchema = StructType(
-      "listing_ratings_snapshot_fetcher",
-      Array(StructField("listing", LongType),
-            StructField("ts", LongType),
-            StructField("rating", IntType),
-            StructField("ds", StringType))
-    )
-
-    // {..., mutation_ts (timestamp of mutation), is_before (previous value or the updated value),...}
+     // Schemas
+     val snapshotSchema = StructType(
+       "listing_ratings_snapshot_fetcher",
+      Array(
+        StructField("listing", LongType),
+        StructField("ts", LongType),
+        StructField("rating", IntType),
+        StructField("ds", StringType)
+      )
+     )
+ 
+     // {..., mutation_ts (timestamp of mutation), is_before (previous value or the updated value),...}
     // Change the names to make sure mappings work properly
     val mutationSchema = StructType(
       "listing_ratings_mutations_fetcher",
@@ -347,18 +352,20 @@ object FetcherTestUtil {
         StructField("mutation_time", LongType),
         StructField("is_before_reversal", BooleanType)
       )
+     )
+ 
+     // {..., event (generic event column), ...}
+    val eventSchema = StructType(
+      "listing_events_fetcher",
+      Array(
+        StructField("listing_id", LongType),
+        StructField("ts", LongType),
+        StructField("ds", StringType)
+      )
     )
-
-    // {..., event (generic event column), ...}
-    val eventSchema = StructType("listing_events_fetcher",
-                                 Array(
-                                   StructField("listing_id", LongType),
-                                   StructField("ts", LongType),
-                                   StructField("ds", StringType)
-                                 ))
-
-    val sourceData: Map[StructType, Seq[Row]] = Map(
-      eventSchema -> eventData,
+ 
+     val sourceData: Map[StructType, Seq[Row]] = Map(
+       eventSchema -> eventData,
       mutationSchema -> mutationData,
       snapshotSchema -> snapshotData
     )
@@ -450,18 +457,19 @@ object FetcherTestUtil {
       Row(1L, toTs("2021-04-07 00:30:00"), Row("w", 4L, 500), "2021-04-10"),
       Row(2L, toTs("2021-04-04 01:30:00"), Row("a", 5L, 150), "2021-04-10"),
       Row(2L, toTs("2021-04-05 01:30:00"), Row("b", 6L, 250), "2021-04-10")
-    )
-
-    val mutationData = Seq(
-      Row(1L,
-          toTs("2021-04-08 00:30:00"),
-          Row("z", 1L, 400),
-          "2021-04-09",
-          toTs("2021-04-08 00:30:00"),
-          false
-      ), // duplicate unique_id
-      Row(1L, toTs("2021-04-09 00:30:00"), Row("v", 7L, 600), "2021-04-09", toTs("2021-04-09 00:30:00"), false)
-    )
+     )
+ 
+     val mutationData = Seq(
+      Row(
+        1L,
+        toTs("2021-04-08 00:30:00"),
+        Row("z", 1L, 400),
+        "2021-04-09",
+        toTs("2021-04-08 00:30:00"),
+        false
+       ), // duplicate unique_id
+       Row(1L, toTs("2021-04-09 00:30:00"), Row("v", 7L, 600), "2021-04-09", toTs("2021-04-09 00:30:00"), false)
+     )
 
     // Event schema
     val eventSchema = StructType(
@@ -472,36 +480,44 @@ object FetcherTestUtil {
     // Struct snapshot schema
     val structSnapshotSchema = StructType(
       "listing_struct_snapshot",
-      Array(
-        StructField("listing_id", LongType),
-        StructField("ts", LongType),
-        StructField("rating_struct",
-                    StructType("RatingStruct",
-                               Array(
-                                 StructField("sort_key", StringType),
-                                 StructField("unique_id", LongType),
-                                 StructField("value", IntType)
-                               ))),
-        StructField("ds", StringType)
-      )
-    )
+       Array(
+         StructField("listing_id", LongType),
+         StructField("ts", LongType),
+        StructField(
+          "rating_struct",
+          StructType(
+            "RatingStruct",
+            Array(
+              StructField("sort_key", StringType),
+              StructField("unique_id", LongType),
+              StructField("value", IntType)
+            )
+          )
+        ),
+         StructField("ds", StringType)
+       )
+     )
 
     // Struct mutation schema
     val structMutationSchema = StructType(
       "listing_struct_mutation",
-      Array(
-        StructField("listing_id", LongType),
-        StructField("ts", LongType),
-        StructField("rating_struct",
-                    StructType("RatingStruct",
-                               Array(
-                                 StructField("sort_key", StringType),
-                                 StructField("unique_id", LongType),
-                                 StructField("value", IntType)
-                               ))),
-        StructField("ds", StringType),
-        StructField("mutation_time", LongType),
-        StructField("is_before_reversal", BooleanType)
+       Array(
+         StructField("listing_id", LongType),
+         StructField("ts", LongType),
+        StructField(
+          "rating_struct",
+          StructType(
+            "RatingStruct",
+            Array(
+              StructField("sort_key", StringType),
+              StructField("unique_id", LongType),
+              StructField("value", IntType)
+            )
+          )
+        ),
+         StructField("ds", StringType),
+         StructField("mutation_time", LongType),
+         StructField("is_before_reversal", BooleanType)
       )
     )
 
@@ -570,10 +586,10 @@ object FetcherTestUtil {
                          topic: String,
                          today: String,
                          yesterday: String,
-                         keyCount: Int = 4,
+                         keyCount: Int = 10,
                          cardinality: Int = 100): api.Join = {
     tableUtils.createDatabase(namespace)
-    val rowCount = cardinality * keyCount * 50
+    val rowCount = cardinality * keyCount
     val userCol = Column("user", StringType, keyCount)
     val vendorCol = Column("vendor", StringType, keyCount)
     // temporal events
@@ -585,15 +601,17 @@ object FetcherTestUtil {
     paymentsDf.withTimeBasedColumn(tsColString, format = "yyyy-MM-dd HH:mm:ss").save(paymentsTable)
     // temporal events
     val userPaymentsGroupBy = Builders.GroupBy(
-      sources = Seq(Builders.Source.events(query = Builders.Query(), table = paymentsTable, topic = topic)),
-      keyColumns = Seq("user"),
-      aggregations = Seq(
-        Builders.Aggregation(operation = Operation.COUNT,
-                             inputColumn = "payment",
-                             windows = Seq(new Window(6, TimeUnit.HOURS), new Window(14, TimeUnit.DAYS))),
-        Builders.Aggregation(operation = Operation.COUNT, inputColumn = "payment"),
-        Builders.Aggregation(operation = Operation.LAST, inputColumn = "payment"),
-        Builders.Aggregation(operation = Operation.LAST_K, argMap = Map("k" -> "5"), inputColumn = "notes"),
+       sources = Seq(Builders.Source.events(query = Builders.Query(), table = paymentsTable, topic = topic)),
+       keyColumns = Seq("user"),
+       aggregations = Seq(
+        Builders.Aggregation(
+          operation = Operation.COUNT,
+          inputColumn = "payment",
+          windows = Seq(new Window(6, TimeUnit.HOURS), new Window(14, TimeUnit.DAYS))
+        ),
+         Builders.Aggregation(operation = Operation.COUNT, inputColumn = "payment"),
+         Builders.Aggregation(operation = Operation.LAST, inputColumn = "payment"),
+         Builders.Aggregation(operation = Operation.LAST_K, argMap = Map("k" -> "5"), inputColumn = "notes"),
         Builders.Aggregation(operation = Operation.VARIANCE, inputColumn = "payment"),
         Builders.Aggregation(operation = Operation.FIRST, inputColumn = "notes"),
         Builders.Aggregation(operation = Operation.FIRST, inputColumn = tsColString),
@@ -616,30 +634,40 @@ object FetcherTestUtil {
     DataFrameGen.events(spark, ratingCols, rowCount, 180).save(ratingsTable)
 
     val vendorRatingsGroupBy = Builders.GroupBy(
-      sources = Seq(Builders.Source.events(query = Builders.Query(), table = ratingsTable)),
-      keyColumns = Seq("vendor"),
-      aggregations = Seq(
-        Builders.Aggregation(operation = Operation.AVERAGE,
-                             inputColumn = "rating",
-                             windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS)),
-                             buckets = Seq("bucket")),
-        Builders.Aggregation(operation = Operation.SKEW,
-                             inputColumn = "rating",
-                             windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS)),
-                             buckets = Seq("bucket")),
-        Builders.Aggregation(operation = Operation.HISTOGRAM,
-                             inputColumn = "txn_types",
-                             windows = Seq(new Window(3, TimeUnit.DAYS))),
-        Builders.Aggregation(operation = Operation.APPROX_FREQUENT_K,
-                             inputColumn = "txn_types",
-                             windows = Seq(new Window(3, TimeUnit.DAYS))),
-        Builders.Aggregation(operation = Operation.LAST_K,
-                             argMap = Map("k" -> "300"),
-                             inputColumn = "user",
-                             windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS)))
-      ),
-      metaData = Builders.MetaData(name = "unit_test.vendor_ratings", namespace = namespace),
-      accuracy = Accuracy.SNAPSHOT
+       sources = Seq(Builders.Source.events(query = Builders.Query(), table = ratingsTable)),
+       keyColumns = Seq("vendor"),
+       aggregations = Seq(
+        Builders.Aggregation(
+          operation = Operation.AVERAGE,
+          inputColumn = "rating",
+          windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS)),
+          buckets = Seq("bucket")
+        ),
+        Builders.Aggregation(
+          operation = Operation.SKEW,
+          inputColumn = "rating",
+          windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS)),
+          buckets = Seq("bucket")
+        ),
+        Builders.Aggregation(
+          operation = Operation.HISTOGRAM,
+          inputColumn = "txn_types",
+          windows = Seq(new Window(3, TimeUnit.DAYS))
+        ),
+        Builders.Aggregation(
+          operation = Operation.APPROX_FREQUENT_K,
+          inputColumn = "txn_types",
+          windows = Seq(new Window(3, TimeUnit.DAYS))
+        ),
+        Builders.Aggregation(
+          operation = Operation.LAST_K,
+          argMap = Map("k" -> "300"),
+          inputColumn = "user",
+          windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS))
+        )
+       ),
+       metaData = Builders.MetaData(name = "unit_test.vendor_ratings", namespace = namespace),
+       accuracy = Accuracy.SNAPSHOT
     )
 
     // no-agg
@@ -657,47 +685,55 @@ object FetcherTestUtil {
       keyColumns = Seq("user"),
       metaData = Builders.MetaData(name = "unit_test.user_balance", namespace = namespace)
     )
-
-    // snapshot-entities
-    val userVendorCreditCols =
-      Seq(Column("account", StringType, 100),
-          vendorCol, // will be renamed
-          Column("credit", IntType, 500),
-          Column("ts", LongType, 100))
-    val creditTable = s"$namespace.credit_table"
-    DataFrameGen
-      .entities(spark, userVendorCreditCols, rowCount, 100)
+ 
+     // snapshot-entities
+     val userVendorCreditCols =
+      Seq(
+        Column("account", StringType, 100),
+        vendorCol, // will be renamed
+        Column("credit", IntType, 500),
+        Column("ts", LongType, 100)
+      )
+     val creditTable = s"$namespace.credit_table"
+     DataFrameGen
+       .entities(spark, userVendorCreditCols, rowCount, 100)
       .withColumnRenamed("vendor", "vendor_id")
       .save(creditTable)
     val creditGroupBy = Builders.GroupBy(
+       sources = Seq(Builders.Source.entities(query = Builders.Query(), snapshotTable = creditTable)),
+       keyColumns = Seq("vendor_id"),
+       aggregations = Seq(
+        Builders.Aggregation(
+          operation = Operation.SUM,
+          inputColumn = "credit",
+          windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS))
+        )
+      ),
+       metaData = Builders.MetaData(name = "unit_test.vendor_credit", namespace = namespace)
+     )
+     val creditDerivationGroupBy = Builders.GroupBy(
       sources = Seq(Builders.Source.entities(query = Builders.Query(), snapshotTable = creditTable)),
-      keyColumns = Seq("vendor_id"),
-      aggregations = Seq(
-        Builders.Aggregation(operation = Operation.SUM,
-                             inputColumn = "credit",
-                             windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS)))),
-      metaData = Builders.MetaData(name = "unit_test.vendor_credit", namespace = namespace)
-    )
-    val creditDerivationGroupBy = Builders.GroupBy(
-      sources = Seq(Builders.Source.entities(query = Builders.Query(), snapshotTable = creditTable)),
-      keyColumns = Seq("vendor_id"),
-      aggregations = Seq(
-        Builders
-          .Aggregation(operation = Operation.SUM, inputColumn = "credit", windows = Seq(new Window(3, TimeUnit.DAYS)))),
-      metaData = Builders.MetaData(name = "unit_test/vendor_credit_derivation", namespace = namespace),
-      derivations = Seq(
-        Builders.Derivation("credit_sum_3d_test_rename", "credit_sum_3d"),
+       keyColumns = Seq("vendor_id"),
+       aggregations = Seq(
+         Builders
+          .Aggregation(operation = Operation.SUM, inputColumn = "credit", windows = Seq(new Window(3, TimeUnit.DAYS)))
+      ),
+       metaData = Builders.MetaData(name = "unit_test/vendor_credit_derivation", namespace = namespace),
+       derivations = Seq(
+         Builders.Derivation("credit_sum_3d_test_rename", "credit_sum_3d"),
         Builders.Derivation("*", "*")
       )
     )
-
-    // temporal-entities
-    val vendorReviewCols =
-      Seq(Column("vendor", StringType, 10), // will be renamed
-          Column("review", LongType, 10))
-    val snapshotTable = s"$namespace.reviews_table_snapshot"
-    val mutationTable = s"$namespace.reviews_table_mutations"
-    val mutationTopic = "reviews_mutation_topic"
+ 
+     // temporal-entities
+     val vendorReviewCols =
+      Seq(
+        Column("vendor", StringType, 10), // will be renamed
+        Column("review", LongType, 10)
+      )
+     val snapshotTable = s"$namespace.reviews_table_snapshot"
+     val mutationTable = s"$namespace.reviews_table_mutations"
+     val mutationTopic = "reviews_mutation_topic"
     val (snapshotDf, mutationsDf) =
       DataFrameGen.mutations(spark, vendorReviewCols, rowCount, 35, 0.2, 1, keyColumnName = "vendor")
     snapshotDf.withColumnRenamed("vendor", "vendor_id").save(snapshotTable)
@@ -709,18 +745,22 @@ object FetcherTestUtil {
             query = Builders.Query(
               startPartition = tableUtils.partitionSpec.before(yesterday)
             ),
-            snapshotTable = snapshotTable,
-            mutationTable = mutationTable,
-            mutationTopic = mutationTopic
-          )),
-      keyColumns = Seq("vendor_id"),
-      aggregations = Seq(
-        Builders.Aggregation(operation = Operation.SUM,
-                             inputColumn = "review",
-                             windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS)))),
-      metaData = Builders.MetaData(name = "unit_test/vendor_review", namespace = namespace),
-      accuracy = Accuracy.TEMPORAL
-    )
+             snapshotTable = snapshotTable,
+             mutationTable = mutationTable,
+             mutationTopic = mutationTopic
+          )
+      ),
+       keyColumns = Seq("vendor_id"),
+       aggregations = Seq(
+        Builders.Aggregation(
+          operation = Operation.SUM,
+          inputColumn = "review",
+          windows = Seq(new Window(2, TimeUnit.DAYS), new Window(30, TimeUnit.DAYS))
+        )
+      ),
+       metaData = Builders.MetaData(name = "unit_test/vendor_review", namespace = namespace),
+       accuracy = Accuracy.TEMPORAL
+     )
 
     // queries
     val queryCols = Seq(userCol, vendorCol)
@@ -745,32 +785,36 @@ object FetcherTestUtil {
           Builders.JoinPart(groupBy = userBalanceGroupBy, keyMapping = Map("user_id" -> "user")).setUseLongNames(false),
           Builders.JoinPart(groupBy = reviewGroupBy).setUseLongNames(false),
           Builders.JoinPart(groupBy = creditGroupBy, prefix = "b").setUseLongNames(false),
-          Builders.JoinPart(groupBy = creditGroupBy, prefix = "a").setUseLongNames(false),
-          Builders.JoinPart(groupBy = creditDerivationGroupBy, prefix = "c").setUseLongNames(false)
+           Builders.JoinPart(groupBy = creditGroupBy, prefix = "a").setUseLongNames(false),
+           Builders.JoinPart(groupBy = creditDerivationGroupBy, prefix = "c").setUseLongNames(false)
+         ),
+        metaData = Builders.MetaData(
+          name = "test.payments_join",
+          namespace = namespace,
+          team = "chronon",
+          consistencySamplePercent = 30
         ),
-        metaData = Builders.MetaData(name = "test.payments_join",
-                                     namespace = namespace,
-                                     team = "chronon",
-                                     consistencySamplePercent = 30),
-        derivations = Seq(
-          Builders.Derivation("*", "*"),
-          Builders.Derivation("hist_3d", "vendor_txn_types_histogram_3d"),
+         derivations = Seq(
+           Builders.Derivation("*", "*"),
+           Builders.Derivation("hist_3d", "vendor_txn_types_histogram_3d"),
           Builders.Derivation("payment_variance", "user_payment_variance/2"),
           Builders.Derivation("derived_ds", "from_unixtime(ts/1000, 'yyyy-MM-dd')"),
           Builders.Derivation("direct_ds", "ds")
         )
       )
       .setUseLongNames(false)
-    joinConf
-  }
-
-  def generateEventOnlyData(namespace: String,
-                            tableUtils: TableUtils,
-                            spark: SparkSession,
-                            groupByCustomJson: Option[String] = None): api.Join = {
-    tableUtils.createDatabase(namespace)
-
-    def toTs(arg: String): Long = TsUtils.datetimeToTs(arg)
+     joinConf
+   }
+ 
+  def generateEventOnlyData(
+      namespace: String,
+      tableUtils: TableUtils,
+      spark: SparkSession,
+      groupByCustomJson: Option[String] = None
+  ): api.Join = {
+     tableUtils.createDatabase(namespace)
+ 
+     def toTs(arg: String): Long = TsUtils.datetimeToTs(arg)
 
     val listingEventData = Seq(
       Row(1L, toTs("2021-04-10 03:10:00"), "2021-04-10"),
@@ -796,25 +840,30 @@ object FetcherTestUtil {
       Row(2L, toTs("2021-04-10 02:30:00"), 8, "2021-04-10"),
       Row(2L, toTs("2021-04-10 02:30:00"), 8, "2021-04-10"),
       Row(2L, toTs("2021-04-07 00:30:00"), 10, "2021-04-10") // dated 4/10 but excluded from avg agg based on ts
+     )
+     // Schemas
+     // {..., event (generic event column), ...}
+    val listingsSchema = StructType(
+      "listing_events_fetcher",
+      Array(
+        StructField("listing_id", LongType),
+        StructField("ts", LongType),
+        StructField("ds", StringType)
+      )
     )
-    // Schemas
-    // {..., event (generic event column), ...}
-    val listingsSchema = StructType("listing_events_fetcher",
-                                    Array(
-                                      StructField("listing_id", LongType),
-                                      StructField("ts", LongType),
-                                      StructField("ds", StringType)
-                                    ))
+ 
+     val ratingsSchema = StructType(
+       "listing_ratings_fetcher",
+      Array(
+        StructField("listing_id", LongType),
+        StructField("ts", LongType),
+        StructField("rating", IntType),
+        StructField("ds", StringType)
+      )
+     )
+ 
+     val sourceData: Map[StructType, Seq[Row]] = Map(
 
-    val ratingsSchema = StructType(
-      "listing_ratings_fetcher",
-      Array(StructField("listing_id", LongType),
-            StructField("ts", LongType),
-            StructField("rating", IntType),
-            StructField("ds", StringType))
-    )
-
-    val sourceData: Map[StructType, Seq[Row]] = Map(
       listingsSchema -> listingEventData,
       ratingsSchema -> ratingEventData
     )

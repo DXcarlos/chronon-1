@@ -4,11 +4,10 @@ import org.apache.spark.sql.SparkSession
 
 import scala.reflect.runtime.universe.runtimeMirror
 
-/** Dynamically provide the read / write table format depending on table name.
-  * This supports reading/writing tables with heterogeneous formats.
-  * This approach enables users to override and specify a custom format provider if needed. This is useful in
-  * cases such as leveraging different library versions from what we support in the Chronon project (e.g. newer delta lake)
-  * as well as working with custom internal company logic / checks.
+/** Dynamically provide the read / write table format depending on table name. This supports reading/writing tables with
+  * heterogeneous formats. This approach enables users to override and specify a custom format provider if needed. This
+  * is useful in cases such as leveraging different library versions from what we support in the Chronon project (e.g.
+  * newer delta lake) as well as working with custom internal company logic / checks.
   */
 trait FormatProvider extends Serializable {
 

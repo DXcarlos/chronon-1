@@ -78,7 +78,7 @@ case class DataStream(df: DataFrame, partitions: Int, topicInfo: TopicInfo) {
     val selectsOption: Option[Map[String, String]] = for {
       selectMap <- Option(query.selects).map(_.toScala.toMap)
       keyMap = Option(keys).map(_.map(k => k -> k).toMap).getOrElse(Map.empty)
-    } yield (keyMap ++ selectMap ++ timeSelects)
+    } yield keyMap ++ selectMap ++ timeSelects
     val selectClauses = selectsOption.map { _.map { case (name, expr) => s"($expr) AS `$name`" }.toSeq }
 
     logger.info(s"Applying select clauses: $selectClauses")
@@ -94,7 +94,8 @@ case class DataStream(df: DataFrame, partitions: Int, topicInfo: TopicInfo) {
       Option(keys)
         .map(
           _.map { key => s"${selectsOption.map(_(key)).getOrElse(key)} IS NOT NULL" }
-            .mkString(" OR "))
+            .mkString(" OR ")
+        )
         .map(where => s"($where)")
     val baseWheres = Option(query.wheres).map(_.toScala).getOrElse(Seq.empty[String])
     val whereClauses = baseWheres ++ atLeastOneKeyIsPresent :+ timeIsPresent

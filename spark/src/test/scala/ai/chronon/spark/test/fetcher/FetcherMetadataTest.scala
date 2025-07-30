@@ -40,7 +40,7 @@ class FetcherMetadataTest extends AnyFlatSpec {
       finally src.close()
     }.replaceAll("\\s+", "")
 
-    val acceptedEndPoints = List(MetadataEndPoint.ConfByKeyEndPointName)
+    val acceptedEndPoints = List(MetadataEndPoint.ConfByKeyEndPointName, MetadataEndPoint.NameByTeamEndPointName)
     val inMemoryKvStore = OnlineUtils.buildInMemoryKVStore("FetcherTest")
     val singleFileDataSet = MetadataDataset + "_single_file_test"
     val singleFileMetadataStore = new fetcher.MetadataStore(FetchContext(inMemoryKvStore, singleFileDataSet))
@@ -61,6 +61,10 @@ class FetcherMetadataTest extends AnyFlatSpec {
     val actual = new String(res.values.get.head.bytes)
     assertEquals(expected, actual.replaceAll("\\s+", ""))
 
+    val teamMetadataResponse = inMemoryKvStore.getString("joins/relevance", singleFileDataSet, 10000)
+    val teamMetadataRes = teamMetadataResponse.get
+    assert(teamMetadataRes.equals(joinKeyName))
+
     val directoryDataSetDataSet = MetadataDataset + "_directory_test"
     val directoryMetadataStore =
       new fetcher.MetadataStore(FetchContext(inMemoryKvStore, directoryDataSetDataSet))
@@ -78,6 +82,10 @@ class FetcherMetadataTest extends AnyFlatSpec {
     assertTrue(dirRes.latest.isSuccess)
     val dirActual = new String(dirRes.values.get.head.bytes)
     assertEquals(expected, dirActual.replaceAll("\\s+", ""))
+
+    val teamMetadataDirResponse = inMemoryKvStore.getString("group_bys/team", directoryDataSetDataSet, 10000)
+    val teamMetadataDirRes = teamMetadataDirResponse.get
+    assert(teamMetadataDirRes.equals("group_bys/team.example_group_by.v1"))
 
     val emptyResponse =
       inMemoryKvStore.get(GetRequest("NoneExistKey".getBytes(), "NonExistDataSetName"))

@@ -108,8 +108,8 @@ releases
 # Local bazelrc setup
 .bazelrc.local
 
-# Bazel mod files (currently unused)
-MODULE.bazel*
+# Bazel mod files now used for bzlmod
+# MODULE.bazel*
 
 /plugins/vscode/node_modules
 

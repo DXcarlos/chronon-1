@@ -47,8 +47,10 @@ class TwoStackLiteAggregatorTest extends AnyFlatSpec {
       if (a == null || b == null) {
         assertEquals(a, b)
       } else {
-        assertArrayEquals(Option(a).map(_.map(x => Integer.valueOf(x).asInstanceOf[AnyRef]).toArray).orNull,
-                          Option(b).map(_.toArray).orNull)
+        assertArrayEquals(
+          Option(a).map(_.map(x => Integer.valueOf(x).asInstanceOf[AnyRef]).toArray).orNull,
+          Option(b).map(_.toArray).orNull
+        )
       }
     }
     assertBufferEquals(Seq(8, 9), bankersBuffer.query)
@@ -74,13 +76,15 @@ class TwoStackLiteAggregatorTest extends AnyFlatSpec {
       Builders.Aggregation(
         Operation.AVERAGE,
         "num",
-        Seq(new Window(1, TimeUnit.DAYS), new Window(1, TimeUnit.HOURS), new Window(30, TimeUnit.DAYS))),
+        Seq(new Window(1, TimeUnit.DAYS), new Window(1, TimeUnit.HOURS), new Window(30, TimeUnit.DAYS))
+      ),
       Builders.Aggregation(Operation.AVERAGE, "num"),
       Builders.Aggregation(
         Operation.TOP_K,
         "num",
         Seq(new Window(1, TimeUnit.DAYS), new Window(1, TimeUnit.HOURS), new Window(30, TimeUnit.DAYS)),
-        argMap = Map("k" -> "300")),
+        argMap = Map("k" -> "300")
+      ),
       Builders.Aggregation(Operation.TOP_K, "num", argMap = Map("k" -> "300"))
     )
 

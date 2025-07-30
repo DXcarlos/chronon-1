@@ -1,6 +1,7 @@
 load("@bazel_skylib//lib:dicts.bzl", "dicts")
 load("@rules_jvm_external//:defs.bzl", "artifact")
-load("//tools/build_rules/dependencies:maven_repository.bzl", "MAVEN_REPOSITORY_NAME")
+# Maven repository name for bzlmod
+MAVEN_REPOSITORY_NAME = "maven"
 
 DEFAULT_PROVIDED_REPO = MAVEN_REPOSITORY_NAME  # For backwards compatability
 

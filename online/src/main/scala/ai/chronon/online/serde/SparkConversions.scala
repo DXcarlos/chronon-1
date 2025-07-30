@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types._
 
 import java.util
-import scala.collection.{Seq, mutable}
+import scala.collection.{mutable, Seq}
 
 // wrapper class of spark ai.chronon.aggregator.row that the RowAggregator can work with
 // no copies are happening here, but we wrap the ai.chronon.aggregator.row with an additional class
@@ -47,8 +47,10 @@ class RowWrapper(val row: Row, val tsIndex: Int, val reversalIndex: Int = -1, va
   }
 
   override def mutationTs: Long = {
-    require(mutationTsIndex > -1,
-            "Requested mutation timestamp from a ai.chronon.api.Row with missing `mutation_ts` column")
+    require(
+      mutationTsIndex > -1,
+      "Requested mutation timestamp from a ai.chronon.api.Row with missing `mutation_ts` column"
+    )
     getAs[Long](mutationTsIndex)
   }
 }

@@ -253,7 +253,8 @@ class UnionJoinTest extends BaseJoinTest {
         Builders.Query(selects =
                          Builders.Selects("user_id", "item_id", "amount", "category"), // Select all left cols here
                        startPartition = start),
-        table = eventsTable),
+        table = eventsTable
+      ),
       joinParts = Seq(Builders.JoinPart(groupBy = groupByWithDerivations)),
       metaData =
         Builders.MetaData(name = "test.user_features_derived.union_join", namespace = namespace, team = "user_team")

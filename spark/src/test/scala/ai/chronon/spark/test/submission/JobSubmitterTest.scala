@@ -16,16 +16,16 @@ class JobSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "successfully test parseConf" in {
-    val runfilesDir = System.getenv("RUNFILES_DIR")
-    val path = Paths.get(runfilesDir, "chronon/spark/src/test/resources/joins/team/example_join.v1")
+    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
+    val path = Paths.get(runfilesDir, "_main/spark/src/test/resources/joins/team/example_join.v1")
 
     JobSubmitter.parseConf[api.Join](path.toAbsolutePath.toString)
   }
 
   it should "test getModeConfigProperties with only common" in {
 
-    val confPath = "chronon/spark/src/test/resources/group_bys/team/purchases_only_conf_common.v1"
-    val runfilesDir = System.getenv("RUNFILES_DIR")
+    val confPath = "_main/spark/src/test/resources/group_bys/team/purchases_only_conf_common.v1"
+    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
     val modeMap = JobSubmitter.getModeConfigProperties(
@@ -33,14 +33,15 @@ class JobSubmitterTest extends AnyFlatSpec with MockitoSugar {
         s"--local-conf-path=${path.toAbsolutePath.toString}",
         "--conf-type=group_bys",
         "--original-mode=backfill"
-      ))
+      )
+    )
     assert(modeMap.get == Map("spark.chronon.partition.format" -> "yyyy-MM-dd"))
   }
 
   it should "test getModeConfigProperties with common and modeConfigs" in {
 
-    val confPath = "chronon/spark/src/test/resources/group_bys/team/purchases.v1"
-    val runfilesDir = System.getenv("RUNFILES_DIR")
+    val confPath = "_main/spark/src/test/resources/group_bys/team/purchases.v1"
+    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
     val modeMap = JobSubmitter.getModeConfigProperties(
@@ -48,14 +49,15 @@ class JobSubmitterTest extends AnyFlatSpec with MockitoSugar {
         s"--local-conf-path=${path.toAbsolutePath.toString}",
         "--conf-type=group_bys",
         "--original-mode=backfill"
-      ))
+      )
+    )
     assert(modeMap.get == Map("spark.dummy" -> "value"))
   }
 
   it should "test getModeConfigProperties without common or modeConfigs" in {
 
-    val confPath = "chronon/spark/src/test/resources/group_bys/team/example_group_by.v1"
-    val runfilesDir = System.getenv("RUNFILES_DIR")
+    val confPath = "_main/spark/src/test/resources/group_bys/team/example_group_by.v1"
+    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
     val modeMap = JobSubmitter.getModeConfigProperties(
@@ -63,22 +65,25 @@ class JobSubmitterTest extends AnyFlatSpec with MockitoSugar {
         s"--local-conf-path=${path.toAbsolutePath.toString}",
         "--conf-type=group_bys",
         "--original-mode=backfill"
-      ))
+      )
+    )
     assert(modeMap.isEmpty)
   }
 
   it should "test getModeConfigProperties for a raw Metadata conf" in {
-    val confPath = "chronon/spark/src/test/resources/teams_metadata/default_team_metadata"
-    val runfilesDir = System.getenv("RUNFILES_DIR")
+    val confPath = "_main/spark/src/test/resources/teams_metadata/default_team_metadata"
+    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
     val modeMap = JobSubmitter.getModeConfigProperties(
       Array(
         s"--local-conf-path=${path.toAbsolutePath.toString}",
         "--original-mode=metastore"
-      ))
+      )
+    )
     assert(modeMap.isDefined)
     assert(
-      modeMap.get == Map("spark.chronon.partition.format" -> "yyyy-MM-dd", "spark.chronon.partition.column" -> "_DATE"))
+      modeMap.get == Map("spark.chronon.partition.format" -> "yyyy-MM-dd", "spark.chronon.partition.column" -> "_DATE")
+    )
   }
 }

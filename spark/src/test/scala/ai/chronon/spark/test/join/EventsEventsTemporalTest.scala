@@ -98,14 +98,17 @@ class EventsEventsTemporalTest extends BaseJoinTest {
     val diff = Comparison.sideBySide(computed, expected, List("item", "ts", "ds"))
     val queriesBare =
       tableUtilsSkewFree.sql(
-        s"SELECT item, ts, ds from $itemQueriesTable where ds >= '$start' and ds <= '$dayAndMonthBefore'")
+        s"SELECT item, ts, ds from $itemQueriesTable where ds >= '$start' and ds <= '$dayAndMonthBefore'"
+      )
     assertEquals(queriesBare.count(), computed.count())
     if (diff.count() > 0) {
       println(s"Diff count: ${diff.count()}")
       println("diff result rows")
       diff
-        .replaceWithReadableTime(Seq("ts", "a_user_unit_test_item_views_ts_max", "b_user_unit_test_item_views_ts_max"),
-                                 dropOriginal = true)
+        .replaceWithReadableTime(
+          Seq("ts", "a_user_unit_test_item_views_ts_max", "b_user_unit_test_item_views_ts_max"),
+          dropOriginal = true
+        )
         .show()
     }
     assertEquals(diff.count(), 0)

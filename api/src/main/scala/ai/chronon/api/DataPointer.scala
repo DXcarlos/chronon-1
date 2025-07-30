@@ -56,8 +56,10 @@ object DataPointer extends RegexParsers {
 
         fmt match {
           // Retain the full uri if it's a path.
-          case Some(ft) => URIDataPointer(ctl + sep + path, Some(ft), Some(ft), opts.getOrElse(Map.empty))
-          case None     => URIDataPointer(path, Some(ctl), Some(ctl), opts.getOrElse(Map.empty))
+          case Some(ft) =>
+            URIDataPointer(ctl + sep + path, Some(ft), Some(ft), opts.getOrElse(Map.empty))
+          case None =>
+            URIDataPointer(path, Some(ctl), Some(ctl), opts.getOrElse(Map.empty))
         }
 
       case None ~ path =>
@@ -70,7 +72,8 @@ object DataPointer extends RegexParsers {
       (catalog, format)
     }
 
-  private def options: Parser[Map[String, String]] = "(" ~> repsep(option, ",") <~ ")" ^^ (_.toMap)
+  private def options: Parser[Map[String, String]] =
+    "(" ~> repsep(option, ",") <~ ")" ^^ (_.toMap)
 
   private def option: Parser[(String, String)] =
     ("""[^=,]+""".r <~ "=") ~ """[^,)]+""".r ^^ { case key ~ value =>
@@ -82,7 +85,8 @@ object DataPointer extends RegexParsers {
   private def extractFormatFromPath(
       path: String,
       catalog: String,
-      fileCatalogs: Seq[String] = Seq("s3", "gcs", "hdfs", "file")): (String, Option[String]) = {
+      fileCatalogs: Seq[String] = Seq("s3", "gcs", "hdfs", "file")
+  ): (String, Option[String]) = {
     catalog.toLowerCase match {
       // direct file case - extract string after the last dot as format
       case ctl if fileCatalogs.contains(ctl) =>

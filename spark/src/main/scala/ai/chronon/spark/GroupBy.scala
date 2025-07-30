@@ -248,15 +248,16 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
         (
           (mutationsHashFx(row), row.getString(mutationPartitionIndex)),
           row
-        )
-      }
-      .groupByKey()
-      .mapValues(_.map(SparkConversions.toChrononRow(_, mTsIndex, mutationsReversalIndex, mutationsTsIndex)).toBuffer
-        .sortWith(_.mutationTs < _.mutationTs)
-        .toArray)
-
-    // Having the final IR of previous day + mutations (if any), build the array of finalized IR for each query.
-    val queryValuesRDD = queriesByKeys
+         )
+       }
+       .groupByKey()
+      .mapValues(
+        _.map(SparkConversions.toChrononRow(_, mTsIndex, mutationsReversalIndex, mutationsTsIndex)).toBuffer
+          .sortWith(_.mutationTs < _.mutationTs)
+          .toArray)
+ 
+     // Having the final IR of previous day + mutations (if any), build the array of finalized IR for each query.
+     val queryValuesRDD = queriesByKeys
       .leftOuterJoin(snapshotByKeys)
       .leftOuterJoin(mutationsByKeys)
       .map { case ((keyWithHash: KeyWithHash, ds: String), ((timeQueries, eodIr), dayMutations)) =>
@@ -745,13 +746,14 @@ object GroupBy {
                       tableUtils: TableUtils,
                       stepDays: Option[Int] = None,
                       overrideStartPartition: Option[String] = None,
-                      skipFirstHole: Boolean = true): Unit = {
-    assert(
-      groupByConf.backfillStartDate != null,
-      s"GroupBy:${groupByConf.metaData.name} has null backfillStartDate. This needs to be set for offline backfilling.")
-    Option(groupByConf.setups).foreach(_.foreach(tableUtils.sql))
-    val overrideStart = overrideStartPartition.getOrElse(groupByConf.backfillStartDate)
-    val outputTable = groupByConf.metaData.outputTable
+                       skipFirstHole: Boolean = true): Unit = {
+     assert(
+       groupByConf.backfillStartDate != null,
+      s"GroupBy:${groupByConf.metaData.name} has null backfillStartDate. This needs to be set for offline backfilling."
+    )
+     Option(groupByConf.setups).foreach(_.foreach(tableUtils.sql))
+     val overrideStart = overrideStartPartition.getOrElse(groupByConf.backfillStartDate)
+     val outputTable = groupByConf.metaData.outputTable
     val tableProps = Option(groupByConf.metaData.tableProperties)
       .map(_.toScala)
       .orNull

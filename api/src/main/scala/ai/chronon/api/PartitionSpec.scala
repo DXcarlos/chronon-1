@@ -43,7 +43,8 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long) {
   }
 
   // what is the date portion of this timestamp
-  def at(millis: Long): String = partitionFormatter.format(Instant.ofEpochMilli(millis))
+  def at(millis: Long): String =
+    partitionFormatter.format(Instant.ofEpochMilli(millis))
 
   def before(s: String): String = shift(s, -1)
 
@@ -65,7 +66,8 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long) {
 
   // all partitions `count` ahead of `s` including `s` - result size will be count + 1
   // used to compute effected output partitions for a given partition
-  def partitionsFrom(s: String, count: Int): Seq[String] = s +: (1 to count).map(shift(s, _))
+  def partitionsFrom(s: String, count: Int): Seq[String] =
+    s +: (1 to count).map(shift(s, _))
 
   def partitionsFrom(s: String, window: Window): Seq[String] = {
     val count = math.ceil(window.millis.toDouble / spanMillis).toInt
@@ -86,7 +88,8 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long) {
     else if (spanMillis == WindowUtils.Hour.millis) WindowUtils.Hour
     else
       throw new UnsupportedOperationException(
-        s"Partition Intervals should be either hour or day - found ${spanMillis / 60 * 1000} minutes")
+        s"Partition Intervals should be either hour or day - found ${spanMillis / 60 * 1000} minutes"
+      )
   }
 
   def translate(date: String, targetSpec: PartitionSpec): String = {
@@ -96,5 +99,6 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long) {
 }
 
 object PartitionSpec {
-  val daily: PartitionSpec = PartitionSpec("ds", "yyyy-MM-dd", 24 * 60 * 60 * 1000)
+  val daily: PartitionSpec =
+    PartitionSpec("ds", "yyyy-MM-dd", 24 * 60 * 60 * 1000)
 }

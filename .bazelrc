@@ -1,14 +1,20 @@
 try-import %workspace%/.bazelrc.local
 
+# Enable bzlmod (required for Bazel 8)
+common --enable_bzlmod
+
+
 # To build with Scala 2.12, pass "--config scala_2.12" to "bazel build"
-common:scala_2.12 --repo_env=SCALA_VERSION=2.12.18
-common:scala_2.12 --define=SCALA_VERSION=2.12.18
+common:scala_2.12 --repo_env=SCALA_VERSION=2.12.20
+common:scala_2.12 --define=SCALA_VERSION=2.12.20
 
 # Default scala version to 2.12
 # To set a different default Scala version, add the following to .bazelrc.local:
 # common --config scala_2.12
-common --repo_env=SCALA_VERSION=2.12.18
-common --define=SCALA_VERSION=2.12.18
+common --repo_env=SCALA_VERSION=2.12.20
+common --define=SCALA_VERSION=2.12.20
+
+build --remote_cache=https://storage.googleapis.com/zipline-bazel-cache
 
 build --java_language_version=11
 build --java_runtime_version=11

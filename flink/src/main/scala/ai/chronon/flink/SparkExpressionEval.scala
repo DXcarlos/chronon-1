@@ -20,16 +20,18 @@ import org.slf4j.LoggerFactory
 import scala.collection.Seq
 import scala.jdk.CollectionConverters.asScalaBufferConverter
 
-/** Core utility class for Spark expression evaluation that can be reused across different Flink operators.
-  * This evaluator is instantiated for a given EventType (specific case class object, Thrift / Proto object).
-  * Based on the selects and where clauses in the GroupBy, this function projects and filters the input data and
-  * emits a Map which contains the relevant fields & values that are needed to compute the aggregated values for the
-  * GroupBy.
-  * This class is meant to be used in Flink operators (e.g. DeserializationSchema, RichMapFunctions) to run Spark expression evals.
+/** Core utility class for Spark expression evaluation that can be reused across different Flink operators. This
+  * evaluator is instantiated for a given EventType (specific case class object, Thrift / Proto object). Based on the
+  * selects and where clauses in the GroupBy, this function projects and filters the input data and emits a Map which
+  * contains the relevant fields & values that are needed to compute the aggregated values for the GroupBy. This class is
+  * meant to be used in Flink operators (e.g. DeserializationSchema, RichMapFunctions) to run Spark expression evals.
   *
-  * @param encoder Spark Encoder for the input event
-  * @param groupBy The GroupBy to evaluate.
-  * @tparam EventType The type of the input event.
+  * @param encoder
+  *   Spark Encoder for the input event
+  * @param groupBy
+  *   The GroupBy to evaluate.
+  * @tparam EventType
+  *   The type of the input event.
   */
 class SparkExpressionEval[EventType](encoder: Encoder[EventType], groupBy: GroupBy) extends Serializable {
   import SparkExpressionEval._
@@ -89,8 +91,10 @@ class SparkExpressionEval[EventType](encoder: Encoder[EventType], groupBy: Group
     performSql(internalRow)
   }
 
-  def evaluateExpressions(inputEvent: EventType,
-                          rowSerializer: ExpressionEncoder.Serializer[EventType]): Seq[Map[String, Any]] = {
+  def evaluateExpressions(
+      inputEvent: EventType,
+      rowSerializer: ExpressionEncoder.Serializer[EventType]
+  ): Seq[Map[String, Any]] = {
     try {
       val start = System.currentTimeMillis()
       val row: InternalRow = rowSerializer(inputEvent)
@@ -171,8 +175,10 @@ class SparkExpressionEval[EventType](encoder: Encoder[EventType], groupBy: Group
   // Utility method to help with result validation. This method is used to match results of the core catalyst util based
   // eval against Spark DF based eval. This method iterates over the input records and hits the catalyst performSql method
   // to collect results.
-  def runCatalystBulk(records: Seq[(String, EventType)],
-                      rowSerializer: ExpressionEncoder.Serializer[EventType]): Map[String, Seq[Map[String, Any]]] = {
+  def runCatalystBulk(
+      records: Seq[(String, EventType)],
+      rowSerializer: ExpressionEncoder.Serializer[EventType]
+  ): Map[String, Seq[Map[String, Any]]] = {
     records.map { record =>
       val recordId = record._1
       val row = rowSerializer(record._2)

@@ -17,7 +17,7 @@
 package ai.chronon.spark.test.join
 
 import ai.chronon.api.Builders
-import ai.chronon.api.{Window, TimeUnit}
+import ai.chronon.api.{TimeUnit, Window}
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._

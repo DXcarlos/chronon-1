@@ -133,7 +133,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
 
   it should "test createSubmissionPropsMap for spark job" in {
 
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
+    val confPath = "_main/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
     val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
@@ -162,7 +162,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test createSubmissionPropsMap for flink job with latest savepoint" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
+    val confPath = "_main/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
     val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
@@ -211,7 +211,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     assertEquals(actual(SavepointUri), latestFlinkCheckpoint)
   }
   it should "test createSubmissionPropsMap for flink job with no savepoint" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
+    val confPath = "_main/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
     val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
@@ -254,7 +254,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     assert(!actual.contains(SavepointUri))
   }
   it should "test createSubmissionPropsMap for flink job with user passed savepoint" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
+    val confPath = "_main/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
     val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
@@ -300,7 +300,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test createSubmissionPropsMap for flink job with additional jars" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
+    val confPath = "_main/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
     val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
@@ -529,7 +529,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test flink deploy with no-savepoint deploy strategy successfully" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
+    val confPath = "_main/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
     val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
@@ -582,7 +582,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test flink deploy with latest savepoint deploy strategy successfully" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
+    val confPath = "_main/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
     val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
@@ -645,7 +645,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test flink deploy with user provided savepoint deploy strategy successfully" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
+    val confPath = "_main/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
     val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
     val path = Paths.get(runfilesDir, confPath)
 
@@ -786,6 +786,8 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     assertEquals(runningJobs.size, 1)
     assertEquals(runningJobs.head, jobId)
 
+    // Verify the call was made with correct parameters
+    verify(mockJobControllerClient).listJobs(listJobsRequestCapture.capture())
     val listRequest = listJobsRequestCapture.getValue
 
     assertEquals(listRequest.getProjectId, "test-project")

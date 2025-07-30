@@ -254,7 +254,7 @@ class BigTableKVStoreTest extends AnyFlatSpec with BeforeAndAfter {
   }
 
   it should "multiput failures" in {
-    val mockDataClient = mock[BigtableDataClient](withSettings().mockMaker("mock-maker-inline"))
+    val mockDataClient = mock[BigtableDataClient](withSettings())
     val mockAdminClient = mock[BigtableTableAdminClient]
     val kvStoreWithMocks = new BigTableKVStoreImpl(mockDataClient, Some(mockAdminClient))
 
@@ -276,7 +276,7 @@ class BigTableKVStoreTest extends AnyFlatSpec with BeforeAndAfter {
   }
 
   it should "multiget failures" in {
-    val mockDataClient = mock[BigtableDataClient](withSettings().mockMaker("mock-maker-inline"))
+    val mockDataClient = mock[BigtableDataClient](withSettings())
     val mockAdminClient = mock[BigtableTableAdminClient]
     val kvStoreWithMocks = new BigTableKVStoreImpl(mockDataClient, Some(mockAdminClient))
     val serverStreamingCallable = mock[ServerStreamingCallable[Query, Row]]

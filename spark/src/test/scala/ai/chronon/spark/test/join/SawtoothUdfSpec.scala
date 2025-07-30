@@ -41,12 +41,13 @@ class SawtoothUdfSpec extends BaseJoinTest with Matchers {
       org.apache.spark.sql.types.StructField(Constants.TimeColumn, org.apache.spark.sql.types.LongType)
     ))
 
-    val rightSchema = org.apache.spark.sql.types.StructType(Seq(
-      org.apache.spark.sql.types.StructField("user_id", org.apache.spark.sql.types.IntegerType),
-      org.apache.spark.sql.types.StructField("item_id", org.apache.spark.sql.types.StringType),
-      org.apache.spark.sql.types.StructField("price", org.apache.spark.sql.types.DoubleType),
-      org.apache.spark.sql.types.StructField(Constants.TimeColumn, org.apache.spark.sql.types.LongType)
-    ))
+    val rightSchema = org.apache.spark.sql.types.StructType(
+      Seq(
+        org.apache.spark.sql.types.StructField("user_id", org.apache.spark.sql.types.IntegerType),
+        org.apache.spark.sql.types.StructField("item_id", org.apache.spark.sql.types.StringType),
+        org.apache.spark.sql.types.StructField("price", org.apache.spark.sql.types.DoubleType),
+        org.apache.spark.sql.types.StructField(Constants.TimeColumn, org.apache.spark.sql.types.LongType)
+      ))
 
     // Define our aggregations
     val aggregations = Seq(
@@ -190,12 +191,13 @@ class SawtoothUdfSpec extends BaseJoinTest with Matchers {
       org.apache.spark.sql.types.StructField(Constants.TimeColumn, org.apache.spark.sql.types.LongType)
     ))
 
-    val rightSchema = org.apache.spark.sql.types.StructType(Seq(
-      org.apache.spark.sql.types.StructField("user_id", org.apache.spark.sql.types.IntegerType),
-      org.apache.spark.sql.types.StructField("item_id", org.apache.spark.sql.types.StringType),
-      org.apache.spark.sql.types.StructField("price", org.apache.spark.sql.types.DoubleType),
-      org.apache.spark.sql.types.StructField(Constants.TimeColumn, org.apache.spark.sql.types.LongType)
-    ))
+    val rightSchema = org.apache.spark.sql.types.StructType(
+      Seq(
+        org.apache.spark.sql.types.StructField("user_id", org.apache.spark.sql.types.IntegerType),
+        org.apache.spark.sql.types.StructField("item_id", org.apache.spark.sql.types.StringType),
+        org.apache.spark.sql.types.StructField("price", org.apache.spark.sql.types.DoubleType),
+        org.apache.spark.sql.types.StructField(Constants.TimeColumn, org.apache.spark.sql.types.LongType)
+      ))
 
     // Define a 1-day window aggregation
     val aggregations = Seq(

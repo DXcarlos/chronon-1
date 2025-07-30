@@ -180,7 +180,8 @@ class FlinkRowAggregationFunctionTest extends AnyFlatSpec {
       case Failure(e) => {
         fail(
           "An exception was thrown by the aggregator when it should not have been. " +
-            s"The aggregator should fix the order without failing. $e")
+            s"The aggregator should fix the order without failing. $e"
+        )
       }
       case _ =>
     }

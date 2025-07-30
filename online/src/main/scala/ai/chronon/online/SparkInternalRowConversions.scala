@@ -128,9 +128,11 @@ object SparkInternalRowConversions {
         def mapConverter(x: Any): Any = {
           val mapData = x.asInstanceOf[util.HashMap[Any, Any]]
           val keyArray: ArrayData = new GenericArrayData(
-            mapData.entrySet().iterator().toScala.map(_.getKey).map(keyConverter).toArray)
+            mapData.entrySet().iterator().toScala.map(_.getKey).map(keyConverter).toArray
+          )
           val valueArray: ArrayData = new GenericArrayData(
-            mapData.entrySet().iterator().toScala.map(_.getValue).map(valueConverter).toArray)
+            mapData.entrySet().iterator().toScala.map(_.getValue).map(valueConverter).toArray
+          )
           new ArrayBasedMapData(keyArray, valueArray)
         }
 

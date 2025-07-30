@@ -19,7 +19,8 @@ object MetaDataUtils {
     val newName = nodeName
     copy.setName(newName)
 
-    val baseExecutionInfo = Option(copy.executionInfo).getOrElse(new ExecutionInfo())
+    val baseExecutionInfo =
+      Option(copy.executionInfo).getOrElse(new ExecutionInfo())
     val mergedExecutionInfo = mergeModeConfAndEnv(baseExecutionInfo, modeName)
     copy.setExecutionInfo(mergedExecutionInfo)
 
@@ -64,7 +65,8 @@ object MetaDataUtils {
     if (executionInfo.conf != null) {
       val merged = new util.HashMap[String, String]()
 
-      if (executionInfo.conf.common != null) merged.putAll(executionInfo.conf.common)
+      if (executionInfo.conf.common != null)
+        merged.putAll(executionInfo.conf.common)
 
       if (executionInfo.conf.modeConfigs != null) {
         val modeConf = executionInfo.conf.modeConfigs.get(mode)
@@ -77,7 +79,8 @@ object MetaDataUtils {
 
     if (executionInfo.clusterConf != null) {
       val clusterMerged = new util.HashMap[String, String]()
-      if (executionInfo.clusterConf.common != null) clusterMerged.putAll(executionInfo.clusterConf.common)
+      if (executionInfo.clusterConf.common != null)
+        clusterMerged.putAll(executionInfo.clusterConf.common)
       if (executionInfo.clusterConf.modeClusterConfigs != null) {
         val modeConf = executionInfo.clusterConf.modeClusterConfigs.get(mode)
         if (modeConf != null) clusterMerged.putAll(modeConf)
@@ -91,7 +94,8 @@ object MetaDataUtils {
     if (executionInfo.env != null) {
       val merged = new util.HashMap[String, String]()
 
-      if (executionInfo.env.common != null) merged.putAll(executionInfo.env.common)
+      if (executionInfo.env.common != null)
+        merged.putAll(executionInfo.env.common)
 
       if (executionInfo.env.modeEnvironments != null) {
         val modeEnv = executionInfo.env.modeEnvironments.get(mode)
