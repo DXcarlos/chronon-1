@@ -79,7 +79,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
   val joinPartParallelism: Int = sparkSession.conf.get("spark.chronon.join.part.parallelism", "1").toInt
 
   val internalRowIdColumnName: String = Constants.RowIDColumn
-  val rowIdClusterNumber: Int = 100
+  val rowIdClusterNumber: Int = 360
 
   sparkSession.sparkContext.setLogLevel("ERROR")
 
