@@ -21,61 +21,11 @@ source = Source(
     )
 )
 
-v1_test = Join(
+fraud_detection = Join(
     left=source,
     row_ids="user_id",
     right_parts=[
-        JoinPart(group_by=purchases.v1_test)
-    ],
-    version=0,
-)
-
-v1_hub = Join(
-    left=source,
-    row_ids="user_id",
-    right_parts=[
-        JoinPart(group_by=purchases.v1_test)
-    ],
-    version=0,
-)
-
-v1_dev = Join(
-    left=source,
-    row_ids="user_id",
-    right_parts=[
-        JoinPart(group_by=purchases.v1_dev)
-    ],
-    version=0,
-)
-
-source_notds = Source(
-    events=EventSource(
-        table="data.checkouts_notds",
-        query=Query(
-            selects=selects(
-                "user_id"
-            ),  # The primary key used to join various GroupBys together
-            time_column="ts",
-            partition_column="notds",
-            start_partition="2025-07-01",
-        ),  # The event time used to compute feature values as-of
-    )
-)
-
-v1_test_notds = Join(
-    left=source_notds,
-    row_ids=["user_id"],
-    right_parts=[
-        JoinPart(group_by=purchases.v1_test_notds)
-    ],
-    version=0,
-)
-
-v1_dev_notds = Join(
-    left=source_notds,
-    row_ids=["user_id"],
-    right_parts=[
-        JoinPart(group_by=purchases.v1_dev_notds)
+        JoinPart(group_by=purchases.features)
     ],
     version=0,
 )

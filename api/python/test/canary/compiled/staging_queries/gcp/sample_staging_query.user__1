@@ -1,89 +1,6 @@
 {
-  "aggregations": [
-    {
-      "argMap": {},
-      "inputColumn": "purchase_price",
-      "operation": 7,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        },
-        {
-          "length": 3,
-          "timeUnit": 1
-        },
-        {
-          "length": 7,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {},
-      "inputColumn": "purchase_price",
-      "operation": 6,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        },
-        {
-          "length": 3,
-          "timeUnit": 1
-        },
-        {
-          "length": 7,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {},
-      "inputColumn": "purchase_price",
-      "operation": 8,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        },
-        {
-          "length": 3,
-          "timeUnit": 1
-        },
-        {
-          "length": 7,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {
-        "k": "10"
-      },
-      "inputColumn": "purchase_price",
-      "operation": 13
-    }
-  ],
-  "backfillStartDate": "2023-11-01",
-  "keyColumns": [
-    "user_id"
-  ],
   "metaData": {
-    "columnHashes": {
-      "purchase_price_average_1d": "ff8fca8d015c942b760d0e08e9f729fe",
-      "purchase_price_average_3d": "ff8fca8d015c942b760d0e08e9f729fe",
-      "purchase_price_average_7d": "ff8fca8d015c942b760d0e08e9f729fe",
-      "purchase_price_count_1d": "ff8fca8d015c942b760d0e08e9f729fe",
-      "purchase_price_count_3d": "ff8fca8d015c942b760d0e08e9f729fe",
-      "purchase_price_count_7d": "ff8fca8d015c942b760d0e08e9f729fe",
-      "purchase_price_last10": "ff8fca8d015c942b760d0e08e9f729fe",
-      "purchase_price_sum_1d": "ff8fca8d015c942b760d0e08e9f729fe",
-      "purchase_price_sum_3d": "ff8fca8d015c942b760d0e08e9f729fe",
-      "purchase_price_sum_7d": "ff8fca8d015c942b760d0e08e9f729fe",
-      "user_id": "393f5e98e4ffd73344977d7ac9780627"
-    },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_notds_with_offset_0\", \"spec\": \"data.purchases_notds/notds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_fraud_detection__0_with_offset_1\", \"spec\": \"data.gcp_training_set_fraud_detection__0/ds={{ macros.ds_add(ds, 1) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {},
@@ -163,13 +80,13 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "https://canary.zipline.ai/",
+          "FRONTEND_URL": "http://localhost:5173",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-          "HUB_URL": "https://zipline-orchestration-703996152583.us-central1.run.app",
+          "HUB_URL": "http://localhost:3903",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
@@ -184,13 +101,13 @@
             "CUSTOMER_ID": "dev",
             "ENABLE_PUBSUB": "true",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-            "FRONTEND_URL": "https://canary.zipline.ai/",
+            "FRONTEND_URL": "http://localhost:5173",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
             "GCP_DATAPROC_CLUSTER_NAME": "zipline-transient-upload-cluster",
             "GCP_PROJECT_ID": "canary-443022",
             "GCP_REGION": "us-central1",
             "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-            "HUB_URL": "https://zipline-orchestration-703996152583.us-central1.run.app",
+            "HUB_URL": "http://localhost:3903",
             "JOB_MODE": "local[*]",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
@@ -198,29 +115,36 @@
           }
         }
       },
-      "historicalBackfill": 0,
       "scheduleCron": "@daily"
     },
-    "name": "gcp.purchases.v1_test_notds__0",
-    "online": 1,
+    "name": "gcp.sample_staging_query.user__1",
     "outputNamespace": "data",
-    "sourceFile": "group_bys/gcp/purchases.py",
+    "sourceFile": "staging_queries/gcp/sample_staging_query.py",
+    "tableProperties": {
+      "sample_config_json": "{\"sample_key\": \"sample value\"}"
+    },
     "team": "gcp",
-    "version": "0"
+    "version": "1"
   },
-  "sources": [
+  "query": "\n        SELECT\n            user_id,\n            user_id_purchase_price_count_1d,\n            user_id_purchase_price_count_3d,\n            user_id_purchase_price_count_7d,\n            user_id_purchase_price_average_1d,\n            user_id_purchase_price_average_3d,\n            user_id_purchase_price_average_7d,\n            user_id_purchase_price_last10,\n            'user' as category_name\n        FROM data.gcp_training_set_fraud_detection__0\n        WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n        \n    ",
+  "startPartition": "2025-07-01",
+  "tableDependencies": [
     {
-      "events": {
-        "query": {
-          "partitionColumn": "notds",
-          "selects": {
-            "purchase_price": "purchase_price",
-            "user_id": "user_id"
-          },
-          "startPartition": "2025-07-01",
-          "timeColumn": "ts"
+      "endOffset": {
+        "length": 1,
+        "timeUnit": 1
+      },
+      "startOffset": {
+        "length": 1,
+        "timeUnit": 1
+      },
+      "tableInfo": {
+        "partitionColumn": "ds",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
         },
-        "table": "data.purchases_notds"
+        "table": "data.gcp_training_set_fraud_detection__0"
       }
     }
   ]
