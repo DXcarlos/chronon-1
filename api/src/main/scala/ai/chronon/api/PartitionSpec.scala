@@ -21,7 +21,8 @@ import ai.chronon.api.PartitionSpec.getFormatter
 
 import java.time.Instant
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder}
+import java.time.temporal.ChronoField
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -96,11 +97,17 @@ object PartitionSpec {
     new ConcurrentHashMap[String, DateTimeFormatter]()
 
   private def getFormatter(format: String): DateTimeFormatter = {
-    formatterMap.computeIfAbsent(format,
-                                 { format: String =>
-                                   DateTimeFormatter
-                                     .ofPattern(format, Locale.US)
-                                     .withZone(ZoneOffset.UTC)
-                                 })
+    formatterMap.computeIfAbsent(
+      format,
+      { format: String =>
+        new DateTimeFormatterBuilder()
+          .appendPattern(format)
+          .parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
+          .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
+          .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
+          .toFormatter(Locale.US)
+          .withZone(ZoneOffset.UTC)
+      }
+    )
   }
 }
