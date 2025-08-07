@@ -17,6 +17,8 @@
 package ai.chronon.api
 
 import ai.chronon.api.Extensions._
+import ai.chronon.api.PartitionSpec.getFormatter
+import org.eclipse.collections.impl.map.mutable.ConcurrentHashMap
 
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -27,19 +29,12 @@ import java.util.TimeZone
 
 case class PartitionSpec(column: String, format: String, spanMillis: Long) {
 
-  private def partitionFormatter =
-    DateTimeFormatter
-      .ofPattern(format, Locale.US)
-      .withZone(ZoneOffset.UTC)
-
-  private def sdf = {
-    val formatter = new SimpleDateFormat(format)
-    formatter.setTimeZone(TimeZone.getTimeZone("UTC"))
-    formatter
-  }
+  private def partitionFormatter = getFormatter(format)
 
   def epochMillis(partition: String): Long = {
-    sdf.parse(partition).getTime
+    val accessor = partitionFormatter.parse(partition)
+    val instant = Instant.from(accessor)
+    instant.toEpochMilli
   }
 
   // what is the date portion of this timestamp
@@ -97,4 +92,14 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long) {
 
 object PartitionSpec {
   val daily: PartitionSpec = PartitionSpec("ds", "yyyy-MM-dd", 24 * 60 * 60 * 1000)
+
+  // re-use formatters - once per format
+  private val formatterMap: ConcurrentHashMap[String, DateTimeFormatter] = new ConcurrentHashMap[String, DateTimeFormatter]()
+
+  private def getFormatter(format: String): DateTimeFormatter = {
+    formatterMap.computeIfAbsent(format, {format: String =>  DateTimeFormatter
+      .ofPattern(format, Locale.US)
+      .withZone(ZoneOffset.UTC)
+    })
+  }
 }
