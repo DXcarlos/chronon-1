@@ -16,7 +16,7 @@ def get_select_star_export(table: str, partitition_column: str = "_PARTITIONTIME
         output_namespace="demo",
         engine_type=EngineType.BIGQUERY,
         dependencies=[
-            TableDependency(table=f"demo.`{table}`", partition_column=f"TIMESTAMP_TRUNC({partitition_column}, DAY)", offset=0)
+            TableDependency(table=f"demo.`{table}`", partition_column=partitition_column, offset=0)
         ],
         version=0,
     )
