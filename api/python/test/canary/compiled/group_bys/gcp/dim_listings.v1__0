@@ -1,7 +1,28 @@
 {
-  "engineType": 1,
+  "keyColumns": [
+    "listing_id"
+  ],
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_v1_hub__0_with_offset_0\", \"spec\": \"data.gcp_training_set_v1_hub__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "columnHashes": {
+      "brief_description": "c611fe3abaf11ceedfb045772b17e419",
+      "currency": "ba58bf5c966522640e81901b82f395cb",
+      "headline": "a40f30f2f7011c3497b2222e9f108ae2",
+      "inventory_count": "bcb025b20a0333e0f0cce9e11715396a",
+      "is_active": "f4c71f4f9d23309f3d50c90660f18673",
+      "is_expensive": "c7c9968f131f5dbbaaac3e5527c2ab10",
+      "is_in_stock": "86bd4f05f9b98c4ff439bd21cef621a5",
+      "listing_id": "c5ab02e8cefb90a917b39baa959bf581",
+      "long_description": "4d2844e63112db8aa16e8fa63363d64c",
+      "main_image_path": "00a58406caaeaf7e7ce327b98f8e0656",
+      "merchant_id": "d239a95b1dd6ff1f1e7bbefe924f075c",
+      "price_cents": "921af250bbc3fa51f73b149166746711",
+      "price_dollars": "33dfed739569fe3596b231719d6402fa",
+      "primary_category": "cba5923a25334336462b12eb68897b58",
+      "secondary_image_paths": "1ea0a08bfbeb215712657e0ccdb9b6ae",
+      "tags": "12437d27b4bfb68ed328f4adcd0282f0",
+      "weight_grams": "88daffd2c220a7a02b881ac5fddfefe5"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"demo.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {},
@@ -116,32 +137,42 @@
           }
         }
       },
+      "historicalBackfill": 0,
       "scheduleCron": "@daily"
     },
-    "name": "gcp.sample_staging_query.v1_bigquery_import__0",
+    "name": "gcp.dim_listings.v1__0",
+    "online": 1,
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/gcp/sample_staging_query.py",
+    "sourceFile": "group_bys/gcp/dim_listings.py",
     "team": "gcp",
     "version": "0"
   },
-  "query": "\nSELECT\n    *\nFROM data.gcp_training_set_v1_hub__0\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
-  "tableDependencies": [
+  "sources": [
     {
-      "endOffset": {
-        "length": 0,
-        "timeUnit": 1
-      },
-      "startOffset": {
-        "length": 0,
-        "timeUnit": 1
-      },
-      "tableInfo": {
-        "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
+      "entities": {
+        "query": {
+          "selects": {
+            "brief_description": "brief_description",
+            "currency": "currency",
+            "headline": "headline",
+            "inventory_count": "inventory_count",
+            "is_active": "is_active",
+            "is_expensive": "IF(price_cents > 10000, 1, 0)",
+            "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+            "listing_id": "listing_id",
+            "long_description": "long_description",
+            "main_image_path": "main_image_path",
+            "merchant_id": "merchant_id",
+            "price_cents": "price_cents",
+            "price_dollars": "ROUND(price_cents / 100.0, 2)",
+            "primary_category": "primary_category",
+            "secondary_image_paths": "secondary_image_paths",
+            "tags": "tags",
+            "weight_grams": "weight_grams"
+          },
+          "startPartition": "2025-08-01"
         },
-        "table": "data.gcp_training_set_v1_hub__0"
+        "snapshotTable": "demo.gcp_exports_dim_listings__0"
       }
     }
   ]

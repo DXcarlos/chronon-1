@@ -96,8 +96,6 @@ WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 v1_bigquery_import = Import(
     query=bigquery_import_query,
     engine_type=EngineType.BIGQUERY,
-    start_partition="2023-11-01",
-    name="sample_staging_query",
     output_namespace="data",
     dependencies=[
         TableDependency(table=get_join_output_table_name(training_set.v1_hub, True), partition_column="ds", offset=0)

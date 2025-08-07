@@ -1,0 +1,723 @@
+{
+  "joinParts": [
+    {
+      "groupBy": {
+        "aggregations": [
+          {
+            "argMap": {},
+            "inputColumn": "view_event",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "click_event",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "purchase_event",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "favorite_event",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "add_to_cart_event",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "view_event",
+            "operation": 8,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "click_event",
+            "operation": 8,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "purchase_event",
+            "operation": 8,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "favorite_event",
+            "operation": 8,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "add_to_cart_event",
+            "operation": 8,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "is_mobile",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "is_desktop",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "is_tablet",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {
+              "k": "128"
+            },
+            "inputColumn": "user_event_struct",
+            "operation": 13,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              },
+              {
+                "length": 14,
+                "timeUnit": 1
+              },
+              {
+                "length": 30,
+                "timeUnit": 1
+              }
+            ]
+          }
+        ],
+        "keyColumns": [
+          "user_id"
+        ],
+        "metaData": {
+          "columnHashes": {
+            "add_to_cart_event_average_14d": "e249f8df346cb16982521516e08b5a00",
+            "add_to_cart_event_average_1d": "e249f8df346cb16982521516e08b5a00",
+            "add_to_cart_event_average_30d": "e249f8df346cb16982521516e08b5a00",
+            "add_to_cart_event_average_7d": "e249f8df346cb16982521516e08b5a00",
+            "add_to_cart_event_sum_14d": "e249f8df346cb16982521516e08b5a00",
+            "add_to_cart_event_sum_1d": "e249f8df346cb16982521516e08b5a00",
+            "add_to_cart_event_sum_30d": "e249f8df346cb16982521516e08b5a00",
+            "add_to_cart_event_sum_7d": "e249f8df346cb16982521516e08b5a00",
+            "click_event_average_14d": "336d6b6a97c65afaa99d1f304380fc17",
+            "click_event_average_1d": "336d6b6a97c65afaa99d1f304380fc17",
+            "click_event_average_30d": "336d6b6a97c65afaa99d1f304380fc17",
+            "click_event_average_7d": "336d6b6a97c65afaa99d1f304380fc17",
+            "click_event_sum_14d": "336d6b6a97c65afaa99d1f304380fc17",
+            "click_event_sum_1d": "336d6b6a97c65afaa99d1f304380fc17",
+            "click_event_sum_30d": "336d6b6a97c65afaa99d1f304380fc17",
+            "click_event_sum_7d": "336d6b6a97c65afaa99d1f304380fc17",
+            "favorite_event_average_14d": "4da6cc21bb8fa947a3e412f1ed774112",
+            "favorite_event_average_1d": "4da6cc21bb8fa947a3e412f1ed774112",
+            "favorite_event_average_30d": "4da6cc21bb8fa947a3e412f1ed774112",
+            "favorite_event_average_7d": "4da6cc21bb8fa947a3e412f1ed774112",
+            "favorite_event_sum_14d": "4da6cc21bb8fa947a3e412f1ed774112",
+            "favorite_event_sum_1d": "4da6cc21bb8fa947a3e412f1ed774112",
+            "favorite_event_sum_30d": "4da6cc21bb8fa947a3e412f1ed774112",
+            "favorite_event_sum_7d": "4da6cc21bb8fa947a3e412f1ed774112",
+            "is_desktop_sum_14d": "dc53a5e948ce5f8519d2478b468858e8",
+            "is_desktop_sum_1d": "dc53a5e948ce5f8519d2478b468858e8",
+            "is_desktop_sum_30d": "dc53a5e948ce5f8519d2478b468858e8",
+            "is_desktop_sum_7d": "dc53a5e948ce5f8519d2478b468858e8",
+            "is_mobile_sum_14d": "2c4c3f2bcff60bcccc8e14ee586f7e53",
+            "is_mobile_sum_1d": "2c4c3f2bcff60bcccc8e14ee586f7e53",
+            "is_mobile_sum_30d": "2c4c3f2bcff60bcccc8e14ee586f7e53",
+            "is_mobile_sum_7d": "2c4c3f2bcff60bcccc8e14ee586f7e53",
+            "is_tablet_sum_14d": "f700bf7b2db42f0967cf99472ee1468e",
+            "is_tablet_sum_1d": "f700bf7b2db42f0967cf99472ee1468e",
+            "is_tablet_sum_30d": "f700bf7b2db42f0967cf99472ee1468e",
+            "is_tablet_sum_7d": "f700bf7b2db42f0967cf99472ee1468e",
+            "purchase_event_average_14d": "4b0337fe7d382732c72545571eccf24f",
+            "purchase_event_average_1d": "4b0337fe7d382732c72545571eccf24f",
+            "purchase_event_average_30d": "4b0337fe7d382732c72545571eccf24f",
+            "purchase_event_average_7d": "4b0337fe7d382732c72545571eccf24f",
+            "purchase_event_sum_14d": "4b0337fe7d382732c72545571eccf24f",
+            "purchase_event_sum_1d": "4b0337fe7d382732c72545571eccf24f",
+            "purchase_event_sum_30d": "4b0337fe7d382732c72545571eccf24f",
+            "purchase_event_sum_7d": "4b0337fe7d382732c72545571eccf24f",
+            "user_event_struct_last128_14d": "0edc003b53c9990bcad0aeccdb02616b",
+            "user_event_struct_last128_1d": "0edc003b53c9990bcad0aeccdb02616b",
+            "user_event_struct_last128_30d": "0edc003b53c9990bcad0aeccdb02616b",
+            "user_event_struct_last128_7d": "0edc003b53c9990bcad0aeccdb02616b",
+            "user_id": "0194d3187b4d3585ee6e15cdef046cb7",
+            "view_event_average_14d": "22c2528f90f250e7cbc1a6ac9cff8bdf",
+            "view_event_average_1d": "22c2528f90f250e7cbc1a6ac9cff8bdf",
+            "view_event_average_30d": "22c2528f90f250e7cbc1a6ac9cff8bdf",
+            "view_event_average_7d": "22c2528f90f250e7cbc1a6ac9cff8bdf",
+            "view_event_sum_14d": "22c2528f90f250e7cbc1a6ac9cff8bdf",
+            "view_event_sum_1d": "22c2528f90f250e7cbc1a6ac9cff8bdf",
+            "view_event_sum_30d": "22c2528f90f250e7cbc1a6ac9cff8bdf",
+            "view_event_sum_7d": "22c2528f90f250e7cbc1a6ac9cff8bdf"
+          },
+          "executionInfo": {
+            "historicalBackfill": 0,
+            "scheduleCron": "@daily"
+          },
+          "name": "gcp.user_activities.v1__0",
+          "online": 1,
+          "outputNamespace": "data",
+          "team": "gcp",
+          "version": "0"
+        },
+        "sources": [
+          {
+            "events": {
+              "query": {
+                "selects": {
+                  "add_to_cart_event": "IF(event_type = 'add_to_cart', 1, 0)",
+                  "click_event": "IF(event_type = 'click', 1, 0)",
+                  "favorite_event": "IF(event_type = 'favorite', 1, 0)",
+                  "is_desktop": "IF(device_type = 'desktop', 1, 0)",
+                  "is_mobile": "IF(device_type = 'mobile', 1, 0)",
+                  "is_tablet": "IF(device_type = 'tablet', 1, 0)",
+                  "listing_id": "listing_id",
+                  "purchase_event": "IF(event_type = 'purchase', 1, 0)",
+                  "user_event_struct": "STRUCT(event_type, listing_id, event_time_ms as timestamp)",
+                  "user_id": "user_id",
+                  "view_event": "IF(event_type = 'view', 1, 0)"
+                },
+                "timeColumn": "event_time_ms"
+              },
+              "table": "demo.gcp_exports_user_activities__0",
+              "topic": "pubsub://user-activities-v0/project=canary-443022/subscription=user-activities-v0-sub"
+            }
+          }
+        ]
+      },
+      "useLongNames": 0
+    },
+    {
+      "groupBy": {
+        "keyColumns": [
+          "listing_id"
+        ],
+        "metaData": {
+          "columnHashes": {
+            "brief_description": "c611fe3abaf11ceedfb045772b17e419",
+            "currency": "ba58bf5c966522640e81901b82f395cb",
+            "headline": "a40f30f2f7011c3497b2222e9f108ae2",
+            "inventory_count": "bcb025b20a0333e0f0cce9e11715396a",
+            "is_active": "f4c71f4f9d23309f3d50c90660f18673",
+            "is_expensive": "c7c9968f131f5dbbaaac3e5527c2ab10",
+            "is_in_stock": "86bd4f05f9b98c4ff439bd21cef621a5",
+            "listing_id": "c5ab02e8cefb90a917b39baa959bf581",
+            "long_description": "4d2844e63112db8aa16e8fa63363d64c",
+            "main_image_path": "00a58406caaeaf7e7ce327b98f8e0656",
+            "merchant_id": "d239a95b1dd6ff1f1e7bbefe924f075c",
+            "price_cents": "921af250bbc3fa51f73b149166746711",
+            "price_dollars": "33dfed739569fe3596b231719d6402fa",
+            "primary_category": "cba5923a25334336462b12eb68897b58",
+            "secondary_image_paths": "1ea0a08bfbeb215712657e0ccdb9b6ae",
+            "tags": "12437d27b4bfb68ed328f4adcd0282f0",
+            "weight_grams": "88daffd2c220a7a02b881ac5fddfefe5"
+          },
+          "executionInfo": {
+            "historicalBackfill": 0,
+            "scheduleCron": "@daily"
+          },
+          "name": "gcp.dim_listings.v1__0",
+          "online": 1,
+          "outputNamespace": "data",
+          "team": "gcp",
+          "version": "0"
+        },
+        "sources": [
+          {
+            "entities": {
+              "query": {
+                "selects": {
+                  "brief_description": "brief_description",
+                  "currency": "currency",
+                  "headline": "headline",
+                  "inventory_count": "inventory_count",
+                  "is_active": "is_active",
+                  "is_expensive": "IF(price_cents > 10000, 1, 0)",
+                  "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+                  "listing_id": "listing_id",
+                  "long_description": "long_description",
+                  "main_image_path": "main_image_path",
+                  "merchant_id": "merchant_id",
+                  "price_cents": "price_cents",
+                  "price_dollars": "ROUND(price_cents / 100.0, 2)",
+                  "primary_category": "primary_category",
+                  "secondary_image_paths": "secondary_image_paths",
+                  "tags": "tags",
+                  "weight_grams": "weight_grams"
+                },
+                "startPartition": "2025-08-01"
+              },
+              "snapshotTable": "demo.gcp_exports_dim_listings__0"
+            }
+          }
+        ]
+      },
+      "useLongNames": 0
+    }
+  ],
+  "left": {
+    "events": {
+      "query": {
+        "selects": {
+          "listing_id": "listing_id",
+          "row_id": "event_id",
+          "ts": "event_time_ms",
+          "user_id": "user_id"
+        },
+        "timeColumn": "event_time_ms"
+      },
+      "table": "demo.gcp_exports_user_activities__0"
+    }
+  },
+  "metaData": {
+    "columnHashes": {
+      "listing_id": "91f68aec5ed606e82a747d252695c796",
+      "listing_id_brief_description": "dde8c55d61eabcc81024296fec2f9426",
+      "listing_id_currency": "abbc4e0d169b4553c73bc8eb9e4491d2",
+      "listing_id_headline": "9257af603bf5f90b8bdc92a81b020bcf",
+      "listing_id_inventory_count": "41fa25475670f8fc1222355adb6ff196",
+      "listing_id_is_active": "bf5f8b35213e5b95c1936472eede35bf",
+      "listing_id_is_expensive": "ec5887e67135106e8acba117d5db621d",
+      "listing_id_is_in_stock": "801c6bcdb365fdb9dce4ec6a134472f2",
+      "listing_id_listing_id": "8ead9ab522e9c3af23e3a61edcabfefe",
+      "listing_id_long_description": "562b1b9660ca7cfc2c2a15f3fd4b8cf6",
+      "listing_id_main_image_path": "2fb61bf00956fb65b0689132629fe884",
+      "listing_id_merchant_id": "34a8f758f72fcdb491f486fb5cc30d68",
+      "listing_id_price_cents": "da9efcdccaa7131dd22e4a8db9abecbb",
+      "listing_id_price_dollars": "a45bf0f53a9262cc3c12441250ff733d",
+      "listing_id_primary_category": "8e2f29357d77fd7cfeb4af05b13176ee",
+      "listing_id_secondary_image_paths": "881fb1eb026200a78ce7e0000d3fa0bc",
+      "listing_id_tags": "f155efdb35ba1231da5404a12905a95a",
+      "listing_id_weight_grams": "3e51e988b0fa4a2c44353bfcb8cdc203",
+      "row_id": "f637c29b6b804800149765e216a27f14",
+      "ts": "0abc1d0da2790acfda656dc97b8aaaaa",
+      "user_id": "2ea2dab7226601e5afc0a4910e00c3f8",
+      "user_id_add_to_cart_event_average_14d": "f9ce81bd1671fbcb0516fe79c87adb73",
+      "user_id_add_to_cart_event_average_1d": "f9ce81bd1671fbcb0516fe79c87adb73",
+      "user_id_add_to_cart_event_average_30d": "f9ce81bd1671fbcb0516fe79c87adb73",
+      "user_id_add_to_cart_event_average_7d": "f9ce81bd1671fbcb0516fe79c87adb73",
+      "user_id_add_to_cart_event_sum_14d": "f9ce81bd1671fbcb0516fe79c87adb73",
+      "user_id_add_to_cart_event_sum_1d": "f9ce81bd1671fbcb0516fe79c87adb73",
+      "user_id_add_to_cart_event_sum_30d": "f9ce81bd1671fbcb0516fe79c87adb73",
+      "user_id_add_to_cart_event_sum_7d": "f9ce81bd1671fbcb0516fe79c87adb73",
+      "user_id_click_event_average_14d": "1231daee2d55875c7026346dc2bf1fe5",
+      "user_id_click_event_average_1d": "1231daee2d55875c7026346dc2bf1fe5",
+      "user_id_click_event_average_30d": "1231daee2d55875c7026346dc2bf1fe5",
+      "user_id_click_event_average_7d": "1231daee2d55875c7026346dc2bf1fe5",
+      "user_id_click_event_sum_14d": "1231daee2d55875c7026346dc2bf1fe5",
+      "user_id_click_event_sum_1d": "1231daee2d55875c7026346dc2bf1fe5",
+      "user_id_click_event_sum_30d": "1231daee2d55875c7026346dc2bf1fe5",
+      "user_id_click_event_sum_7d": "1231daee2d55875c7026346dc2bf1fe5",
+      "user_id_favorite_event_average_14d": "341e0d33f601141def71289d3a8a2b22",
+      "user_id_favorite_event_average_1d": "341e0d33f601141def71289d3a8a2b22",
+      "user_id_favorite_event_average_30d": "341e0d33f601141def71289d3a8a2b22",
+      "user_id_favorite_event_average_7d": "341e0d33f601141def71289d3a8a2b22",
+      "user_id_favorite_event_sum_14d": "341e0d33f601141def71289d3a8a2b22",
+      "user_id_favorite_event_sum_1d": "341e0d33f601141def71289d3a8a2b22",
+      "user_id_favorite_event_sum_30d": "341e0d33f601141def71289d3a8a2b22",
+      "user_id_favorite_event_sum_7d": "341e0d33f601141def71289d3a8a2b22",
+      "user_id_is_desktop_sum_14d": "2e89bdfdd5c9171dfb5cae4b16ff731d",
+      "user_id_is_desktop_sum_1d": "2e89bdfdd5c9171dfb5cae4b16ff731d",
+      "user_id_is_desktop_sum_30d": "2e89bdfdd5c9171dfb5cae4b16ff731d",
+      "user_id_is_desktop_sum_7d": "2e89bdfdd5c9171dfb5cae4b16ff731d",
+      "user_id_is_mobile_sum_14d": "81d67f209543cda25f2d95304ebadc53",
+      "user_id_is_mobile_sum_1d": "81d67f209543cda25f2d95304ebadc53",
+      "user_id_is_mobile_sum_30d": "81d67f209543cda25f2d95304ebadc53",
+      "user_id_is_mobile_sum_7d": "81d67f209543cda25f2d95304ebadc53",
+      "user_id_is_tablet_sum_14d": "a10e9c57d73911abab1db7fa08249534",
+      "user_id_is_tablet_sum_1d": "a10e9c57d73911abab1db7fa08249534",
+      "user_id_is_tablet_sum_30d": "a10e9c57d73911abab1db7fa08249534",
+      "user_id_is_tablet_sum_7d": "a10e9c57d73911abab1db7fa08249534",
+      "user_id_purchase_event_average_14d": "a65d6426cfdd502f5ec2284416c91372",
+      "user_id_purchase_event_average_1d": "a65d6426cfdd502f5ec2284416c91372",
+      "user_id_purchase_event_average_30d": "a65d6426cfdd502f5ec2284416c91372",
+      "user_id_purchase_event_average_7d": "a65d6426cfdd502f5ec2284416c91372",
+      "user_id_purchase_event_sum_14d": "a65d6426cfdd502f5ec2284416c91372",
+      "user_id_purchase_event_sum_1d": "a65d6426cfdd502f5ec2284416c91372",
+      "user_id_purchase_event_sum_30d": "a65d6426cfdd502f5ec2284416c91372",
+      "user_id_purchase_event_sum_7d": "a65d6426cfdd502f5ec2284416c91372",
+      "user_id_user_event_struct_last128_14d": "7532bb65c7277708d99f8ca2dc1cf81f",
+      "user_id_user_event_struct_last128_1d": "7532bb65c7277708d99f8ca2dc1cf81f",
+      "user_id_user_event_struct_last128_30d": "7532bb65c7277708d99f8ca2dc1cf81f",
+      "user_id_user_event_struct_last128_7d": "7532bb65c7277708d99f8ca2dc1cf81f",
+      "user_id_view_event_average_14d": "ea7f80eea6c6e3011b83db3375f3a619",
+      "user_id_view_event_average_1d": "ea7f80eea6c6e3011b83db3375f3a619",
+      "user_id_view_event_average_30d": "ea7f80eea6c6e3011b83db3375f3a619",
+      "user_id_view_event_average_7d": "ea7f80eea6c6e3011b83db3375f3a619",
+      "user_id_view_event_sum_14d": "ea7f80eea6c6e3011b83db3375f3a619",
+      "user_id_view_event_sum_1d": "ea7f80eea6c6e3011b83db3375f3a619",
+      "user_id_view_event_sum_30d": "ea7f80eea6c6e3011b83db3375f3a619",
+      "user_id_view_event_sum_7d": "ea7f80eea6c6e3011b83db3375f3a619"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"demo.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_demo_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"demo.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_demo_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"demo.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
+    "executionInfo": {
+      "clusterConf": {
+        "common": {},
+        "modeClusterConfigs": {
+          "upload": {
+            "dataproc.config": "{\"gceClusterConfig\": {\"subnetworkUri\": \"default\", \"serviceAccount\": \"dataproc@canary-443022.iam.gserviceaccount.com\", \"serviceAccountScopes\": [\"https://www.googleapis.com/auth/cloud-platform\", \"https://www.googleapis.com/auth/cloud.useraccounts.readonly\", \"https://www.googleapis.com/auth/devstorage.read_write\", \"https://www.googleapis.com/auth/logging.write\"], \"metadata\": {\"hive-version\": \"3.1.2\", \"SPARK_BQ_CONNECTOR_URL\": \"gs://spark-lib/bigquery/spark-3.5-bigquery-0.42.1.jar\", \"artifact_prefix\": \"gs://zipline-artifacts-canary\"}, \"tags\": []}, \"masterConfig\": {\"numInstances\": 1, \"machineTypeUri\": \"n2-highmem-8\", \"diskConfig\": {\"bootDiskType\": \"pd-standard\", \"bootDiskSizeGb\": 1024}}, \"workerConfig\": {\"numInstances\": 2, \"machineTypeUri\": \"n2-highmem-4\", \"diskConfig\": {\"bootDiskType\": \"pd-standard\", \"bootDiskSizeGb\": 64, \"numLocalSsds\": 2}}, \"softwareConfig\": {\"imageVersion\": \"2.2.50-debian12\", \"optionalComponents\": [\"FLINK\", \"JUPYTER\"], \"properties\": {}}, \"initializationActions\": [{\"executable_file\": \"gs://zipline-artifacts-canary/scripts/copy_java_security.sh\"}], \"endpointConfig\": {\"enableHttpPortAccess\": true}, \"lifecycleConfig\": {\"idleDeleteTtl\": \"7200s\"}}"
+          }
+        }
+      },
+      "conf": {
+        "common": {
+          "spark.chronon.cloud_provider": "gcp",
+          "spark.chronon.coalesce.factor": "10",
+          "spark.chronon.partition.column": "ds",
+          "spark.chronon.partition.format": "yyyy-MM-dd",
+          "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
+          "spark.chronon.table.gcs.connector_output_dataset": "data",
+          "spark.chronon.table.gcs.connector_output_project": "canary-443022",
+          "spark.chronon.table.gcs.temporary_gcs_bucket": "zipline-warehouse-canary",
+          "spark.chronon.table_write.format": "iceberg",
+          "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
+          "spark.default.parallelism": "10",
+          "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
+          "spark.sql.catalog.default_iceberg": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+          "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+          "spark.sql.catalog.default_iceberg.gcp_location": "us-central1",
+          "spark.sql.catalog.default_iceberg.gcp_project": "canary-443022",
+          "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+          "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+          "spark.sql.catalog.spark_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+          "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+          "spark.sql.catalog.spark_catalog.gcp_location": "us-central1",
+          "spark.sql.catalog.spark_catalog.gcp_project": "canary-443022",
+          "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+          "spark.sql.catalog.spark_catalog.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+          "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+          "spark.sql.shuffle.partitions": "10"
+        },
+        "modeConfigs": {
+          "backfill": {
+            "spark.chronon.backfill_cloud_provider": "gcp",
+            "spark.chronon.cloud_provider": "gcp",
+            "spark.chronon.coalesce.factor": "10",
+            "spark.chronon.partition.column": "ds",
+            "spark.chronon.partition.format": "yyyy-MM-dd",
+            "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
+            "spark.chronon.table.gcs.connector_output_dataset": "data",
+            "spark.chronon.table.gcs.connector_output_project": "canary-443022",
+            "spark.chronon.table.gcs.temporary_gcs_bucket": "zipline-warehouse-canary",
+            "spark.chronon.table_write.format": "iceberg",
+            "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
+            "spark.default.parallelism": "10",
+            "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
+            "spark.sql.catalog.default_iceberg": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+            "spark.sql.catalog.default_iceberg.gcp_location": "us-central1",
+            "spark.sql.catalog.default_iceberg.gcp_project": "canary-443022",
+            "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+            "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+            "spark.sql.catalog.spark_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+            "spark.sql.catalog.spark_catalog.gcp_location": "us-central1",
+            "spark.sql.catalog.spark_catalog.gcp_project": "canary-443022",
+            "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+            "spark.sql.catalog.spark_catalog.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+            "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+            "spark.sql.shuffle.partitions": "10"
+          }
+        }
+      },
+      "env": {
+        "common": {
+          "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
+          "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+          "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
+          "CLOUD_PROVIDER": "gcp",
+          "CUSTOMER_ID": "dev",
+          "ENABLE_PUBSUB": "true",
+          "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+          "FRONTEND_URL": "https://canary.zipline.ai/",
+          "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
+          "HUB_URL": "https://zipline-orchestration-703996152583.us-central1.run.app",
+          "JOB_MODE": "local[*]",
+          "PARTITION_COLUMN": "ds",
+          "PARTITION_FORMAT": "yyyy-MM-dd",
+          "VERSION": "latest"
+        },
+        "modeEnvironments": {
+          "upload": {
+            "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+            "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
+            "CLOUD_PROVIDER": "gcp",
+            "CUSTOMER_ID": "dev",
+            "ENABLE_PUBSUB": "true",
+            "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+            "FRONTEND_URL": "https://canary.zipline.ai/",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "zipline-transient-upload-cluster",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
+            "HUB_URL": "https://zipline-orchestration-703996152583.us-central1.run.app",
+            "JOB_MODE": "local[*]",
+            "PARTITION_COLUMN": "ds",
+            "PARTITION_FORMAT": "yyyy-MM-dd",
+            "VERSION": "latest"
+          }
+        }
+      },
+      "scheduleCron": "@daily"
+    },
+    "name": "gcp.demo.v1__0",
+    "online": 1,
+    "outputNamespace": "data",
+    "production": 0,
+    "samplePercent": 100.0,
+    "sourceFile": "joins/gcp/demo.py",
+    "team": "gcp",
+    "version": "0"
+  },
+  "rowIds": [
+    "event_id"
+  ],
+  "useLongNames": 0
+}
