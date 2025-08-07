@@ -18,14 +18,12 @@ package ai.chronon.api
 
 import ai.chronon.api.Extensions._
 import ai.chronon.api.PartitionSpec.getFormatter
-import org.eclipse.collections.impl.map.mutable.ConcurrentHashMap
 
-import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 
 case class PartitionSpec(column: String, format: String, spanMillis: Long) {
 
@@ -94,12 +92,15 @@ object PartitionSpec {
   val daily: PartitionSpec = PartitionSpec("ds", "yyyy-MM-dd", 24 * 60 * 60 * 1000)
 
   // re-use formatters - once per format
-  private val formatterMap: ConcurrentHashMap[String, DateTimeFormatter] = new ConcurrentHashMap[String, DateTimeFormatter]()
+  private val formatterMap: ConcurrentHashMap[String, DateTimeFormatter] =
+    new ConcurrentHashMap[String, DateTimeFormatter]()
 
   private def getFormatter(format: String): DateTimeFormatter = {
-    formatterMap.computeIfAbsent(format, {format: String =>  DateTimeFormatter
-      .ofPattern(format, Locale.US)
-      .withZone(ZoneOffset.UTC)
-    })
+    formatterMap.computeIfAbsent(format,
+                                 { format: String =>
+                                   DateTimeFormatter
+                                     .ofPattern(format, Locale.US)
+                                     .withZone(ZoneOffset.UTC)
+                                 })
   }
 }
