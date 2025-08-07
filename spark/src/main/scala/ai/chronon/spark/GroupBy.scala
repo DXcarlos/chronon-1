@@ -740,6 +740,41 @@ object GroupBy {
       .translatePartitionSpec(sourcePartitionSpec, tableUtils.partitionSpec)
   }
 
+
+  def fillRange(groupByConf: api.GroupBy,
+                startPartition: String,
+                endPartition: String,
+                tableUtils: TableUtils): Unit = {
+
+    val outputTable = groupByConf.metaData.outputTable
+    val tableProps = Option(groupByConf.metaData.tableProperties)
+      .map(_.toScala)
+      .orNull
+
+    Option(groupByConf.setups).foreach(_.foreach(tableUtils.sql))
+
+    val range = PartitionRange(startPartition, endPartition)(tableUtils.partitionSpec)
+    val groupByBackfill = from(groupByConf, range, tableUtils, computeDependency = true)
+
+    val outputDf = groupByConf.dataModel match {
+      // group by back-fills have to be snapshot only
+      case ENTITIES => groupByBackfill.snapshotEntities
+      case EVENTS   => groupByBackfill.snapshotEvents(range)
+    }
+
+    if (!groupByConf.hasDerivations) {
+      outputDf.save(outputTable, tableProps)
+    } else {
+      val finalOutputColumns = groupByConf.derivationsScala.finalOutputColumn(outputDf.columns)
+      val result = outputDf.select(finalOutputColumns.toSeq: _*)
+      result.save(outputTable, tableProps)
+    }
+
+    logger.info(s"Wrote to table $outputTable, into partitions: $range")
+
+  }
+
+
   def computeBackfill(groupByConf: api.GroupBy,
                       endPartition: String,
                       tableUtils: TableUtils,

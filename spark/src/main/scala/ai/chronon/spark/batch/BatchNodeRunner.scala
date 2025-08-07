@@ -143,11 +143,11 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
         runGroupByUpload(metadata, conf.getGroupByUpload, range)
       case NodeContent._Fields.GROUP_BY_BACKFILL =>
         logger.info(s"Running groupBy backfill for '${metadata.name}' for range: [${range.start}, ${range.end}]")
-        GroupBy.computeBackfill(
+        GroupBy.fillRange(
           conf.getGroupByBackfill.groupBy,
+          range.start,
           range.end,
-          tableUtils,
-          overrideStartPartition = Option(range.start)
+          tableUtils
         )
         logger.info(s"Successfully completed groupBy backfill for '${metadata.name}'")
       case NodeContent._Fields.STAGING_QUERY =>

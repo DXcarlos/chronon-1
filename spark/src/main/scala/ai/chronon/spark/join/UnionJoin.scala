@@ -204,7 +204,7 @@ object UnionJoin {
     }
 
     val joinPart = joinConf.getJoinParts.get(0)
-    val leftDf = JoinUtils.leftDf(joinConf, dateRange, tableUtils).get
+    val leftDf = Utils.leftDf(joinConf, dateRange, tableUtils).get
 
     val groupByDerivedDf = computeJoinPart(leftDf, joinPart, dateRange, includeAllLeftColumns)
 
