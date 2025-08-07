@@ -1,7 +1,7 @@
 {
   "engineType": 1,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo__checkouts__with_offset_0\", \"spec\": \"demo.`checkouts`/TIMESTAMP_TRUNC(_PARTITIONTIME, DAY)={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo__checkouts__with_offset_0\", \"spec\": \"demo.`checkouts`/_PARTITIONTIME={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {},
@@ -81,13 +81,13 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "https://canary.zipline.ai/",
+          "FRONTEND_URL": "https://34.111.151.47/",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-          "HUB_URL": "https://zipline-orchestration-703996152583.us-central1.run.app",
+          "HUB_URL": "http://34.133.227.246:3903",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
@@ -102,13 +102,13 @@
             "CUSTOMER_ID": "dev",
             "ENABLE_PUBSUB": "true",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-            "FRONTEND_URL": "https://canary.zipline.ai/",
+            "FRONTEND_URL": "https://34.111.151.47/",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
             "GCP_DATAPROC_CLUSTER_NAME": "zipline-transient-upload-cluster",
             "GCP_PROJECT_ID": "canary-443022",
             "GCP_REGION": "us-central1",
             "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-            "HUB_URL": "https://zipline-orchestration-703996152583.us-central1.run.app",
+            "HUB_URL": "http://34.133.227.246:3903",
             "JOB_MODE": "local[*]",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
@@ -136,7 +136,7 @@
         "timeUnit": 1
       },
       "tableInfo": {
-        "partitionColumn": "TIMESTAMP_TRUNC(_PARTITIONTIME, DAY)",
+        "partitionColumn": "_PARTITIONTIME",
         "partitionInterval": {
           "length": 1,
           "timeUnit": 1
