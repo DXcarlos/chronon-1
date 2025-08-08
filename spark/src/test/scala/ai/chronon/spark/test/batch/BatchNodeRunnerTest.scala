@@ -25,6 +25,7 @@ import ai.chronon.spark.batch.BatchNodeRunner
 import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.test.{MockKVStore, TableTestUtils}
 import ai.chronon.spark.utils.MockApi
+import com.google.gson.{Gson, GsonBuilder}
 import org.apache.spark.sql.SparkSession
 import org.junit.Assert._
 import org.scalatest.flatspec.AnyFlatSpec
@@ -452,6 +453,7 @@ class BatchNodeRunnerTest extends AnyFlatSpec with BeforeAndAfterAll with Before
         }
 
       case Failure(exception) =>
+        exception.printStackTrace()
         fail(s"runFromArgs should have succeeded but failed with: ${exception.getMessage}")
     }
   }

@@ -126,10 +126,12 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
       val stepDays = for {
         executionInfo <- Option(metadata.executionInfo)
       } yield executionInfo.stepDays
-      val df = join.computeJoin(stepDays = stepDays, overrideStartPartition = Option(range.start))
+      val dfOpt = join.computeJoinOpt(stepDays = stepDays, overrideStartPartition = Option(range.start))
 
-      df.show(numRows = 3, truncate = 0, vertical = true)
-      logger.info(s"\nShowing three rows of output above.\nQuery table '$joinName' for more.\n")
+      dfOpt.foreach {
+        logger.info(s"\nShowing three rows of output above.\nQuery table '$joinName' for more.\n")
+        _.show(numRows = 3, truncate = 0, vertical = true)
+      }
     }
   }
 

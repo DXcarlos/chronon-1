@@ -112,9 +112,15 @@ object JoinUtils {
     */
   def getRangeToFill(leftSource: ai.chronon.api.Source,
                      tableUtils: TableUtils,
-                     endPartition: String,
-                     overrideStartPartition: Option[String] = None,
+                     endPartitionRaw: String,
+                     overrideStartPartitionRaw: Option[String] = None,
                      historicalBackfill: Boolean = true): PartitionRange = {
+
+    val leftSpec = leftSource.query.partitionSpec(tableUtils.partitionSpec)
+
+    // translate this range to match left partitionSpec
+    val endPartition = tableUtils.partitionSpec.translate(endPartitionRaw, leftSpec)
+    val overrideStartPartition = overrideStartPartitionRaw.map(p => tableUtils.partitionSpec.translate(p, leftSpec))
 
     val overrideStart = if (historicalBackfill) {
       overrideStartPartition
@@ -124,12 +130,12 @@ object JoinUtils {
     }
 
     implicit val tu: TableUtils = tableUtils
-    val leftSpec = leftSource.query.partitionSpec(tableUtils.partitionSpec)
 
     val firstAvailablePartitionOpt =
       tableUtils.firstAvailablePartition(leftSource.table,
                                          leftSpec,
                                          subPartitionFilters = leftSource.subPartitionFilters)
+
     lazy val defaultLeftStart = Option(leftSource.query.startPartition)
       .getOrElse {
         require(

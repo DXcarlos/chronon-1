@@ -17,7 +17,15 @@ object TableDependencies {
   def fromJoin(join: api.Join): Seq[TableDependency] = {
     val joinParts = Option(join.joinParts).map(_.iterator().toScala.toArray).getOrElse(Array.empty)
     val joinPartDeps = joinParts.flatMap((jp) => fromGroupBy(jp.groupBy))
-    val leftDep = scala.Option(join.left).map((src) => fromTable(src.table))
+    val leftDep = scala.Option(join.left).map { src =>
+      val dep = fromTable(src.table)
+      dep.tableInfo
+        .setPartitionColumn(src.query.getPartitionColumn)
+        .setPartitionFormat(src.query.getPartitionFormat)
+        .setPartitionInterval(src.query.getPartitionInterval)
+      dep
+    }
+
     val bootstrap =
       scala.Option(join.bootstrapParts).map(_.toScala.toArray[BootstrapPart]).getOrElse(Array.empty[BootstrapPart])
     val bootstrapDeps = bootstrap.map((bp) => fromTable(bp.table, bp.query))
