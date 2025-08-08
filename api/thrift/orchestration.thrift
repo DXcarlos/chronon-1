@@ -100,6 +100,7 @@ struct JobTrackingInfo {
     1: optional string jobUrl
     2: optional string sparkUrl
     3: optional string flinkUrl
+    4: optional string jobId
 }
 
 struct NodeStepRunInfo {
@@ -176,6 +177,14 @@ struct WorkflowListRequest {
 
 struct WorkflowListResponse {
     1: optional list<WorkflowResponse> workflows
+}
+
+struct WorkflowCancelRequest {
+    1: optional string workflowId
+}
+
+struct WorkflowCancelResponse {
+    1: optional string message
 }
 
 /**
