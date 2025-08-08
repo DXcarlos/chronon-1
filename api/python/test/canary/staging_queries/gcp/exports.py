@@ -7,7 +7,7 @@ def get_select_star_export(table: str, partitition_column: str = "_PARTITIONTIME
         * 
     FROM demo.`{table}`
     WHERE 
-    TIMESTAMP_TRUNC({partitition_column}, DAY) BETWEEN '{{{{ start_date }}}}' AND '{{{{ end_date }}}}'
+    TIMESTAMP_TRUNC({partitition_column}, DAY) BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
     """
 
 
