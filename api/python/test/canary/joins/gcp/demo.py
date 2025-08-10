@@ -1,4 +1,4 @@
-from group_bys.gcp import dim_listings, user_activities
+from group_bys.gcp import dim_listings, user_activities, dim_merchants
 from staging_queries.gcp import exports
 from ai.chronon.utils import get_staging_query_output_table_name
 
@@ -43,8 +43,14 @@ v1 = Join(
         # Listing dimension attributes (point-in-time lookup)
         JoinPart(
             group_by=dim_listings.v1,
-        )
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_merchants.v1,
+            prefix="merchant_"
+        ),
     ],
     version=0,
     online=True,
+    output_namespace="data"
 )

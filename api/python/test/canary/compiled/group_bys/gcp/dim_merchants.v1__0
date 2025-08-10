@@ -4,23 +4,9 @@
   ],
   "metaData": {
     "columnHashes": {
-      "brief_description": "85c0544e6f2d058e93e6d54956e118e4",
-      "currency": "ff795c264858b08c00d9159c8e4761d5",
-      "headline": "46fb87fe34c8251a81870c83853e15c6",
-      "inventory_count": "10910897373885c1b0fc1420e7a52562",
-      "is_active": "0fe881820ff26668c32d68dc3382a7ff",
-      "is_expensive": "4d6678c92b2194fd9b7e6bfa85366fe5",
-      "is_in_stock": "0cd5441df3d278d3b7a060e4bd23a324",
-      "listing_id": "6ed4569be71307367d24e5fe77626334",
-      "long_description": "51bbdbd4269ccb2d382f835dcfc2eed3",
-      "main_image_path": "a5ab50facb20e01a0d93a4ed0eac1a9d",
-      "merchant_id": "60a2c0a6662b1bdb97061e9b9566e451",
-      "price_cents": "058f7df64e0544d392a31bb6dc08209f",
-      "price_dollars": "47d312799614d4beaa8318095bd348c9",
-      "primary_category": "62f56fda8558ec54a85da33a3934c182",
-      "secondary_image_paths": "e8ec969f13b6db533bca510f235fd069",
-      "tags": "589de0914f9ffabf8c80a0fe10eaa866",
-      "weight_grams": "041362c5ebf87a340a139e6b53034b7c"
+      "listing_id": "1695b8759f9e9f48b4d41bd01a1bfdeb",
+      "primary_category": "fc3ad70da0a490a08ab72450a25bba20",
+      "seller_rating": "c8ee8eab91fc142a8d59a8139fbb421e"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
@@ -140,10 +126,10 @@
       "historicalBackfill": 0,
       "scheduleCron": "@daily"
     },
-    "name": "gcp.dim_listings.v1__0",
+    "name": "gcp.dim_merchants.v1__0",
     "online": 1,
     "outputNamespace": "data",
-    "sourceFile": "group_bys/gcp/dim_listings.py",
+    "sourceFile": "group_bys/gcp/dim_merchants.py",
     "team": "gcp",
     "version": "0"
   },
@@ -152,23 +138,9 @@
       "entities": {
         "query": {
           "selects": {
-            "brief_description": "brief_description",
-            "currency": "currency",
-            "headline": "headline",
-            "inventory_count": "inventory_count",
-            "is_active": "is_active",
-            "is_expensive": "IF(price_cents > 10000, 1, 0)",
-            "is_in_stock": "IF(inventory_count > 0, 1, 0)",
-            "listing_id": "listing_id",
-            "long_description": "long_description",
-            "main_image_path": "main_image_path",
-            "merchant_id": "merchant_id",
-            "price_cents": "price_cents",
-            "price_dollars": "ROUND(price_cents / 100.0, 2)",
+            "listing_id": "merchant_id",
             "primary_category": "primary_category",
-            "secondary_image_paths": "secondary_image_paths",
-            "tags": "tags",
-            "weight_grams": "weight_grams"
+            "seller_rating": "seller_rating"
           },
           "startPartition": "2025-01-01"
         },
