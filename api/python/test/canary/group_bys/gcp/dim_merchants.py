@@ -14,7 +14,7 @@ providing a clean interface to listing attributes for joins and feature engineer
 
 source = EntitySource(
     # BigQuery table written directly by the batch process
-    snapshot_table=get_staging_query_output_table_name(exports.dim_listings, True),
+    snapshot_table=get_staging_query_output_table_name(exports.dim_merchants, True),
     query=Query(
         selects=selects(
             listing_id="merchant_id",
