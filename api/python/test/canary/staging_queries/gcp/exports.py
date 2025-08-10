@@ -13,7 +13,7 @@ def get_select_star_export(table: str, partitition_column: str = "_PARTITIONTIME
 
     return StagingQuery(
         query=bigquery_export_sql,
-        output_namespace="demo",
+        output_namespace="data",
         engine_type=EngineType.BIGQUERY,
         dependencies=[
             TableDependency(table=f"demo.`{table}`", partition_column=partitition_column, offset=0)
