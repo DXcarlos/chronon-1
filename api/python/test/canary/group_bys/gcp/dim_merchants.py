@@ -17,28 +17,13 @@ source = EntitySource(
     snapshot_table=get_staging_query_output_table_name(exports.dim_listings, True),
     query=Query(
         selects=selects(
-            listing_id="listing_id",
-            merchant_id="merchant_id", 
-            headline="headline",
-            brief_description="brief_description",
-            long_description="long_description",
-            price_cents="price_cents",
-            currency="currency",
-            inventory_count="inventory_count",
+            listing_id="merchant_id",
             primary_category="primary_category",
-            is_active="is_active",
-            weight_grams="weight_grams",
-            tags="tags",
-            # Derived features
-            price_dollars="ROUND(price_cents / 100.0, 2)",
-            is_expensive="IF(price_cents > 10000, 1, 0)",  # Over $100
-            is_in_stock="IF(inventory_count > 0, 1, 0)",
-            main_image_path="main_image_path",
-            secondary_image_paths="secondary_image_paths",
+            seller_rating="seller_rating"
         ),
         start_partition="2025-01-01"
     ),
-    
+
 )
 
 v1 = GroupBy(

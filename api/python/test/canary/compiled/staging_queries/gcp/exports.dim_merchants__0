@@ -81,7 +81,7 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "https://34.111.151.47/",
+          "FRONTEND_URL": "https://34.111.151.47.nip.io",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
@@ -102,7 +102,7 @@
             "CUSTOMER_ID": "dev",
             "ENABLE_PUBSUB": "true",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-            "FRONTEND_URL": "https://34.111.151.47/",
+            "FRONTEND_URL": "https://34.111.151.47.nip.io",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
             "GCP_DATAPROC_CLUSTER_NAME": "zipline-transient-upload-cluster",
             "GCP_PROJECT_ID": "canary-443022",
@@ -119,12 +119,12 @@
       "scheduleCron": "@daily"
     },
     "name": "gcp.exports.dim_merchants__0",
-    "outputNamespace": "demo",
+    "outputNamespace": "data",
     "sourceFile": "staging_queries/gcp/exports.py",
     "team": "gcp",
     "version": "0"
   },
-  "query": "\n    SELECT \n        * \n    FROM demo.`dim_merchants`\n    WHERE \n    TIMESTAMP_TRUNC(ds, DAY) BETWEEN '{{ start_date }}' AND '{{ end_date }}'\n    ",
+  "query": "\n    SELECT \n        * \n    FROM demo.`dim_merchants`\n    WHERE \n    TIMESTAMP_TRUNC(ds, DAY) BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [
     {
       "endOffset": {
