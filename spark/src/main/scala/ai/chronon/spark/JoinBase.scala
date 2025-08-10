@@ -290,19 +290,27 @@ abstract class JoinBase(val joinConfCloned: api.Join,
     logger.info(s"Join range to fill $rangeToFill")
 
     // check if left source doesn't have any partition for the requested range
-    val existingLeftRange = tableUtils.partitions(
+    val existingLeftPartitions: Seq[String] = tableUtils.partitions(
       joinConfCloned.left.table,
       partitionRange = Option(rangeToFill),
       tablePartitionSpec = Option(joinConfCloned.left.query.partitionSpec(tableUtils.partitionSpec))
-    )
+    ).map(p => tableUtils.partitionSpec.translate(p, rangeToFill.partitionSpec))
+
     val requested = rangeToFill.partitions
-    val fillableRanges = requested.filter(existingLeftRange.contains)
+    val fillableRanges = requested.filter(existingLeftPartitions.contains)
 
     if (fillableRanges.isEmpty) {
       logger.info(s"""No relevant input partitions present in join.left table ${joinConfCloned.left.table}
                    | for the requested range ${rangeToFill.start} - ${rangeToFill.end}. Exiting...""".stripMargin)
       return None
     }
+
+    logger.info(
+      s"""
+         |rangeToFill: ${rangeToFill}
+         |rangeToFillSpec: ${rangeToFill.partitionSpec}
+         |""".stripMargin
+    )
 
     val unfilledRanges = tableUtils
       .unfilledRanges(
@@ -330,7 +338,7 @@ abstract class JoinBase(val joinConfCloned: api.Join,
     // build bootstrap info once for the entire job
     val bootstrapInfo = BootstrapInfo.from(joinConfCloned.deepCopy(), rangeToFill, tableUtils, leftSchema)
 
-    val wholeRange = PartitionRange(unfilledRanges.minBy(_.start).start, unfilledRanges.maxBy(_.end).end)
+    val wholeRange = PartitionRange(unfilledRanges.minBy(_.start).start, unfilledRanges.maxBy(_.end).end)(unfilledRanges.head.partitionSpec)
 
     val leftDataOpt = leftDf(joinConfCloned, wholeRange, tableUtils)
     require(leftDataOpt.nonEmpty,

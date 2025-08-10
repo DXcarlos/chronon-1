@@ -27,7 +27,8 @@ class JoinBootstrapJob(node: JoinBootstrapNode, metaData: MetaData, range: DateR
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   private val join = node.join
-  private val dateRange = range.toPartitionRange
+  private val leftSpec = join.left.query.partitionSpec
+  private val dateRange = range.toPartitionRange(leftSpec)
   private val leftSourceTable = JoinUtils.computeFullLeftSourceTableName(join)
 
   // Use the node's metadata output table
@@ -39,6 +40,9 @@ class JoinBootstrapJob(node: JoinBootstrapNode, metaData: MetaData, range: DateR
     // `f"${source.table}_${ThriftJsonCodec.md5Digest(sourceWithFilter)}"` Logic should  be computed by orchestrator
     // and passed to both jobs
     val leftDf = tableUtils.scanDf(query = null, table = leftSourceTable, range = Some(dateRange))
+
+    println("bootstrap job left df")
+    leftDf.show()
 
     val bootstrapInfo = BootstrapInfo.from(join, dateRange, tableUtils, Option(leftDf.schema))
 
@@ -126,6 +130,16 @@ class JoinBootstrapJob(node: JoinBootstrapNode, metaData: MetaData, range: DateR
     val enrichedDf = padExternalFields(joinedDf, bootstrapInfo)
 
     println(s"EnrichedDF schema: ${enrichedDf.schema}")
+
+    // TODO: remove
+    println(
+      s"""DEBUG_HELPER
+         |date range: $dateRange
+         |date range spec: ${dateRange.partitionSpec}
+         |bootstrap part spec: ${parts.map(bp => s"${bp.query.startPartition}..${bp.query.endPartition}")}
+         |""".stripMargin)
+    leftDf.show()
+    enrichedDf.show()
 
     // set autoExpand = true since log table could be a bootstrap part
     enrichedDf.save(bootstrapTable, tableProps, autoExpand = true)

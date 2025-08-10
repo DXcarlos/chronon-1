@@ -1226,7 +1226,7 @@ object Extensions {
       result
     }
 
-    def partitionSpec(defaultSpec: PartitionSpec): PartitionSpec = {
+    def partitionSpec(implicit defaultSpec: PartitionSpec): PartitionSpec = {
       val column = Option(query).flatMap((q) => Option(q.partitionColumn)).getOrElse(defaultSpec.column)
       val format = Option(query).flatMap((q) => Option(q.partitionFormat)).getOrElse(defaultSpec.format)
       val interval = Option(query).flatMap((q) => Option(q.partitionInterval)).getOrElse(WindowUtils.Day)

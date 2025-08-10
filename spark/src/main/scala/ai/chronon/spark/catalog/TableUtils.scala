@@ -122,7 +122,9 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
   def partitions(tableName: String,
                  subPartitionsFilter: Map[String, String] = Map.empty,
                  partitionRange: Option[PartitionRange] = None,
-                 tablePartitionSpec: Option[PartitionSpec] = None): List[String] = {
+                 tablePartitionSpec: Option[PartitionSpec] = None,
+                 translateToDefault: Boolean = true
+                ): List[String] = {
     if (!tableReachable(tableName)) return List.empty[String]
     val rangeWheres = andPredicates(partitionRange.map(_.whereClauses).getOrElse(Seq.empty))
 
@@ -146,11 +148,13 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       })
       .getOrElse(List.empty)
 
-    // if table is yyyyMMdd and global partitionSpec is yyyy-MM-dd, partitions will use yyyyMMdd
-    // downstream range arithmetic requires yyyy-MM-dd - so we need to translate to global
-    tablePartitionSpec
-      .map(ps => partitions.map(date => ps.translate(date, partitionSpec)))
-      .getOrElse(partitions)
+    if(translateToDefault && tablePartitionSpec.nonEmpty) {
+      // if table is yyyyMMdd and global partitionSpec is yyyy-MM-dd, partitions will use yyyyMMdd
+      // downstream range arithmetic requires yyyy-MM-dd - so we need to translate to global
+      partitions.map(date => tablePartitionSpec.get.translate(date, partitionSpec))
+    } else {
+      partitions
+    }
   }
 
   def tableCoversRange(table: String, range: PartitionRange): Boolean = {
@@ -339,13 +343,13 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     }
   }
 
-  def chunk(partitions: Set[String]): Seq[PartitionRange] = {
+  def chunk(partitions: Set[String], spec: PartitionSpec = partitionSpec): Seq[PartitionRange] = {
     val sortedDates = partitions.toSeq.sorted
     sortedDates.foldLeft(Seq[PartitionRange]()) { (ranges, nextDate) =>
-      if (ranges.isEmpty || partitionSpec.after(ranges.last.end) != nextDate) {
-        ranges :+ PartitionRange(nextDate, nextDate)(partitionSpec)
+      if (ranges.isEmpty || spec.after(ranges.last.end) != nextDate) {
+        ranges :+ PartitionRange(nextDate, nextDate)(spec)
       } else {
-        val newRange = PartitionRange(ranges.last.start, nextDate)(partitionSpec)
+        val newRange = PartitionRange(ranges.last.start, nextDate)(spec)
         ranges.dropRight(1) :+ newRange
       }
     }
@@ -359,7 +363,6 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                      inputToOutputShift: Int = 0,
                      skipFirstHole: Boolean = true,
                      inputPartitionSpecs: Seq[PartitionSpec] = Seq(partitionSpec)
-
                      // ------- TODO: CLEANUP --------
   ): Option[Seq[PartitionRange]] = {
 
@@ -380,9 +383,9 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
 
       outputPartitionRange.copy(start = partitionSpec.shift(inputStart.get, inputToOutputShift))(partitionSpec)
     } else {
-
       outputPartitionRange
     }
+
     val outputExisting = partitions(outputTable)
     // To avoid recomputing partitions removed by retention mechanisms we will not fill holes in the very beginning of the range
     // If a user fills a new partition in the newer end of the range, then we will never fill any partitions before that range.
@@ -392,6 +395,14 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     } else {
       validPartitionRange.start
     }
+
+    logger.info(
+      s"""
+         |outputRange: $outputPartitionRange
+         |outputSpec: ${outputPartitionRange.partitionSpec}
+         |validRange: ${validPartitionRange}
+         |validRangeSpec: ${validPartitionRange.partitionSpec}
+         |""".stripMargin)
 
     val fillablePartitions =
       if (skipFirstHole) {
@@ -413,7 +424,10 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                                    Option(outputPartitionRange),
                                    tablePartitionSpec = Some(inputPartitionSpec))
       ) yield {
-        partitionSpec.shift(partitionStr, inputToOutputShift)
+        partitionSpec.translate(
+          partitionSpec.shift(partitionStr, inputToOutputShift),
+          outputPartitionRange.partitionSpec
+        )
       }
 
     val inputMissing = inputTables
@@ -421,7 +435,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       .getOrElse(Set.empty)
 
     val missingPartitions = outputMissing -- inputMissing
-    val missingChunks = chunk(missingPartitions)
+    val missingChunks = chunk(missingPartitions, outputPartitionRange.partitionSpec)
 
     logger.info(s"""
                |Unfilled range computation:
@@ -429,6 +443,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                |   Missing output partitions: ${outputMissing.toSeq.sorted.prettyInline}
                |   Input tables: ${inputTables.getOrElse(Seq("None")).mkString(", ")}
                |   Missing input partitions: ${inputMissing.toSeq.sorted.prettyInline}
+               |   Existing Input Partitions: ${existingInputPartitions}
                |   Unfilled Partitions: ${missingPartitions.toSeq.sorted.prettyInline}
                |   Unfilled ranges: ${missingChunks.sorted.mkString("")}
                |""".stripMargin)

@@ -84,10 +84,17 @@ object JoinUtils {
 
     val partitionColumnOfLeft = effectiveLeftSpec.column
 
+    println(s"printing left table")
+    tableUtils.scanDf(joinConf.left.query,
+      joinConf.left.table,
+      Some((Map(partitionColumnOfLeft -> null) ++ timeProjection).toMap),
+      range = None).limit(5).show()
+
     var df = tableUtils.scanDf(joinConf.left.query,
                                joinConf.left.table,
                                Some((Map(partitionColumnOfLeft -> null) ++ timeProjection).toMap),
                                range = Some(effectiveLeftRange))
+
 
     limit.foreach(l => df = df.limit(l))
 
@@ -131,10 +138,26 @@ object JoinUtils {
 
     implicit val tu: TableUtils = tableUtils
 
-    val firstAvailablePartitionOpt =
+    val firstAvailablePartitionRawOpt =
       tableUtils.firstAvailablePartition(leftSource.table,
                                          leftSpec,
                                          subPartitionFilters = leftSource.subPartitionFilters)
+
+    val firstAvailablePartitionOpt = firstAvailablePartitionRawOpt.map(p =>
+        tableUtils.partitionSpec.translate(p, leftSpec)
+    )
+
+    logger.info(
+      s"""
+         |endPartitionRaw:           $endPartitionRaw
+         |overrideStartPartitionRaw: $overrideStartPartitionRaw
+         |endPartition:              $endPartition
+         |overrideStartPartition:    $overrideStartPartition
+         |tableUtils Spec:           ${tableUtils.partitionSpec}
+         |leftSpec:                  $leftSpec
+         |firstAvailablePartition:   $firstAvailablePartitionOpt
+         |""".stripMargin
+    )
 
     lazy val defaultLeftStart = Option(leftSource.query.startPartition)
       .getOrElse {

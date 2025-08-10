@@ -16,6 +16,9 @@
 
 package ai.chronon.api
 
+import org.slf4j.LoggerFactory
+import org.slf4j.Logger
+
 sealed trait DataRange {
   def toTimePoints: Array[Long]
 }
@@ -38,6 +41,11 @@ case class TimeRange(start: Long, end: Long)(implicit partitionSpec: PartitionSp
 case class PartitionRange(start: String, end: String)(implicit val partitionSpec: PartitionSpec)
     extends DataRange
     with Ordered[PartitionRange] {
+
+  val logger: Logger = LoggerFactory.getLogger(this.getClass)
+  // enforcing invariant: start and end should be compatible with the format
+  val startMillis: Option[Long] = Option(start).map(partitionSpec.epochMillis)
+  val endMillis: Option[Long] = Option(end).map(partitionSpec.epochMillis)
 
   def valid: Boolean = {
     (Option(start), Option(end)) match {

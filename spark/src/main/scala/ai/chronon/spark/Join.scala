@@ -236,6 +236,9 @@ class Join(joinConf: api.Join,
                             runSmallMode: Boolean = false,
                             usingBootstrappedLeft: Boolean = false): Option[DataFrame] = {
 
+    println("left df results")
+    leftDf.show()
+
     val leftTaggedDf = leftDf.addTimebasedColIfExists()
 
     // compute bootstrap table - a left outer join between left source and various bootstrap source table

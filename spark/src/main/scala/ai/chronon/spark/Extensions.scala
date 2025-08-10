@@ -55,7 +55,6 @@ object Extensions {
     def toAvroSchema(name: String = null): Schema = AvroConversions.fromChrononSchema(toChrononSchema(name))
   }
 
-  case class DfStats(count: Long, partitionRange: PartitionRange)
   // helper class to maintain datafram stats that are necessary for downstream operations
   case class DfWithStats(df: DataFrame, partitionCounts: Map[String, Long])(implicit val partitionSpec: PartitionSpec) {
     private val minPartition: String = partitionCounts.keys.min

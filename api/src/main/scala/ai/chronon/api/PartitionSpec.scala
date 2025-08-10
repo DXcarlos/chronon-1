@@ -30,10 +30,14 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long) {
 
   private def partitionFormatter = getFormatter(format)
 
-  def epochMillis(partition: String): Long = {
+  def epochMillis(partition: String): Long = try {
     val accessor = partitionFormatter.parse(partition)
     val instant = Instant.from(accessor)
     instant.toEpochMilli
+  } catch {
+    case exception: Exception =>
+      println(s"Failed to parse string $partition using format $format")
+      throw exception
   }
 
   // what is the date portion of this timestamp
