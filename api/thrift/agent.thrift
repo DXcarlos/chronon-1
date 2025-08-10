@@ -99,7 +99,7 @@ enum JobStatusType {
     RUNNING = 2,
     SUCCEEDED = 3,
     FAILED = 4,
-    STOPPED = 5
+    CANCELLED = 5
 }
 
 struct ResourceUsage {

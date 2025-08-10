@@ -124,7 +124,6 @@
           "ts": "ts",
           "user_id": "user_id"
         },
-        "startPartition": "2023-11-01",
         "timeColumn": "ts"
       },
       "table": "data.checkouts_notds"

@@ -4,38 +4,21 @@ import ai.chronon.spark.submission.JobSubmitterConstants._
 import ai.chronon.spark.submission.{JobSubmitter, JobType, FlinkJob => TypeFlinkJob, SparkJob => TypeSparkJob}
 import com.google.api.gax.rpc.ApiException
 import com.google.cloud.dataproc.v1._
+import com.google.cloud.storage.{Storage, StorageOptions}
 import com.google.protobuf.util.JsonFormat
 import org.apache.hadoop.fs.Path
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
 
 import scala.jdk.CollectionConverters._
-
-case class SubmitterConf(
-    projectId: String,
-    region: String,
-    clusterName: String
-) {
-
-  def endPoint: String = s"${region}-dataproc.googleapis.com:443"
-}
-
-case class GeneralJob(
-    jobName: String,
-    jars: String,
-    mainClass: String
-)
 
 case class MoreThanOneRunningFlinkJob(message: String) extends Exception(message)
 
 case class NoRunningFlinkJob(message: String) extends Exception(message)
 
 class DataprocSubmitter(jobControllerClient: JobControllerClient,
-                        gcsClient: GCSClient = GCSClient(),
-                        conf: SubmitterConf)
+                        gcsClient: GCSClient,
+                        val region: String,
+                        val projectId: String)
     extends JobSubmitter {
-
-  def getConf: SubmitterConf = conf
 
   def formatDataprocLabel(label: String): String = {
     // dataproc label keys and values only allow lowercase, numbers, underscores, and dashes.
@@ -50,8 +33,6 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
   }
 
   def listRunningGroupByFlinkJobs(groupByName: String): List[String] = {
-    val projectId = conf.projectId
-    val region = conf.region
     val groupByNameDataprocLabel = formatDataprocLabel(groupByName)
 
     //  String values for filters cannot have quotations or else search doesn't work.
@@ -73,8 +54,6 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
   }
 
   def getZiplineVersionOfDataprocJob(jobId: String): String = {
-    val projectId = conf.projectId
-    val region = conf.region
     val currentJob: Job = jobControllerClient.getJob(projectId, region, jobId)
     val labels = currentJob.getLabelsMap
     labels.get(formatDataprocLabel(ZiplineVersion))
@@ -128,7 +107,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
   override def status(jobId: String): String = {
     try {
 
-      val currentJob: Job = jobControllerClient.getJob(conf.projectId, conf.region, jobId)
+      val currentJob: Job = jobControllerClient.getJob(projectId, region, jobId)
       currentJob.getStatus.getState.toString
 
     } catch {
@@ -140,7 +119,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
   }
 
   override def kill(jobId: String): Unit = {
-    val job = jobControllerClient.cancelJob(conf.projectId, conf.region, jobId)
+    val job = jobControllerClient.cancelJob(projectId, region, jobId)
     job.getDone
   }
 
@@ -151,6 +130,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
                       args: String*): String = {
     val mainClass = submissionProperties.getOrElse(MainClass, throw new RuntimeException("Main class not found"))
     val jarUri = submissionProperties.getOrElse(JarURI, throw new RuntimeException("Jar URI not found"))
+    val clusterName = submissionProperties.getOrElse(ClusterName, throw new RuntimeException("Cluster name not found"))
 
     val jobId = submissionProperties.getOrElse(JobId, throw new RuntimeException("No generated job id found"))
 
@@ -187,7 +167,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
 
     val jobPlacement = JobPlacement
       .newBuilder()
-      .setClusterName(conf.clusterName)
+      .setClusterName(clusterName)
       .build()
 
     try {
@@ -204,7 +184,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
         )
         .build()
 
-      val submittedJob = jobControllerClient.submitJob(conf.projectId, conf.region, job)
+      val submittedJob = jobControllerClient.submitJob(projectId, region, job)
       val submittedJobId = submittedJob.getReference.getJobId
 
       if (jobId != submittedJobId) {
@@ -317,34 +297,18 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
 
 object DataprocSubmitter {
 
-  def apply(conf: SubmitterConf): DataprocSubmitter = {
-    val jobControllerClient = JobControllerClient.create(
-      JobControllerSettings.newBuilder().setEndpoint(conf.endPoint).build()
-    )
-    new DataprocSubmitter(jobControllerClient, GCSClient(projectId = conf.projectId), conf)
-  }
-
-  private def initializeDataprocSubmitter(clusterName: String,
-                                          maybeClusterConfig: Option[Map[String, String]]): DataprocSubmitter = {
-    val projectId = sys.env.getOrElse(GcpProjectIdEnvVar, throw new Exception(s"$GcpProjectIdEnvVar not set"))
-    val region = sys.env.getOrElse(GcpRegionEnvVar, throw new Exception(s"$GcpRegionEnvVar not set"))
-    val dataprocClient = ClusterControllerClient.create(
-      ClusterControllerSettings.newBuilder().setEndpoint(s"$region-dataproc.googleapis.com:443").build())
-
-    val submitterClusterName = getOrCreateCluster(clusterName, maybeClusterConfig, projectId, region, dataprocClient)
-
-    val submitterConf = SubmitterConf(
-      projectId,
-      region,
-      submitterClusterName
-    )
-    DataprocSubmitter(submitterConf)
+  def apply(jobControllerClient: JobControllerClient,
+            storageClient: Storage,
+            region: String,
+            projectId: String): DataprocSubmitter = {
+    new DataprocSubmitter(jobControllerClient, GCSClient(storageClient), region, projectId)
   }
 
   private[cloud_gcp] def createSubmissionPropsMap(jobType: JobType,
                                                   submitter: DataprocSubmitter,
                                                   envMap: Map[String, Option[String]] = Map.empty,
-                                                  args: Array[String]): Map[String, String] = {
+                                                  args: Array[String],
+                                                  clusterName: String): Map[String, String] = {
     val jarUri = JobSubmitter
       .getArgValue(args, JarUriArgKeyword)
       .getOrElse(throw new Exception("Missing required argument: " + JarUriArgKeyword))
@@ -418,7 +382,9 @@ object DataprocSubmitter {
     submissionProps ++ Map(
       ZiplineVersion -> JobSubmitter
         .getArgValue(args, ZiplineVersionArgKeyword)
-        .getOrElse(throw new Exception("Missing required argument: " + ZiplineVersionArgKeyword)))
+        .getOrElse(throw new Exception("Missing required argument: " + ZiplineVersionArgKeyword)),
+      ClusterName -> clusterName
+    )
   }
 
   private[cloud_gcp] def getDataprocFilesArgs(args: Array[String] = Array.empty): List[String] = {
@@ -718,7 +684,8 @@ object DataprocSubmitter {
   def run(args: Array[String],
           submitter: DataprocSubmitter,
           envMap: Map[String, Option[String]] = Map.empty,
-          maybeConf: Option[Map[String, String]] = None): Unit = {
+          maybeConf: Option[Map[String, String]] = None,
+          clusterName: String): Unit = {
     // Get the job type
     val jobTypeValue = JobSubmitter
       .getArgValue(args, JobTypeArgKeyword)
@@ -783,27 +750,43 @@ object DataprocSubmitter {
 
     val jobId = submitter.submit(
       jobType = jobType,
-      submissionProperties =
-        createSubmissionPropsMap(jobType = jobType, args = args, submitter = submitter, envMap = envMap),
+      submissionProperties = createSubmissionPropsMap(jobType = jobType,
+                                                      args = args,
+                                                      submitter = submitter,
+                                                      envMap = envMap,
+                                                      clusterName = clusterName),
       jobProperties = maybeConf.getOrElse(JobSubmitter.getModeConfigProperties(args).getOrElse(Map.empty)),
       files = getDataprocFilesArgs(args),
       finalArgs: _*
     )
     println("Dataproc submitter job id: " + jobId)
     println(
-      s"Safe to exit. Follow the job status at: https://console.cloud.google.com/dataproc/jobs/${jobId}/configuration?region=${submitter.getConf.region}&project=${submitter.getConf.projectId}")
+      s"Safe to exit. Follow the job status at: https://console.cloud.google.com/dataproc/jobs/${jobId}/configuration?region=${submitter.region}&project=${submitter.projectId}")
   }
 
   def main(args: Array[String]): Unit = {
     val clusterName = sys.env
       .getOrElse(GcpDataprocClusterNameEnvVar, "")
     val maybeClusterConfig = JobSubmitter.getClusterConfig(args)
-    val submitter = initializeDataprocSubmitter(clusterName, maybeClusterConfig)
+
+    val projectId = sys.env.getOrElse(GcpProjectIdEnvVar, throw new Exception(s"$GcpProjectIdEnvVar not set"))
+    val region = sys.env.getOrElse(GcpRegionEnvVar, throw new Exception(s"$GcpRegionEnvVar not set"))
+    val dataprocClient = ClusterControllerClient.create(
+      ClusterControllerSettings.newBuilder().setEndpoint(s"$region-dataproc.googleapis.com:443").build())
+
+    val submitterClusterName = getOrCreateCluster(clusterName, maybeClusterConfig, projectId, region, dataprocClient)
+
+    val endPoint = s"${region}-dataproc.googleapis.com:443"
+    val jobControllerClient =
+      JobControllerClient.create(JobControllerSettings.newBuilder().setEndpoint(endPoint).build())
+    val gcsStorageClient = StorageOptions.newBuilder().setProjectId(projectId).build().getService
+    val submitter = DataprocSubmitter(jobControllerClient, gcsStorageClient, region, projectId)
+
     val envMap = Map(
       GcpBigtableInstanceIdEnvVar -> sys.env.get(GcpBigtableInstanceIdEnvVar),
       GcpProjectIdEnvVar -> sys.env.get(GcpProjectIdEnvVar)
     )
-    DataprocSubmitter.run(args = args, submitter = submitter, envMap = envMap)
+    DataprocSubmitter.run(args = args, submitter = submitter, envMap = envMap, clusterName = submitterClusterName)
   }
 
 }

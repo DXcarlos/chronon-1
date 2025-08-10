@@ -193,7 +193,7 @@ zipline compile --chronon-root=$CHRONON_ROOT
 
 touch tmp_backfill.out
 echo -e "${GREEN}<<<<<.....................................BACKFILL.....................................>>>>>\033[0m"
-zipline hub backfill --repo=$CHRONON_ROOT --hub_url $HUB_URL --conf compiled/staging_queries/gcp/sample_staging_query.v1_hub__0 --start-ds 2023-12-01 --end-ds 2023-12-01 | tee tmp_backfill.out
+zipline hub backfill --repo=$CHRONON_ROOT --conf compiled/staging_queries/gcp/sample_staging_query.v1_hub__0 --start-ds 2023-12-01 --end-ds 2023-12-01 | tee tmp_backfill.out
 
 
 fail_if_bash_failed $?
