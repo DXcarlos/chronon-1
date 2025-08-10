@@ -502,9 +502,9 @@
         ],
         "metaData": {
           "columnHashes": {
-            "listing_id": "1695b8759f9e9f48b4d41bd01a1bfdeb",
-            "primary_category": "fc3ad70da0a490a08ab72450a25bba20",
-            "seller_rating": "c8ee8eab91fc142a8d59a8139fbb421e"
+            "listing_id": "56b684bc2ca64fd442ccd845604e5e70",
+            "primary_category": "62491a3e7c13a27a3eeb765ba460169f",
+            "seller_rating": "41ba85e046b9a5c6106d202fa73a3721"
           },
           "executionInfo": {
             "historicalBackfill": 0,
@@ -527,7 +527,7 @@
                 },
                 "startPartition": "2025-01-01"
               },
-              "snapshotTable": "data.gcp_exports_dim_listings__0"
+              "snapshotTable": "data.gcp_exports_dim_merchants__0"
             }
           }
         ]
@@ -570,9 +570,9 @@
       "listing_id_secondary_image_paths": "1001bcbe2b97f447bb20a64c6d8ab297",
       "listing_id_tags": "b4a3e64fad103c2caf6fcadb2e68f1dd",
       "listing_id_weight_grams": "7d01ad6aa1db30922ff461f2d0d62ee7",
-      "merchant__listing_id_listing_id": "7343bdbd61d36efac3b973d9dc10ae6e",
-      "merchant__listing_id_primary_category": "5d1423fc9a21705242a186d220443560",
-      "merchant__listing_id_seller_rating": "96bb630af7e69f6f4a555e26883afcb7",
+      "merchant__listing_id_listing_id": "74857a06805db28ecb0d7e350f031dfd",
+      "merchant__listing_id_primary_category": "c4a356b0561263aa879220c3829eb41f",
+      "merchant__listing_id_seller_rating": "b0f05ca80f4fe886c7b0ddeef9e6879a",
       "row_id": "596506e0a4fef5508ebdcda7e6eb1072",
       "ts": "d1ae44a8f84a262685dbf1bdb9f8d46e",
       "user_id": "80c458b68b34de93d3c4c555ef2b2ddc",
@@ -633,7 +633,7 @@
       "user_id_view_event_sum_30d": "fffe33a5913643faa801e729d55a5b53",
       "user_id_view_event_sum_7d": "fffe33a5913643faa801e729d55a5b53"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_merchants__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
     "executionInfo": {
       "clusterConf": {
         "common": {},

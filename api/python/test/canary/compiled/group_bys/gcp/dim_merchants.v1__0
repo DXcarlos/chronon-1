@@ -4,11 +4,11 @@
   ],
   "metaData": {
     "columnHashes": {
-      "listing_id": "1695b8759f9e9f48b4d41bd01a1bfdeb",
-      "primary_category": "fc3ad70da0a490a08ab72450a25bba20",
-      "seller_rating": "c8ee8eab91fc142a8d59a8139fbb421e"
+      "listing_id": "56b684bc2ca64fd442ccd845604e5e70",
+      "primary_category": "62491a3e7c13a27a3eeb765ba460169f",
+      "seller_rating": "41ba85e046b9a5c6106d202fa73a3721"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_merchants__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {},
@@ -144,7 +144,7 @@
           },
           "startPartition": "2025-01-01"
         },
-        "snapshotTable": "data.gcp_exports_dim_listings__0"
+        "snapshotTable": "data.gcp_exports_dim_merchants__0"
       }
     }
   ]
