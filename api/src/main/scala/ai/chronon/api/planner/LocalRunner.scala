@@ -10,9 +10,7 @@ object LocalRunner {
                         jobStatus: String,
                         jobInfo: Map[String, String])
 
-  case class NodeStatus(steps: Seq[StepStatus],
-                        partitions: Seq[String])
-
+  case class NodeStatus(steps: Seq[StepStatus], partitions: Seq[String])
 
   trait JobExecutor {
     def run(id: String, node: Node, rangeOpt: Option[PartitionRange])
@@ -20,9 +18,6 @@ object LocalRunner {
     def track()
 
   }
-
-
-
 
   /** To run:
     * bazel build //api:planner_deploy.jar

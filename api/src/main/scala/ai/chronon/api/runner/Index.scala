@@ -17,8 +17,8 @@ import scala.reflect.ClassTag
 
 case class Index(confs: Array[ConfEntry], nodes: Array[NodeEntry]) {
 
-  private val confNameToEntry: Map[String, ConfEntry] = confs.map{
-    conf => conf.confName -> conf
+  private val confNameToEntry: Map[String, ConfEntry] = confs.map { conf =>
+    conf.confName -> conf
   }.toMap
 
   private val outputTableToNode: Map[String, NodeEntry] = {
@@ -42,10 +42,10 @@ case class Index(confs: Array[ConfEntry], nodes: Array[NodeEntry]) {
     nodePlan
   }
 
-  private val sensorJobConf: Map[String, String] = Map (
+  private val sensorJobConf: Map[String, String] = Map(
     "spark.driver.memory" -> "1G",
-    "spark.executor.memory"-> "1G",
-    "spark.executor.cores"-> "1",
+    "spark.executor.memory" -> "1G",
+    "spark.executor.cores" -> "1",
     "spark.dynamicAllocation.maxExecutors" -> "2",
     "spark.dynamicAllocation.enabled" -> "true"
   )
@@ -58,7 +58,7 @@ case class Index(confs: Array[ConfEntry], nodes: Array[NodeEntry]) {
     // if it is computed from a node, return it
     val tableName = tableInfo.table
     val existingNode = outputTableToNode.get(tableName)
-    if(existingNode.isDefined) return existingNode.get
+    if (existingNode.isDefined) return existingNode.get
 
     // otherwise create a sensor node that points to the metadata cluster
     implicit val partitionSpec: PartitionSpec = tableInfo.partitionSpec(PartitionSpec.daily)
@@ -68,10 +68,7 @@ case class Index(confs: Array[ConfEntry], nodes: Array[NodeEntry]) {
     val childMetadata = child.node.metaData.deepCopy()
     childMetadata.executionInfo.unsetClusterConf()
 
-    val backfillConf = childMetadata
-      .executionInfo
-      .conf
-      .modeConfigs
+    val backfillConf = childMetadata.executionInfo.conf.modeConfigs
       .putIfAbsent("backfill", new util.HashMap[String, String]())
 
     // sensor job should be small and cheap and pointed to a long-running cluster
@@ -105,13 +102,12 @@ case class Index(confs: Array[ConfEntry], nodes: Array[NodeEntry]) {
 
   private def traverseParentsAndUpdate(nodeWithRange: NodeWithRange, plan: NodeGraph): Unit = {
 
-    val name  = nodeWithRange.nodeName
+    val name = nodeWithRange.nodeName
     val nodeEntry = nameToNode(name)
     val tableDeps = nodeEntry.dependencies
     val rangeOpt = nodeWithRange.range
 
     tableDeps.foreach { dep =>
-
       val tableInfo = dep.getTableInfo
 
       val producingNode = findParentNodeOrCreateSensor(tableInfo, nodeEntry)
@@ -132,7 +128,8 @@ object Index {
 
   case class NodeWithRange(nodeName: String, range: Option[PartitionRange])
 
-  case class NodeGraph(nodeToParent: mutable.Map[String, mutable.Buffer[NodeWithRange]], terminalNodeRanges: Seq[NodeWithRange])
+  case class NodeGraph(nodeToParent: mutable.Map[String, mutable.Buffer[NodeWithRange]],
+                       terminalNodeRanges: Seq[NodeWithRange])
 
   case class ConfEntry(confName: String,
                        confHash: String,
@@ -162,6 +159,7 @@ object Index {
 
   case class NodeEntry(nodeName: String, nodeHash: String, node: Node) {
     def outputTable: String = node.metaData.outputTable
-    def dependencies: Array[TableDependency] = node.metaData.executionInfo.getTableDependencies.iterator().toScala.toArray
+    def dependencies: Array[TableDependency] =
+      node.metaData.executionInfo.getTableDependencies.iterator().toScala.toArray
   }
 }

@@ -13,18 +13,21 @@ class Builder {
 
   private def listFiles(dir: String = "."): ParArray[String] = {
     val baseDir = new File(dir)
-    Option(baseDir.listFiles).getOrElse(Array()).flatMap { file =>
-      if (file.isDirectory) listFiles(file.getPath)
-      else Seq(file.getPath.replaceFirst("^\\./", ""))
-    }.filterNot(isIgnorableFile).par
+    Option(baseDir.listFiles)
+      .getOrElse(Array())
+      .flatMap { file =>
+        if (file.isDirectory) listFiles(file.getPath)
+        else Seq(file.getPath.replaceFirst("^\\./", ""))
+      }
+      .filterNot(isIgnorableFile)
+      .par
   }
 
   private def isIgnorableFile(path: String): Boolean = {
     val file = new File(path)
     Constants.extensionsToIgnore.exists(file.getName.endsWith) ||
-      Constants.foldersToIgnore.exists(file.getPath.split("/").contains(_))
+    Constants.foldersToIgnore.exists(file.getPath.split("/").contains(_))
   }
-
 
   def buildIndex(compiledDir: String)(implicit partitionSpec: PartitionSpec): Index = {
 
@@ -33,7 +36,10 @@ class Builder {
     }
 
     val stagingEntries = listFiles(compiledDir + "/staging_queries").map { file =>
-      ConfEntry[StagingQuery](file, ConfType.STAGING_QUERY, { sq: StagingQuery => sq.metaData }, StagingQueryPlanner.apply)
+      ConfEntry[StagingQuery](file,
+                              ConfType.STAGING_QUERY,
+                              { sq: StagingQuery => sq.metaData },
+                              StagingQueryPlanner.apply)
     }
 
     val groupByEntries = listFiles(compiledDir + "/group_bys").map { file =>

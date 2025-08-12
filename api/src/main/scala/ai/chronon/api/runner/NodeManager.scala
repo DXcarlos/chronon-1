@@ -9,15 +9,13 @@ abstract class NodeManager(nodeName: String, jobExecutor: Any) {
 
   def cancel(workflowId: String): Unit = ???
 
-  def updatePartitions(partitions: Seq[String],
-                       forRange: Option[PartitionRange]): Unit = ???
+  def updatePartitions(partitions: Seq[String], forRange: Option[PartitionRange]): Unit = ???
 
   def status(rangeOpt: Option[PartitionRange]): NodeStatus = ???
 
   def status(workflowId: String): NodeStatus = ???
 
 }
-
 
 //class BatchNodeManager(nodeName: String, jobExecutor: Any) {
 //
