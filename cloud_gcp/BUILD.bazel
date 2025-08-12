@@ -41,6 +41,7 @@ shared_deps = [
     maven_artifact("com.google.cloud.spark:spark-3.5-bigquery"),
     maven_artifact_with_suffix("org.apache.iceberg:iceberg-spark-runtime-3.5"),
     maven_artifact("org.objenesis:objenesis"),
+    maven_artifact("net.sf.py4j:py4j"),
 ]
 
 scala_library(
@@ -58,6 +59,15 @@ jvm_binary(
     runtime_deps = [
         ":base_cloud_gcp_lib",
     ],
+)
+
+jvm_binary(
+    name = "eval_conf_server",
+    main_class = "ai.chronon.integrations.cloud_gcp.EvalConfServer",
+    runtime_deps = [
+        ":base_cloud_gcp_lib",
+    ],
+    visibility = ["//visibility:public"],
 )
 
 test_deps = _SCALA_TEST_DEPS + [

@@ -246,6 +246,24 @@ scala_test_suite(
     ],
 )
 
+filegroup(
+    name = "eval-test-resources",
+    srcs = glob(["src/test/scala/ai/chronon/spark/test/eval/resources/**/*"]),
+    visibility = ["//visibility:public"],
+)
+
+scala_test_suite(
+    name = "eval_test",
+    srcs = glob(["src/test/scala/ai/chronon/spark/test/eval/*.scala"]),
+    data = [":eval-test-resources"],
+    # defined in prelude_bazel file
+    jvm_flags = _JVM_FLAGS_FOR_ACCESSING_BASE_JAVA_CLASSES,
+    visibility = ["//visibility:public"],
+    deps = test_deps + [
+        ":test_lib",
+    ],
+)
+
 jvm_binary(
     name = "spark_assembly",
     deploy_env = ["//tools/build_rules/spark:spark"],

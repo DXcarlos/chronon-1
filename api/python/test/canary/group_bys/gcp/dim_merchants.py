@@ -16,7 +16,7 @@ source = EntitySource(
     snapshot_table=get_staging_query_output_table_name(exports.dim_merchants, True),
     query=Query(
         selects=selects(
-            listing_id="merchant_id",
+            listing_id="CAST(merchant_id as String)",
             primary_category="primary_category",
         ),
         start_partition="2025-01-01"

@@ -4,6 +4,7 @@
   ],
   "metaData": {
     "columnHashes": {
+      "bad_column": "90e7b25bebba5b73de61b0205b4ac103",
       "listing_id": "56b684bc2ca64fd442ccd845604e5e70",
       "primary_category": "62491a3e7c13a27a3eeb765ba460169f"
     },
@@ -137,6 +138,7 @@
       "entities": {
         "query": {
           "selects": {
+            "bad_column": "bad_column",
             "listing_id": "merchant_id",
             "primary_category": "primary_category"
           },

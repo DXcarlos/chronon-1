@@ -500,6 +500,7 @@
         ],
         "metaData": {
           "columnHashes": {
+            "bad_column": "90e7b25bebba5b73de61b0205b4ac103",
             "listing_id": "56b684bc2ca64fd442ccd845604e5e70",
             "primary_category": "62491a3e7c13a27a3eeb765ba460169f"
           },
@@ -518,6 +519,7 @@
             "entities": {
               "query": {
                 "selects": {
+                  "bad_column": "bad_column",
                   "listing_id": "merchant_id",
                   "primary_category": "primary_category"
                 },
@@ -565,6 +567,7 @@
       "listing_id_secondary_image_paths": "1001bcbe2b97f447bb20a64c6d8ab297",
       "listing_id_tags": "b4a3e64fad103c2caf6fcadb2e68f1dd",
       "listing_id_weight_grams": "7d01ad6aa1db30922ff461f2d0d62ee7",
+      "merchant__listing_id_bad_column": "b17344f046b72f5d80eeaa2e0912ed8d",
       "merchant__listing_id_listing_id": "74857a06805db28ecb0d7e350f031dfd",
       "merchant__listing_id_primary_category": "c4a356b0561263aa879220c3829eb41f",
       "row_id": "596506e0a4fef5508ebdcda7e6eb1072",
@@ -744,7 +747,7 @@
       },
       "scheduleCron": "@daily"
     },
-    "name": "gcp.demo.v1__0",
+    "name": "gcp.demo.v0__0",
     "online": 1,
     "outputNamespace": "data",
     "production": 0,

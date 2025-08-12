@@ -304,29 +304,50 @@ struct JoinPartEvalResult {
 }
 
 struct JoinEvalResult {
-    1: optional BaseEvalResult leftExpressionCheck
-    2: optional BaseEvalResult leftTimestampCheck
-    3: optional list<JoinPartEvalResult> joinPartChecks
-    4: optional BaseEvalResult derivationValidityCheck
-    5: optional map<string, string> leftQuerySchema
-    6: optional map<string, string> rightPartsSchema
-    7: optional map<string, string> derivationsSchema
-    8: optional map<string, string> externalPartsSchema
+    1: optional string name
+    2: optional BaseEvalResult leftExpressionCheck
+    3: optional BaseEvalResult leftTimestampCheck
+    4: optional list<JoinPartEvalResult> joinPartChecks
+    5: optional BaseEvalResult derivationValidityCheck
+    6: optional BaseEvalResult overallCheck
+    10: optional map<string, string> leftQuerySchema
+    11: optional map<string, string> rightPartsSchema
+    12: optional map<string, string> derivationsSchema
+    13: optional map<string, string> externalPartsSchema
+    100: optional list<EvalUnion> parentEvals
 }
 
 struct GroupByEvalResult {
-    1: optional BaseEvalResult sourceExpressionCheck
-    2: optional BaseEvalResult sourceTimestampCheck
-    3: optional BaseEvalResult aggExpressionCheck
-    4: optional BaseEvalResult derivationsExpressionCheck
-    5: optional map<string, string> keySchema
-    6: optional map<string, string> aggSchema
-    7: optional map<string, string> derivationsSchema
+    1: optional string name
+    2: optional BaseEvalResult sourceExpressionCheck
+    3: optional BaseEvalResult sourceTimestampCheck
+    4: optional BaseEvalResult aggExpressionCheck
+    5: optional BaseEvalResult derivationsExpressionCheck
+    6: optional BaseEvalResult overallCheck
+    10: optional map<string, string> keySchema
+    11: optional map<string, string> aggSchema
+    12: optional map<string, string> derivationsSchema
+    100: optional list<EvalUnion> parentEvals
 }
 
 struct StagingQueryEvalResult {
-    1: optional BaseEvalResult queryCheck
-    2: optional map<string, string> outputSchema
+    1: optional string name
+    2: optional BaseEvalResult overallCheck
+    3: optional map<string, string> outputSchema
+    100: optional list<EvalUnion> parentEvals
+}
+
+struct TableDependencyEvalResult {
+    1: optional string tableName
+    2: optional map<string, string> schema
+    3: optional BaseEvalResult overallCheck
+}
+
+struct EvalUnion {
+    1: optional StagingQueryEvalResult stagingQueryEval
+    2: optional JoinEvalResult joinEval
+    3: optional GroupByEvalResult groupByEval
+    4: optional TableDependencyEvalResult tableDepEval
 }
 
 /**

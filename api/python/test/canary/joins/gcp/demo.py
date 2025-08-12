@@ -32,7 +32,7 @@ source = EventSource(
 )
 
 # Join with user behavioral features and listing attributes
-v1 = Join(
+v0 = Join(
     left=source,
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
