@@ -58,5 +58,28 @@ def __compile(chronon_root, ignore_python_errors=False):
     return results
 
 
+def compile_and_raise_on_errors(chronon_root=None):
+    """
+    Compile configs and raise an exception if there are compilation errors.
+    
+    Args:
+        chronon_root: Path to chronon root directory, defaults to current directory
+        
+    Raises:
+        click.ClickException: If compilation fails
+    """
+    if chronon_root is None:
+        chronon_root = os.getcwd()
+    
+    results = __compile(chronon_root, ignore_python_errors=False)
+    
+    # Check if there were any compilation errors
+    for _conf_type, result in results.items():
+        if result.error_dict:
+            raise click.ClickException("Compilation failed with errors")
+    
+    return results
+
+
 if __name__ == "__main__":
     compile()

@@ -44,7 +44,50 @@ object `package` extends build.BaseModule {
   override def unmanagedClasspath = Task {
     super.unmanagedClasspath() ++ Seq(bigqueryJarFile())
   }
+
+  // EvalConf server executable - equivalent to Bazel's jvm_binary
+  override def mainClass = Some("ai.chronon.integrations.cloud_gcp.EvalConfServer")
   
+  // Disable prepended shell script to handle large JARs
+  override def prependShellScript = ""
+  
+  // EvalConf server with all dependencies including Spark
+  object with_spark extends build.BaseModule {
+    def moduleDeps = Seq(build.cloud_gcp, build.spark, build.aggregator, build.api, build.online)
+    
+    // Include all necessary dependencies for EvalConf server
+    def mvnDeps = build.Constants.commonDeps ++
+      build.Constants.loggingDeps ++
+      build.Constants.utilityDeps ++
+      build.Constants.sparkDeps ++
+      Seq(
+        mvn"com.google.cloud:google-cloud-storage:2.49.0",
+        mvn"com.google.cloud:google-cloud-dataproc:4.52.0",
+        mvn"com.google.cloud:google-cloud-pubsub:1.134.2",
+        mvn"com.google.cloud:google-cloud-bigquery:2.42.0",
+        mvn"com.google.cloud:google-cloud-bigtable:2.57.1",
+        mvn"com.google.cloud.spark:spark-3.5-bigquery:0.42.0",
+      ).map(excludeJackson) ++ Seq(
+        mvn"com.fasterxml.jackson.core:jackson-core:2.15.2",
+        mvn"com.fasterxml.jackson.core:jackson-databind:2.15.2",
+        mvn"com.fasterxml.jackson.core:jackson-annotations:2.15.2",
+        mvn"com.fasterxml.jackson.module::jackson-module-scala:2.15.2",
+        mvn"com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2",
+        mvn"net.sf.py4j:py4j:0.10.9.7"
+      ).map(_.forceVersion())
+    
+    // Include the local BigQuery catalog JAR
+    override def unmanagedClasspath = Task {
+      super.unmanagedClasspath() ++ Seq(bigqueryJarFile())
+    }
+    
+    // EvalConf server executable
+    override def mainClass = Some("ai.chronon.integrations.cloud_gcp.EvalConfServer")
+    
+    // Disable prepended shell script to handle large JARs
+    override def prependShellScript = ""
+  }
+
   object test extends build.BaseTestModule {
     def moduleDeps = Seq(build.cloud_gcp, build.spark.test)
     override def testFramework = "org.scalatest.tools.Framework"

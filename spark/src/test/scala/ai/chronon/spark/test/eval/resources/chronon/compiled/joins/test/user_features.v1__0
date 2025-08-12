@@ -1,0 +1,229 @@
+{
+  "joinParts": [
+    {
+      "groupBy": {
+        "aggregations": [
+          {
+            "argMap": {},
+            "inputColumn": "clicks",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "purchases",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {
+              "k": "10"
+            },
+            "inputColumn": "clicks",
+            "operation": 13,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {
+              "k": "10"
+            },
+            "inputColumn": "purchases",
+            "operation": 13,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              }
+            ]
+          }
+        ],
+        "keyColumns": [
+          "user_id"
+        ],
+        "metaData": {
+          "columnHashes": {
+            "clicks_last10_1d": "a9985d45377c93dbf0574d341e11867a",
+            "clicks_last10_7d": "a9985d45377c93dbf0574d341e11867a",
+            "clicks_sum_1d": "a9985d45377c93dbf0574d341e11867a",
+            "clicks_sum_7d": "a9985d45377c93dbf0574d341e11867a",
+            "purchases_last10_1d": "65bc39aaf09e6f6c266a80228ba8d7b2",
+            "purchases_last10_7d": "65bc39aaf09e6f6c266a80228ba8d7b2",
+            "purchases_sum_1d": "65bc39aaf09e6f6c266a80228ba8d7b2",
+            "purchases_sum_7d": "65bc39aaf09e6f6c266a80228ba8d7b2",
+            "user_id": "2fadb04655407db8dcfb584f22ea3a6f"
+          },
+          "executionInfo": {
+            "historicalBackfill": 0,
+            "scheduleCron": "@daily"
+          },
+          "name": "test.user_features.v0__0",
+          "online": 1,
+          "outputNamespace": "local_test",
+          "team": "test",
+          "version": "0"
+        },
+        "sources": [
+          {
+            "events": {
+              "query": {
+                "selects": {
+                  "clicks": "click_event",
+                  "purchases": "purchase_event",
+                  "user_id": "user_id"
+                },
+                "timeColumn": "ts"
+              },
+              "table": "local_test.test_user_activities_v0__0"
+            }
+          }
+        ]
+      },
+      "useLongNames": 0
+    }
+  ],
+  "left": {
+    "events": {
+      "query": {
+        "selects": {
+          "ds": "ds",
+          "row_id": "row_id",
+          "ts": "ts",
+          "user_id": "user_id"
+        },
+        "timeColumn": "ts"
+      },
+      "table": "local_test.test_user_activities_v0__0"
+    }
+  },
+  "metaData": {
+    "columnHashes": {
+      "ds": "4df582cc2a89897da2c27e31c344a927",
+      "row_id": "3ddd88aa297c9dcaefeb5ecbabdba469",
+      "ts": "7ec161f357c19765a0f8eb7f76682c0a",
+      "user_id": "1c7f7d14f502b3dcd4d83a9c0ae91c80",
+      "user_id_clicks_last10_1d": "382cd0d9d7e0ab3a1d8665016fa401e0",
+      "user_id_clicks_last10_7d": "382cd0d9d7e0ab3a1d8665016fa401e0",
+      "user_id_clicks_sum_1d": "382cd0d9d7e0ab3a1d8665016fa401e0",
+      "user_id_clicks_sum_7d": "382cd0d9d7e0ab3a1d8665016fa401e0",
+      "user_id_purchases_last10_1d": "acecc53c39a3a1414307d135a6c3384e",
+      "user_id_purchases_last10_7d": "acecc53c39a3a1414307d135a6c3384e",
+      "user_id_purchases_sum_1d": "acecc53c39a3a1414307d135a6c3384e",
+      "user_id_purchases_sum_7d": "acecc53c39a3a1414307d135a6c3384e"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_local_test_test_user_activities_v0__0_with_offset_0\", \"spec\": \"local_test.test_user_activities_v0__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_local_test_test_user_activities_v0__0_with_offset_0\", \"spec\": \"local_test.test_user_activities_v0__0/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        },
+        "modeConfigs": {}
+      },
+      "env": {
+        "common": {
+          "CHRONON_ONLINE_ARGS": "[ONLINE-TODO]args prefixed with -Z become constructor map for your implementation of ai.chronon.online.Api, -Zkv-host=<YOUR_HOST> -Zkv-port=<YOUR_PORT>",
+          "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
+          "CUSTOMER_ID": "dev",
+          "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+          "FRONTEND_URL": "http://localhost:5173",
+          "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
+          "HUB_URL": "http://localhost:3903",
+          "JOB_MODE": "local[*]",
+          "PARTITION_COLUMN": "ds",
+          "PARTITION_FORMAT": "yyyy-MM-dd",
+          "VERSION": "latest"
+        },
+        "modeEnvironments": {
+          "backfill": {
+            "CHRONON_ONLINE_ARGS": "[ONLINE-TODO]args prefixed with -Z become constructor map for your implementation of ai.chronon.online.Api, -Zkv-host=<YOUR_HOST> -Zkv-port=<YOUR_PORT>",
+            "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
+            "CUSTOMER_ID": "dev",
+            "DRIVER_MEMORY": "15G",
+            "EXECUTOR_CORES": "2",
+            "EXECUTOR_MEMORY": "4G",
+            "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+            "FRONTEND_URL": "http://localhost:5173",
+            "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
+            "HUB_URL": "http://localhost:3903",
+            "JOB_MODE": "local[*]",
+            "MAX_EXECUTORS": "4",
+            "PARALLELISM": "4",
+            "PARTITION_COLUMN": "ds",
+            "PARTITION_FORMAT": "yyyy-MM-dd",
+            "VERSION": "latest"
+          },
+          "upload": {
+            "CHRONON_ONLINE_ARGS": "[ONLINE-TODO]args prefixed with -Z become constructor map for your implementation of ai.chronon.online.Api, -Zkv-host=<YOUR_HOST> -Zkv-port=<YOUR_PORT>",
+            "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
+            "CUSTOMER_ID": "dev",
+            "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+            "FRONTEND_URL": "http://localhost:5173",
+            "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
+            "HUB_URL": "http://localhost:3903",
+            "JOB_MODE": "local[*]",
+            "MAX_EXECUTORS": "4",
+            "PARALLELISM": "2",
+            "PARTITION_COLUMN": "ds",
+            "PARTITION_FORMAT": "yyyy-MM-dd",
+            "VERSION": "latest"
+          }
+        }
+      },
+      "scheduleCron": "@daily"
+    },
+    "name": "test.user_features.v1__0",
+    "online": 0,
+    "outputNamespace": "local_test",
+    "production": 0,
+    "samplePercent": 100.0,
+    "sourceFile": "joins/test/user_features.py",
+    "team": "test",
+    "version": "0"
+  },
+  "rowIds": [
+    "row_id"
+  ],
+  "useLongNames": 0
+}

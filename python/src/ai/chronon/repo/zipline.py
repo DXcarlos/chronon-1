@@ -4,6 +4,7 @@ from importlib.metadata import version as ver
 import click
 
 from ai.chronon.cli.compile.display.console import console
+from ai.chronon.eval.cli import main as eval_main
 from ai.chronon.repo.compile import compile
 from ai.chronon.repo.hub_runner import hub
 from ai.chronon.repo.init import main as init_main
@@ -30,6 +31,7 @@ def zipline(ctx):
 
 
 zipline.add_command(compile)
+zipline.add_command(eval_main)
 zipline.add_command(run_main)
 zipline.add_command(init_main)
 zipline.add_command(hub)

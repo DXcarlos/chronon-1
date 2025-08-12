@@ -54,12 +54,17 @@ object `package` extends PythonModule with RuffModule with PublishModule {
   }
 
   def sources = super.sources() ++ generatedSources()
+  
+  def resources = super.resources() ++ jarResources()
 
   // the mill PythonModule doesn't yet support entrypoints, so extend it manually
   def pyproject: T[String] = Task {
     super.pyproject() + """|
          |[project.scripts]
          |zipline = "ai.chronon.repo.zipline:zipline"
+         |
+         |[tool.setuptools.package-data]
+         |"ai.chronon.jars" = ["*.jar"]
          |""".stripMargin
   }
 
@@ -84,6 +89,23 @@ object `package` extends PythonModule with RuffModule with PublishModule {
 
   }
 
+  // Package the cloud_gcp JAR into the correct package structure  
+  def jarResources: T[Seq[PathRef]] = Task {
+    val resourcesDir = Task.dest / "ai" / "chronon" / "jars"
+    os.makeDir.all(resourcesDir)
+    
+    // Get the assembled JAR from the cloud_gcp.with_spark target
+    val jarPath = build.cloud_gcp.with_spark.assembly()
+    val targetJarPath = resourcesDir / "chronon-eval.jar"
+    
+    // Copy the JAR to our resources directory
+    os.copy(jarPath.path, targetJarPath, replaceExisting = true)
+    
+    println(s"Packaged JAR as resource: $targetJarPath")
+    
+    // Return the root directory as a PathRef so the whole ai/chronon/jars structure gets included
+    Seq(PathRef(Task.dest))
+  }
 
   // Generate Python thrift files
   def generatedSources: T[Seq[PathRef]] = Task {

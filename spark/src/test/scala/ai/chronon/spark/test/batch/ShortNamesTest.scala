@@ -251,30 +251,6 @@ class ShortNamesTest extends AnyFlatSpec {
       )
       .setUseLongNames(false)
 
-    // test eval
-    val eval = new Eval()(tableUtils)
-    val evalResult = eval.evalJoin(joinConf)
-
-    assertEquals(
-      evalResult.rightPartsSchema.toScala,
-      Map(
-        "user_user_name_amount_dollars_sum_30d" -> "LongType",
-        "user_amount_dollars_sum" -> "LongType",
-        "user_amount_dollars_sum_10d" -> "LongType"
-      )
-    )
-
-    assertEquals(evalResult.derivationsSchema.toScala,
-                 Map(
-                   "ratio_derivation" -> "DoubleType",
-                   "external_coalesce" -> "IntType"
-                 ))
-
-    assertEquals(evalResult.externalPartsSchema.toScala,
-                 Map(
-                   "ext_return_one_value_number" -> "IntType"
-                 ))
-
     val leftSourceWithFilter = new SourceWithFilterNode().setSource(joinConf.left)
 
     // First run the SourceJob associated with the left
