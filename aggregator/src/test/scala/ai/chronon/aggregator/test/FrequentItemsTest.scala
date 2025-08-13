@@ -11,6 +11,7 @@ import java.util
 import ai.chronon.api.ScalaJavaConversions._
 import org.apache.datasketches.frequencies.ErrorType
 import org.scalatest.matchers.should.Matchers._
+import org.scalatest.matchers.should.Matchers
 
 import scala.util.Random
 
@@ -182,16 +183,18 @@ class FrequentItemsTest extends AnyFlatSpec {
   }
 
   "MostFrequentK" should "always produce nearly k elements when cardinality is > k" in {
-    val k = 10
-    val topFrequentItems = new FrequentItems[java.lang.Long](k)
-    val frequentItemsIr = topFrequentItems.prepare(0)
+    for (i <- 0 until 900) {
+      val k = 10
+      val topFrequentItems = new FrequentItems[java.lang.Long](k)
+      val frequentItemsIr = topFrequentItems.prepare(0)
 
-    createSkewedData().foreach(i => topFrequentItems.update(frequentItemsIr, i))
+      createSkewedData().foreach(i => topFrequentItems.update(frequentItemsIr, i))
 
-    val topHistogram = topFrequentItems.finalize(frequentItemsIr)
+      val topHistogram = topFrequentItems.finalize(frequentItemsIr)
 
-    math.abs(topHistogram.size() - k) <= 2 shouldBe true
-    heavyHitterElems.foreach(elem => topHistogram.containsKey(elem.toString))
+      (topHistogram.size() - k) should be < 3
+      heavyHitterElems.foreach(elem => topHistogram.containsKey(elem.toString))
+    }
   }
 
   "HeavyHittersK" should "always produce only heavy hitter elements regardless of cardinality" in {

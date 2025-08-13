@@ -803,12 +803,14 @@ class UniqueTopKHelper[T](inputType: DataType, k: Int, maxSizeOpt: Option[Int] =
         x match {
           case arr: Array[Any]               => arr(sortKeyIndex).asInstanceOf[String]
           case row: org.apache.spark.sql.Row => row.getString(sortKeyIndex)
+          case map: Map[String, AnyRef]      => map("sort_key").asInstanceOf[String]
         }
 
       val getIdStruct = (x: T) =>
         x match {
           case arr: Array[Any]               => arr(uniqueIdIndex).asInstanceOf[Long]
           case row: org.apache.spark.sql.Row => row.getLong(uniqueIdIndex)
+          case map: Map[String, AnyRef]      => map("unique_id").asInstanceOf[Long]
         }
 
       val op = UniqueOrderByLimit.Operator[T, String](getOrderKeyStruct, getIdStruct, k, maxSize, topK = true)

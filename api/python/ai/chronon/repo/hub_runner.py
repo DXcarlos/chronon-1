@@ -35,12 +35,17 @@ def start_ds_option(func):
 def end_ds_option(func):
     return click.option("--end-ds", help="the end ds for a range backfill")(func)
 
+def force_recompute_option(func):
+    return click.option("--force-recompute", is_flag=True, default=False,
+                        help="Force recompute the backfill even if the data is already present in the output table.")(func)
+
 
 def submit_workflow(repo,
                     conf,
                     mode,
                     start_ds,
-                    end_ds):
+                    end_ds,
+                    force_recompute=False):
 
     hub_conf = get_hub_conf(conf)
     zipline_hub = ZiplineHub(base_url=hub_conf.hub_url)
@@ -61,6 +66,7 @@ def submit_workflow(repo,
         start=start_ds,
         end=end_ds,
         conf_hash=conf_name_to_hash_dict[conf_name].hash,
+        force_recompute=force_recompute
     )
 
     workflow_id = response_json.get("workflowId", "N/A")
@@ -72,6 +78,32 @@ def submit_workflow(repo,
         workflow_id=workflow_id
     )
 
+def submit_schedule(repo,
+                    conf,
+                    mode,
+):
+
+    hub_conf = get_hub_conf(conf)
+    zipline_hub = ZiplineHub(base_url=hub_conf.hub_url)
+    conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir= repo)
+    branch = get_current_branch()
+
+    hub_uploader.compute_and_upload_diffs(branch, zipline_hub=zipline_hub, local_repo_confs=conf_name_to_hash_dict)
+
+    # get conf name
+    conf_name = utils.get_metadata_name_from_conf(repo, conf)
+
+
+    response_json = zipline_hub.call_schedule_api(
+        mode=mode,
+        branch=branch,
+        conf_name=conf_name,
+        conf_hash=conf_name_to_hash_dict[conf_name],
+    )
+
+    schedule_id = response_json.get("scheduleId", "N/A")
+    print(" 🆔 Schedule Id:", schedule_id)
+
 
 # zipline hub backfill --conf=compiled/joins/join
 # adhoc backfills
@@ -79,17 +111,19 @@ def submit_workflow(repo,
 @common_options
 @start_ds_option
 @end_ds_option
+@force_recompute_option
 def backfill(repo,
              conf,
              start_ds,
-             end_ds):
+             end_ds,
+             force_recompute):
     """
     - Submit a backfill job to Zipline.
     Response should contain a list of confs that are different from what's on remote.
     - Call upload API to upload the conf contents for the list of confs that were different.
     - Call the actual run API with mode set to backfill.
     """
-    submit_workflow(repo, conf, RunMode.BACKFILL.value, start_ds, end_ds)
+    submit_workflow(repo, conf, RunMode.BACKFILL.value, start_ds, end_ds, force_recompute)
 
 
 

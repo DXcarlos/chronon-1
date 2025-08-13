@@ -93,6 +93,14 @@ maven_repository = repository(
         # Avro
         "org.apache.avro:avro:1.11.4",
         "com.linkedin.avroutil1:avro-fastserde:0.4.25",
+        
+        # Parquet - Force upgrade to 1.15.1 to address CVE in 1.13.1
+        "org.apache.parquet:parquet-column:1.15.1",
+        "org.apache.parquet:parquet-common:1.15.1",
+        "org.apache.parquet:parquet-encoding:1.15.1",
+        "org.apache.parquet:parquet-format-structures:1.15.1",
+        "org.apache.parquet:parquet-hadoop:1.15.1",
+        "org.apache.parquet:parquet-jackson:1.15.1",
 
         #        # Parquet
         #        "org.apache.parquet:parquet-column:1.15.1",
