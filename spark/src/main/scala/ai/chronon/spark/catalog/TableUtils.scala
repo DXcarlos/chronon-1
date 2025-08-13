@@ -112,7 +112,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     } catch {
       case e: Exception =>
         val alreadyExists = e.getClass.getName.contains("AlreadyExists")
-        if(alreadyExists) {
+        if (alreadyExists) {
           false
         } else {
           logger.error(s"Failed to create database $database", e)

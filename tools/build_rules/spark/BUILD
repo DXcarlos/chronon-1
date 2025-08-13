@@ -16,14 +16,14 @@ SPARK_JARS = [
         name = "spark-sql",
         org = "org.apache.spark",
     ),
-    scala_jar(
-        name = "spark-hive",
-        org = "org.apache.spark",
-    ),
-    scala_jar(
-        name = "spark-avro",
-        org = "org.apache.spark",
-    ),
+    #    scala_jar(
+    #        name = "spark-hive",
+    #        org = "org.apache.spark",
+    #    ),
+    #    scala_jar(
+    #        name = "spark-avro",
+    #        org = "org.apache.spark",
+    #    ),
     scala_jar(
         name = "spark-sketch",
         org = "org.apache.spark",
@@ -40,10 +40,10 @@ SPARK_JARS = [
         name = "spark-unsafe",
         org = "org.apache.spark",
     ),
-    jar(
-        name = "hive-metastore",
-        org = "org.apache.hive",
-    ),
+    #    jar(
+    #        name = "hive-metastore",
+    #        org = "org.apache.hive",
+    #    ),
     jar(
         name = "kryo_shaded",
         org = "com.esotericsoftware",

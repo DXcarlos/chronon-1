@@ -64,11 +64,13 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
                                flinkCheckpointUri: String): Option[String] = {
     val manifestFileName = "manifest.txt"
 
-    val manifestObjectPath = Paths.get(
-      manifestBucketPath,
-      groupByName,
-      manifestFileName
-    ).toString
+    val manifestObjectPath = Paths
+      .get(
+        manifestBucketPath,
+        groupByName,
+        manifestFileName
+      )
+      .toString
 
     println(s"Checking for manifest file at $manifestObjectPath")
 

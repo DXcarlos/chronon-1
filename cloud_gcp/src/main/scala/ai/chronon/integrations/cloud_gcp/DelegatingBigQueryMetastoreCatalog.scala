@@ -84,7 +84,7 @@ class DelegatingBigQueryMetastoreCatalog extends TableCatalog with SupportsNames
         case noIcebergTableEx: NoSuchTableException => {
           val project = catalogProps.getOrElse("gcp_project", bqOptions.getProjectId)
           val tId = identNoCatalog.namespace().toList match {
-            case database :: Nil            => TableId.of(project, database, identNoCatalog.name())
+            case database :: Nil      => TableId.of(project, database, identNoCatalog.name())
             case _ :: database :: Nil => TableId.of(project, database, identNoCatalog.name())
             case Nil =>
               throw new IllegalArgumentException(
