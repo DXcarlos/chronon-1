@@ -21,7 +21,7 @@ source = EntitySource(
             primary_category="primary_category",
             seller_rating="seller_rating"
         ),
-        start_partition="2025-01-01"
+        start_partition="2025-08-01"
     ),
 
 )
