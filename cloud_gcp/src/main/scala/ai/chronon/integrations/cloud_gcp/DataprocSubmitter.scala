@@ -6,8 +6,8 @@ import com.google.api.gax.rpc.ApiException
 import com.google.cloud.dataproc.v1._
 import com.google.cloud.storage.{Storage, StorageOptions}
 import com.google.protobuf.util.JsonFormat
-import org.apache.hadoop.fs.Path
 
+import java.nio.file.Paths
 import scala.jdk.CollectionConverters._
 
 case class MoreThanOneRunningFlinkJob(message: String) extends Exception(message)
@@ -64,8 +64,12 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
                                flinkCheckpointUri: String): Option[String] = {
     val manifestFileName = "manifest.txt"
 
-    val groupByCheckpointPath = new Path(manifestBucketPath, groupByName)
-    val manifestObjectPath = new Path(groupByCheckpointPath, manifestFileName).toString
+    val manifestObjectPath = Paths.get(
+      manifestBucketPath,
+      groupByName,
+      manifestFileName
+    ).toString
+
     println(s"Checking for manifest file at $manifestObjectPath")
 
     if (!gcsClient.fileExists(manifestObjectPath)) {
@@ -80,7 +84,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
       .map(_.split("=")(1))
       .getOrElse(throw new RuntimeException("Flink job id not found in manifest file."))
 
-    val matchedFiles = gcsClient.listFiles(new Path(flinkCheckpointUri, flinkJobId).toString).toList
+    val matchedFiles = gcsClient.listFiles(Paths.get(flinkCheckpointUri, flinkJobId).toString).toList
     val allCheckpoints = matchedFiles
       .filter(_.split("/").exists(_.startsWith("chk-")))
       .map(_.split("/").find(_.startsWith("chk-")).get)
@@ -91,8 +95,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
     val latestCheckpoint = allCheckpoints.headOption
     val latestCheckpointUri = latestCheckpoint
       .map(chk => {
-        val flinkJobPath = new Path(flinkCheckpointUri, flinkJobId)
-        new Path(flinkJobPath, chk).toString
+        Paths.get(flinkCheckpointUri, flinkJobId, chk).toString
       })
 
     if (latestCheckpointUri.isEmpty) {

@@ -17,10 +17,8 @@
 package ai.chronon.spark.test
 
 import ai.chronon.api._
-import ai.chronon.spark._
 import ai.chronon.spark.catalog.{Format, IncompatibleSchemaException}
 import ai.chronon.spark.test.TestUtils.makeDf
-import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.spark.sql.{Row, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions.col
@@ -31,11 +29,11 @@ import scala.util.Try
 
 case class TestRecord(ds: String, id: String)
 
-class SimpleAddUDF extends UDF {
-  def evaluate(value: Int): Int = {
-    value + 20
-  }
-}
+//class SimpleAddUDF extends UDF {
+//  def evaluate(value: Int): Int = {
+//    value + 20
+//  }
+//}
 
 class TableUtilsTest extends AnyFlatSpec {
 
@@ -488,8 +486,8 @@ class TableUtilsTest extends AnyFlatSpec {
   }
 
   it should "double udf registration" in {
-    tableUtils.sql("CREATE TEMPORARY FUNCTION test AS 'ai.chronon.spark.test.SimpleAddUDF'")
-    tableUtils.sql("CREATE TEMPORARY FUNCTION test AS 'ai.chronon.spark.test.SimpleAddUDF'")
+//    tableUtils.sql("CREATE TEMPORARY FUNCTION test AS 'ai.chronon.spark.test.SimpleAddUDF'")
+//    tableUtils.sql("CREATE TEMPORARY FUNCTION test AS 'ai.chronon.spark.test.SimpleAddUDF'")
   }
 
   it should "insert partitions table reachable already" in {

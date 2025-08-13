@@ -40,7 +40,7 @@ class GcpFormatProvider(override val sparkSession: SparkSession) extends Default
           case s @ Success(_)     => s.toOption
           case Failure(exception) => throw exception
         }
-      case iceberg: SparkCatalog if (iceberg.icebergCatalog().isInstanceOf[BigQueryMetastoreCatalog]) =>
+      case iceberg: SparkCatalog if (iceberg.icebergCatalog().getClass.getName.contains("BigQueryMetastoreCatalog")) =>
         scala.Option(Iceberg)
       case _ => super.readFormat(tableName)
     }

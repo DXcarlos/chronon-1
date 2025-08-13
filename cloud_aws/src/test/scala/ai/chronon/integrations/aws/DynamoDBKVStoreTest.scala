@@ -2,9 +2,6 @@ package ai.chronon.integrations.aws
 
 import ai.chronon.api.Constants.{ContinuationKey, ListLimit}
 import ai.chronon.online.KVStore._
-import com.amazonaws.services.dynamodbv2.local.main.ServerRunner
-import com.amazonaws.services.dynamodbv2.local.server.DynamoDBProxyServer
-import io.circe.generic.auto._
 import io.circe.generic.semiauto._
 import io.circe.parser._
 import io.circe.syntax._
@@ -15,6 +12,8 @@ import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials, StaticCredentialsProvider}
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient
+import software.amazon.dynamodb.services.local.main.ServerRunner
+import software.amazon.dynamodb.services.local.server.DynamoDBProxyServer
 
 import java.net.URI
 import java.nio.charset.StandardCharsets

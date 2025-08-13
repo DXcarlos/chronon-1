@@ -20,7 +20,6 @@ import ai.chronon.api.{Constants, PartitionRange, PartitionSpec, Query, QueryUti
 import ai.chronon.api.ColorPrinter.ColorString
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
-import org.apache.hadoop.hive.metastore.api.AlreadyExistsException
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
@@ -111,11 +110,14 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       sql(command)
       true
     } catch {
-      case _: AlreadyExistsException =>
-        false // 'already exists' is a swallowable exception
       case e: Exception =>
-        logger.error(s"Failed to create database $database", e)
-        throw e
+        val alreadyExists = e.getClass.getName.contains("AlreadyExists")
+        if(alreadyExists) {
+          false
+        } else {
+          logger.error(s"Failed to create database $database", e)
+          throw e
+        }
     }
   }
 

@@ -40,9 +40,7 @@ scala_library(
         maven_artifact_with_suffix("io.delta:delta-spark"),
         maven_artifact("net.sf.py4j:py4j"),
         maven_artifact("org.apache.avro:avro"),
-        maven_artifact("org.apache.thrift:libthrift"),
-        maven_artifact("org.apache.hadoop:hadoop-common"),
-        maven_artifact("org.apache.hadoop:hadoop-client-api"),
+        #  maven_artifact("org.apache.hadoop:hadoop-common"),
         maven_artifact_with_suffix("org.apache.iceberg:iceberg-spark-runtime-3.5"),
     ],
 )
@@ -57,11 +55,10 @@ scala_library(
         "//api:thrift_java",
         "//tools/build_rules/spark:spark-exec",
         maven_artifact("org.slf4j:slf4j-api"),
-        maven_artifact("org.apache.thrift:libthrift"),
         maven_artifact("org.apache.logging.log4j:log4j-api"),
         maven_artifact("org.apache.logging.log4j:log4j-core"),
         maven_artifact_with_suffix("io.delta:delta-spark"),
-        maven_artifact("org.apache.hadoop:hadoop-client-api"),
+        #        maven_artifact("org.apache.hadoop:hadoop-client-api"),
     ],
 )
 
@@ -131,9 +128,8 @@ test_deps = _SCALA_TEST_DEPS + [
     maven_artifact("org.apache.avro:avro"),
     maven_artifact("com.fasterxml.jackson.core:jackson-core"),
     maven_artifact("com.fasterxml.jackson.core:jackson-databind"),
-    maven_artifact("org.apache.hive:hive-exec"),
-    maven_artifact("org.apache.hadoop:hadoop-common"),
-    maven_artifact("org.apache.hadoop:hadoop-client-api"),
+    # maven_artifact("org.apache.hadoop:hadoop-common"),
+    #    maven_artifact("org.apache.hadoop:hadoop-client-api"),
 ]
 
 scala_library(

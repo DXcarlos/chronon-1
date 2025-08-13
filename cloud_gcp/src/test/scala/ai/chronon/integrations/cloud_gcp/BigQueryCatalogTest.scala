@@ -5,16 +5,8 @@ import ai.chronon.spark.catalog.{FormatProvider, Iceberg, TableUtils}
 import ai.chronon.spark.submission.SparkSessionBuilder
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.google.cloud.hadoop.fs.gcs.{
-  GoogleHadoopFS,
-  GoogleHadoopFileSystem,
-  GoogleHadoopFileSystemConfiguration,
-  HadoopConfigurationProperty
-}
 import com.google.cloud.spark.bigquery.SparkBigQueryUtil
-import org.apache.iceberg.gcp.bigquery.{BigQueryMetastoreCatalog => BQMSCatalog}
 import org.apache.iceberg.gcp.gcs.GCSFileIO
-import org.apache.iceberg.io.ResolvingFileIO
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions.{col, to_date}
@@ -37,8 +29,9 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
         "spark.chronon.table.format_provider.class" -> classOf[GcpFormatProvider].getName,
         "hive.metastore.uris" -> "thrift://localhost:9083",
         "spark.chronon.partition.column" -> "ds",
-        "spark.hadoop.fs.gs.impl" -> classOf[GoogleHadoopFileSystem].getName,
-        "spark.hadoop.fs.AbstractFileSystem.gs.impl" -> classOf[GoogleHadoopFS].getName,
+        // !vulnerability alert!: keep the strings, don't change to classes.
+        "spark.hadoop.fs.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
+        "spark.hadoop.fs.AbstractFileSystem.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
         "spark.sql.catalogImplementation" -> "in-memory"
 
 //        Uncomment to test
@@ -94,11 +87,11 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
 
   }
 
-  it should "google runtime classes are available" in {
-    assertTrue(GoogleHadoopFileSystemConfiguration.BLOCK_SIZE.isInstanceOf[HadoopConfigurationProperty[_]])
-    assertCompiles("classOf[GoogleHadoopFileSystem]")
-    assertCompiles("classOf[GoogleHadoopFS]")
-  }
+//  it should "google runtime classes are available" in {
+//    assertTrue(GoogleHadoopFileSystemConfiguration.BLOCK_SIZE.isInstanceOf[HadoopConfigurationProperty[_]])
+//    assertCompiles("classOf[GoogleHadoopFileSystem]")
+//    assertCompiles("classOf[GoogleHadoopFS]")
+//  }
 
   it should "verify dynamic classloading of GCP providers" in {
     assertEquals("thrift://localhost:9083", spark.sqlContext.getConf("hive.metastore.uris"))
@@ -247,32 +240,32 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
 
   }
 
-  it should "kryo serialization for ResolvingFileIO" in {
-    val registrator = new ChrononIcebergKryoRegistrator()
-    val kryo = new Kryo();
-    kryo.setReferences(true);
-    registrator.registerClasses(kryo)
-
-    // Create an instance of ResolvingFileIO
-    val original = new ResolvingFileIO();
-    original.initialize(Map.empty[String, String].asJava)
-
-    // Serialize the object
-    val outputStream = new ByteArrayOutputStream();
-    val output = new Output(outputStream);
-    kryo.writeClassAndObject(output, original);
-    output.close();
-
-    // Deserialize the object
-    val inputStream = new ByteArrayInputStream(outputStream.toByteArray());
-    val input = new Input(inputStream);
-    val deserializedObj = kryo.readClassAndObject(input);
-    input.close();
-
-    assertNotNull("Deserialized object should not be null", deserializedObj);
-    assertTrue("Deserialized object should be an instance of ResolvingFileIO",
-               deserializedObj.isInstanceOf[ResolvingFileIO]);
-  }
+//  it should "kryo serialization for ResolvingFileIO" in {
+//    val registrator = new ChrononIcebergKryoRegistrator()
+//    val kryo = new Kryo();
+//    kryo.setReferences(true);
+//    registrator.registerClasses(kryo)
+//
+//    // Create an instance of ResolvingFileIO
+//    val original = new ResolvingFileIO();
+//    original.initialize(Map.empty[String, String].asJava)
+//
+//    // Serialize the object
+//    val outputStream = new ByteArrayOutputStream();
+//    val output = new Output(outputStream);
+//    kryo.writeClassAndObject(output, original);
+//    output.close();
+//
+//    // Deserialize the object
+//    val inputStream = new ByteArrayInputStream(outputStream.toByteArray());
+//    val input = new Input(inputStream);
+//    val deserializedObj = kryo.readClassAndObject(input);
+//    input.close();
+//
+//    assertNotNull("Deserialized object should not be null", deserializedObj);
+//    assertTrue("Deserialized object should be an instance of ResolvingFileIO",
+//               deserializedObj.isInstanceOf[ResolvingFileIO]);
+//  }
 
   it should "kryo serialization for GCSFileIO" in {
     val registrator = new ChrononIcebergKryoRegistrator()

@@ -10,7 +10,6 @@ import com.google.cloud.bigquery.{
   TableId
 }
 import com.google.cloud.spark.bigquery.BigQueryCatalog
-import org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog
 import org.apache.iceberg.spark.SparkCatalog
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog._
@@ -83,11 +82,10 @@ class DelegatingBigQueryMetastoreCatalog extends TableCatalog with SupportsNames
     }
       .recover {
         case noIcebergTableEx: NoSuchTableException => {
-          val project =
-            catalogProps.getOrElse(BigQueryMetastoreCatalog.PROPERTIES_KEY_GCP_PROJECT, bqOptions.getProjectId)
+          val project = catalogProps.getOrElse("gcp_project", bqOptions.getProjectId)
           val tId = identNoCatalog.namespace().toList match {
             case database :: Nil            => TableId.of(project, database, identNoCatalog.name())
-            case catalog :: database :: Nil => TableId.of(project, database, identNoCatalog.name())
+            case _ :: database :: Nil => TableId.of(project, database, identNoCatalog.name())
             case Nil =>
               throw new IllegalArgumentException(
                 s"Table identifier namespace ${identNoCatalog} must have at least one part.")

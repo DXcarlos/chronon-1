@@ -24,7 +24,7 @@ shared_deps = [
     maven_artifact("com.google.cloud.bigdataoss:gcs-connector"),
     maven_artifact("com.google.cloud.bigdataoss:util"),
     maven_artifact("com.google.cloud.bigdataoss:util-hadoop"),
-    maven_artifact("org.apache.hadoop:hadoop-client-api"),
+    #    maven_artifact("org.apache.hadoop:hadoop-client-api"),
     maven_artifact("com.google.cloud.hosted.kafka:managed-kafka-auth-login-handler"),
     maven_artifact("com.google.api:api-common"),
     maven_artifact("com.google.api.grpc:proto-google-cloud-dataproc-v1"),

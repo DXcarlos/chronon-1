@@ -21,7 +21,6 @@ maven_repository = repository(
         "com.novocode:junit-interface:0.11",
         "org.mockito:mockito-core:5.12.0",
         "org.objenesis:objenesis:3.4",
-        "org.eclipse.jetty:jetty-util:9.4.57.v20241219",  # latest version that is still built on jdk 11 and not 17.
 
         # Unit testing - for scala 2.12
         "org.scalatestplus:mockito-3-4_2.12:3.2.10.0",
@@ -49,11 +48,10 @@ maven_repository = repository(
         "jakarta.servlet:jakarta.servlet-api:4.0.3",
         "com.google.guava:guava:33.3.1-jre",
         "org.yaml:snakeyaml:2.3",
-        "commons-io:commons-io:2.9.0",
-        "commons-lang:commons-lang:2.6",
-        "io.netty:netty-all:4.1.111.Final",
+        #        "commons-lang:commons-lang:2.6",
+        "io.netty:netty-all:4.1.118.Final",
         "ch.qos.reload4j:reload4j:1.2.25",
-        "ch.qos.logback:logback-classic:1.5.6",
+        "ch.qos.logback:logback-classic:1.5.13",
         "com.typesafe:config:1.4.3",
         "io.micrometer:micrometer-registry-statsd:1.13.6",
         "io.micrometer:micrometer-registry-otlp:1.13.6",
@@ -63,7 +61,7 @@ maven_repository = repository(
         # Can revisit when we bump Vert.x to 5.x
         "io.micrometer:micrometer-registry-prometheus:1.10.13",
         "net.sf.py4j:py4j:0.10.9.9",
-        "org.apache.commons:commons-lang3:3.12.0",
+        "commons-io:commons-io:2.20.0",
         "org.apache.commons:commons-math3:3.6.1",
         "org.apache.commons:commons-pool2:2.12.1",
         "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1",
@@ -77,6 +75,7 @@ maven_repository = repository(
         "org.json4s:json4s-core_2.12:3.7.0-M11",
         "org.json4s:json4s-ast_2.12:3.7.0-M11",
         "io.delta:delta-spark_2.12:3.2.0",
+        "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1",
         "org.apache.hudi:hudi-spark3.5-bundle_2.12:1.0.0",
 
         # grpc
@@ -92,20 +91,36 @@ maven_repository = repository(
         "com.google.protobuf:protobuf-java:3.25.1",
 
         # Avro
-        "org.apache.avro:avro:1.11.3",
+        "org.apache.avro:avro:1.11.4",
         "com.linkedin.avroutil1:avro-fastserde:0.4.25",
 
+        #        # Parquet
+        #        "org.apache.parquet:parquet-column:1.15.1",
+        #        "org.apache.parquet:parquet-common:1.15.1",
+        #        "org.apache.parquet:parquet-encoding:1.15.1",
+        #        "org.apache.parquet:parquet-format-structures:1.15.1",
+        #        "org.apache.parquet:parquet-hadoop:1.15.1",
+        #        "org.apache.parquet:parquet-jackson:1.15.1",
+        #        maven.artifact(
+        #            group = "org.apache.parquet",
+        #            artifact = "parquet-avro",
+        #            version = "1.15.1",
+        #            force_version = True,  # Force this version to override transitive dependencies from Spark
+        #        ),
+
         # Hive
-        "org.apache.hive:hive-metastore:2.3.9",
+        # "org.apache.hive:hive-metastore:2.3.9",
         # !!! this is a dangerous dependency - only used in //online:test-lib - please don't use it anywhere else
-        "org.apache.hive:hive-exec:2.3.9",
-        "org.apache.curator:apache-curator:5.5.0",
+        # "org.apache.hive:hive-exec:2.3.9",
+        # "org.apache.curator:apache-curator:5.5.0",
 
         # Hadoop
-        "org.apache.hadoop:hadoop-client-api:3.4.1",
-        "org.apache.hadoop:hadoop-common:3.4.1",
-        "org.apache.hadoop:hadoop-yarn-api:3.4.1",
-        "org.apache.hadoop:hadoop-yarn-common:3.4.1",
+        #        "org.apache.hadoop:hadoop-client-api:3.4.1",
+        #        "org.apache.hadoop:hadoop-common:3.4.1",
+        #        # dep of hadoop-common
+        #        "com.fasterxml.woodstox:woodstox-core:5.4.0",
+        #        "org.apache.hadoop:hadoop-yarn-api:3.4.1",
+        #        "org.apache.hadoop:hadoop-yarn-common:3.4.1",
 
         # AWS
         "software.amazon.awssdk:dynamodb:2.30.13",
@@ -117,7 +132,7 @@ maven_repository = repository(
         "software.amazon.awssdk:url-connection-client:2.30.13",
         "software.amazon.awssdk:identity-spi:2.30.13",
         "software.amazon.awssdk:emr:2.30.13",
-        "com.amazonaws:DynamoDBLocal:1.25.1",
+        "software.amazon.dynamodb:DynamoDBLocal:3.0.0",
 
         # Google Cloud
         "com.google.cloud:google-cloud-bigquery:2.42.0",
@@ -127,7 +142,6 @@ maven_repository = repository(
         "com.google.api.grpc:grpc-google-cloud-bigtable-v2:2.57.1",
         "com.google.cloud:google-cloud-pubsub:1.131.0",
         "com.google.cloud:google-cloud-dataproc:4.52.0",
-        "com.google.cloud:google-cloud-storage:2.46.0",
         # Have to specify in group:artifact:packaging:version format if version doesn't start with a digit
         # Code reference: https://github.com/bazel-contrib/rules_jvm_external/blob/master/private/lib/coordinates.bzl#L44
         "com.google.cloud.bigdataoss:gcs-connector:jar:hadoop3-2.2.26",
@@ -138,10 +152,13 @@ maven_repository = repository(
         "com.google.cloud:google-cloud-bigtable-emulator:0.178.0",
         "com.google.cloud.hosted.kafka:managed-kafka-auth-login-handler:1.0.3",
         "com.google.cloud:google-cloud-spanner:6.86.0",
+        "com.google.cloud:google-cloud-storage:2.52.1",
+        "com.google.cloud:google-cloud-core:2.57.0",
         "com.google.api:api-common:2.46.1",
         "com.google.api:gax:2.60.0",
         "com.google.api:gax-grpc:2.60.0",
         "com.google.api.grpc:proto-google-cloud-pubsub-v1:1.120.0",
+        "com.google.api.grpc:proto-google-longrunning-v1:0.1.24",
 
         # Flink
         "org.apache.flink:flink-metrics-dropwizard:1.17.0",
@@ -174,9 +191,9 @@ maven_repository = repository(
 
         # Spark artifacts - for scala 2.12
         "org.apache.spark:spark-sql_2.12:3.5.3",
-        "org.apache.spark:spark-hive_2.12:3.5.3",
+        #        "org.apache.spark:spark-hive_2.12:3.5.3",
         "org.apache.spark:spark-streaming_2.12:3.5.3",
-        "org.apache.spark:spark-avro_2.12:3.5.3",
+        #        "org.apache.spark:spark-avro_2.12:3.5.3",
 
         # Circe - for scala 2.12
         "io.circe:circe-core_2.12:0.14.9",
@@ -186,6 +203,8 @@ maven_repository = repository(
 
         # Slick - for scala 2.12
         "com.typesafe.slick:slick_2.12:3.3.3",
+        # for database connection pooling
+        "com.zaxxer:HikariCP:7.0.0",
 
         # Temporal
         "io.temporal:temporal-sdk:1.28.0",
@@ -198,6 +217,19 @@ maven_repository = repository(
         "io.opentelemetry:opentelemetry-exporter-otlp:1.49.0",
         "io.opentelemetry:opentelemetry-exporter-prometheus:1.49.0-alpha",
         "io.opentelemetry:opentelemetry-sdk-extension-autoconfigure:1.49.0",
+
+        # liquibase
+        "org.liquibase:liquibase-core:4.33.0",
+
+        # vulnerable dependency fixes
+        "com.fasterxml.woodstox:woodstox-core:5.4.0",
+        "org.apache.commons:commons-configuration2:2.12.0",
+        "org.codehaus.jettison:jettison:1.5.4",
+        "org.apache.commons:commons-lang3:3.18.0",
+        "org.eclipse.jetty:jetty-util:9.4.57.v20241219",  # latest version that is still built on jdk 11 and not 17.
+        "org.eclipse.jetty:jetty-server:9.4.57.v20241219",
+        "org.eclipse.jetty:jetty-xml:9.4.57.v20241219",
+        "org.eclipse.jetty:jetty-http:12.0.12",
     ],
     excluded_artifacts = [
         "org.apache.beam:beam-sdks-java-io-hadoop-common",
@@ -212,9 +244,14 @@ maven_repository = repository(
         "org.apache.hadoop:hadoop-hdfs-client",
         "org.apache.hadoop:hadoop-hdfs",
         "org.apache.hadoop:hadoop-mapreduce-client-core",
+        "org.apache.hadoop:hadoop-yarn-api",
         "org.apache.hadoop:hadoop-yarn-client",
-        "org.apache.parquet:parquet-avro",
+        "org.apache.hadoop:hadoop-client-runtime",
+        "org.apache.hadoop:hadoop-common",
         "org.apache.zookeeper:zookeeper",
+        "org.apache.hadoop:hadoop-client-api",
+        # Exclude old parquet-hadoop-bundle that includes vulnerable parquet-avro 1.13.1
+        "org.apache.parquet:parquet-hadoop-bundle",
         # Exclude rocksdb from the assembled JARs that pull this in (e.g. flink, cloud_gcp) as we want to exclude
         # the rockdb library and rely on those part of the dist / env
         # Else we hit an error - NoSuchMethodError: 'void org.rocksdb.WriteBatch.remove
@@ -222,6 +259,10 @@ maven_repository = repository(
         # Exclude scala artifacts as right versions are pulled from scala repository
         "org.scala-lang:scala-library",
         "org.scala-lang:scala-reflect",
+        "log4j:log4j",
     ],
-    overrides = {},
+    overrides = {
+        # Force reload4j as a replacement for vulnerable log4j 1.2.17
+        "log4j:log4j": "ch.qos.reload4j:reload4j:1.2.25",
+    },
 )

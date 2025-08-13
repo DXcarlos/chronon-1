@@ -68,10 +68,9 @@ scala_library(
         maven_artifact("com.google.code.gson:gson"),
         maven_artifact("org.apache.avro:avro"),
         maven_artifact("com.linkedin.avroutil1:avro-fastserde"),
-        maven_artifact("org.apache.thrift:libthrift"),
         maven_artifact("org.apache.kafka:kafka-clients"),
-        maven_artifact("org.apache.hadoop:hadoop-common"),
-        maven_artifact("org.apache.hadoop:hadoop-client-api"),
+        #        maven_artifact("org.apache.hadoop:hadoop-common"),
+        #        maven_artifact("org.apache.hadoop:hadoop-client-api"),
     ],
 )
 
@@ -84,11 +83,11 @@ test_deps = _SCALA_TEST_DEPS + [
     maven_artifact("com.github.ben-manes.caffeine:caffeine"),
     maven_artifact("org.slf4j:slf4j-api"),
     maven_artifact("com.google.code.gson:gson"),
-    maven_artifact("org.apache.hive:hive-exec"),
+    maven_artifact("org.apache.avro:avro"),
     maven_artifact("net.bytebuddy:byte-buddy"),
     maven_artifact("net.bytebuddy:byte-buddy-agent"),
-    maven_artifact("org.apache.hadoop:hadoop-common"),
-    maven_artifact("org.apache.hadoop:hadoop-client-api"),
+    #  maven_artifact("org.apache.hadoop:hadoop-common"),
+    #    maven_artifact("org.apache.hadoop:hadoop-client-api"),
     maven_artifact("io.opentelemetry:opentelemetry-api"),
 ]
 
