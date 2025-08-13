@@ -21,7 +21,7 @@ import ai.chronon.api.ThriftJsonCodec
 import ai.chronon.spark.catalog.TableUtils
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.apache.commons.lang.exception.ExceptionUtils
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.io.{BufferedWriter, File, FileWriter}

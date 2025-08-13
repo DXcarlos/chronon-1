@@ -129,20 +129,15 @@ object SparkSessionBuilder {
       .config("spark.sql.catalogImplementation", "hive")
       .config("spark.hadoop.hive.exec.max.dynamic.partitions", 30000)
       .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-      .config(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
-      .config(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key, false)
+      .config("spark.sql.datetime.java8API.enabled", true)
+      .config("spark.sql.parquet.inferTimestampNTZ.enabled", false)
 
     // Staging queries don't benefit from the KryoSerializer and in fact may fail with buffer underflow in some cases.
     if (enforceKryoSerializer) {
-      val sparkConf = new SparkConf()
-      val kryoSerializerConfMap = Map(
-        "spark.serializer" -> "org.apache.spark.serializer.KryoSerializer",
-        "spark.kryo.registrator" -> kryoRegistrator,
-        "spark.kryoserializer.buffer.max" -> "2000m",
-        "spark.kryo.referenceTracking" -> "false"
-      ).filter { case (k, _) => !sparkConf.contains(k) }
-
-      baseBuilder.config(kryoSerializerConfMap)
+      baseBuilder = baseBuilder.config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+        .config("spark.kryo.registrator", kryoRegistrator)
+        .config("spark.kryoserializer.buffer.max",  "2000m")
+        .config("spark.kryo.referenceTracking", "false")
     }
 
     if (SPARK_VERSION.startsWith("2")) {
@@ -167,7 +162,9 @@ object SparkSessionBuilder {
       // hive jars need to be available on classpath - no needed for local testing
       baseBuilder
     }
+
     mergedConfigs.foreach { config => baseBuilder = baseBuilder.config(config._1, config._2) }
+
     val spark = builder.getOrCreate()
     // disable log spam
     spark.sparkContext.setLogLevel("ERROR")

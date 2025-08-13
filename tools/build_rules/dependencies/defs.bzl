@@ -1,15 +1,15 @@
+load("@rules_jvm_external//:defs.bzl", "artifact")
 load("@rules_jvm_external//:specs.bzl", "parse")
 load("//tools/build_rules:utils.bzl", "flatten", "map")
-load("@rules_jvm_external//:defs.bzl", "artifact")
 
-def _parse_versioned_artifact(artifact, version, exclusions):
-    result = parse.parse_maven_coordinate("{}:{}".format(artifact, version))
+def _artifact_string(group, artifact, version, exclusions):
+    result = parse.parse_maven_coordinate("{}:{}:{}".format(group, artifact, version))
     if (exclusions != None):
         result["exclusions"] = exclusions
     return result
 
-def versioned_artifacts(version, artifacts, exclusions = None):
-    return map(lambda artifact: _parse_versioned_artifact(artifact, version, exclusions), artifacts)
+def versioned_artifacts(group, version, artifacts, exclusions = None):
+    return map(lambda artifact: _artifact_string(group, artifact, version, exclusions), artifacts)
 
 def repository(name, pinned = True, artifacts = [], overrides = {}, provided = False, vars = {}, excluded_artifacts = [], maven_install_json = None):
     final_artifacts = []

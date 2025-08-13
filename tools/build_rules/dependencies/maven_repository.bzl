@@ -3,6 +3,13 @@ load(":defs.bzl", "repository", "versioned_artifacts")
 
 MAVEN_REPOSITORY_NAME = "maven"
 
+HADOOP_DEPS = [
+    "org.apache.hadoop:hadoop-client",
+    "org.apache.hadoop:hadoop-common",
+    "org.apache.hadoop:hadoop-hdfs",
+    "org.apache.hadoop:hadoop-mapreduce-client-core",
+]
+
 maven_repository = repository(
     name = MAVEN_REPOSITORY_NAME,
     pinned = False,
@@ -93,63 +100,33 @@ maven_repository = repository(
         # Avro
         "org.apache.avro:avro:1.11.4",
         "com.linkedin.avroutil1:avro-fastserde:0.4.25",
-        
-        # Parquet - Force upgrade to 1.15.1 to address CVE in 1.13.1
-        "org.apache.parquet:parquet-column:1.15.1",
-        "org.apache.parquet:parquet-common:1.15.1",
-        "org.apache.parquet:parquet-encoding:1.15.1",
-        "org.apache.parquet:parquet-format-structures:1.15.1",
-        "org.apache.parquet:parquet-hadoop:1.15.1",
-        "org.apache.parquet:parquet-jackson:1.15.1",
-
-        #        # Parquet
-        #        "org.apache.parquet:parquet-column:1.15.1",
-        #        "org.apache.parquet:parquet-common:1.15.1",
-        #        "org.apache.parquet:parquet-encoding:1.15.1",
-        #        "org.apache.parquet:parquet-format-structures:1.15.1",
-        #        "org.apache.parquet:parquet-hadoop:1.15.1",
-        #        "org.apache.parquet:parquet-jackson:1.15.1",
-        #        maven.artifact(
-        #            group = "org.apache.parquet",
-        #            artifact = "parquet-avro",
-        #            version = "1.15.1",
-        #            force_version = True,  # Force this version to override transitive dependencies from Spark
-        #        ),
-
-        # Hive
-        # "org.apache.hive:hive-metastore:2.3.9",
-        # !!! this is a dangerous dependency - only used in //online:test-lib - please don't use it anywhere else
-        # "org.apache.hive:hive-exec:2.3.9",
-        # "org.apache.curator:apache-curator:5.5.0",
-
-        # Hadoop
-        #        "org.apache.hadoop:hadoop-client-api:3.4.1",
-        #        "org.apache.hadoop:hadoop-common:3.4.1",
-        #        # dep of hadoop-common
-        #        "com.fasterxml.woodstox:woodstox-core:5.4.0",
-        #        "org.apache.hadoop:hadoop-yarn-api:3.4.1",
-        #        "org.apache.hadoop:hadoop-yarn-common:3.4.1",
 
         # AWS
-        "software.amazon.awssdk:dynamodb:2.30.13",
-        "software.amazon.awssdk:regions:2.30.13",
-        "software.amazon.awssdk:aws-core:2.30.13",
-        "software.amazon.awssdk:sdk-core:2.30.13",
-        "software.amazon.awssdk:utils:2.30.13",
-        "software.amazon.awssdk:auth:2.30.13",
-        "software.amazon.awssdk:url-connection-client:2.30.13",
-        "software.amazon.awssdk:identity-spi:2.30.13",
-        "software.amazon.awssdk:emr:2.30.13",
+        versioned_artifacts(
+            group = "software.amazon.awssdk",
+            version = "2.30.13",
+            artifacts = [
+                "dynamodb",
+                "regions",
+                "aws-core",
+                "sdk-core",
+                "utils",
+                "auth",
+                "url-connection-client",
+                "identity-spi",
+                "emr",
+            ],
+            exclusions = HADOOP_DEPS,
+        ),
         "software.amazon.dynamodb:DynamoDBLocal:3.0.0",
 
         # Google Cloud
         "com.google.cloud:google-cloud-bigquery:2.42.0",
         "com.google.cloud:google-cloud-bigtable:2.57.1",
-        "com.google.api.grpc:proto-google-cloud-bigtable-v2:2.57.1",
-        "com.google.api.grpc:proto-google-cloud-bigtable-admin-v2:2.57.1",
-        "com.google.api.grpc:grpc-google-cloud-bigtable-v2:2.57.1",
         "com.google.cloud:google-cloud-pubsub:1.131.0",
         "com.google.cloud:google-cloud-dataproc:4.52.0",
+
+        # spark related
         # Have to specify in group:artifact:packaging:version format if version doesn't start with a digit
         # Code reference: https://github.com/bazel-contrib/rules_jvm_external/blob/master/private/lib/coordinates.bzl#L44
         "com.google.cloud.bigdataoss:gcs-connector:jar:hadoop3-2.2.26",
@@ -157,16 +134,27 @@ maven_repository = repository(
         "com.google.cloud.bigdataoss:util-hadoop:jar:hadoop3-2.2.26",
         "com.google.cloud.bigdataoss:util:2.2.26",
         "com.google.cloud.spark:spark-3.5-bigquery:0.42.0",
-        "com.google.cloud:google-cloud-bigtable-emulator:0.178.0",
+
+        # Managed kafka
         "com.google.cloud.hosted.kafka:managed-kafka-auth-login-handler:1.0.3",
+
+        # Google Cloud
         "com.google.cloud:google-cloud-spanner:6.86.0",
         "com.google.cloud:google-cloud-storage:2.52.1",
         "com.google.cloud:google-cloud-core:2.57.0",
+        "com.google.cloud:google-cloud-bigtable-emulator:0.178.0",
+
+        # Google api
         "com.google.api:api-common:2.46.1",
         "com.google.api:gax:2.60.0",
         "com.google.api:gax-grpc:2.60.0",
+
+        # Google api grpc
         "com.google.api.grpc:proto-google-cloud-pubsub-v1:1.120.0",
-        "com.google.api.grpc:proto-google-longrunning-v1:0.1.24",
+        "com.google.api.grpc:proto-google-longrunning-v1:0.1.24",  # todo fix vulns or remove
+        "com.google.api.grpc:proto-google-cloud-bigtable-v2:2.57.1",
+        "com.google.api.grpc:proto-google-cloud-bigtable-admin-v2:2.57.1",
+        "com.google.api.grpc:grpc-google-cloud-bigtable-v2:2.57.1",
 
         # Flink
         "org.apache.flink:flink-metrics-dropwizard:1.17.0",
@@ -211,6 +199,7 @@ maven_repository = repository(
 
         # Slick - for scala 2.12
         "com.typesafe.slick:slick_2.12:3.3.3",
+
         # for database connection pooling
         "com.zaxxer:HikariCP:7.0.0",
 
@@ -238,6 +227,12 @@ maven_repository = repository(
         "org.eclipse.jetty:jetty-server:9.4.57.v20241219",
         "org.eclipse.jetty:jetty-xml:9.4.57.v20241219",
         "org.eclipse.jetty:jetty-http:12.0.12",
+
+        # hadoop deps
+        "org.apache.hadoop:hadoop-common:3.4.1",
+        "org.apache.hadoop:hadoop-mapreduce-client-core:3.4.1",
+        "org.apache.hadoop:hadoop-hdfs:3.4.1",
+        "org.apache.hadoop:hadoop-client:3.4.1",
     ],
     excluded_artifacts = [
         "org.apache.beam:beam-sdks-java-io-hadoop-common",
@@ -251,11 +246,11 @@ maven_repository = repository(
         "org.apache.hadoop:hadoop-auth",
         "org.apache.hadoop:hadoop-hdfs-client",
         "org.apache.hadoop:hadoop-hdfs",
-        "org.apache.hadoop:hadoop-mapreduce-client-core",
+        #        "org.apache.hadoop:hadoop-mapreduce-client-core",
         "org.apache.hadoop:hadoop-yarn-api",
         "org.apache.hadoop:hadoop-yarn-client",
         "org.apache.hadoop:hadoop-client-runtime",
-        "org.apache.hadoop:hadoop-common",
+        #        "org.apache.hadoop:hadoop-common",
         "org.apache.zookeeper:zookeeper",
         "org.apache.hadoop:hadoop-client-api",
         # Exclude old parquet-hadoop-bundle that includes vulnerable parquet-avro 1.13.1

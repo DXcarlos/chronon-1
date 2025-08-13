@@ -1,3 +1,11 @@
+# Define Hadoop dependencies as "provided"
+HADOOP_PROVIDED_DEPS = [
+    "@maven//:org_apache_hadoop_hadoop_client",
+    "@maven//:org_apache_hadoop_hadoop_common",
+    "@maven//:org_apache_hadoop_hadoop_hdfs",
+    "@maven//:org_apache_hadoop_hadoop_mapreduce_client_core",
+]
+
 scala_library(
     name = "lib",
     srcs = glob(["src/main/**/*.scala"]),
@@ -14,7 +22,7 @@ scala_library(
         maven_artifact_with_suffix("com.fasterxml.jackson.module:jackson-module-scala"),
         maven_artifact("com.google.guava:guava"),
         maven_artifact("commons-io:commons-io"),
-        maven_artifact("commons-lang:commons-lang"),
+        maven_artifact("org.apache.commons:commons-lang3"),
         maven_artifact("org.apache.kafka:kafka-clients"),
         maven_artifact_with_suffix("org.json4s:json4s-core"),
         maven_artifact_with_suffix("org.json4s:json4s-jackson"),
@@ -40,9 +48,8 @@ scala_library(
         maven_artifact_with_suffix("io.delta:delta-spark"),
         maven_artifact("net.sf.py4j:py4j"),
         maven_artifact("org.apache.avro:avro"),
-        #  maven_artifact("org.apache.hadoop:hadoop-common"),
         maven_artifact_with_suffix("org.apache.iceberg:iceberg-spark-runtime-3.5"),
-    ],
+    ] + HADOOP_PROVIDED_DEPS,
 )
 
 scala_library(
@@ -58,7 +65,6 @@ scala_library(
         maven_artifact("org.apache.logging.log4j:log4j-api"),
         maven_artifact("org.apache.logging.log4j:log4j-core"),
         maven_artifact_with_suffix("io.delta:delta-spark"),
-        #        maven_artifact("org.apache.hadoop:hadoop-client-api"),
     ],
 )
 
@@ -116,7 +122,7 @@ test_deps = _SCALA_TEST_DEPS + [
     maven_artifact("com.google.guava:guava"),
     maven_artifact_with_suffix("org.rogach:scallop"),
     maven_artifact("commons.io:commons-io"),
-    maven_artifact("commons.lang:commons-lang"),
+    maven_artifact("org.apache.commons:commons-lang3"),
     maven_artifact_with_suffix("org.scala-lang.modules:scala-java8-compat"),
     maven_artifact_with_suffix("com.fasterxml.jackson.module:jackson-module-scala"),
     maven_artifact_with_suffix("org.scala-lang.modules:scala-collection-compat"),
@@ -128,9 +134,7 @@ test_deps = _SCALA_TEST_DEPS + [
     maven_artifact("org.apache.avro:avro"),
     maven_artifact("com.fasterxml.jackson.core:jackson-core"),
     maven_artifact("com.fasterxml.jackson.core:jackson-databind"),
-    # maven_artifact("org.apache.hadoop:hadoop-common"),
-    #    maven_artifact("org.apache.hadoop:hadoop-client-api"),
-]
+] + HADOOP_PROVIDED_DEPS
 
 scala_library(
     name = "test_lib",

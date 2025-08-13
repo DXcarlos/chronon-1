@@ -1,0 +1,3 @@
+-Xmx12096m    # Maximum heap size (12GB in this example)
+-Xms3024m    # Initial heap size (3GB in this example)
+-XX:ReservedCodeCacheSize=1512m    # Code cache size

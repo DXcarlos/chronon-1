@@ -40,6 +40,18 @@ SPARK_JARS = [
         name = "spark-unsafe",
         org = "org.apache.spark",
     ),
+    jar(
+        name = "hadoop-common",
+        org = "org.apache.hadoop",
+    ),
+    jar(
+        name = "hadoop-mapreduce-client-core",
+        org = "org.apache.hadoop",
+    ),
+    jar(
+        name = "hadoop-hdfs",
+        org = "org.apache.hadoop",
+    ),
     #    jar(
     #        name = "hive-metastore",
     #        org = "org.apache.hive",
