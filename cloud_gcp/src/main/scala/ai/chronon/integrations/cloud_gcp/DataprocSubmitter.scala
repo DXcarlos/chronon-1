@@ -127,6 +127,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
                       submissionProperties: Map[String, String],
                       jobProperties: Map[String, String],
                       files: List[String],
+                      labels: Map[String, String],
                       args: String*): String = {
     val mainClass = submissionProperties.getOrElse(MainClass, throw new RuntimeException("Main class not found"))
     val jarUri = submissionProperties.getOrElse(JarURI, throw new RuntimeException("Jar URI not found"))
@@ -685,7 +686,8 @@ object DataprocSubmitter {
           submitter: DataprocSubmitter,
           envMap: Map[String, Option[String]] = Map.empty,
           maybeConf: Option[Map[String, String]] = None,
-          clusterName: String): Unit = {
+          clusterName: String,
+          labels: Map[String, String] = Map.empty): Unit = {
     // Get the job type
     val jobTypeValue = JobSubmitter
       .getArgValue(args, JobTypeArgKeyword)
@@ -757,6 +759,7 @@ object DataprocSubmitter {
                                                       clusterName = clusterName),
       jobProperties = maybeConf.getOrElse(JobSubmitter.getModeConfigProperties(args).getOrElse(Map.empty)),
       files = getDataprocFilesArgs(args),
+      labels = labels,
       finalArgs: _*
     )
     println("Dataproc submitter job id: " + jobId)

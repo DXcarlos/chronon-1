@@ -20,6 +20,7 @@ trait JobSubmitter {
              submissionProperties: Map[String, String],
              jobProperties: Map[String, String],
              files: List[String],
+             labels: Map[String, String],
              args: String*): String
 
   def status(jobId: String): String

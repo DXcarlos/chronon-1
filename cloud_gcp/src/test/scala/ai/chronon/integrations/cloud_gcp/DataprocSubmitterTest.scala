@@ -753,7 +753,8 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
           ClusterName -> "test-cluster"
         ),
         Map.empty,
-        List.empty
+        List.empty,
+        labels = Map.empty,
       )
     assertEquals(submittedJobId, jobId)
   }
@@ -1121,6 +1122,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
         ),
         Map.empty,
         List.empty,
+        labels = Map.empty,
         "--kafka-bootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
         "--kafka-topic=test-item-event-data",
         "--data-file-name=gs://zl-warehouse/canary_item_events/events-output.avro",
@@ -1154,6 +1156,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
         ),
         Map.empty,
         List.empty,
+        labels = Map.empty,
         "--gcp-project=canary-443022",
         "--topic=test-item-event-data",
         "--data-file-name=gs://zl-warehouse/canary_item_events/events-output.avro",

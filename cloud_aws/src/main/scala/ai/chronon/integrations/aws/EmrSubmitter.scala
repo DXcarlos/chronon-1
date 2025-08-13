@@ -168,6 +168,7 @@ class EmrSubmitter(customerId: String, emrClient: EmrClient) extends JobSubmitte
                       submissionProperties: Map[String, String],
                       jobProperties: Map[String, String],
                       files: List[String],
+                      labels: Map[String, String],
                       args: String*): String = {
     if (submissionProperties.get(ShouldCreateCluster).exists(_.toBoolean)) {
       // create cluster
@@ -316,6 +317,7 @@ object EmrSubmitter {
       submissionProperties = submissionProps,
       jobProperties = modeConfigProperties.getOrElse(Map.empty),
       files = files.toList,
+      labels = Map.empty,
       finalArgs: _*
     )
   }
