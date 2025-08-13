@@ -116,7 +116,7 @@ object SparkSessionBuilder {
       .builder()
       .appName(name)
 
-    if (hiveSupport) baseBuilder = baseBuilder.enableHiveSupport()
+//    if (hiveSupport) baseBuilder = baseBuilder.enableHiveSupport()
 
     baseBuilder = baseBuilder
       .config("spark.sql.session.timeZone", "UTC")
