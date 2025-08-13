@@ -2,8 +2,9 @@
 HADOOP_PROVIDED_DEPS = [
     "@maven//:org_apache_hadoop_hadoop_client",
     "@maven//:org_apache_hadoop_hadoop_common",
-    "@maven//:org_apache_hadoop_hadoop_hdfs",
-    "@maven//:org_apache_hadoop_hadoop_mapreduce_client_core",
+    "@maven//:org_apache_hadoop_hadoop_auth",
+    #    "@maven//:org_apache_hadoop_hadoop_hdfs",
+    #    "@maven//:org_apache_hadoop_hadoop_mapreduce_client_core",
 ]
 
 scala_library(
@@ -11,6 +12,7 @@ scala_library(
     srcs = glob(["src/main/**/*.scala"]),
     format = True,
     visibility = ["//visibility:public"],
+    runtime_deps = HADOOP_PROVIDED_DEPS,
     deps = [
         "//aggregator:lib",
         "//api:lib",
@@ -49,7 +51,7 @@ scala_library(
         maven_artifact("net.sf.py4j:py4j"),
         maven_artifact("org.apache.avro:avro"),
         maven_artifact_with_suffix("org.apache.iceberg:iceberg-spark-runtime-3.5"),
-    ] + HADOOP_PROVIDED_DEPS,
+    ],
 )
 
 scala_library(

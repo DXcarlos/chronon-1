@@ -16,10 +16,10 @@ SPARK_JARS = [
         name = "spark-sql",
         org = "org.apache.spark",
     ),
-    #    scala_jar(
-    #        name = "spark-hive",
-    #        org = "org.apache.spark",
-    #    ),
+    scala_jar(
+        name = "spark-hive",
+        org = "org.apache.spark",
+    ),
     #    scala_jar(
     #        name = "spark-avro",
     #        org = "org.apache.spark",
@@ -52,6 +52,10 @@ SPARK_JARS = [
         name = "hadoop-hdfs",
         org = "org.apache.hadoop",
     ),
+    jar(
+        name = "hadoop-auth",
+        org = "org.apache.hadoop",
+    ),
     #    jar(
     #        name = "hive-metastore",
     #        org = "org.apache.hive",
@@ -60,9 +64,6 @@ SPARK_JARS = [
         name = "kryo_shaded",
         org = "com.esotericsoftware",
     ),
-]
-
-SPARK_3_5_JARS = SPARK_JARS + [
     scala_jar(
         name = "spark-common-utils",
         org = "org.apache.spark",
@@ -76,7 +77,7 @@ SPARK_3_5_JARS = SPARK_JARS + [
 java_library(
     name = "spark-exec",
     visibility = ["//visibility:public"],
-    exports = get_jars_for_repository(MAVEN_REPOSITORY_NAME, SPARK_3_5_JARS),
+    exports = get_jars_for_repository(MAVEN_REPOSITORY_NAME, SPARK_JARS),
 )
 
 # To simulate the spark runtime environment with dependencies we want to exclude from our final deployment jar

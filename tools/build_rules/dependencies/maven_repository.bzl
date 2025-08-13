@@ -229,10 +229,22 @@ maven_repository = repository(
         "org.eclipse.jetty:jetty-http:12.0.12",
 
         # hadoop deps
-        "org.apache.hadoop:hadoop-common:3.4.1",
-        "org.apache.hadoop:hadoop-mapreduce-client-core:3.4.1",
-        "org.apache.hadoop:hadoop-hdfs:3.4.1",
-        "org.apache.hadoop:hadoop-client:3.4.1",
+        #        "org.apache.hadoop:hadoop-common:3.4.1",
+        #        "org.apache.hadoop:hadoop-mapreduce-client-core:3.4.1",
+        #        "org.apache.hadoop:hadoop-hdfs:3.4.1",
+        #        "org.apache.hadoop:hadoop-client:3.4.1",
+        versioned_artifacts(
+            group = "org.apache.hadoop",
+            version = "3.3.4",
+            artifacts = [
+                "hadoop-yarn-api",
+                "hadoop-yarn-client",
+                "hadoop-client",
+                "hadoop-common",
+                "hadoop-auth",
+                "hadoop-hdfs",
+            ],
+        ),
     ],
     excluded_artifacts = [
         "org.apache.beam:beam-sdks-java-io-hadoop-common",
@@ -245,7 +257,7 @@ maven_repository = repository(
         "org.apache.hadoop:hadoop-annotations",
         "org.apache.hadoop:hadoop-auth",
         "org.apache.hadoop:hadoop-hdfs-client",
-        "org.apache.hadoop:hadoop-hdfs",
+        #        "org.apache.hadoop:hadoop-hdfs",
         #        "org.apache.hadoop:hadoop-mapreduce-client-core",
         "org.apache.hadoop:hadoop-yarn-api",
         "org.apache.hadoop:hadoop-yarn-client",
@@ -255,6 +267,7 @@ maven_repository = repository(
         "org.apache.hadoop:hadoop-client-api",
         # Exclude old parquet-hadoop-bundle that includes vulnerable parquet-avro 1.13.1
         "org.apache.parquet:parquet-hadoop-bundle",
+        "org.apache.parquet:parquet-hadoop",
         # Exclude rocksdb from the assembled JARs that pull this in (e.g. flink, cloud_gcp) as we want to exclude
         # the rockdb library and rely on those part of the dist / env
         # Else we hit an error - NoSuchMethodError: 'void org.rocksdb.WriteBatch.remove
