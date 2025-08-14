@@ -181,6 +181,27 @@ struct WorkflowStatusRequest {
     1: optional string workflowId
 }
 
+struct WorkflowGetRequest {
+    1: optional string workflowId
+}
+
+struct WorkflowGetResponse {
+    1: optional string runId
+    2: optional string confName
+    3: optional string confHash
+    4: optional string mode
+    5: optional string startPartition
+    6: optional string endPartition
+    7: optional string branch
+    8: optional string user
+    9: optional string workflowPlan
+    10: optional string submissionTime
+    11: optional bool forceRecompute
+    12: optional WorkflowStatus status
+}
+
+}
+
 struct NodeStatusRequest {
     1: optional string nodeName
     2: optional string start
