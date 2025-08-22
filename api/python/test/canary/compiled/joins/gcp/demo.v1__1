@@ -421,7 +421,7 @@
                 "timeColumn": "event_time_ms"
               },
               "table": "data.gcp_exports_user_activities__0",
-              "topic": "pubsub://user-activities-v0/project=canary-443022/subscription=user-activities-streaming-sub/serde=pubsub_schema/schemaId=user-activities"
+              "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
             }
           }
         ]
@@ -442,6 +442,7 @@
             "is_active": "0fe881820ff26668c32d68dc3382a7ff",
             "is_expensive": "4d6678c92b2194fd9b7e6bfa85366fe5",
             "is_in_stock": "0cd5441df3d278d3b7a060e4bd23a324",
+            "is_very_expensive": "fa72ec0671df63517c77f7b0b7cb4e24",
             "listing_id": "6ed4569be71307367d24e5fe77626334",
             "long_description": "51bbdbd4269ccb2d382f835dcfc2eed3",
             "main_image_path": "a5ab50facb20e01a0d93a4ed0eac1a9d",
@@ -456,11 +457,11 @@
             "historicalBackfill": 0,
             "scheduleCron": "@daily"
           },
-          "name": "gcp.dim_listings.v1__0",
+          "name": "gcp.dim_listings.v1__1",
           "online": 1,
           "outputNamespace": "data",
           "team": "gcp",
-          "version": "0"
+          "version": "1"
         },
         "sources": [
           {
@@ -474,6 +475,7 @@
                   "is_active": "is_active",
                   "is_expensive": "IF(price_cents > 10000, 1, 0)",
                   "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+                  "is_very_expensive": "IF(price_cents > 100000, 1, 0)",
                   "listing_id": "listing_id",
                   "long_description": "long_description",
                   "main_image_path": "main_image_path",
@@ -556,6 +558,7 @@
       "listing_id_is_active": "616642f4d27a8e00d7250f7f91cb1646",
       "listing_id_is_expensive": "38ee87f5b11a42d891ec52616a2d7b52",
       "listing_id_is_in_stock": "6c5685ed65e91bcb3fe9ce2cb53ddbcd",
+      "listing_id_is_very_expensive": "5f45866f5c0c2d7c01765e5f38988b6e",
       "listing_id_listing_id": "15395806521d79e682aa3274a46c5104",
       "listing_id_long_description": "e3fda2158f5d126aef5ebbfdfc848174",
       "listing_id_main_image_path": "ce9bc184baf01f9c7818e88e25b446d0",
@@ -707,13 +710,13 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "http://localhost:5173",
+          "FRONTEND_URL": "https://canary.zipline.ai",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-          "HUB_URL": "http://localhost:3903",
+          "HUB_URL": "https://canary-orch.zipline.ai",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
@@ -728,13 +731,13 @@
             "CUSTOMER_ID": "dev",
             "ENABLE_PUBSUB": "true",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-            "FRONTEND_URL": "http://localhost:5173",
+            "FRONTEND_URL": "https://canary.zipline.ai",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
             "GCP_DATAPROC_CLUSTER_NAME": "zipline-transient-upload-cluster",
             "GCP_PROJECT_ID": "canary-443022",
             "GCP_REGION": "us-central1",
             "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-            "HUB_URL": "http://localhost:3903",
+            "HUB_URL": "https://canary-orch.zipline.ai",
             "JOB_MODE": "local[*]",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
@@ -744,14 +747,14 @@
       },
       "scheduleCron": "@daily"
     },
-    "name": "gcp.demo.v1__0",
-    "online": 1,
+    "name": "gcp.demo.v1__1",
+    "online": 0,
     "outputNamespace": "data",
     "production": 0,
     "samplePercent": 100.0,
     "sourceFile": "joins/gcp/demo.py",
     "team": "gcp",
-    "version": "0"
+    "version": "1"
   },
   "rowIds": [
     "event_id"
