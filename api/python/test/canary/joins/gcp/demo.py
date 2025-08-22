@@ -50,7 +50,7 @@ v1 = Join(
             prefix="merchant_"
         ),
     ],
-    version=1,
+    version=2,
     online=False,
     output_namespace="data"
 )

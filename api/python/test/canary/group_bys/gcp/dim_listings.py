@@ -30,7 +30,6 @@ source = EntitySource(
             tags="tags",
             # Derived features
             is_expensive="IF(price_cents > 10000, 1, 0)",  # Over $100
-            is_very_expensive="IF(price_cents > 100000, 1, 0)",  # Over $1000
             is_in_stock="IF(inventory_count > 0, 1, 0)",
             main_image_path="main_image_path",
             secondary_image_paths="secondary_image_paths",
@@ -44,6 +43,6 @@ v1 = GroupBy(
     sources=[source],
     keys=["listing_id"],  # Key by listing_id for point lookups
     online=True,
-    version=1,
+    version=0,
     aggregations=None,  # No aggregations - this is a simple passthrough
 )
