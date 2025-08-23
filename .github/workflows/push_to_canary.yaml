@@ -486,25 +486,25 @@ jobs:
 #
 #          gcloud storage cp connectors_pubsub_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/connectors_pubsub_deploy.jar
 #          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/connectors_pubsub_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-
-  clean_up_artifacts:
-    permissions:
-      contents: read
-
-    runs-on: ubuntu-latest
-
-    needs: [ push_to_gcp_passing, push_to_aws_passing ]
-
-    steps:
-      - name: Delete Artifacts
-        uses: geekyeggo/delete-artifact@v5
-        with:
-          name: |
-            zipline-ai-wheel
-            flink-assembly-jar
-            cloud-aws-jar
-            cloud-gcp-jar
-            service-assembly-jar
+#
+#  clean_up_artifacts:
+#    permissions:
+#      contents: read
+#
+#    runs-on: ubuntu-latest
+#
+#    needs: [ push_to_gcp_passing, push_to_aws_passing ]
+#
+#    steps:
+#      - name: Delete Artifacts
+#        uses: geekyeggo/delete-artifact@v5
+#        with:
+#          name: |
+#            zipline-ai-wheel
+#            flink-assembly-jar
+#            cloud-aws-jar
+#            cloud-gcp-jar
+#            service-assembly-jar
 
 
   merge_to_main-passing-tests:
