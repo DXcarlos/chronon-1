@@ -14,7 +14,7 @@ trap "rm -rf $TEMP_DIR" EXIT
 cp -r python/ $TEMP_DIR/
 # move the python sources one level up
 ls $TEMP_DIR/python/
-mv $TEMP_DIR/src/* $TEMP_DIR/
+mv $TEMP_DIR/python/src/* $TEMP_DIR/
 
 echo "📋 Copying generated sources..."
 cp -r out/python/generatedSources.dest/gen_thrift $TEMP_DIR/
