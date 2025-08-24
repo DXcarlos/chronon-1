@@ -22,7 +22,7 @@ object `package` extends PythonModule with RuffModule with PublishModule {
         "github" -> "https://github.com/zipline-ai/chronon/",
     )
   )
-  
+
   // used by pypi
   // https://pypi.org/project/zipline-ai/
   def publishVersion = build.Constants.chrononVersion

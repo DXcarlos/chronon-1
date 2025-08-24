@@ -116,11 +116,6 @@ trait BaseModule extends ScalaModule with ScalafmtModule {
     "-language:reflectiveCalls"
   )
 
-  def javacOptions = Seq(
-    "-source", "11",
-    "-target", "11",
-  )
-
   // Merge strategy for assembly
   override def assemblyRules = Assembly.defaultRules ++ Seq(
     Assembly.Rule.AppendPattern("META-INF/services/*", "\n")
