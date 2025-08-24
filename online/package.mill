@@ -18,9 +18,6 @@ object `package` extends build.BaseModule {
     mvn"org.apache.avro:avro:1.11.4",
     mvn"com.linkedin.avroutil1:avro-fastserde:0.4.25",
     mvn"org.rogach::scallop:5.1.0",
-    // Scala reflection dependencies
-    mvn"org.scala-lang:scala-reflect:${scalaVersion()}",
-    mvn"org.scala-lang:scala-compiler:${scalaVersion()}",
     // HTTP client (core only - matching Bazel exactly)
     mvn"com.softwaremill.sttp.client3::core:3.9.7",
     // OpenTelemetry (using exact versions from Bazel)

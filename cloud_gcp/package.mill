@@ -32,6 +32,7 @@ object `package` extends build.BaseModule {
 
       mvn"com.google.cloud:google-cloud-bigquery:2.42.0",
       mvn"com.google.cloud:google-cloud-bigtable:2.57.1",
+      mvn"com.chuusai::shapeless:2.3.12",
   ).map(excludeJackson) ++ Seq(
     mvn"com.fasterxml.jackson.core:jackson-core:2.15.2",
     mvn"com.fasterxml.jackson.core:jackson-databind:2.15.2",

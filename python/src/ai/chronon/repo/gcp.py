@@ -53,7 +53,7 @@ class GcpRunner(Runner):
             self._version,
             ZIPLINE_GCP_SERVICE_JAR,
         )
-        jar_path = f"{gcp_jar_path}:{service_jar_path}" if args["mode"] == "fetch" else gcp_jar_path
+        jar_path = f"{service_jar_path}:{gcp_jar_path}" if args["mode"] == "fetch" else gcp_jar_path
 
         self._args = args
         self.job_id = str(uuid.uuid4())

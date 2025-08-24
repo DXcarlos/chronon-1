@@ -8,26 +8,6 @@ object `package` extends PythonModule with RuffModule with PublishModule {
 
   def pythonRequirementFiles = Task.Sources("requirements/base.txt")
 
-  // TODO: doing this because we want the whl to have Requires-Dist metadata.
-  def pythonDeps: T[Seq[String]] = Task {
-    // Use the same file that pythonRequirementFiles references
-    val reqFiles = pythonRequirementFiles()
-    if (reqFiles.nonEmpty) {
-      val reqFile = reqFiles.head.path
-      if (os.exists(reqFile)) {
-        os.read.lines(reqFile)
-          .map(_.trim)
-          .filter(line => line.nonEmpty && !line.startsWith("#"))
-          .filter(!_.startsWith("-"))  // Skip pip flags like -e
-          .toSeq
-      } else {
-        Seq.empty[String]
-      }
-    } else {
-      Seq.empty[String]
-    }
-  }
-
   def mainScript = Task.Source("src/ai/chronon/repo/zipline.py")
 
   def publishMeta = PublishMeta(
@@ -42,16 +22,10 @@ object `package` extends PythonModule with RuffModule with PublishModule {
         "github" -> "https://github.com/zipline-ai/chronon/",
     )
   )
-
+  
   // used by pypi
   // https://pypi.org/project/zipline-ai/
-  // Override publishVersion to check environment variable first, then fall back to constant
-  override def publishVersion = Task {
-    Task.ctx().env.get("ZIPLINE_VERSION") match {
-      case Some(version) if version.nonEmpty => version
-      case _ => build.Constants.chrononVersion
-    }
-  }
+  def publishVersion = build.Constants.chrononVersion
 
   def sources = super.sources() ++ generatedSources()
 

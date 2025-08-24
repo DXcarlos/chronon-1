@@ -22,15 +22,22 @@ concurrency:
 
 jobs:
   scala_compile_fmt_fix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-8_cores-32_gb
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '11'
+      - name: Check assembly
+        run: |
+          ./mill cloud_gcp.assembly
 
       - name: Check Scalafmt
         run: |

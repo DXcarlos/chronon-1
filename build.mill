@@ -118,7 +118,7 @@ trait BaseModule extends ScalaModule with ScalafmtModule {
 
   def javacOptions = Seq(
     "-source", "11",
-    "-target", "11"
+    "-target", "11",
   )
 
   // Merge strategy for assembly
