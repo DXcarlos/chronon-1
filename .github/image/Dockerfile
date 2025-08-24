@@ -55,12 +55,6 @@ RUN java -version && \
     pip3 --version && \
     git --version
 
-# set system wide encoding to UTF-8
-# needed by javac / jar assembly to handle files/classes with non-ascii chars
-# shapeless is the main culprit
-ENV LC_ALL=C.UTF-8
-ENV LANG=C.UTF-8
-
 # Set working directory
 WORKDIR /app
 
