@@ -7,7 +7,7 @@ from google.auth.transport.requests import Request
 
 
 class ZiplineHub:
-    def __init__(self, base_url, enable_gcloud_auth: bool = True):
+    def __init__(self, base_url, enable_gcloud_auth: bool):
         if not base_url:
             raise ValueError("Base URL for ZiplineHub cannot be empty.")
         self.base_url = base_url
