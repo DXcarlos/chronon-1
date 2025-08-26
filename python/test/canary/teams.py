@@ -29,7 +29,7 @@ default = Team(
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
             "FRONTEND_URL": "http://localhost:5173", # "https://34.111.151.47.nip.io",
             "HUB_URL": "http://localhost:3903", #"http://34.133.227.246:3903",
-            "ENABLE_HUB_GCLOUD_AUTH": "true",
+            # "ENABLE_HUB_GCLOUD_AUTH": "false",
         },
     ),
 )
