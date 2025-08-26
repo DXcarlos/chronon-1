@@ -178,6 +178,10 @@ class ScheduleModes:
     online: str
     offline_schedule: str
 
+def get_hub_gcloud_auth_flag(conf_path):
+    common_env_map = get_common_env_map(conf_path)
+    enable_hub_gcloud_auth = common_env_map.get("ENABLE_HUB_GCLOUD_AUTH", os.environ.get("ENABLE_HUB_GCLOUD_AUTH", "false")).lower()
+    return enable_hub_gcloud_auth == "true"
 
 def get_hub_conf(conf_path):
     common_env_map = get_common_env_map(conf_path)

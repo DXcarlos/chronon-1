@@ -7,11 +7,11 @@ from google.auth.transport.requests import Request
 
 
 class ZiplineHub:
-    def __init__(self, base_url):
+    def __init__(self, base_url, enable_gcloud_auth: bool = True):
         if not base_url:
             raise ValueError("Base URL for ZiplineHub cannot be empty.")
         self.base_url = base_url
-        if self.base_url.startswith("https"):
+        if enable_gcloud_auth:
             print("\n 🔐 Using Google Cloud authentication for ZiplineHub.")
 
             # First try to get ID token from environment (GitHub Actions)
