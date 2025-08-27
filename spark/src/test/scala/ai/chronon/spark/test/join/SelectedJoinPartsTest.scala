@@ -16,13 +16,13 @@
 
 package ai.chronon.spark.test.join
 
+import ai.chronon.spark.test.utils.DataFrameGen
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.planner.RelevantLeftForJoinPart
 import ai.chronon.api.{Accuracy, Builders, Operation}
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
-import ai.chronon.spark.test.DataFrameGen
 import org.apache.spark.sql.AnalysisException
 import org.junit.Assert._
 

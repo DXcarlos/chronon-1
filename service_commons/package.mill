@@ -1,0 +1,32 @@
+package build.service_commons
+import mill._
+import mill.scalalib._
+
+// Service Commons module (shared service utilities)
+object `package` extends build.BaseModule {
+  def moduleDeps = Seq(build.api, build.online)
+  
+  def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingDeps ++ build.Constants.utilityDeps ++ Seq(
+    mvn"io.vertx:vertx-core:4.5.10",
+    mvn"io.vertx:vertx-web:4.5.10",
+    mvn"io.vertx:vertx-config:4.5.10",
+    mvn"io.vertx:vertx-micrometer-metrics:4.5.10",
+    mvn"io.micrometer:micrometer-registry-statsd:1.13.6",
+    mvn"io.micrometer:micrometer-registry-otlp:1.13.6",
+    mvn"io.micrometer:micrometer-registry-prometheus:1.10.13",
+    mvn"io.netty:netty-all:4.1.111.Final"
+  )
+  
+  object test extends build.BaseJUnitTestModule {
+    def moduleDeps = Seq(build.service_commons, build.api)
+    def mvnDeps = Seq(
+      mvn"org.junit.jupiter:junit-jupiter:5.10.2",
+      mvn"org.junit.jupiter:junit-jupiter-api:5.10.2",
+      mvn"org.junit.jupiter:junit-jupiter-engine:5.10.2",
+      mvn"org.junit.platform:junit-platform-launcher:1.10.2",
+      mvn"com.github.sbt.junit:jupiter-interface:0.11.4",
+      mvn"io.vertx:vertx-junit5:4.5.10",
+      mvn"io.vertx:vertx-web-client:4.5.10"
+    )
+  }
+}

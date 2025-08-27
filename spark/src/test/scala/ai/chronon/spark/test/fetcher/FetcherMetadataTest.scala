@@ -8,8 +8,8 @@ import ai.chronon.online.fetcher.FetchContext
 import ai.chronon.online.{MetadataDirWalker, MetadataEndPoint, fetcher}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission
-import ai.chronon.spark.test.OnlineUtils
-import com.google.devtools.build.runfiles.Runfiles
+import ai.chronon.spark.test.utils.OnlineUtils
+// Removed Bazel runfiles import - using standard resource loading instead
 import org.apache.spark.sql.SparkSession
 import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -33,7 +33,8 @@ class FetcherMetadataTest extends AnyFlatSpec {
     val src = Source.fromResource(joinPath)
     println(s"conf resource path for dir walker: ${confResource.getPath}")
 
-    val runFilesResource = Runfiles.create().rlocation("chronon/spark/src/test/resources/")
+    // Use standard resource loading instead of Bazel runfiles  
+    val runFilesResource = getClass.getClassLoader.getResource("joins").getPath.replace("/joins", "")
 
     val expected = {
       try src.mkString

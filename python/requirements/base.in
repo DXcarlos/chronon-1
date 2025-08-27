@@ -1,0 +1,10 @@
+click
+thrift==0.21.0
+pyspark==3.5.4
+crcmod==1.7
+boto3
+importlib-resources==6.5.2
+rich
+google-cloud-storage==2.19.0
+google-cloud-bigquery-storage
+GitPython

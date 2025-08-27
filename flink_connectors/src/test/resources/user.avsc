@@ -1,0 +1,59 @@
+{
+  "type": "record",
+  "name": "User",
+  "namespace": "com.example",
+  "doc": "Test User Schema",
+  "fields": [
+    {
+      "name": "id",
+      "type": "int",
+      "doc": "A unique identifier"
+    },
+    {
+      "name": "username",
+      "type": "string",
+      "doc": "The user's username"
+    },
+    {
+      "name": "tags",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "doc": "List of tags associated with the user"
+    },
+    {
+      "name": "address",
+      "type": {
+        "type": "record",
+        "name": "AddressRecord",
+        "fields": [
+          {"name": "street", "type": "string"},
+          {"name": "city", "type": "string"},
+          {"name": "country", "type": "string"},
+          {"name": "postalCode", "type": ["null", "string"], "default": null}
+        ]
+      },
+      "doc": "User's address information"
+    },
+    {
+      "name": "preferences",
+      "type": {
+        "type": "map",
+        "values": "string"
+      },
+      "doc": "User preferences stored as key-value pairs"
+    },
+    {
+      "name": "lastLoginTimestamp",
+      "type": "long",
+      "doc": "Timestamp of last login in milliseconds since epoch"
+    },
+    {
+      "name": "isActive",
+      "type": "boolean",
+      "default": true,
+      "doc": "Whether the user account is active"
+    }
+  ]
+}

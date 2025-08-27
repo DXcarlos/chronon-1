@@ -72,6 +72,7 @@ class SparkExpressionEval[EventType](encoder: Encoder[EventType], groupBy: Group
     exprEvalSuccessCounter = metricsGroup.counter("spark_expr_eval_success")
     exprEvalErrorCounter = metricsGroup.counter("spark_expr_eval_errors")
 
+    // Initialize CatalystUtil without acquiring session reference
     catalystUtil = new CatalystUtil(chrononSchema, transforms, filters, groupBy.setups)
   }
 
@@ -111,7 +112,8 @@ class SparkExpressionEval[EventType](encoder: Encoder[EventType], groupBy: Group
 
   def close(): Unit = {
     if (catalystUtil != null) {
-      CatalystUtil.session.close()
+      // Don't close the shared session - let it remain open for other components
+      catalystUtil = null
     }
   }
 

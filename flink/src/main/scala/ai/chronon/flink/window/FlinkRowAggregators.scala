@@ -101,7 +101,7 @@ class FlinkRowAggregationFunction(
     if (enableDebug) {
       logger.info(
         f"Flink pre-aggregates BEFORE adding new element: accumulatorIr=[${accumulatorIr.ir
-          .mkString(", ")}] groupBy=${groupBy.getMetaData.getName} tsMills=$tsMills element=$element"
+            .mkString(", ")}] groupBy=${groupBy.getMetaData.getName} tsMills=$tsMills element=$element"
       )
     }
 

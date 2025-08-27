@@ -4,7 +4,6 @@ import ai.chronon.api.Extensions._
 import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
 import ai.chronon.api.{MetaData, PartitionRange, PartitionSpec, ThriftJsonCodec}
 import ai.chronon.online.Api
-import ai.chronon.online.KVStore.PutRequest
 import ai.chronon.planner._
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.join.UnionJoin
@@ -15,8 +14,6 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success, Try}
 
 class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
@@ -49,35 +46,43 @@ class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
 class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
   @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  def checkPartitions(conf: ExternalSourceSensorNode, metadata: MetaData, range: PartitionRange): Try[Unit] = {
-    val tableName = conf.sourceName
+  def checkPartitions(conf: ExternalSourceSensorNode, range: PartitionRange): Try[Unit] = {
+    val tableName = Option(conf.sourceTableDependency)
+      .map(_.tableInfo)
+      .map(_.table)
+      .getOrElse(
+        throw new IllegalArgumentException("ExternalSourceSensorNode must have a sourceTableDependency defined")
+      )
     val retryCount = if (conf.isSetRetryCount) conf.retryCount else 3L
     val retryIntervalMin = if (conf.isSetRetryIntervalMin) conf.retryIntervalMin else 3L
 
-    val spec = metadata.executionInfo.tableDependencies.asScala
-      .find(_.tableInfo.table == tableName)
-      .map(_.tableInfo.partitionSpec(tableUtils.partitionSpec))
+    val spec = conf.sourceTableDependency.tableInfo.partitionSpec(tableUtils.partitionSpec)
 
     @tailrec
     def retry(attempt: Long): Try[Unit] = {
       val result = Try {
         val partitionsInRange =
-          tableUtils.partitions(tableName, partitionRange = Option(range), tablePartitionSpec = spec)
-        val missingPartitions = range.partitions.diff(partitionsInRange)
-        if (missingPartitions.nonEmpty) {
-          throw new RuntimeException(
-            s"Input table ${tableName} is missing partitions: ${missingPartitions.mkString(", ")}")
-        } else {
-          logger.info(s"Input table ${tableName} has the requested range present: ${range}.")
-        }
+          tableUtils.partitions(tableName,
+                                partitionRange = Option(range.translate(spec)),
+                                tablePartitionSpec = Option(spec))
+        Option(range).map(_.partitions).getOrElse(Seq.empty).diff(partitionsInRange)
       }
+
       result match {
-        case Success(value) => Success(value)
-        case Failure(exception) if attempt < retryCount =>
-          logger.warn(s"Attempt ${attempt + 1} failed, retrying in ${retryIntervalMin} minutes", exception)
+        case Success(missingPartitions) if missingPartitions.isEmpty =>
+          logger.info(s"Input table ${tableName} has the requested range present: ${range}.")
+          Success(())
+        case Success(missingPartitions) if attempt < retryCount =>
+          logger.warn(
+            s"Attempt ${attempt + 1} failed: Input table ${tableName} is missing partitions: ${missingPartitions
+                .mkString(", ")}. Retrying in ${retryIntervalMin} minutes")
           Thread.sleep(retryIntervalMin * 60 * 1000)
           retry(attempt + 1)
-        case failure => failure
+        case Success(missingPartitions) =>
+          Failure(new RuntimeException(
+            s"Sensor timed out after ${retryIntervalMin * attempt} minutes. Input table ${tableName} is missing partitions: ${missingPartitions
+                .mkString(", ")}"))
+        case Failure(e) => Failure(e)
       }
     }
     retry(0)
@@ -127,7 +132,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
 
       result match {
         case Some(df) =>
-          logger.info(s"\nShowing three rows of output above.\nQuery table '$joinName' for more.\n")
+          logger.info(s"\nShowing three rows of output above.\nQuery table '${metadata.outputTable}' for more.\n")
           df.show(numRows = 3, truncate = 0, vertical = true)
 
         case None =>
@@ -159,7 +164,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
         runStagingQuery(metadata, conf.getStagingQuery, range)
       case NodeContent._Fields.EXTERNAL_SOURCE_SENSOR => {
 
-        checkPartitions(conf.getExternalSourceSensor, metadata, range) match {
+        checkPartitions(conf.getExternalSourceSensor, range) match {
           case Success(_) => System.exit(0)
           case Failure(exception) =>
             logger.error(s"ExternalSourceSensor check failed.", exception)
@@ -180,7 +185,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
     Try {
       val metadata = node.metaData
       val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
-      val kvStore = api.genKvStore
+//      val kvStore = api.genKvStore
 
       logger.info(s"Starting batch node runner for '${metadata.name}'")
       val inputTablesToRange = Option(metadata.executionInfo.getTableDependencies)
@@ -213,12 +218,12 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
           })
         }
       }
-      val kvStoreUpdates = kvStore.multiPut(allInputTablePartitions.map { case (tableName, allPartitions) =>
-        val partitionsJson = PartitionRange.collapsedPrint(allPartitions)(range.partitionSpec)
-        PutRequest(tableName.getBytes, partitionsJson.getBytes, tablePartitionsDataset)
-      }.toSeq)
-
-      Await.result(kvStoreUpdates, Duration.Inf)
+//      val kvStoreUpdates = kvStore.multiPut(allInputTablePartitions.map { case (tableName, allPartitions) =>
+//        val partitionsJson = PartitionRange.collapsedPrint(allPartitions)(range.partitionSpec)
+//        PutRequest(tableName.getBytes, partitionsJson.getBytes, tablePartitionsDataset)
+//      }.toSeq)
+//
+//      Await.result(kvStoreUpdates, Duration.Inf)
 
       val missingPartitions = maybeMissingPartitions.collect {
         case (tableName, Some(missing)) if missing.nonEmpty =>
@@ -235,21 +240,21 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
         )
       } else {
         run(metadata, node.content, Option(range))
-        val outputTablePartitionSpec = (for {
-          meta <- Option(metadata)
-          executionInfo <- Option(meta.executionInfo)
-          outputTableInfo <- Option(executionInfo.outputTableInfo)
-          definedSpec = outputTableInfo.partitionSpec(tableUtils.partitionSpec)
-        } yield definedSpec).getOrElse(tableUtils.partitionSpec)
-        val allOutputTablePartitions = tableUtils.partitions(metadata.executionInfo.outputTableInfo.table,
-                                                             tablePartitionSpec = Option(outputTablePartitionSpec))
-
-        val outputTablePartitionsJson = PartitionRange.collapsedPrint(allOutputTablePartitions)(range.partitionSpec)
-        val putRequest = PutRequest(metadata.executionInfo.outputTableInfo.table.getBytes,
-                                    outputTablePartitionsJson.getBytes,
-                                    tablePartitionsDataset)
-        val kvStoreUpdates = kvStore.put(putRequest)
-        Await.result(kvStoreUpdates, Duration.Inf)
+//        val outputTablePartitionSpec = (for {
+//          meta <- Option(metadata)
+//          executionInfo <- Option(meta.executionInfo)
+//          outputTableInfo <- Option(executionInfo.outputTableInfo)
+//          definedSpec = outputTableInfo.partitionSpec(tableUtils.partitionSpec)
+//        } yield definedSpec).getOrElse(tableUtils.partitionSpec)
+//        val allOutputTablePartitions = tableUtils.partitions(metadata.executionInfo.outputTableInfo.table,
+//                                                             tablePartitionSpec = Option(outputTablePartitionSpec))
+//
+//        val outputTablePartitionsJson = PartitionRange.collapsedPrint(allOutputTablePartitions)(range.partitionSpec)
+//        val putRequest = PutRequest(metadata.executionInfo.outputTableInfo.table.getBytes,
+//                                    outputTablePartitionsJson.getBytes,
+//                                    tablePartitionsDataset)
+//        val kvStoreUpdates = kvStore.put(putRequest)
+//        Await.result(kvStoreUpdates, Duration.Inf)
         logger.info(s"Successfully completed batch node runner for '${metadata.name}'")
       }
     }

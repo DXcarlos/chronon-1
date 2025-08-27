@@ -8,7 +8,7 @@ import ai.chronon.planner.{JoinBootstrapNode, JoinDerivationNode, JoinMergeNode,
 import ai.chronon.spark._
 import ai.chronon.spark.batch._
 import ai.chronon.spark.Extensions._
-import ai.chronon.spark.test.{DataFrameGen, TableTestUtils}
+import ai.chronon.spark.test.utils.{DataFrameGen, TableTestUtils}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.junit.Assert._

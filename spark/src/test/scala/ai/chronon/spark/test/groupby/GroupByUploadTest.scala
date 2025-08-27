@@ -16,6 +16,8 @@
 
 package ai.chronon.spark.test.groupby
 
+import ai.chronon.spark.test.utils.OnlineUtils
+import ai.chronon.spark.test.utils.DataFrameGen
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
@@ -24,13 +26,11 @@ import ai.chronon.online.fetcher.Fetcher
 import ai.chronon.spark.Extensions.DataframeOps
 import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.GroupByUpload
-import ai.chronon.spark.test.{DataFrameGen, OnlineUtils}
 import ai.chronon.spark.utils.MockApi
 import com.google.gson.Gson
 import org.apache.spark.sql.SparkSession
 import org.junit.Assert.assertEquals
 import ai.chronon.spark.catalog.TableUtils
-
 import org.scalatest.flatspec.AnyFlatSpec
 import org.slf4j.{Logger, LoggerFactory}
 

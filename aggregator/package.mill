@@ -1,0 +1,23 @@
+package build.aggregator
+import mill._
+import mill.scalalib._
+
+// Aggregator module  
+object `package` extends build.BaseModule {
+  def moduleDeps = Seq(build.api)
+
+  def compileMvnDeps = Seq(
+    mvn"org.apache.spark::spark-sql:${build.Constants.sparkVersion}"
+  )
+
+
+  def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingDeps ++ build.Constants.utilityDeps ++ Seq(
+    mvn"org.apache.datasketches:datasketches-memory:3.0.2",
+    mvn"org.apache.datasketches:datasketches-java:6.1.1",
+  )
+  
+  object test extends build.BaseTestModule {
+    def moduleDeps = Seq(build.aggregator, build.api.test)
+    def mvnDeps = super.mvnDeps() ++ build.Constants.testDeps
+  }
+}

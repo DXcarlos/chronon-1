@@ -1,12 +1,12 @@
 package ai.chronon.spark.test.join
 
 import ai.chronon.aggregator.row.RowAggregator
+import ai.chronon.spark.test.utils.DataFrameGen
 import ai.chronon.aggregator.test.{Column, NaiveAggregator, Timer, TestRow => TRow}
 import ai.chronon.aggregator.windowing.FiveMinuteResolution
 import ai.chronon.api.Extensions.AggregationOps
 import ai.chronon.api._
 import ai.chronon.spark.join.{AggregationInfo, CGenericRow, SawtoothUdf, UnionJoin}
-import ai.chronon.spark.test.DataFrameGen
 import org.apache.spark.sql.{DataFrame, types}
 import org.scalatest.matchers.should.Matchers
 import org.slf4j.{Logger, LoggerFactory}

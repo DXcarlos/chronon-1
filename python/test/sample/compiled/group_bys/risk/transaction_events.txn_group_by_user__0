@@ -1,0 +1,114 @@
+{
+  "aggregations": [
+    {
+      "argMap": {},
+      "inputColumn": "transaction_amount",
+      "operation": 6,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        },
+        {
+          "length": 365,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "transaction_amount",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        }
+      ]
+    }
+  ],
+  "keyColumns": [
+    "user_id"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "transaction_amount_count_1d": "04b6dd016581a0190cafca606f38ca77",
+      "transaction_amount_count_30d": "04b6dd016581a0190cafca606f38ca77",
+      "transaction_amount_count_365d": "04b6dd016581a0190cafca606f38ca77",
+      "transaction_amount_sum_1d": "04b6dd016581a0190cafca606f38ca77",
+      "user_id": "4eb15c63f889b6064f4f41c8691ef8b4"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_txn_events_with_offset_0\", \"spec\": \"data.txn_events/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "_DATE"
+        },
+        "modeConfigs": {}
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "canary",
+          "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "VERSION": "latest"
+        },
+        "modeEnvironments": {
+          "backfill": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "streaming": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "upload": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          }
+        }
+      },
+      "historicalBackfill": 0,
+      "scheduleCron": "@daily"
+    },
+    "name": "risk.transaction_events.txn_group_by_user__0",
+    "online": 1,
+    "outputNamespace": "risk",
+    "sourceFile": "group_bys/risk/transaction_events.py",
+    "team": "risk",
+    "version": "0"
+  },
+  "sources": [
+    {
+      "events": {
+        "query": {
+          "selects": {
+            "transaction_amount": "transaction_amount",
+            "transaction_type": "transaction_type",
+            "user_id": "user_id"
+          },
+          "timeColumn": "transaction_time"
+        },
+        "table": "data.txn_events"
+      }
+    }
+  ]
+}

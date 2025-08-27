@@ -84,6 +84,17 @@ class BigTableKVStoreTest extends AnyFlatSpec with BeforeAndAfter {
 
   }
 
+  after {
+    // Close clients to avoid gRPC channel warnings
+    if (dataClient != null) {
+      dataClient.close()
+    }
+    if (adminClient != null) {
+      adminClient.close()
+    }
+    emulatorWrapper.after()
+  }
+
   it should "big table creation" in {
     val kvStore = new BigTableKVStoreImpl(dataClient, Some(adminClient))
     val dataset = "test-table"

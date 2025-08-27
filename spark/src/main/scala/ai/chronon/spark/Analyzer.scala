@@ -379,12 +379,10 @@ class Analyzer(tableUtils: TableUtils,
         Some(
           rightKey ->
             s"[ERROR]: Right side of the join doesn't contain the key $rightKey. Available keys are [${right.keys
-              .mkString(",")}]")
+                .mkString(",")}]")
       case (rightKey, leftKey) if left(leftKey) != right(rightKey) =>
-        Some(
-          leftKey ->
-            s"[ERROR]: Join key, '$leftKey', has mismatched data types - left type: ${left(
-              leftKey)} vs. right type ${right(rightKey)}")
+        Some(leftKey ->
+          s"[ERROR]: Join key, '$leftKey', has mismatched data types - left type: ${left(leftKey)} vs. right type ${right(rightKey)}")
       case _ => None
     }
   }

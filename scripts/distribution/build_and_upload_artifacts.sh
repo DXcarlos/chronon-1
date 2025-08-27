@@ -106,11 +106,10 @@ if [[ $EXPECTED_MINIMUM_MINOR_PYTHON_VERSION -gt $MINOR_PYTHON_VERSION ]] ; then
     exit 1
 fi
 
-WHEEL_VERSION="0.1.0+dev.$USER"
+export ZIPLINE_VERSION="0.1.0+dev.$USER"
+./mill python.wheel # we need ZIPLINE_VERSION set to build the wheel with specific version here
 
-bash scripts/distribution/build_wheel.sh $WHEEL_VERSION
-
-EXPECTED_ZIPLINE_WHEEL="zipline_ai-$WHEEL_VERSION-py3-none-any.whl"
+EXPECTED_ZIPLINE_WHEEL="./out/python/wheel.dest//dist/zipline_ai-$ZIPLINE_VERSION-py3-none-any.whl"
 if [ ! -f "$EXPECTED_ZIPLINE_WHEEL" ]; then
     echo "$EXPECTED_ZIPLINE_WHEEL not found"
     exit 1
@@ -119,57 +118,59 @@ fi
 
 echo "Building jars"
 
-bazel build //flink:flink_assembly_deploy.jar
-bazel build //service:service_assembly_deploy.jar
+./mill flink.assembly
+./mill service.assembly
 
-FLINK_JAR="$CHRONON_ROOT_DIR/bazel-bin/flink/flink_assembly_deploy.jar"
-SERVICE_JAR="$CHRONON_ROOT_DIR/bazel-bin/service/service_assembly_deploy.jar"
+SRC_FLINK_JAR="$CHRONON_ROOT_DIR/out/flink/assembly.dest/out.jar"
+SRC_SERVICE_JAR="$CHRONON_ROOT_DIR/out/service/assembly.dest/out.jar"
 
-if [ ! -f "$SERVICE_JAR" ]; then
-    echo "$SERVICE_JAR not found"
+if [ ! -f "$SRC_SERVICE_JAR" ]; then
+    echo "$SRC_SERVICE_JAR not found"
     exit 1
 fi
 
-if [ ! -f "$FLINK_JAR" ]; then
-    echo "$FLINK_JAR not found"
+if [ ! -f "$SRC_FLINK_JAR" ]; then
+    echo "$SRC_FLINK_JAR not found"
     exit 1
 fi
 
 
 
 if [ "$BUILD_AWS" = true ]; then
-    bazel build //cloud_aws:cloud_aws_lib_deploy.jar
+    ./mill cloud_aws.assembly
 
-    CLOUD_AWS_JAR="$CHRONON_ROOT_DIR/bazel-bin/cloud_aws/cloud_aws_lib_deploy.jar"
+    SRC_CLOUD_AWS_JAR="$CHRONON_ROOT_DIR/out/cloud_aws/assembly.dest/out.jar"
 
-    if [ ! -f "$CLOUD_AWS_JAR" ]; then
-        echo "$CLOUD_AWS_JAR not found"
+    if [ ! -f "$SRC_CLOUD_AWS_JAR" ]; then
+        echo "$SRC_CLOUD_AWS_JAR not found"
         exit 1
     fi
 fi
 if [ "$BUILD_GCP" = true ]; then
-    bazel build //cloud_gcp:cloud_gcp_lib_deploy.jar
-    # build flink pubsub connectors
-    bazel build //flink:connectors_pubsub_deploy.jar
+    ./mill cloud_gcp.assembly
+    ./mill flink_connectors.assembly
 
-    FLINK_PUBSUB_JAR="$CHRONON_ROOT_DIR/bazel-bin/flink/connectors_pubsub_deploy.jar"
+    SRC_FLINK_PUBSUB_JAR="$CHRONON_ROOT_DIR/out/flink_connectors/assembly.dest/out.jar"
+    SRC_CLOUD_GCP_JAR="$CHRONON_ROOT_DIR/out/cloud_gcp/assembly.dest/out.jar"
 
-    CLOUD_GCP_JAR="$CHRONON_ROOT_DIR/bazel-bin/cloud_gcp/cloud_gcp_lib_deploy.jar"
-
-    if [ ! -f "$CLOUD_GCP_JAR" ]; then
-        echo "$CLOUD_GCP_JAR not found"
+    if [ ! -f "$SRC_CLOUD_GCP_JAR" ]; then
+        echo "$SRC_CLOUD_GCP_JAR not found"
         exit 1
     fi
-    if [ ! -f "$FLINK_PUBSUB_JAR" ]; then
-        echo "$FLINK_PUBSUB_JAR not found"
+    if [ ! -f "$SRC_FLINK_PUBSUB_JAR" ]; then
+        echo "$SRC_FLINK_PUBSUB_JAR not found"
         exit 1
     fi
-
 fi
-
 
 # all customer ids
 GCP_CUSTOMER_IDS=("canary")
+
+FLINK_JAR="flink_assembly_deploy.jar"
+FLINK_PUBSUB_JAR="connectors_pubsub_deploy.jar"
+SERVICE_JAR="service_assembly_deploy.jar"
+CLOUD_AWS_JAR="cloud_aws_lib_deploy.jar"
+CLOUD_GCP_JAR="cloud_gcp_lib_deploy.jar"
 
 # Takes in array of customer ids
 function upload_to_gcp() {
@@ -183,13 +184,13 @@ function upload_to_gcp() {
               set -euxo pipefail
               for element in "${customer_ids_to_upload[@]}"
               do
-                NEW_ELEMENT_JAR_PATH=gs://zipline-artifacts-$element/release/$WHEEL_VERSION/jars/
-                NEW_ELEMENT_WHEEL_PATH=gs://zipline-artifacts-$element/release/$WHEEL_VERSION/wheels/
-                gcloud storage cp "$CLOUD_GCP_JAR" "$NEW_ELEMENT_JAR_PATH" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-                gcloud storage cp "$SERVICE_JAR" "$NEW_ELEMENT_JAR_PATH" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                NEW_ELEMENT_JAR_PATH=gs://zipline-artifacts-$element/release/$ZIPLINE_VERSION/jars
+                NEW_ELEMENT_WHEEL_PATH=gs://zipline-artifacts-$element/release/$ZIPLINE_VERSION/wheels/
+                gcloud storage cp "$SRC_CLOUD_GCP_JAR" "$NEW_ELEMENT_JAR_PATH/$CLOUD_GCP_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                gcloud storage cp "$SRC_SERVICE_JAR" "$NEW_ELEMENT_JAR_PATH/$SERVICE_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
                 gcloud storage cp "$EXPECTED_ZIPLINE_WHEEL" "$NEW_ELEMENT_WHEEL_PATH" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-                gcloud storage cp "$FLINK_JAR" "$NEW_ELEMENT_JAR_PATH" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-                gcloud storage cp "$FLINK_PUBSUB_JAR" "$NEW_ELEMENT_JAR_PATH" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                gcloud storage cp "$SRC_FLINK_JAR" "$NEW_ELEMENT_JAR_PATH/$FLINK_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                gcloud storage cp "$SRC_FLINK_PUBSUB_JAR" "$NEW_ELEMENT_JAR_PATH/$FLINK_PUBSUB_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
               done
               echo "Succeeded"
               break;;
@@ -211,12 +212,12 @@ function upload_to_aws() {
               set -euxo pipefail
               for element in "${customer_ids_to_upload[@]}"
               do
-                NEW_ELEMENT_JAR_PATH=s3://zipline-artifacts-$element/release/$WHEEL_VERSION/jars/
-                NEW_ELEMENT_WHEEL_PATH=s3://zipline-artifacts-$element/release/$WHEEL_VERSION/wheels/
-                aws s3 cp "$CLOUD_AWS_JAR" "$NEW_ELEMENT_JAR_PATH" --metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-                aws s3 cp "$SERVICE_JAR" "$NEW_ELEMENT_JAR_PATH" --metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                NEW_ELEMENT_JAR_PATH=s3://zipline-artifacts-$element/release/$ZIPLINE_VERSION/jars
+                NEW_ELEMENT_WHEEL_PATH=s3://zipline-artifacts-$element/release/$ZIPLINE_VERSION/wheels/
+                aws s3 cp "$SRC_CLOUD_AWS_JAR" "$NEW_ELEMENT_JAR_PATH/$CLOUD_AWS_JAR" --metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                aws s3 cp "$SRC_SERVICE_JAR" "$NEW_ELEMENT_JAR_PATH/$SERVICE_JAR" --metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
                 aws s3 cp "$EXPECTED_ZIPLINE_WHEEL" "$NEW_ELEMENT_WHEEL_PATH" --metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-                aws s3 cp "$FLINK_JAR" "$NEW_ELEMENT_JAR_PATH" --metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                aws s3 cp "$SRC_FLINK_JAR" "$NEW_ELEMENT_JAR_PATH/$FLINK_JAR" --metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
               done
               echo "Succeeded"
               break;;
@@ -249,6 +250,6 @@ if [ "$BUILD_GCP" = true ]; then
 fi
 
 # Cleanup wheel stuff
-rm ./*.whl
+rm ./*.whl || true
 
-echo "Built and uploaded $WHEEL_VERSION"
+echo "Built and uploaded $ZIPLINE_VERSION"

@@ -1,0 +1,50 @@
+package build.api
+
+import mill.*
+import mill.scalalib.*
+
+// Main API module
+object `package` extends build.BaseModule {
+  
+  // Thrift base classes module (ai.chronon.api.thrift package)
+  object thriftBase extends JavaModule {
+    def jvmId = build.Constants.jvmId
+    
+    def sources = Task.Sources(moduleDir / os.up / "src" / "main" / "java" / "ai" / "chronon" / "api" / "thrift")
+    def repositoriesTask = Task.Anon { super.repositoriesTask() ++ build.Constants.repositories }
+    def mvnDeps = Seq(
+      mvn"javax.annotation:javax.annotation-api:1.3.2",
+      mvn"org.slf4j:slf4j-api:1.7.36",
+      mvn"org.apache.commons:commons-lang3:3.18.0"
+    )
+  }
+
+  // Generated Thrift Java classes module
+  object thriftJava extends JavaModule {
+    def jvmId = build.Constants.jvmId
+    
+    def moduleDeps = Seq(thriftBase)
+    def repositoriesTask = Task.Anon { super.repositoriesTask() ++ build.Constants.repositories }
+    def mvnDeps = Seq(mvn"javax.annotation:javax.annotation-api:1.3.2")
+    
+    def generatedSources = Task { 
+      Seq(build.thrift.generateJavaThrift())
+    }
+  }
+  
+  def moduleDeps = Seq(thriftJava)
+
+  def compileMvnDeps = Seq(
+      mvn"org.apache.spark::spark-sql:${build.Constants.sparkVersion}",
+  )
+
+  def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingDeps ++ build.Constants.utilityDeps ++ Seq(
+    mvn"org.apache.avro:avro:1.11.4",
+  )
+  
+  object test extends build.BaseTestModule {
+    def moduleDeps = Seq(build.api)
+    def mvnDeps = super.mvnDeps() ++ super.compileMvnDeps() ++ build.Constants.testDeps
+  }
+
+}

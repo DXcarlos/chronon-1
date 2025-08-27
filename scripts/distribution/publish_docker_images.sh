@@ -29,13 +29,13 @@ cd $CHRONON_ROOT_DIR
 
 echo "Building jars"
 
-bazel build //cloud_gcp:cloud_gcp_lib_deploy.jar
-bazel build //cloud_aws:cloud_aws_lib_deploy.jar
-bazel build //service:service_assembly_deploy.jar
+./mill cloud_gcp.assembly
+./mill cloud_aws.assembly
+./mill service.assembly
 
-CLOUD_GCP_JAR="$CHRONON_ROOT_DIR/bazel-bin/cloud_gcp/cloud_gcp_lib_deploy.jar"
-CLOUD_AWS_JAR="$CHRONON_ROOT_DIR/bazel-bin/cloud_aws/cloud_aws_lib_deploy.jar"
-SERVICE_JAR="$CHRONON_ROOT_DIR/bazel-bin/service/service_assembly_deploy.jar"
+CLOUD_GCP_JAR="$CHRONON_ROOT_DIR/out/cloud_gcp/assembly.dest/out.jar"
+CLOUD_AWS_JAR="$CHRONON_ROOT_DIR/out/cloud_aws/assembly.dest/out.jar"
+SERVICE_JAR="$CHRONON_ROOT_DIR/out/service/assembly.dest/out.jar"
 
 if [ ! -f "$CLOUD_GCP_JAR" ]; then
     echo "$CLOUD_GCP_JAR not found"
@@ -52,12 +52,12 @@ if [ ! -f "$CLOUD_AWS_JAR" ]; then
     exit 1
 fi
 
-# We copy to build output as the docker build can't access the bazel-bin (as its a symlink)
+# Copy jars to build output for docker build
 echo "Copying jars to build_output"
 mkdir -p build_output
-cp bazel-bin/service/service_assembly_deploy.jar build_output/
-cp bazel-bin/cloud_aws/cloud_aws_lib_deploy.jar build_output/
-cp bazel-bin/cloud_gcp/cloud_gcp_lib_deploy.jar build_output/
+cp out/service/assembly.dest/out.jar build_output/service_assembly_deploy.jar
+cp out/cloud_aws/assembly.dest/out.jar build_output/cloud_aws_lib_deploy.jar
+cp out/cloud_gcp/assembly.dest/out.jar build_output/cloud_gcp_lib_deploy.jar
 
 echo "Kicking off a docker login"
 docker login

@@ -145,7 +145,7 @@ class JoinSourceRunner(groupByConf: api.GroupBy, conf: Map[String, String] = Map
              |keyBytes: ${Base64.getEncoder.encodeToString(keyBytes)}
              |valueBytes: ${Base64.getEncoder.encodeToString(valueBytes)}
              |ts: $ts|  UTC: ${formatter.format(Instant.ofEpochMilli(ts))}| PST: ${pstFormatter.format(
-          Instant.ofEpochMilli(ts))}
+                        Instant.ofEpochMilli(ts))}
              |""".stripMargin)
       }
       KVStore.PutRequest(keyBytes, valueBytes, streamingDataset, Option(ts))

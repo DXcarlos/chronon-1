@@ -33,7 +33,11 @@ import java.util.Locale
 
 class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
 
-  it should "consistency" in {
+
+  // expected :<...88,["user4042","user[3592","user2348","user1551]"],["user4042","user...> but
+  // was      :<...88,["user4042","user[4042","user3592","user3592]"],["user4042","user...>
+  //
+  it should "ensure consistency between sawtooth ir and online ir" in {
     val queryEndTs = TsUtils.round(System.currentTimeMillis(), WindowUtils.Day.millis)
     val batchEndTs = queryEndTs - WindowUtils.Day.millis
     val queries = CStream.genTimestamps(new Window(1, TimeUnit.DAYS), 1000)

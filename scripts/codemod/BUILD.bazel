@@ -1,6 +1,0 @@
-py_binary(
-    name = "thrift_package_replace",
-    srcs = ["thrift_package_replace.py"],
-    main = "thrift_package_replace.py",
-    visibility = ["//visibility:public"],
-)

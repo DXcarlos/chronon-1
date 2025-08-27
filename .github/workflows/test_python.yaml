@@ -4,15 +4,55 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'python/**'
+      - 'thrift/**'
+      - '.github/workflows/test_python.yaml'
   pull_request:
     branches:
       - main
+    paths:
+      - 'python/**'
+      - 'thrift/**'
+      - '.github/workflows/test_python.yaml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  python_lint:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Install uv
+        shell: bash
+        run: |
+          apt-get update && apt-get install -y curl
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Run Python lint and format check
+        shell: bash
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          ./mill python.ruffCheck
+
   python_tests:
     runs-on: ubuntu-latest
     container:
@@ -32,34 +72,20 @@ jobs:
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Set up Python virtual environment
+      - name: Install uv
         shell: bash
         run: |
-          python3 -m venv chronon_py_env
-          source chronon_py_env/bin/activate
+          apt-get update && apt-get install -y curl
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-      - name: Run Chronon Python lint (ruff)
+      - name: Run Python tests
         shell: bash
         run: |
-          source chronon_py_env/bin/activate
-          cd api/python
-          pip install ruff
-          ruff check .
-
-      - name: Run Chronon Python tests
-        shell: bash
-        run: |
-          set -euxo pipefail
-          source chronon_py_env/bin/activate
-          for file in api/thrift/*.thrift; do
-            thrift --gen py -out api/python/ "$file"
-          done
-          cd api/python
-          pip3 install -r requirements/dev.txt
-          pip3 install tox
-          tox
+          export PATH="$HOME/.cargo/bin:$PATH"
+          ./mill python.test
 
       - uses: actions/upload-artifact@v4
         with:
           name: htmlcov
-          path: api/python/htmlcov
+          path: python/htmlcov

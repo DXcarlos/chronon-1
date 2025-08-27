@@ -1,12 +1,12 @@
 package ai.chronon.spark.test.join
 
 import ai.chronon.aggregator.test.Column
+import ai.chronon.spark.test.utils.DataFrameGen
 import ai.chronon.api
 import ai.chronon.api.Extensions.MetadataOps
 import ai.chronon.api._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.join.UnionJoin
-import ai.chronon.spark.test.DataFrameGen
 import org.scalatest.matchers.should.Matchers._
 
 class UnionJoinTest extends BaseJoinTest {

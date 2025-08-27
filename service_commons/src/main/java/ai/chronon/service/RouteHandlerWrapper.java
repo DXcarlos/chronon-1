@@ -16,15 +16,15 @@ import org.slf4j.LoggerFactory;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
-import java.util.Base64;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 /**
- * Wrapper class for creating Route handlers that map parameters to an Input object and transform it to Output
- * The wrapped handler produces a JSON response.
- * TODO: Add support for Thrift BinaryProtocol based serialization based on a special request query param.
+ * Wrapper class for creating Route handlers that map parameters to an Input
+ * object and transform it to Output The wrapped handler produces a JSON
+ * response. TODO: Add support for Thrift BinaryProtocol based serialization
+ * based on a special request query param.
  */
 public class RouteHandlerWrapper {
 
@@ -53,7 +53,9 @@ public class RouteHandlerWrapper {
     private static final ThreadLocal<Base64.Encoder> base64Encoder = ThreadLocal.withInitial(Base64::getEncoder);
     private static final ThreadLocal<Base64.Decoder> base64Decoder = ThreadLocal.withInitial(Base64::getDecoder);
 
-    public static <T extends TBase> T deserializeTBinaryBase64(String base64Data, Class<? extends TBase> clazz) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException, TException {
+    public static <T extends TBase> T deserializeTBinaryBase64(String base64Data, Class<? extends TBase> clazz)
+            throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException,
+            TException {
         byte[] binaryData = base64Decoder.get().decode(base64Data);
         T tb = (T) clazz.getDeclaredConstructor().newInstance();
         binaryDeSerializer.get().deserialize(tb, binaryData);
@@ -61,8 +63,8 @@ public class RouteHandlerWrapper {
     }
 
     /**
-     * Combines path parameters, query parameters, and JSON body into a single JSON object.
-     * Returns the JSON object as a string.
+     * Combines path parameters, query parameters, and JSON body into a single JSON
+     * object. Returns the JSON object as a string.
      */
     public static String combinedParamJson(RoutingContext ctx) {
         JsonObject params = ctx.body().asJsonObject();
@@ -76,8 +78,42 @@ public class RouteHandlerWrapper {
         }
 
         // Add query parameters
+        Map<String, List<String>> queryParamGroups = new HashMap<>();
+
         for (Map.Entry<String, String> entry : ctx.queryParams().entries()) {
-            params.put(entry.getKey(), entry.getValue());
+            String key = entry.getKey();
+            String value = entry.getValue();
+
+            queryParamGroups.computeIfAbsent(key, k -> new ArrayList<>()).add(value);
+        }
+
+        for (Map.Entry<String, List<String>> entry : queryParamGroups.entrySet()) {
+            String key = entry.getKey();
+            List<String> values = entry.getValue();
+
+            if (values.size() == 1) {
+                String singleValue = values.get(0);
+                // Handle single key with array-like (string) syntax (ex. `?statuses=[SUCCEEDED,FAILED]`)
+                if (singleValue.startsWith("[") && singleValue.endsWith("]")) {
+                    String arrayContent = singleValue.substring(1, singleValue.length() - 1).trim();
+                    if (!arrayContent.isEmpty()) {
+                        String[] items = arrayContent.split(",");
+                        List<String> arrayItems = new ArrayList<>();
+                        for (String item : items) {
+                            arrayItems.add(item.trim());
+                        }
+                        params.put(key, arrayItems);
+                    } else {
+                        // Empty array
+                        params.put(key, new ArrayList<>());
+                    }
+                } else {
+                    params.put(key, singleValue);
+                }
+            } else {
+                // Multiple query parameters with same name (ex. `?statuses=SUCCEEDED&statuses=FAILED`)
+                params.put(key, values);
+            }
         }
 
         return params.encodePrettily();
@@ -117,21 +153,22 @@ public class RouteHandlerWrapper {
         } else {
             LOGGER.error(errorMessage, ex);
             ctx.response()
-                    .setStatusCode(500)
-                    .putHeader("content-type", "application/json")
-                    .end(toErrorPayload(ex));
+                .setStatusCode(500)
+                .putHeader("content-type", "application/json")
+                .end(toErrorPayload(ex));
         }
     }
-    
+
     /**
-     * Creates a RoutingContext handler that maps parameters to an Input object and transforms it to Output
+     * Creates a RoutingContext handler that maps parameters to an Input object and
+     * transforms it to Output
      *
      * @param transformer Function to convert from Input to Output
      * @param inputClass  Class object for the Input type
      * @param <I>         Input type with setter methods
      * @param <O>         Output type
-     * @return Handler for RoutingContext that produces Output
-     * TODO: To use consistent helper wrappers for the response.
+     * @return Handler for RoutingContext that produces Output TODO: To use
+     *         consistent helper wrappers for the response.
      */
     public static <I, O> Handler<RoutingContext> createHandler(Function<I, O> transformer, Class<I> inputClass) {
         return ctx -> {
@@ -146,20 +183,22 @@ public class RouteHandlerWrapper {
     }
 
     /**
-     * Creates a RoutingContext handler that maps parameters to an Input object and transforms it to a CompletableFuture of Output
-     * This method is specifically designed for asynchronous handlers that return CompletableFuture.
+     * Creates a RoutingContext handler that maps parameters to an Input object and
+     * transforms it to a CompletableFuture of Output This method is specifically
+     * designed for asynchronous handlers that return CompletableFuture.
      *
      * @param asyncTransformer Function to convert from Input to CompletableFuture of Output
-     * @param inputClass  Class object for the Input type
-     * @param <I>         Input type with setter methods
-     * @param <O>         Output type
+     * @param inputClass       Class object for the Input type
+     * @param <I>              Input type with setter methods
+     * @param <O>              Output type
      * @return Handler for RoutingContext that handles the CompletableFuture response
      */
-    public static <I, O> Handler<RoutingContext> createAsyncHandler(Function<I, CompletableFuture<O>> asyncTransformer, Class<I> inputClass) {
+    public static <I, O> Handler<RoutingContext> createAsyncHandler(Function<I, CompletableFuture<O>> asyncTransformer,
+            Class<I> inputClass) {
         return ctx -> {
             try {
                 I input = parseInput(ctx, inputClass);
-                
+
                 // Apply the async transformer to get the CompletableFuture
                 CompletableFuture<O> futureOutput = asyncTransformer.apply(input);
 
@@ -198,7 +237,9 @@ public class RouteHandlerWrapper {
 
     private static <O> String convertToTBinaryB64(String responseFormat, O output) throws TException {
         if (!responseFormat.equals(TBINARY_B64_TYPE_VALUE)) {
-            throw new IllegalArgumentException(String.format("Unsupported response-content-type: %s. Supported values are: %s and %s", responseFormat, JSON_TYPE_VALUE, TBINARY_B64_TYPE_VALUE));
+            throw new IllegalArgumentException(
+                    String.format("Unsupported response-content-type: %s. Supported values are: %s and %s",
+                            responseFormat, JSON_TYPE_VALUE, TBINARY_B64_TYPE_VALUE));
         }
 
         // Verify output is a Thrift object before casting
@@ -241,4 +282,3 @@ public class RouteHandlerWrapper {
         return new JsonObject().put("error", sw.getBuffer().toString()).encode();
     }
 }
-

@@ -7,7 +7,7 @@ import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
 import ai.chronon.online.fetcher.Fetcher.Request
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission
-import ai.chronon.spark.test.OnlineUtils
+import ai.chronon.spark.test.utils.OnlineUtils
 import ai.chronon.spark.utils.MockApi
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col

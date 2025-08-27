@@ -27,11 +27,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run Spark tests
+      - name: Install curl
         run: |
-          bazel test \
-            --test_env=JAVA_OPTS="-Xmx8G -Xms2G" \
-            //spark:tests
+          apt-get update && apt-get install -y curl
+
+      - name: Run Other Spark tests
+        run: |
+          ./mill spark.test.testOnly "ai.chronon.spark.test.other.*"
 
   batch_tests:
     runs-on: ubuntu-8_cores-32_gb
@@ -47,11 +49,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run Batch tests
         run: |
-          bazel test \
-            --test_env=JAVA_OPTS="-Xmx8G -Xms2G" \
-            //spark:batch_test
+          ./mill spark.test.testOnly "ai.chronon.spark.test.batch.*"
 
   fetcher_tests:
     runs-on: ubuntu_32_core_128gb
@@ -67,11 +71,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run Fetcher tests
         run: |
-          bazel test \
-            --test_env=JAVA_OPTS="-Xmx16G -Xms8G" \
-            //spark:fetcher_test
+          ./mill spark.test.testOnly "ai.chronon.spark.test.fetcher.*"
 
   join_tests:
     runs-on: ubuntu_32_core_128gb
@@ -87,11 +93,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run Join tests
         run: |
-          bazel test \
-            --test_env=JAVA_OPTS="-Xmx16G -Xms8G" \
-            //spark:join_test
+          ./mill spark.test.testOnly "ai.chronon.spark.test.join.*"
 
   groupby_tests:
     runs-on: ubuntu_32_core_128gb
@@ -107,11 +115,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run GroupBy tests
         run: |
-          bazel test \
-            --test_env=JAVA_OPTS="-Xmx16G -Xms8G" \
-            //spark:groupby_test
+          ./mill spark.test.testOnly "ai.chronon.spark.test.groupby.*"
 
   analyzer_tests:
     runs-on: ubuntu-8_cores-32_gb
@@ -127,11 +137,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run Analyzer tests
         run: |
-          bazel test \
-            --test_env=JAVA_OPTS="-Xmx16G -Xms8G" \
-            //spark:analyzer_test
+          ./mill spark.test.testOnly "ai.chronon.spark.test.analyzer.*" "ai.chronon.spark.test.bootstrap.*"
 
   streaming_tests:
     runs-on: ubuntu-8_cores-32_gb
@@ -147,8 +159,76 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run Streaming tests
         run: |
-          bazel test \
-            --test_env=JAVA_OPTS="-Xmx16G -Xms8G" \
-            //spark:streaming_test
+          ./mill spark.test.testOnly "ai.chronon.spark.test.streaming.*"
+
+  kv_store_tests:
+    runs-on: ubuntu-8_cores-32_gb
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
+      - name: Run KV Store tests
+        run: |
+          ./mill spark.test.testOnly "ai.chronon.spark.test.kv_store.*"
+
+  udafs_tests:
+    runs-on: ubuntu-8_cores-32_gb
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
+      - name: Run UDAFs tests
+        run: |
+          ./mill spark.test.testOnly "ai.chronon.spark.test.udafs.*"
+
+  stats_tests:
+    runs-on: ubuntu-8_cores-32_gb
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
+      - name: Run Stats tests
+        run: |
+          ./mill spark.test.testOnly "ai.chronon.spark.test.stats.*"

@@ -1,0 +1,104 @@
+package build.python
+
+import mill.*
+import mill.pythonlib.*
+
+// Python API module
+object `package` extends PythonModule with RuffModule with PublishModule {
+
+  def pythonRequirementFiles = Task.Sources("requirements/base.txt")
+
+  // TODO: doing this because we want the whl to have Requires-Dist metadata.
+  def pythonDeps: T[Seq[String]] = Task {
+    // Use the same file that pythonRequirementFiles references
+    val reqFiles = pythonRequirementFiles()
+    if (reqFiles.nonEmpty) {
+      val reqFile = reqFiles.head.path
+      if (os.exists(reqFile)) {
+        os.read.lines(reqFile)
+          .map(_.trim)
+          .filter(line => line.nonEmpty && !line.startsWith("#"))
+          .filter(!_.startsWith("-"))  // Skip pip flags like -e
+          .toSeq
+      } else {
+        Seq.empty[String]
+      }
+    } else {
+      Seq.empty[String]
+    }
+  }
+
+  def mainScript = Task.Source("src/ai/chronon/repo/zipline.py")
+
+  def publishMeta = PublishMeta(
+    name = "zipline-ai",
+    description = "CLI tool for the Zipline AI platform",
+    requiresPython = ">= 3.11",
+    license = License.`Apache-2.0`,
+    authors = Seq(Developer("Zipline AI", "hello@zipline.ai")),
+    urls = Map(
+        "homepage" -> "https://zipline.ai",
+        "documentation" -> "https://docs.zipline.ai",
+        "github" -> "https://github.com/zipline-ai/chronon/",
+    )
+  )
+
+  // used by pypi
+  // https://pypi.org/project/zipline-ai/
+  // Override publishVersion to check environment variable first, then fall back to constant
+  override def publishVersion = Task {
+    Task.ctx().env.get("ZIPLINE_VERSION") match {
+      case Some(version) if version.nonEmpty => version
+      case _ => build.Constants.chrononVersion
+    }
+  }
+
+  def sources = super.sources() ++ generatedSources()
+
+  // the mill PythonModule doesn't yet support entrypoints, so extend it manually
+  def pyproject: T[String] = Task {
+    super.pyproject() + """|
+         |[project.scripts]
+         |zipline = "ai.chronon.repo.zipline:zipline"
+         |""".stripMargin
+  }
+
+
+  object test extends PythonTests, TestModule.Pytest {
+    def pythonRequirementFiles = Task.Sources(moduleDir / os.up / "requirements" / "base.txt")
+
+    override def sources = Task.Sources(moduleDir)
+
+    // Override forkEnv to set PYTHONPATH
+    override def forkEnv: T[Map[String, String]] = Task {
+
+      val generatedPath = build.python.generatedSources().head.path.toString
+      val sourcePath = (moduleDir / os.up / "src").toString
+      val samplePath = (moduleDir / "sample").toString
+
+      super.forkEnv() ++ Map(
+        "PYTHONPATH" -> s"$generatedPath:$sourcePath:$samplePath"
+      )
+
+    }
+
+  }
+
+
+  // Generate Python thrift files
+  def generatedSources: T[Seq[PathRef]] = Task {
+    val outputDir = Task.dest
+    os.makeDir.all(outputDir)
+
+    val sources = build.thrift.thriftSources()
+    val thriftFiles = sources.flatMap(p => os.list(p.path)).filter(_.ext == "thrift")
+
+    thriftFiles.foreach { thriftFile =>
+      println(s"Generating Python thrift for: $thriftFile")
+      os.proc("thrift", "--gen", "py", "-out", outputDir, thriftFile).call()
+    }
+
+    Seq(PathRef(outputDir))
+  }
+
+}

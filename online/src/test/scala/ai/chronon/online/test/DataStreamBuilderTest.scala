@@ -42,7 +42,13 @@ class DataStreamBuilderTest extends AnyFlatSpec {
     val spark = SparkSession
       .builder()
       .appName("DataStreamBuilderTest")
-      .master("local")
+      .master("local[1]")
+      .config("spark.driver.bindAddress", "127.0.0.1")
+      .config("spark.driver.host", "127.0.0.1")
+      .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse")
+      .config("spark.ui.enabled", "false")
+      .config("spark.sql.adaptive.enabled", "false")
+      .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .getOrCreate()
     spark
   }

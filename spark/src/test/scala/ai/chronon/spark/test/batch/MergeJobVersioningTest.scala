@@ -9,7 +9,7 @@ import com.google.gson.Gson
 import ai.chronon.planner.{JoinMergeNode, JoinPartNode, SourceWithFilterNode}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.batch.{JoinPartJob, MergeJob, SourceJob}
-import ai.chronon.spark.test.{DataFrameGen, TableTestUtils}
+import ai.chronon.spark.test.utils.{DataFrameGen, TableTestUtils}
 import ai.chronon.spark.{Join, JoinUtils}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._

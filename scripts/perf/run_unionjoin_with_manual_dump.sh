@@ -1,12 +1,19 @@
 #!/bin/bash
 
 # UnionJoinTest with Manual Heap Dump Generation
+# TODO: Update this script to work with Mill instead of Bazel
 
-cd /Users/nsimha/repos/chronon
+echo "This script needs to be updated to work with Mill build system."
+echo "The Bazel-specific test runner is no longer available."
+echo "Use 'mill spark.test' to run Spark tests or specific test classes."
+exit 1
+
+# TODO: Implement Mill equivalent
+# cd /Users/nsimha/repos/chronon
 
 # Build the test target
-echo "Building UnionJoinTest..."
-bazel build //spark:join_test_test_suite_src_test_scala_ai_chronon_spark_test_join_UnionJoinTest.scala
+# echo "Building UnionJoinTest..."
+# mill spark.test
 
 # Get the generated script path
 BAZEL_SCRIPT="bazel-bin/spark/join_test_test_suite_src_test_scala_ai_chronon_spark_test_join_UnionJoinTest.scala"

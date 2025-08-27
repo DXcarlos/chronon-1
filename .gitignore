@@ -113,6 +113,10 @@ MODULE.bazel*
 
 /plugins/vscode/node_modules
 
-**/.claude/settings.local.json
+.claude/
 
 **/api/py/ai/chronon/observability/__init__.py
+
+
+# mill build output
+out/**

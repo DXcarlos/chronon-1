@@ -18,7 +18,10 @@ class GlueCatalogTest extends AnyFlatSpec with MockitoSugar {
       Map(
         "spark.sql.catalog.spark_catalog" -> "org.apache.spark.sql.hudi.catalog.HoodieCatalog",
         "spark.sql.extensions" -> "org.apache.spark.sql.hudi.HoodieSparkSessionExtension",
-        "spark.kryo.registrator" -> classOf[ChrononHudiKryoRegistrator].getName
+        "spark.kryo.registrator" -> classOf[ChrononHudiKryoRegistrator].getName,
+        // Disable timeline server-based markers to avoid connection issues in tests
+        "hoodie.write.markers.type" -> "DIRECT",
+        "hoodie.embed.timeline.server" -> "false"
       ))
   )
   lazy val tableUtils: TableUtils = TableUtils(spark)

@@ -37,6 +37,8 @@ There's some additional environment variables that the Docker container can be s
 |VERTX_PROMETHEUS_SERVER_PORT|If using the 'prometheus' metrics reader, exposes a [Prometheus service endpoint](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/prometheus/) on the configured port to export Vert.x webservice metrics|`8906`
 |**Monitoring**
 |FETCHER_OOC_TOPIC_INFO|Topic string in the format of: `kafka://my-topic-name/key1=value1/key2=value2`. If configured, the service emits [online offline consistency feature logging](https://chronon.ai/test_deploy_serve/Online_Offline_Consistency.html) data to the given topic|``
+|**JVM Configuration**
+|JVM_OPTS|Additional JVM options to pass to the service|``
 
 ## Exporting Metrics
 

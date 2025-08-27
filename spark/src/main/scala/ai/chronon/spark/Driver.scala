@@ -40,8 +40,6 @@ import org.apache.spark.sql.streaming.StreamingQueryListener.{
   QueryStartedEvent,
   QueryTerminatedEvent
 }
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
 import org.rogach.scallop.{ScallopConf, ScallopOption, Subcommand}
 import org.slf4j.{Logger, LoggerFactory}
 import org.yaml.snakeyaml.Yaml
@@ -149,8 +147,6 @@ object Driver {
     protected def isLocal: Boolean = localTableMapping.nonEmpty || localDataPath.isDefined
 
     protected def buildSparkSession(): SparkSession = {
-      implicit val formats: Formats = DefaultFormats
-      val yamlLoader = new Yaml()
 
       // We use the KryoSerializer for group bys and joins since we serialize the IRs.
       // But since staging query is fairly freeform, it's better to stick to the java serializer.

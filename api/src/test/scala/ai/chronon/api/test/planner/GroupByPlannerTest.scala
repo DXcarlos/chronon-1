@@ -18,7 +18,7 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
   private def validateGBPlan(groupBy: GroupBy, plan: ConfPlan): Unit = {
     // Should create plan successfully with expected number of nodes
     val hasStreaming = groupBy.streamingSource.isDefined
-    val expectedNodeCount = if (hasStreaming) 4 else 3
+    val expectedNodeCount = if (hasStreaming) 5 else 4
     plan.nodes.asScala should have size expectedNodeCount
 
     // Find the nodes
@@ -84,8 +84,7 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
 
   it should "GB planner handles valid confs" in {
 
-    val runfilesDir = System.getenv("RUNFILES_DIR")
-    val gbRootDir = Paths.get(runfilesDir, "chronon/spark/src/test/resources/canary/compiled/group_bys")
+    val gbRootDir = Paths.get(getClass.getClassLoader.getResource("canary/compiled/group_bys").getPath)
 
     val gbConfs = LocalRunner.parseConfs[ai.chronon.api.GroupBy](gbRootDir.toString)
 

@@ -136,6 +136,12 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
     setClientRetrySettings(dataSettingsBuilder, conf)
 
     val dataSettings = dataSettingsBuilder.setProjectId(projectId).setInstanceId(instanceId).build()
+
+    logger.info(
+      s"Creating BigTableStore for $projectId and $instanceId. " +
+        s"Params: profileId: $maybeAppProfileId, adminClientEnabled: $enableUploadClients, " +
+        s"num procs = ${Runtime.getRuntime.availableProcessors()}")
+
     val dataClient = BigtableDataClient.create(dataSettings)
 
     val maybeAdminClient = maybeAdminSettingsBuilder.map { adminSettingsBuilder =>
@@ -143,10 +149,6 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
       BigtableTableAdminClient.create(adminSettings)
     }
 
-    logger.info(
-      s"Creating BigTableStore for $projectId and $instanceId. " +
-        s"Params: profileId: $maybeAppProfileId, adminClientEnabled: $enableUploadClients, " +
-        s"num procs = ${Runtime.getRuntime.availableProcessors()}")
     new BigTableKVStoreImpl(dataClient, maybeAdminClient, maybeBQClient, conf)
   }
 

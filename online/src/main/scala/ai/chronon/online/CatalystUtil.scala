@@ -50,7 +50,8 @@ object CatalystUtil {
       .config("spark.driver.bindAddress", "127.0.0.1")
       .config(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
       .config(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key, false)
-      .enableHiveSupport() // needed to support registering Hive UDFs via CREATE FUNCTION.. calls
+      // disable Hive support as this requires spark-hive as a hard dep and that fails grype tests
+//      .enableHiveSupport() // needed to support registering Hive UDFs via CREATE FUNCTION.. calls
       .getOrCreate()
     assert(spark.sessionState.conf.wholeStageEnabled)
     spark

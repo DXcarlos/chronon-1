@@ -169,7 +169,7 @@ function check_emr_cluster_state() {
 }
 
 
-CHRONON_ROOT=`pwd`/api/python/test/canary
+CHRONON_ROOT=`pwd`/python/test/canary
 export PYTHONPATH="${PYTHONPATH}:$CHRONON_ROOT" ARTIFACT_PREFIX="s3://zipline-artifacts-$ENVIRONMENT" CUSTOMER_ID=$ENVIRONMENT
 
 

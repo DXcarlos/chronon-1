@@ -1,0 +1,46 @@
+package build.online
+import mill._
+import mill.scalalib._
+
+// Online module
+object `package` extends build.BaseModule {
+  def moduleDeps = Seq(build.aggregator, build.api)
+
+  def compileMvnDeps = Seq(
+    mvn"org.apache.spark::spark-hive:${build.Constants.sparkVersion}",
+    mvn"org.apache.hadoop:hadoop-client-api:3.3.6",
+  )
+
+  def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingDeps ++ build.Constants.utilityDeps ++ Seq(
+    // Core dependencies from Bazel
+    mvn"com.github.ben-manes.caffeine:caffeine:3.1.8",
+    mvn"org.apache.kafka:kafka-clients:3.8.1",
+    mvn"org.apache.avro:avro:1.11.4",
+    mvn"com.linkedin.avroutil1:avro-fastserde:0.4.25",
+    mvn"org.rogach::scallop:5.1.0",
+    // Scala reflection dependencies
+    mvn"org.scala-lang:scala-reflect:${scalaVersion()}",
+    mvn"org.scala-lang:scala-compiler:${scalaVersion()}",
+    // HTTP client (core only - matching Bazel exactly)
+    mvn"com.softwaremill.sttp.client3::core:3.9.7",
+    // OpenTelemetry (using exact versions from Bazel)
+    mvn"io.opentelemetry:opentelemetry-sdk:1.49.0",
+    mvn"io.opentelemetry:opentelemetry-exporter-prometheus:1.49.0-alpha",
+    mvn"io.opentelemetry:opentelemetry-exporter-otlp:1.49.0",
+    // Additional from Bazel
+    mvn"net.jodah:typetools:0.6.3",
+    mvn"com.datadoghq:java-dogstatsd-client:4.4.0"
+  )
+  
+  object test extends build.BaseTestModule {
+    def moduleDeps = Seq(build.online, build.api.test)
+    def mvnDeps = super.mvnDeps() ++ build.Constants.testDeps ++ Seq(
+      mvn"org.apache.spark::spark-hive:${build.Constants.sparkVersion}"
+    )
+    
+    def forkArgs = build.Constants.commonTestForkArgs ++ Seq(
+      "--add-opens=java.base/jdk.internal.loader=ALL-UNNAMED",
+      "-Djdk.internal.loader.ClassLoaders.setAccessible=true"
+    )
+  }
+}

@@ -1,0 +1,44 @@
+[tool.ruff]
+# Exclude patterns
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "ai/chronon/api",
+    "ai/chronon/fetcher",
+    "ai/chronon/hub", 
+    "ai/chronon/lineage",
+    "ai/chronon/observability",
+    "ai/chronon/orchestration",
+    "ai/chronon/planner"
+]
+
+# Line length
+line-length = 100
+
+# Target Python version
+target-version = "py39"
+
+[tool.ruff.lint]
+# Rules to enable
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+]
+
+# Rules to ignore
+ignore = [
+    "B017",  # Unnecessary pass
+    "E501",  # line too long
+    #"E402",  # module level import not at top of file
+]
+
+# Ignore specific files or patterns
+[tool.ruff.lint.per-file-ignores]
+"**/constants.py" = ["F401", "I001"]  # Ignore unused imports and import sorting in constants.py
+"**/ttypes.py" = ["F401", "I001"]     # Ignore unused imports and import sorting in ttypes.py

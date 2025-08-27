@@ -8,9 +8,6 @@ import ai.chronon.api.thrift.TBase
 import ai.chronon.online.Api
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.apache.logging.log4j.{Level, LogManager}
-import org.apache.logging.log4j.core.LoggerContext
-import org.apache.logging.log4j.core.config.builder.api.ConfigurationBuilderFactory
 import org.rogach.scallop.{ScallopConf, ScallopOption, Subcommand}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -110,53 +107,10 @@ object FetcherMain {
     verify()
   }
 
-  def configureLogging(): Unit = {
-
-    // Force reconfiguration
-    LoggerContext.getContext(false).close()
-
-    val builder = ConfigurationBuilderFactory.newConfigurationBuilder()
-
-    // Create console appender
-    val console = builder
-      .newAppender("console", "Console")
-      .addAttribute("target", "SYSTEM_OUT")
-
-    // Create pattern layout with colors
-    val patternLayout = builder
-      .newLayout("PatternLayout")
-      .addAttribute("pattern",
-                    "%cyan{%d{yyyy/MM/dd HH:mm:ss}} %highlight{%-5level} %style{%file:%line}{GREEN} - %message%n")
-      .addAttribute("disableAnsi", "false")
-
-    console.add(patternLayout)
-    builder.add(console)
-
-    // Configure root logger
-    val rootLogger = builder.newRootLogger(Level.ERROR)
-    rootLogger.add(builder.newAppenderRef("console"))
-    builder.add(rootLogger)
-
-    // Configure specific logger for ai.chronon
-    val chrononLogger = builder.newLogger("ai.chronon", Level.INFO)
-    builder.add(chrononLogger)
-
-    // Build and apply configuration
-    val config = builder.build()
-    val context = LoggerContext.getContext(false)
-    context.start(config)
-
-    // Add a test log message
-    val logger = LogManager.getLogger(getClass)
-    logger.info("Chronon logging system initialized. Overrides spark's configuration")
-
-  }
-
   def parseConf[T <: TBase[_, _]: Manifest: ClassTag](confPath: String): T =
     ThriftJsonCodec.fromJsonFile[T](confPath, check = false)
 
   def run(args: FetcherArgs): Unit = {
-    configureLogging()
     if (args.keyJson.isEmpty && args.keyJsonFile.isEmpty) {
       throw new Exception("At least one of keyJson and keyJsonFile should be specified!")
     }

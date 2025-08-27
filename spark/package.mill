@@ -1,0 +1,46 @@
+package build.spark
+import mill._
+import mill.scalalib._
+import mill.api.PathRef
+
+// Spark module
+object `package` extends build.BaseModule {
+  def moduleDeps = Seq(build.aggregator, build.api, build.online)
+
+  def compileMvnDeps = build.Constants.sparkDeps
+
+  def mvnDeps = build.Constants.commonDeps ++
+    build.Constants.loggingDeps ++
+    build.Constants.utilityDeps ++
+    Seq(
+      mvn"io.netty:netty-all:4.1.124.Final",
+      mvn"org.rogach::scallop:5.1.0",
+      mvn"org.apache.avro:avro:1.11.4",
+      mvn"io.delta::delta-spark:3.2.0",
+//        .exclude("org.apache.parquet" -> "parquet-avro"), // Avoid version conflict with Spark's Parquet,
+//      mvn"org.apache.parquet:parquet-avro:1.15.2".forceVersion(),
+    )
+  
+  // Single test module for all Spark tests
+  object test extends build.BaseTestModule {
+    def moduleDeps = Seq(build.spark, build.api.test, build.aggregator.test)
+    
+    override def testFramework = "org.scalatest.tools.Framework"
+    
+    def mvnDeps = super.mvnDeps() ++ build.Constants.sparkDeps ++ build.Constants.testDeps ++ Seq(
+      // Fix parquet version conflict - need 1.11.0+ for BROTLI field
+//      mvn"org.apache.parquet:parquet-common:1.15.2",
+//      mvn"org.apache.parquet:parquet-column:1.11.0",
+//      mvn"org.apache.parquet:parquet-hadoop:1.11.0",
+      // Force consistent SLF4J version to avoid multi-release JAR issues
+      mvn"org.slf4j:slf4j-api:1.7.36"
+    )
+    
+    def forkArgs = build.Constants.commonTestForkArgs ++ Seq(
+      "-Dspark.sql.adaptive.enabled=false",
+      "-Dspark.sql.adaptive.coalescePartitions.enabled=false",
+      "-Dspark.serializer=org.apache.spark.serializer.KryoSerializer",
+      "-Dspark.sql.hive.convertMetastoreParquet=false"
+    )
+  }
+}

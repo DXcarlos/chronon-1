@@ -16,14 +16,18 @@
 
 package ai.chronon.spark.test.join
 
+import ai.chronon.spark.test.utils.TableTestUtils
+import ai.chronon.spark.test.utils.DataFrameGen
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api._
 import ai.chronon.spark.Extensions._
-import ai.chronon.spark.test.{DataFrameGen, TableTestUtils}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.Tag
+
+object JoinTag extends Tag("join")
 
 case class TestRow(ds: String, value: String) {}
 

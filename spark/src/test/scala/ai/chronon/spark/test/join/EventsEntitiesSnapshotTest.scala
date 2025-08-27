@@ -16,14 +16,14 @@
 
 package ai.chronon.spark.test.join
 
+import ai.chronon.spark.test.utils.DataFrameGen
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
-import ai.chronon.api.{Accuracy, Join, Window, TimeUnit, _}
+import ai.chronon.api._
 import ai.chronon.spark._
 import ai.chronon.spark.Extensions._
-import ai.chronon.spark.test.DataFrameGen
 import org.junit.Assert._
 
 class EventsEntitiesSnapshotTest extends BaseJoinTest {

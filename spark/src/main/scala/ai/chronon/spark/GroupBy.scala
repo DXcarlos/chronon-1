@@ -773,8 +773,8 @@ object GroupBy {
       try {
         val stepRanges = stepDays.map(groupByUnfilledRange.steps).getOrElse(Seq(groupByUnfilledRange))
         logger.info(s"Group By ranges to compute: ${stepRanges.map {
-          _.toString()
-        }.pretty}")
+            _.toString()
+          }.pretty}")
         stepRanges.zipWithIndex.foreach { case (range, index) =>
           logger.info(s"Computing group by for range: $range [${index + 1}/${stepRanges.size}]")
           val groupByBackfill = from(groupByConf, range, tableUtils, computeDependency = true)

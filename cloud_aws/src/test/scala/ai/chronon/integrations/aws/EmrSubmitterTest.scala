@@ -48,6 +48,7 @@ class EmrSubmitterTest extends AnyFlatSpec with MockitoSugar {
       ),
       jobProperties = Map.empty,
       files = expectedFiles,
+      labels = Map.empty,
       expectedApplicationArgs: _*
     )
     assertEquals(submittedJobId, jobId)
@@ -62,7 +63,7 @@ class EmrSubmitterTest extends AnyFlatSpec with MockitoSugar {
     assertEquals(actualRequest.managedScalingPolicy().computeLimits().unitType(), ComputeLimitsUnitType.INSTANCES)
     assertEquals(actualRequest.managedScalingPolicy().computeLimits().minimumCapacityUnits(), 1)
     assertEquals(actualRequest.managedScalingPolicy().computeLimits().maximumCapacityUnits(),
-                 expectedClusterInstanceCount)
+      expectedClusterInstanceCount)
 
     // cluster specific assertions
     assertEquals(actualRequest.releaseLabel(), "emr-7.2.0")
@@ -101,9 +102,9 @@ class EmrSubmitterTest extends AnyFlatSpec with MockitoSugar {
 
   it should "Used to iterate locally. Do not enable this in CI/CD!" ignore {
     val emrSubmitter = new EmrSubmitter("canary",
-                                        EmrClient
-                                          .builder()
-                                          .build())
+      EmrClient
+        .builder()
+        .build())
     val jobId = emrSubmitter.submit(
       jobType = SparkJob,
       submissionProperties = Map(
@@ -113,6 +114,7 @@ class EmrSubmitterTest extends AnyFlatSpec with MockitoSugar {
       ),
       jobProperties = Map.empty,
       files = List("s3://zipline-artifacts-canary/additional-confs.yaml", "s3://zipline-warehouse-canary/purchases.v1"),
+      Map.empty,
       "group-by-backfill",
       "--conf-path",
       "/mnt/zipline/purchases.v1",

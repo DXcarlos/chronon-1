@@ -16,6 +16,8 @@
 
 package ai.chronon.spark.test.bootstrap
 
+import ai.chronon.spark.test.utils.SchemaEvolutionUtils
+import ai.chronon.spark.test.utils.OnlineUtils
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
@@ -25,8 +27,6 @@ import ai.chronon.spark.Extensions._
 import ai.chronon.spark.LogFlattenerJob
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.test.OnlineUtils
-import ai.chronon.spark.test.SchemaEvolutionUtils
 import ai.chronon.spark.utils.MockApi
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._

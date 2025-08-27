@@ -87,7 +87,7 @@ class KVUploadNodeRunnerTest
     )
 
     // The upload table should be derived as: outputNamespace.name_upload
-    uploadTableCaptor.getValue shouldEqual "test_namespace.test_groupby_upload"
+    uploadTableCaptor.getValue shouldEqual "test_namespace.test_groupby__upload"
     groupByNameCaptor.getValue shouldEqual "test_groupby"
     partitionCaptor.getValue shouldEqual "2023-01-01"
   }

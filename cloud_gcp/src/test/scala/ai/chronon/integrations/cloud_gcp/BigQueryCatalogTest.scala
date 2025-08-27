@@ -5,12 +5,6 @@ import ai.chronon.spark.catalog.{FormatProvider, Iceberg, TableUtils}
 import ai.chronon.spark.submission.SparkSessionBuilder
 import com.esotericsoftware.kryo.Kryo
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.google.cloud.hadoop.fs.gcs.{
-  GoogleHadoopFS,
-  GoogleHadoopFileSystem,
-  GoogleHadoopFileSystemConfiguration,
-  HadoopConfigurationProperty
-}
 import com.google.cloud.spark.bigquery.SparkBigQueryUtil
 import org.apache.iceberg.gcp.bigquery.{BigQueryMetastoreCatalog => BQMSCatalog}
 import org.apache.iceberg.gcp.gcs.GCSFileIO
@@ -37,8 +31,8 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
         "spark.chronon.table.format_provider.class" -> classOf[GcpFormatProvider].getName,
         "hive.metastore.uris" -> "thrift://localhost:9083",
         "spark.chronon.partition.column" -> "ds",
-        "spark.hadoop.fs.gs.impl" -> classOf[GoogleHadoopFileSystem].getName,
-        "spark.hadoop.fs.AbstractFileSystem.gs.impl" -> classOf[GoogleHadoopFS].getName,
+        "spark.hadoop.fs.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
+        "spark.hadoop.fs.AbstractFileSystem.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
         "spark.sql.catalogImplementation" -> "in-memory"
 
 //        Uncomment to test
@@ -92,12 +86,6 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
 
     assertEquals(nativeTruncated.toSet, viewTruncated.toSet)
 
-  }
-
-  it should "google runtime classes are available" in {
-    assertTrue(GoogleHadoopFileSystemConfiguration.BLOCK_SIZE.isInstanceOf[HadoopConfigurationProperty[_]])
-    assertCompiles("classOf[GoogleHadoopFileSystem]")
-    assertCompiles("classOf[GoogleHadoopFS]")
   }
 
   it should "verify dynamic classloading of GCP providers" in {

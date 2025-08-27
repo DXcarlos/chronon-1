@@ -1,0 +1,53 @@
+{
+  "executionInfo": {
+    "conf": {
+      "common": {
+        "spark.chronon.partition.column": "_test_column"
+      },
+      "modeConfigs": {}
+    },
+    "env": {
+      "common": {
+        "CUSTOMER_ID": "canary",
+        "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+        "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+        "GCP_PROJECT_ID": "canary-443022",
+        "GCP_REGION": "us-central1",
+        "VERSION": "latest"
+      },
+      "modeEnvironments": {
+        "backfill": {
+          "CUSTOMER_ID": "canary",
+          "DRIVER_MEMORY": "15G",
+          "EXECUTOR_CORES": "2",
+          "EXECUTOR_MEMORY": "4G",
+          "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "MAX_EXECUTORS": "4",
+          "PARALLELISM": "4",
+          "VERSION": "latest"
+        },
+        "streaming": {
+          "CUSTOMER_ID": "canary",
+          "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "VERSION": "latest"
+        },
+        "upload": {
+          "CUSTOMER_ID": "canary",
+          "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "MAX_EXECUTORS": "4",
+          "PARALLELISM": "2",
+          "VERSION": "latest"
+        }
+      }
+    }
+  }
+}

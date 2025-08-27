@@ -113,12 +113,18 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
   }
 
   override def buildPlan: ConfPlan = {
-    val allNodes = Seq(backfillNode, uploadNode, uploadToKVNode) ++ streamingNode.toSeq
+    val backfill = backfillNode
+    val sensorNodes = ExternalSourceSensorUtil
+      .sensorNodes(backfill.metaData)
+      .map { es =>
+        toNode(es.metaData, _.setExternalSourceSensor(es), ExternalSourceSensorUtil.semanticExternalSourceSensor(es))
+      }
+    val allNodes = Seq(backfill, uploadNode, uploadToKVNode) ++ sensorNodes ++ streamingNode.toSeq
 
     val deployTerminalNode = streamingNode.map(_.metaData.name).getOrElse(uploadToKVNode.metaData.name)
 
     val terminalNodeNames = Map(
-      ai.chronon.planner.Mode.BACKFILL -> backfillNode.metaData.name,
+      ai.chronon.planner.Mode.BACKFILL -> backfill.metaData.name,
       ai.chronon.planner.Mode.DEPLOY -> deployTerminalNode
     )
 

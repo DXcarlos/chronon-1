@@ -1,0 +1,17 @@
+# Mark compiled directories as generated code
+# This prevents GitHub from showing these files in diffs by default
+# and marks them as auto-generated
+
+# Compiled configuration files
+**/compiled/** linguist-generated=true
+**/resources/compiled/** linguist-generated=true
+api/src/test/resources/canary/compiled/** linguist-generated=true
+cloud_gcp/src/test/resources/canary/compiled/** linguist-generated=true
+api/python/test/canary/compiled/** linguist-generated=true
+
+# Mill build output directories
+out/** linguist-generated=true
+
+# Other potential generated directories
+**/target/** linguist-generated=true
+**/.mill-version linguist-generated=true

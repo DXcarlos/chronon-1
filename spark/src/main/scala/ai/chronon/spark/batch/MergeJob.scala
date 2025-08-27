@@ -96,7 +96,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       // Get left DataFrame with potentially reused columns from production
       val leftDf = if (reuseAnalysis.reuseTable.isDefined) {
         logger.info(s"Reusing ${reuseAnalysis.columnsToReuse.length} columns (${reuseAnalysis.columnsToReuse
-          .mkString(", ")}) from table: ${reuseAnalysis.reuseTable.get}")
+            .mkString(", ")}) from table: ${reuseAnalysis.reuseTable.get}")
 
         // Select left columns + reused columns from production table
         val leftColumns = leftInputDf.schema.fieldNames.filterNot(processingColumns.contains)
@@ -360,7 +360,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     if (leftSchemaMismatches.nonEmpty) {
       logger.info(
         s"Left columns have mismatched semantic hashes, cannot reuse from production table. Mismatched columns: ${leftSchemaMismatches
-          .mkString(", ")}")
+            .mkString(", ")}")
       return JoinPartReuseAnalysis(None, Seq.empty, joinParts)
     }
 
@@ -395,7 +395,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
         if (missingColumns.nonEmpty) {
           logger.info(
             s"Join part $joinPartGroupByName cannot be fully reused from production table. Missing columns: ${missingColumns
-              .mkString(", ")}"
+                .mkString(", ")}"
           )
         }
         if (mismatchedHashes.nonEmpty) {

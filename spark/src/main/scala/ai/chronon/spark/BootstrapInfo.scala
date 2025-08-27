@@ -297,8 +297,8 @@ object BootstrapInfo {
         assert(
           bootstrapInfo.fieldsMap(field.name) == field,
           s"""Table $table has column ${field.name} with ${field.fieldType}, but Join ${joinConf.metaData.name} has the same field with ${bootstrapInfo
-            .fieldsMap(field.name)
-            .fieldType}
+              .fieldsMap(field.name)
+              .fieldType}
            |""".stripMargin
         ))
     }

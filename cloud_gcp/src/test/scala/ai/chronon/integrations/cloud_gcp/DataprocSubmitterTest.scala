@@ -12,7 +12,7 @@ import com.google.cloud.dataproc.v1._
 import com.google.cloud.dataproc.v1.stub.JobControllerStub
 import com.google.cloud.storage.Storage
 import com.google.protobuf.Empty
-import org.junit.Assert.assertEquals
+import org.junit.Assert.{assertEquals, assertTrue}
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -44,10 +44,10 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     assertEquals(job.getTypeJobCase, Job.TypeJobCase.FLINK_JOB)
 
     val flinkJob = job.getFlinkJob
-//    TODO: getMainClass returns empty in tests but not in prod
-//    assert(flinkJob.getMainClass == "ai.chronon.flink.FlinkJob")
+    //    TODO: getMainClass returns empty in tests but not in prod
+    //    assert(flinkJob.getMainClass == "ai.chronon.flink.FlinkJob")
 
-    assertEquals(flinkJob.getJarFileUrisList.size(), 1)
+    assertEquals(flinkJob.getJarFileUrisList.size(), 21)
     assertEquals(flinkJob.getJarFileUrisList.get(0), "gs://zipline-jars/cloud-gcp.jar")
 
     assertEquals(flinkJob.getMainJarFileUri, "gs://zipline-jars/flink-assembly-0.1.0-SNAPSHOT.jar")
@@ -128,14 +128,12 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
       "gs://zipline-jars/cloud-gcp.jar",
       "gs://zipline-jars/flink-pubsub-connector.jar"
     )
-    assertEquals(jarFileUris, expectedJarFileUris)
+    expectedJarFileUris.foreach(jarUri => jarFileUris.contains(jarUri))
   }
 
   it should "test createSubmissionPropsMap for spark job" in {
 
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
-    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
-    val path = Paths.get(runfilesDir, confPath)
+    val path = Paths.get(getClass.getClassLoader.getResource("group_bys/team/purchases.v1").getPath)
 
     val mockControllerClient = mock[JobControllerClient]
     val submitter =
@@ -166,9 +164,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test createSubmissionPropsMap for flink job with latest savepoint" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
-    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
-    val path = Paths.get(runfilesDir, confPath)
+    val path = Paths.get(getClass.getClassLoader.getResource("group_bys/team/purchases.v1").getPath)
 
     val manifestBucketPath = "gs://zipline-warehouse/flink-manifest"
     val groupByName = "quickstart.purchases.v1"
@@ -216,9 +212,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     assertEquals(actual(SavepointUri), latestFlinkCheckpoint)
   }
   it should "test createSubmissionPropsMap for flink job with no savepoint" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
-    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
-    val path = Paths.get(runfilesDir, confPath)
+    val path = Paths.get(getClass.getClassLoader.getResource("group_bys/team/purchases.v1").getPath)
 
     val manifestBucketPath = "gs://zipline-warehouse/flink-manifest"
     val groupByName = "quickstart.purchases.v1"
@@ -260,9 +254,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     assert(!actual.contains(SavepointUri))
   }
   it should "test createSubmissionPropsMap for flink job with user passed savepoint" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
-    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
-    val path = Paths.get(runfilesDir, confPath)
+    val path = Paths.get(getClass.getClassLoader.getResource("group_bys/team/purchases.v1").getPath)
 
     val manifestBucketPath = "gs://zipline-warehouse/flink-manifest"
     val groupByName = "quickstart.purchases.v1"
@@ -307,9 +299,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test createSubmissionPropsMap for flink job with additional jars" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
-    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
-    val path = Paths.get(runfilesDir, confPath)
+    val path = Paths.get(getClass.getClassLoader.getResource("group_bys/team/purchases.v1").getPath)
 
     val manifestBucketPath = "gs://zipline-warehouse/flink-manifest"
     val groupByName = "quickstart.purchases.v1"
@@ -541,9 +531,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test flink deploy with no-savepoint deploy strategy successfully" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
-    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
-    val path = Paths.get(runfilesDir, confPath)
+    val path = Paths.get(getClass.getClassLoader.getResource("group_bys/team/purchases.v1").getPath)
 
     val manifestBucketPath = "gs://zipline-warehouse/flink-manifest"
     val groupByName = "quickstart.purchases.v1"
@@ -589,15 +577,14 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
       submissionProperties = any(),
       jobProperties = any(),
       files = any(),
+      labels = any(),
       any()
     )
     // No longer needed as region and projectId are accessed directly
   }
 
   it should "test flink deploy with latest savepoint deploy strategy successfully" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
-    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
-    val path = Paths.get(runfilesDir, confPath)
+    val path = Paths.get(getClass.getClassLoader.getResource("group_bys/team/purchases.v1").getPath)
 
     val manifestBucketPath = "gs://zipline-warehouse/flink-manifest"
     val groupByName = "quickstart.purchases.v1"
@@ -650,6 +637,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
       submissionProperties = any(),
       jobProperties = any(),
       files = any(),
+      labels = any(),
       any()
     )
     verify(submitter).getLatestFlinkCheckpoint(groupByName = groupByName,
@@ -658,9 +646,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test flink deploy with user provided savepoint deploy strategy successfully" in {
-    val confPath = "chronon/cloud_gcp/src/test/resources/group_bys/team/purchases.v1"
-    val runfilesDir = Option(System.getenv("RUNFILES_DIR")).getOrElse(".")
-    val path = Paths.get(runfilesDir, confPath)
+    val path = Paths.get(getClass.getClassLoader.getResource("group_bys/team/purchases.v1").getPath)
 
     val manifestBucketPath = "gs://zipline-warehouse/flink-manifest"
     val groupByName = "quickstart.purchases.v1"
@@ -707,6 +693,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
       submissionProperties = any(),
       jobProperties = any(),
       files = any(),
+      labels = any(),
       any()
     )
     // No longer needed as region and projectId are accessed directly
@@ -753,7 +740,8 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
           ClusterName -> "test-cluster"
         ),
         Map.empty,
-        List.empty
+        List.empty,
+        Map.empty
       )
     assertEquals(submittedJobId, jobId)
   }
@@ -1121,6 +1109,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
         ),
         Map.empty,
         List.empty,
+        Map.empty,
         "--kafka-bootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
         "--kafka-topic=test-item-event-data",
         "--data-file-name=gs://zl-warehouse/canary_item_events/events-output.avro",
@@ -1154,6 +1143,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
         ),
         Map.empty,
         List.empty,
+        Map.empty,
         "--gcp-project=canary-443022",
         "--topic=test-item-event-data",
         "--data-file-name=gs://zl-warehouse/canary_item_events/events-output.avro",

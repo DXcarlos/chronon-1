@@ -107,7 +107,8 @@ class MockApi(kvStore: () => KVStore, val namespace: String) extends Api(null) {
     println(
       s"decoding stream ${parsedInfo.groupBy.streamingSource.get.topic} with " +
         s"schema: ${SparkConversions.fromChrononSchema(parsedInfo.streamChrononSchema).catalogString}")
-    new AvroSerDe(AvroConversions.fromChrononSchema(parsedInfo.streamChrononSchema))
+    val streamChrononSchema = parsedInfo.streamChrononSchema
+    new AvroSerDe(AvroConversions.fromChrononSchema(streamChrononSchema))
   }
 
   override def genKvStore: KVStore = {

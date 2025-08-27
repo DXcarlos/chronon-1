@@ -16,6 +16,8 @@
 
 package ai.chronon.spark.test.streaming
 
+import ai.chronon.spark.test.utils.OnlineUtils
+import ai.chronon.spark.test.utils.DataFrameGen
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.Constants.MetadataDataset
@@ -23,7 +25,6 @@ import ai.chronon.api._
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.test.{DataFrameGen, OnlineUtils}
 import ai.chronon.spark.utils.InMemoryKvStore
 import ai.chronon.spark.{Join => _, _}
 import org.apache.spark.sql.SparkSession

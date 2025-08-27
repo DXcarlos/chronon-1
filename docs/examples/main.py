@@ -14,7 +14,7 @@
 
 from ai.chronon import query
 from ai.chronon.group_by import GroupBy
-from ai.chronon.api.ttypes import (
+from gen_thrift.api.ttypes import (
     EventSource,
     EntitySource,
     Aggregation,

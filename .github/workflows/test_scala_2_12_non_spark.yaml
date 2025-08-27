@@ -26,10 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run Flink tests
         run: |
-          bazel test \
-            //flink:tests
+          ./mill flink.test
 
   aggregator_tests:
     runs-on: ubuntu-latest
@@ -44,11 +47,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
 
       - name: Run Aggregator tests
         run: |
-          bazel test \
-            //aggregator:tests
+          ./mill aggregator.test
 
   online_tests:
     runs-on: ubuntu-latest
@@ -63,10 +68,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run Online tests
         run: |
-          bazel test \
-            //online:tests
+          ./mill online.test
 
   api_tests:
     runs-on: ubuntu-latest
@@ -81,10 +89,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run api tests
         run: |
-          bazel test \
-            //api:tests
+          ./mill api.test
 
   service_tests:
     runs-on: ubuntu-latest
@@ -99,10 +110,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run service tests
         run: |
-          bazel test \
-            //service:tests
+          ./mill service.test
 
   service_commons_tests:
     runs-on: ubuntu-latest
@@ -117,10 +131,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run service_commons tests
         run: |
-          bazel test \
-            //service_commons:tests
+          ./mill service_commons.test
 
   cloud_gcp_tests:
     runs-on: ubuntu-latest
@@ -135,10 +152,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run cloud gcp tests
         run: |
-          bazel test \
-            //cloud_gcp:tests
+          ./mill cloud_gcp.test
 
   cloud_aws_tests:
     runs-on: ubuntu-latest
@@ -153,9 +173,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install curl
+        run: |
+          apt-get update && apt-get install -y curl
+
       - name: Run cloud aws tests
         run: |
-          bazel test \
-            --java_language_version=17 \
-            --java_runtime_version=17 \
-            //cloud_aws:tests
+          ./mill cloud_aws.test

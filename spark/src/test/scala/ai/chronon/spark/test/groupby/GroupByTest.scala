@@ -16,6 +16,8 @@
 
 package ai.chronon.spark.test.groupby
 
+import ai.chronon.spark.test.utils.TestUtils
+import ai.chronon.spark.test.utils.DataFrameGen
 import ai.chronon.aggregator.test.{CStream, Column, NaiveAggregator}
 import ai.chronon.aggregator.windowing.FiveMinuteResolution
 import ai.chronon.api.Aggregation
@@ -36,7 +38,7 @@ import ai.chronon.online.serde.RowWrapper
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark._
-import ai.chronon.spark.test.{DataFrameGen, TestUtils}
+import ai.chronon.spark.test.utils.{DataFrameGen, TestUtils}
 import com.google.gson.Gson
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoders, Row, SparkSession}

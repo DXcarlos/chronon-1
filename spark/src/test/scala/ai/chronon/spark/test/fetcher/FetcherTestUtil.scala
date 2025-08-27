@@ -14,7 +14,7 @@ import ai.chronon.online._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.stats.ConsistencyJob
-import ai.chronon.spark.test.{DataFrameGen, OnlineUtils, SchemaEvolutionUtils}
+import ai.chronon.spark.test.utils.{DataFrameGen, OnlineUtils, SchemaEvolutionUtils}
 import ai.chronon.spark.utils.MockApi
 import ai.chronon.spark.{Join => _, _}
 import org.apache.spark.sql.catalyst.expressions.GenericRow

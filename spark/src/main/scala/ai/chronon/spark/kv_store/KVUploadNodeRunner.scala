@@ -128,7 +128,7 @@ object KVUploadNodeRunner {
 
   def runFromArgs(confPath: String, endDs: String, onlineClass: String, props: Map[String, String]): Try[Unit] = {
     Try {
-      val node = ThriftJsonCodec.fromJsonFile[Node](confPath, check = true)
+      val node = ThriftJsonCodec.fromJsonFile[Node](confPath, check = false)
       val metadata = node.metaData
 
       val api = instantiateApi(onlineClass, props)

@@ -16,6 +16,8 @@
 
 package ai.chronon.spark.test.fetcher
 
+import ai.chronon.spark.test.utils.TestUtils
+import ai.chronon.spark.test.utils.OnlineUtils
 import ai.chronon.api
 import ai.chronon.api._
 import ai.chronon.api.Constants.MetadataDataset
@@ -27,7 +29,7 @@ import ai.chronon.online.serde.SparkConversions
 import ai.chronon.spark.{Join => _, _}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.Extensions._
-import ai.chronon.spark.test.{OnlineUtils, TestUtils}
+import ai.chronon.spark.test.utils.{OnlineUtils, TestUtils}
 import ai.chronon.spark.utils.MockApi
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.GenericRow

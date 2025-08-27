@@ -200,39 +200,50 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
                                          streamingResponses: Seq[TimedValue],
                                          aggregator: SawtoothOnlineAggregator,
                                          batchIr: FinalBatchIr): Array[Any] = {
-    val allStreamingIrDecodeStartTime = System.currentTimeMillis()
-    val streamingIrs: Iterator[TiledIr] = streamingResponses.iterator
-      .filter(tVal => tVal.millis >= servingInfo.batchEndTsMillis)
-      .flatMap { tVal =>
-        Try(servingInfo.tiledCodec.decodeTileIr(tVal.bytes)) match {
-          case Success((tile, _)) => Array(TiledIr(tVal.millis, tile))
-          case Failure(_) =>
-            logger.error(
-              s"Failed to decode tile ir for groupBy ${servingInfo.groupByOps.metaData.getName}" +
-                "Streaming tiled IRs will be ignored")
-            val groupByFlag: Option[Boolean] = Option(fetchContext.flagStore)
-              .map(_.isSet(
-                "disable_streaming_decoding_error_throws",
-                Map("group_by_streaming_dataset" -> servingInfo.groupByServingInfo.groupBy.getMetaData.getName).toJava))
-            if (groupByFlag.getOrElse(fetchContext.disableErrorThrows)) {
-              Array.empty[TiledIr]
-            } else {
-              throw new RuntimeException(
-                s"Failed to decode tile ir for groupBy ${servingInfo.groupByOps.metaData.getName}")
-            }
-        }
-      }
-      .toArray
-      .iterator
 
-    requestContext.metricsContext.distribution("group_by.all_streamingir_decode.latency.millis",
-                                               System.currentTimeMillis() - allStreamingIrDecodeStartTime)
+    val streamingIrs: Iterator[TiledIr] = if (streamingResponses == null) {
+      null
+    } else {
+
+      val allStreamingIrDecodeStartTime = System.currentTimeMillis()
+
+      val tileIterator = streamingResponses.iterator
+        .filter(tVal => tVal.millis >= servingInfo.batchEndTsMillis)
+        .flatMap { tVal =>
+          Try(servingInfo.tiledCodec.decodeTileIr(tVal.bytes)) match {
+            case Success((tile, _)) => Array(TiledIr(tVal.millis, tile))
+            case Failure(_) =>
+              logger.error(
+                s"Failed to decode tile ir for groupBy ${servingInfo.groupByOps.metaData.getName}" +
+                  "Streaming tiled IRs will be ignored")
+              val groupByFlag: Option[Boolean] = Option(fetchContext.flagStore)
+                .map(_.isSet(
+                  "disable_streaming_decoding_error_throws",
+                  Map(
+                    "group_by_streaming_dataset" -> servingInfo.groupByServingInfo.groupBy.getMetaData.getName).toJava))
+              if (groupByFlag.getOrElse(fetchContext.disableErrorThrows)) {
+                Array.empty[TiledIr]
+              } else {
+                throw new RuntimeException(
+                  s"Failed to decode tile ir for groupBy ${servingInfo.groupByOps.metaData.getName}")
+              }
+          }
+        }
+        .toArray
+        .iterator
+
+      requestContext.metricsContext.distribution("group_by.all_streamingir_decode.latency.millis",
+                                                 System.currentTimeMillis() - allStreamingIrDecodeStartTime)
+
+      tileIterator
+    }
 
     if (fetchContext.debug) {
       val gson = new Gson()
       logger.info(s"""
                      |batch ir: ${gson.toJson(batchIr)}
-                     |streamingIrs: ${gson.toJson(streamingIrs)}
+                     |streamingIrs: ${if (streamingIrs != null) { gson.toJson(streamingIrs) }
+                    else { "null" }}
                      |batchEnd in millis: ${servingInfo.batchEndTsMillis}
                      |queryTime in millis: ${requestContext.queryTimeMs}
                      |""".stripMargin)

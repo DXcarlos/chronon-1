@@ -19,9 +19,9 @@ package ai.chronon.spark.test.fetcher;
 import ai.chronon.online.JavaFetcher;
 import ai.chronon.online.JavaRequest;
 import ai.chronon.online.JavaResponse;
-import ai.chronon.online.fetcher.FetchTypes;
+import ai.chronon.online.fetcher.Fetcher;
 import ai.chronon.spark.catalog.TableUtils;
-import ai.chronon.spark.SparkSessionBuilder;
+import ai.chronon.spark.submission.SparkSessionBuilder;
 import ai.chronon.spark.utils.InMemoryKvStore;
 import ai.chronon.spark.utils.MockApi;
 import com.google.gson.Gson;
@@ -43,7 +43,7 @@ public class JavaFetchTypesTest {
     String namespace = "java_fetcher_test";
     SparkSession session = SparkSessionBuilder.build(namespace, true, true, scala.Option.apply(null), scala.Option.apply(null), true);
     TableUtils tu = new TableUtils(session);
-    InMemoryKvStore kvStore = new InMemoryKvStore(func(() -> tu));
+    InMemoryKvStore kvStore = new InMemoryKvStore(func(() -> tu), false);
     MockApi mockApi = new MockApi(func(() -> kvStore), "java_fetcher_test");
     JavaFetcher fetcher = mockApi.buildJavaFetcher();
 
@@ -70,7 +70,7 @@ public class JavaFetchTypesTest {
 
         // can end up with a null result response if the GroupBy is not found
         List<JavaResponse> nullResultResponses = new ArrayList<>();
-        FetchTypes.Response nullScalaResponse = new FetchTypes.Response(
+        Fetcher.Response nullScalaResponse = new Fetcher.Response(
                 requests.get(0).toScalaRequest(),
                 new scala.util.Success<>(null));
         nullResultResponses.add(new JavaResponse(nullScalaResponse));

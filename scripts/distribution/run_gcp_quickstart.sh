@@ -66,7 +66,7 @@ echo "Running with environment $ENVIRONMENT and version $VERSION"
 
 set -xo pipefail
 
-# Delete gcp tables to start from scratch
+## Delete gcp tables to start from scratch
 if [[ "$ENVIRONMENT" == "canary" ]]; then
   bq rm -f -t canary-443022:data.gcp_purchases_v1_test__0
   bq rm -f -t canary-443022:data.gcp_purchases_v1_test_upload__0
@@ -81,7 +81,7 @@ else
   bq rm -f -t canary-443022:data.gcp_purchases_v1_dev_notds__0
   bq rm -f -t canary-443022:data.gcp_training_set_v1_dev_notds__0
 fi
-#TODO: delete bigtable rows
+##TODO: delete bigtable rows
 
 # Create a virtualenv to fresh install zipline-ai
 VENV_DIR="tmp_chronon"
@@ -125,7 +125,7 @@ function fail_if_bash_failed() {
 START_DS="2023-11-01"
 END_DS="2023-11-30"
 
-CHRONON_ROOT=`pwd`/api/python/test/canary
+CHRONON_ROOT=`pwd`/python/test/canary
 export PYTHONPATH="$CHRONON_ROOT" ARTIFACT_PREFIX="gs://zipline-artifacts-$ENVIRONMENT" CUSTOMER_ID=$ENVIRONMENT
 
 echo -e "${GREEN}<<<<<.....................................COMPILE.....................................>>>>>\033[0m"

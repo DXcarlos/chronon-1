@@ -13,8 +13,8 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec: PartitionSpec = PartitionSpec.daily
 
-  private val runfilesDir = System.getenv("RUNFILES_DIR")
-  private val canaryResourcePath = s"$runfilesDir/chronon/spark/src/test/resources/canary/compiled"
+  // Use classpath resources instead of Bazel runfiles
+  private val canaryResourcePath = getClass.getClassLoader.getResource("canary/compiled").getPath
   private val joinConfigPath = s"$canaryResourcePath/joins"
   private val groupByConfigPath = s"$canaryResourcePath/group_bys"
   private val stagingQueryConfigPath = s"$canaryResourcePath/staging_queries"
@@ -31,7 +31,7 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
     }
 
     // Verify specific test configuration exists
-    val testJoinConf = joinConfs.find(_.metaData.name == "gcp.training_set.v1_test__0")
+    val testJoinConf = joinConfs.find(_.metaData.name == "gcp.training_set.v1_test")
     testJoinConf should be(defined)
     testJoinConf.get.metaData.team shouldBe "gcp"
     testJoinConf.get.joinParts should not be empty
@@ -50,7 +50,7 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
     }
 
     // Verify specific test configuration exists
-    val testGroupByConf = groupByConfs.find(_.metaData.name == "gcp.purchases.v1_test__0")
+    val testGroupByConf = groupByConfs.find(_.metaData.name == "gcp.purchases.v1_test")
     testGroupByConf should be(defined)
     testGroupByConf.get.metaData.team shouldBe "gcp"
     testGroupByConf.get.sources should have size 1

@@ -1,0 +1,41 @@
+package build.thrift
+
+import mill._
+import mill.api.PathRef
+import mill.scalalib._
+
+// Thrift source module - generates both Java and Python thrift files
+object `package` extends Module {
+  def thriftSources: Task.Simple[Seq[PathRef]] = Task.Sources(moduleDir)
+  
+  // Generate Java thrift files
+  def generateJavaThrift = Task {
+    val outputDir = Task.dest / "generated-java"
+    val tempOutputDir = Task.dest / "temp-generated-java"
+    
+    os.makeDir.all(outputDir)
+    os.makeDir.all(tempOutputDir)
+    
+    val sources = thriftSources()
+    val thriftFiles = sources.flatMap(p => os.list(p.path)).filter(_.ext == "thrift")
+    
+    thriftFiles.foreach { thriftFile =>
+      os.proc("thrift", "--gen", "java", "-out", tempOutputDir, thriftFile).call()
+    }
+    
+    // Replace org.apache.thrift with ai.chronon.api.thrift in generated files
+    if (os.exists(tempOutputDir)) {
+      os.walk(tempOutputDir).filter(_.ext == "java").foreach { javaFile =>
+        val content = os.read(javaFile)
+        val modifiedContent = content.replace("org.apache.thrift", "ai.chronon.api.thrift")
+        
+        val relativePath = javaFile.relativeTo(tempOutputDir)
+        val targetFile = outputDir / relativePath
+        os.makeDir.all(targetFile / os.up)
+        os.write(targetFile, modifiedContent)
+      }
+    }
+    
+    PathRef(outputDir)
+  }
+}

@@ -16,6 +16,7 @@
 
 package ai.chronon.spark.test.analyzer
 
+import ai.chronon.spark.test.utils.DataFrameGen
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api._
@@ -23,7 +24,6 @@ import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.{Analyzer, Join}
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.test.DataFrameGen
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{col, lit}
 import org.junit.Assert.assertTrue

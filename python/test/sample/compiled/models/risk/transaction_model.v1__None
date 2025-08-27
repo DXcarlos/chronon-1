@@ -1,0 +1,296 @@
+{
+  "metaData": {
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "_DATE"
+        },
+        "modeConfigs": {}
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "canary",
+          "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "VERSION": "latest"
+        },
+        "modeEnvironments": {
+          "backfill": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "streaming": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "upload": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          }
+        }
+      }
+    },
+    "name": "risk.transaction_model.v1__None",
+    "outputNamespace": "risk",
+    "sourceFile": "models/risk/transaction_model.py",
+    "team": "risk"
+  },
+  "modelParams": {},
+  "modelType": 0,
+  "outputSchema": {
+    "kind": 6
+  },
+  "source": {
+    "joinSource": {
+      "join": {
+        "joinParts": [
+          {
+            "groupBy": {
+              "aggregations": [
+                {
+                  "argMap": {},
+                  "inputColumn": "transaction_amount",
+                  "operation": 6,
+                  "windows": [
+                    {
+                      "length": 1,
+                      "timeUnit": 1
+                    },
+                    {
+                      "length": 30,
+                      "timeUnit": 1
+                    },
+                    {
+                      "length": 365,
+                      "timeUnit": 1
+                    }
+                  ]
+                },
+                {
+                  "argMap": {},
+                  "inputColumn": "transaction_amount",
+                  "operation": 7,
+                  "windows": [
+                    {
+                      "length": 1,
+                      "timeUnit": 1
+                    }
+                  ]
+                }
+              ],
+              "keyColumns": [
+                "user_id"
+              ],
+              "metaData": {
+                "executionInfo": {
+                  "historicalBackfill": 0,
+                  "scheduleCron": "@daily"
+                },
+                "name": "risk.transaction_events.txn_group_by_user__0",
+                "online": 1,
+                "team": "risk",
+                "version": "0"
+              },
+              "sources": [
+                {
+                  "events": {
+                    "query": {
+                      "selects": {
+                        "transaction_amount": "transaction_amount",
+                        "transaction_type": "transaction_type",
+                        "user_id": "user_id"
+                      },
+                      "timeColumn": "transaction_time"
+                    },
+                    "table": "data.txn_events"
+                  }
+                }
+              ]
+            },
+            "prefix": "user"
+          },
+          {
+            "groupBy": {
+              "aggregations": [
+                {
+                  "argMap": {},
+                  "inputColumn": "transaction_amount",
+                  "operation": 6,
+                  "windows": [
+                    {
+                      "length": 1,
+                      "timeUnit": 1
+                    },
+                    {
+                      "length": 30,
+                      "timeUnit": 1
+                    },
+                    {
+                      "length": 365,
+                      "timeUnit": 1
+                    }
+                  ]
+                },
+                {
+                  "argMap": {},
+                  "inputColumn": "transaction_amount",
+                  "operation": 7,
+                  "windows": [
+                    {
+                      "length": 1,
+                      "timeUnit": 1
+                    }
+                  ]
+                }
+              ],
+              "keyColumns": [
+                "merchant_id"
+              ],
+              "metaData": {
+                "executionInfo": {
+                  "historicalBackfill": 0,
+                  "scheduleCron": "@daily"
+                },
+                "name": "risk.transaction_events.txn_group_by_merchant__0",
+                "online": 1,
+                "team": "risk",
+                "version": "0"
+              },
+              "sources": [
+                {
+                  "events": {
+                    "query": {
+                      "selects": {
+                        "merchant_id": "merchant_id",
+                        "transaction_amount": "transaction_amount",
+                        "transaction_type": "transaction_type"
+                      },
+                      "timeColumn": "transaction_time"
+                    },
+                    "table": "data.txn_events"
+                  }
+                }
+              ]
+            },
+            "prefix": "merchant"
+          },
+          {
+            "groupBy": {
+              "keyColumns": [
+                "user_id"
+              ],
+              "metaData": {
+                "executionInfo": {
+                  "historicalBackfill": 0,
+                  "scheduleCron": "@daily"
+                },
+                "name": "risk.user_data.user_group_by__0",
+                "team": "risk",
+                "version": "0"
+              },
+              "sources": [
+                {
+                  "entities": {
+                    "query": {
+                      "selects": {
+                        "account_age": "account_age",
+                        "account_balance": "account_balance",
+                        "account_type": "account_type",
+                        "country": "country",
+                        "credit_score": "credit_score",
+                        "number_of_devices": "number_of_devices",
+                        "preferred_language": "preferred_language",
+                        "user_id": "user_id"
+                      }
+                    },
+                    "snapshotTable": "data.users"
+                  }
+                }
+              ]
+            },
+            "prefix": "user"
+          },
+          {
+            "groupBy": {
+              "keyColumns": [
+                "merchant_id"
+              ],
+              "metaData": {
+                "executionInfo": {
+                  "historicalBackfill": 0,
+                  "scheduleCron": "@daily"
+                },
+                "name": "risk.merchant_data.merchant_group_by__0",
+                "team": "risk",
+                "version": "0"
+              },
+              "sources": [
+                {
+                  "entities": {
+                    "query": {
+                      "selects": {
+                        "account_age": "account_age",
+                        "account_type": "account_type",
+                        "country": "country",
+                        "is_big_merchant": "is_big_merchant",
+                        "merchant_id": "merchant_id",
+                        "preferred_language": "preferred_language",
+                        "zipcode": "zipcode"
+                      }
+                    },
+                    "snapshotTable": "data.merchants"
+                  }
+                }
+              ]
+            },
+            "prefix": "merchant"
+          }
+        ],
+        "left": {
+          "events": {
+            "query": {
+              "selects": {
+                "ts": "ts",
+                "user_id": "user_id"
+              },
+              "timeColumn": "ts"
+            },
+            "table": "data.users"
+          }
+        },
+        "metaData": {
+          "executionInfo": {
+            "scheduleCron": "@daily"
+          },
+          "online": 0,
+          "production": 0,
+          "samplePercent": 100.0,
+          "version": "0"
+        },
+        "rowIds": [
+          "user_id"
+        ],
+        "useLongNames": 0
+      },
+      "query": {
+        "selects": {
+          "user_id": "user_id"
+        }
+      }
+    }
+  }
+}

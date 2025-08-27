@@ -16,6 +16,7 @@
 
 package ai.chronon.spark.test.join
 
+import ai.chronon.spark.test.utils.TestUtils
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.{Builders, PartitionRange, PartitionSpec}
@@ -24,7 +25,7 @@ import ai.chronon.spark.JoinUtils
 import ai.chronon.spark.JoinUtils.{contains_any, set_add}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.test.{DataFrameGen, TestUtils}
+import ai.chronon.spark.test.utils.{DataFrameGen, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._

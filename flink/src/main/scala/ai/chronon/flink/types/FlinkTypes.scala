@@ -37,8 +37,8 @@ class TimestampedIR(var ir: Array[Any],
     other match {
       case e: TimestampedIR =>
         util.Arrays.deepEquals(ir.asInstanceOf[Array[AnyRef]], e.ir.asInstanceOf[Array[AnyRef]]) &&
-          latestTsMillis == e.latestTsMillis && startProcessingTime == e.startProcessingTime &&
-          rowAggrTime == e.rowAggrTime
+        latestTsMillis == e.latestTsMillis && startProcessingTime == e.startProcessingTime &&
+        rowAggrTime == e.rowAggrTime
       case _ => false
     }
 }
@@ -62,7 +62,7 @@ class TimestampedTile(var keys: util.List[Any],
 
   override def toString: String =
     s"TimestampedTile(keys=${keys.iterator().toScala.mkString(", ")}, tileBytes=${java.util.Base64.getEncoder
-      .encodeToString(tileBytes)}, latestTsMillis=$latestTsMillis), startProcessingTime=$startProcessingTime)"
+        .encodeToString(tileBytes)}, latestTsMillis=$latestTsMillis), startProcessingTime=$startProcessingTime)"
 
   override def hashCode(): Int =
     Objects.hash(
@@ -76,9 +76,9 @@ class TimestampedTile(var keys: util.List[Any],
     other match {
       case e: TimestampedTile =>
         util.Arrays.deepEquals(keys.toArray.asInstanceOf[Array[AnyRef]], e.keys.toArray.asInstanceOf[Array[AnyRef]]) &&
-          util.Arrays.equals(tileBytes, e.tileBytes) &&
-          latestTsMillis == e.latestTsMillis &&
-          startProcessingTime == e.startProcessingTime
+        util.Arrays.equals(tileBytes, e.tileBytes) &&
+        latestTsMillis == e.latestTsMillis &&
+        startProcessingTime == e.startProcessingTime
       case _ => false
     }
 }
@@ -106,10 +106,10 @@ class AvroCodecOutput(var keyBytes: Array[Byte],
     other match {
       case o: AvroCodecOutput =>
         util.Arrays.equals(keyBytes, o.keyBytes) &&
-          util.Arrays.equals(valueBytes, o.valueBytes) &&
-          dataset == o.dataset &&
-          tsMillis == o.tsMillis &&
-          startProcessingTime == o.startProcessingTime
+        util.Arrays.equals(valueBytes, o.valueBytes) &&
+        dataset == o.dataset &&
+        tsMillis == o.tsMillis &&
+        startProcessingTime == o.startProcessingTime
       case _ => false
     }
 }
@@ -138,11 +138,11 @@ class WriteResponse(var keyBytes: Array[Byte],
     other match {
       case o: WriteResponse =>
         util.Arrays.equals(keyBytes, o.keyBytes) &&
-          util.Arrays.equals(valueBytes, o.valueBytes) &&
-          dataset == o.dataset &&
-          tsMillis == o.tsMillis &&
-          status == o.status &&
-          startProcessingTime == o.startProcessingTime
+        util.Arrays.equals(valueBytes, o.valueBytes) &&
+        dataset == o.dataset &&
+        tsMillis == o.tsMillis &&
+        status == o.status &&
+        startProcessingTime == o.startProcessingTime
       case _ => false
     }
 }

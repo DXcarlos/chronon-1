@@ -9,7 +9,7 @@ import ai.chronon.planner._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.batch._
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.test.{DataFrameGen, TableTestUtils}
+import ai.chronon.spark.test.utils.{DataFrameGen, TableTestUtils}
 import ai.chronon.spark.{Join, _}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.{col, rand}

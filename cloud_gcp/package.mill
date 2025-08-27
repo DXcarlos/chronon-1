@@ -1,0 +1,68 @@
+package build.cloud_gcp
+import mill.*
+import mill.scalalib.*
+
+import java.util.jar.JarFile
+
+// Cloud GCP module
+object `package` extends build.BaseModule {
+  def bigqueryJarFile = Task.Source(moduleDir / "iceberg-bigquery-catalog-1.6.1-1.0.1-beta.jar")
+  def moduleDeps = Seq(build.spark, build.aggregator, build.api, build.online)
+  
+  def excludeJackson(dep: mill.scalalib.Dep): mill.scalalib.Dep = {
+    dep
+      .exclude("com.fasterxml.jackson.core" -> "jackson-core")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-annotations")
+      .exclude("com.fasterxml.jackson.datatype" -> "jackson-datatype-jsr310")    
+  }
+
+  def compileMvnDeps = build.Constants.sparkDeps ++ Seq(
+    mvn"com.google.cloud.spark:spark-3.5-bigquery:0.42.0",
+  )
+
+//  val googleBigdataVersion = "2.2.26"
+  def mvnDeps = build.Constants.commonDeps ++
+    build.Constants.loggingDeps ++
+    build.Constants.utilityDeps ++
+    Seq(
+      mvn"com.google.cloud:google-cloud-storage:2.49.0",
+      mvn"com.google.cloud:google-cloud-dataproc:4.52.0",
+      mvn"com.google.cloud:google-cloud-pubsub:1.134.2",
+
+      mvn"com.google.cloud:google-cloud-bigquery:2.42.0",
+      mvn"com.google.cloud:google-cloud-bigtable:2.57.1",
+  ).map(excludeJackson) ++ Seq(
+    mvn"com.fasterxml.jackson.core:jackson-core:2.15.2",
+    mvn"com.fasterxml.jackson.core:jackson-databind:2.15.2",
+    mvn"com.fasterxml.jackson.core:jackson-annotations:2.15.2",
+    mvn"com.fasterxml.jackson.module::jackson-module-scala:2.15.2",
+    mvn"com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2"
+  ).map(_.forceVersion())
+  
+  // Include the local BigQuery catalog JAR
+  override def unmanagedClasspath = Task {
+    super.unmanagedClasspath() ++ Seq(bigqueryJarFile())
+  }
+  
+  object test extends build.BaseTestModule {
+    def moduleDeps = Seq(build.cloud_gcp, build.spark.test)
+    override def testFramework = "org.scalatest.tools.Framework"
+    def forkArgs = build.Constants.commonTestForkArgs ++ Seq(
+      "-Dspark.sql.adaptive.enabled=false",
+      "-Dspark.sql.adaptive.coalescePartitions.enabled=false",
+      "-Dspark.serializer=org.apache.spark.serializer.KryoSerializer",
+      "-Dspark.sql.hive.convertMetastoreParquet=false"
+    )
+    override def mvnDeps = super.mvnDeps() ++ build.Constants.sparkDeps ++ build.Constants.testDeps ++ Seq(
+      excludeJackson(mvn"com.google.cloud.spark:spark-3.5-bigquery:0.42.0"),
+      // Use exact versions from Bazel configuration
+      excludeJackson(mvn"com.google.cloud:google-cloud-bigtable-emulator:0.178.0")
+        .exclude("io.grpc" -> "grpc-core")
+        .exclude("io.grpc" -> "grpc-stub")
+        .exclude("io.grpc" -> "grpc-inprocess")
+        .exclude("com.google.api" -> "gax")
+        .exclude("com.google.api" -> "gax-grpc"),
+    )
+  }
+}

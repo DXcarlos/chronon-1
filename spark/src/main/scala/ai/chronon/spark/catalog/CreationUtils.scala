@@ -46,9 +46,9 @@ object CreationUtils {
     val propertiesFragment = if (tableProperties != null && tableProperties.nonEmpty) {
       s"""TBLPROPERTIES (
          |    ${(tableProperties + ("file_format" -> fileFormatString) + ("table_type" -> tableTypeString))
-        .transform((k, v) => s"'$k'='$v'")
-        .values
-        .mkString(",\n   ")}
+          .transform((k, v) => s"'$k'='$v'")
+          .values
+          .mkString(",\n   ")}
          |)""".stripMargin
     } else {
       ""

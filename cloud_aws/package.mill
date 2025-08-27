@@ -1,0 +1,39 @@
+package build.cloud_aws
+import mill._
+import mill.scalalib._
+
+// Cloud AWS module
+object `package` extends build.BaseModule {
+  def moduleDeps = Seq(build.spark, build.aggregator, build.api, build.online)
+
+  def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingDeps ++ build.Constants.utilityDeps ++ build.Constants.sparkDeps ++ Seq(
+    mvn"software.amazon.awssdk:dynamodb:2.30.13",
+    mvn"software.amazon.awssdk:emr:2.30.13",
+    mvn"software.amazon.awssdk:regions:2.30.13",
+    mvn"software.amazon.awssdk:aws-core:2.30.13",
+    mvn"software.amazon.awssdk:sdk-core:2.30.13",
+    mvn"software.amazon.awssdk:utils:2.30.13",
+    mvn"software.amazon.awssdk:auth:2.30.13",
+    mvn"software.amazon.awssdk:url-connection-client:2.30.13",
+    mvn"software.amazon.awssdk:identity-spi:2.30.13",
+    mvn"com.amazonaws:DynamoDBLocal:1.25.1",
+    mvn"org.apache.hudi::hudi-spark3.5-bundle:1.0.0",
+    mvn"io.circe:circe-core_2.12:0.14.9",
+    mvn"io.circe:circe-generic_2.12:0.14.9",
+    mvn"io.circe:circe-parser_2.12:0.14.9",
+    mvn"com.chuusai:shapeless_2.12:2.3.12"
+  )
+  
+  object test extends build.BaseTestModule {
+    def moduleDeps = Seq(build.cloud_aws, build.spark.test)
+    override def testFramework = "org.scalatest.tools.Framework"
+    def forkArgs = build.Constants.commonTestForkArgs ++ Seq(
+      "-Dspark.sql.adaptive.enabled=false",
+      "-Dspark.sql.adaptive.coalescePartitions.enabled=false",
+      "-Dspark.serializer=org.apache.spark.serializer.KryoSerializer",
+      "-Dspark.sql.hive.convertMetastoreParquet=false"
+    )
+  }
+
+  def prependShellScript = ""
+}

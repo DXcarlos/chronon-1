@@ -1,0 +1,86 @@
+{
+  "keyColumns": [
+    "merchant_id"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "account_age": "04cbd200270625e1715559a31e3a29a6",
+      "account_type": "31d096fed3422169873ff071f0d17210",
+      "country": "457256af463d44d61cef832e9665e567",
+      "is_big_merchant": "59530efe3e172d2d5b0cea102f1b2588",
+      "merchant_id": "dd14f805606bce3beb74938c532848c2",
+      "preferred_language": "98ab2e8d5a72436904c709e66d49a424",
+      "zipcode": "bf6f911317fa980fd0f51839dedb78ad"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_merchants_with_offset_0\", \"spec\": \"data.merchants/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "_DATE"
+        },
+        "modeConfigs": {}
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "canary",
+          "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "VERSION": "latest"
+        },
+        "modeEnvironments": {
+          "backfill": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "streaming": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "upload": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          }
+        }
+      },
+      "historicalBackfill": 0,
+      "scheduleCron": "@daily"
+    },
+    "name": "risk.merchant_data.merchant_group_by__0",
+    "outputNamespace": "risk",
+    "sourceFile": "group_bys/risk/merchant_data.py",
+    "team": "risk",
+    "version": "0"
+  },
+  "sources": [
+    {
+      "entities": {
+        "query": {
+          "selects": {
+            "account_age": "account_age",
+            "account_type": "account_type",
+            "country": "country",
+            "is_big_merchant": "is_big_merchant",
+            "merchant_id": "merchant_id",
+            "preferred_language": "preferred_language",
+            "zipcode": "zipcode"
+          }
+        },
+        "snapshotTable": "data.merchants"
+      }
+    }
+  ]
+}

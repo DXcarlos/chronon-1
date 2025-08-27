@@ -1,3 +1,6 @@
+
+**Note: This is only required if self-hosting Chronon. If using Zipline these considerations are solved by the Zipline Hub.**
+
 # Orchestrating Chronon
 
 Orchestration for Chronon involves running the various jobs to compute batch and streaming feature computation, as well on online/offline consistency measurement.

@@ -80,11 +80,19 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
   override def buildPlan: planner.ConfPlan = {
     val confPlan = new planner.ConfPlan()
 
+    val backfill = backfillNode
+    val sensorNodes = ExternalSourceSensorUtil
+      .sensorNodes(backfill.metaData)
+      .map((es) =>
+        toNode(es.metaData, _.setExternalSourceSensor(es), ExternalSourceSensorUtil.semanticExternalSourceSensor(es)))
+
     val terminalNodeNames = Map(
-      planner.Mode.BACKFILL -> backfillNode.metaData.name,
+      planner.Mode.BACKFILL -> backfill.metaData.name,
       planner.Mode.DEPLOY -> metadataUploadNode.metaData.name
     )
 
-    confPlan.setNodes(List(backfillNode, metadataUploadNode).asJava).setTerminalNodeNames(terminalNodeNames.asJava)
+    confPlan
+      .setNodes((List(backfill, metadataUploadNode) ++ sensorNodes).asJava)
+      .setTerminalNodeNames(terminalNodeNames.asJava)
   }
 }
