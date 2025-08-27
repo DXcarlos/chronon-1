@@ -219,8 +219,6 @@ struct WorkflowGetResponse {
     12: optional WorkflowStatus status
 }
 
-}
-
 struct NodeStatusRequest {
     1: optional string nodeName
     2: optional string start
