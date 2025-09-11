@@ -1,0 +1,32 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  resource:  # GCP requires these fields
+    attributes:
+      - key: location
+        value: us-central1
+        action: upsert
+      - key: namespace
+        value: local
+        action: upsert
+      - key: cluster
+        value: dev-docker
+        action: upsert
+exporters:
+  googlemanagedprometheus:
+    project: ${GCP_PROJECT_ID}
+  prometheus:
+    endpoint: "0.0.0.0:9464"
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [resource]
+      exporters: [googlemanagedprometheus, prometheus]
