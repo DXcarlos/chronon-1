@@ -7,16 +7,22 @@ receivers:
         endpoint: 0.0.0.0:4318
 
 processors:
-  resource:  # GCP requires these fields
+  # Detects GCP/GKE metadata automatically when deployed in cluster
+  resourcedetection:
+    detectors: [env, gcp]
+    timeout: 5s
+    override: false
+  # Fallback resource attributes for local/non-GKE deployments
+  resource:
     attributes:
       - key: location
-        value: us-central1
+        value: ${env:GCP_LOCATION}
         action: upsert
       - key: namespace
-        value: local
-        action: upsert
+        value: ${env:GCP_NAMESPACE}
+        action: upsert  
       - key: cluster
-        value: dev-docker
+        value: ${env:GCP_CLUSTER_NAME}
         action: upsert
 exporters:
   googlemanagedprometheus:
@@ -28,5 +34,5 @@ service:
   pipelines:
     metrics:
       receivers: [otlp]
-      processors: [resource]
+      processors: [resourcedetection, resource]
       exporters: [googlemanagedprometheus, prometheus]

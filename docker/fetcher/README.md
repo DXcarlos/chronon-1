@@ -137,73 +137,6 @@ curl -s "http://localhost:9091/api/v1/label/__name__/values" | jq '.data[]'
 open http://localhost:9091
 ```
 
-### GCP Telemetry Setup
-
-For production deployments that push metrics to Google Cloud Monitoring:
-
-* **OTEL Collector**: Receives metrics and exports to both GCP Monitoring and local Prometheus
-* **Google Cloud Monitoring**: Cloud-native metrics storage and visualization
-* **Prometheus**: Local metrics access for debugging and development
-
-#### Prerequisites
-
-1. **GCP Setup**:
-   - Enable Cloud Monitoring API in your GCP project
-   - Authenticate with `gcloud auth application-default login`
-
-2. **Required Environment Variables**:
-   ```shell
-   export GCP_PROJECT_ID=your-project-id
-   export GCP_BIGTABLE_INSTANCE_ID=your-instance-id
-   ```
-
-#### Setup Steps
-
-1. **Start services**:
-   ```shell
-   docker-compose -f chronon-service-with-gcp-telemetry.yml up -d
-   ```
-
-#### Viewing Metrics
-
-Metrics are available in both locations:
-
-**Local Prometheus Access:**
-```bash
-# Prometheus UI (same as local setup)
-open http://localhost:9091
-
-# Raw metrics from OTEL Collector
-curl http://localhost:9464/metrics
-```
-
-**Google Cloud Monitoring:**
-
-Metrics are exported under the `custom.googleapis.com/chronon-fetcher` namespace:
-
-> **Configuration Reference:** For additional Google Cloud exporter configuration options, see the [OpenTelemetry Google Cloud Exporter documentation](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/exporter/googlecloudexporter/README.md).
-
-1. **Google Cloud Console**:
-   - Navigate to Monitoring > Metrics Explorer
-   - Search for metrics with prefix `custom.googleapis.com/chronon-fetcher`
-
-2. **gcloud CLI**:
-   ```bash
-   # List available metric types
-   gcloud logging metrics list --filter="name:chronon-fetcher"
-   
-   # View metrics in Cloud Monitoring
-   # Navigate to: https://console.cloud.google.com/monitoring
-   ```
-
-3. **Query via API**:
-   ```bash
-   # Example API call to retrieve metrics
-   curl -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
-     "https://monitoring.googleapis.com/v3/projects/$GCP_PROJECT_ID/metricDescriptors" | \
-     jq '.metricDescriptors[] | select(.type | contains("chronon-fetcher"))'
-   ```
-
 ### Google Managed Prometheus Setup (Recommended)
 
 For production deployments using Google Cloud Managed Service for Prometheus:
@@ -223,16 +156,20 @@ For production deployments using Google Cloud Managed Service for Prometheus:
    ```shell
    export GCP_PROJECT_ID=your-project-id
    export GCP_BIGTABLE_INSTANCE_ID=your-instance-id
-   # Optional: Configure cluster/location metadata
+   # For local/non-GKE deployments, configure metadata manually:
    export GCP_CLUSTER_NAME=chronon-cluster
    export GCP_NAMESPACE=default  
    export GCP_LOCATION=us-central1
    ```
 
+> **Note**: When deployed in a GKE cluster, the OTEL collector automatically detects cluster metadata (cluster name, location, namespace) using the GCP resource detector. Environment variables are only needed for local Docker deployments.
+
 #### Setup Steps
 
 1. **Start services**:
    ```shell
+   # For local deployments, set environment variables:
+   GCP_LOCATION=us-central1 GCP_NAMESPACE=default GCP_CLUSTER_NAME=chronon-local \
    docker-compose -f chronon-service-with-managed-prometheus.yml up -d
    ```
 
@@ -251,26 +188,28 @@ curl http://localhost:9464/metrics
 
 **Google Managed Prometheus:**
 
-Metrics are stored in Managed Service for Prometheus with automatic service discovery:
+Metrics are stored in Managed Service for Prometheus with resource labels from the OTEL processor:
 
 1. **Google Cloud Console**:
    - Navigate to Monitoring > Metrics Explorer
    - Use PromQL queries to filter Chronon metrics
-   - Look for metrics with `service_name="chronon-fetcher"`
+   - Metrics are available without prefixes and include resource labels like `cluster`, `namespace`, `location`
+   - If metrics are failing to publish check the [exporter troubleshooting guide](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/googlemanagedprometheusexporter#troubleshooting)
 
 2. **PromQL Queries**:
    ```promql
-   # Example queries for Chronon metrics
-   {service_name="chronon-fetcher"}
+   # Example queries for Chronon metrics (note: no chronon-fetcher prefix)
+   # For local Docker deployments:
+   {cluster="chronon-cluster", namespace="default", location="us-central1"}
+   
+   # For GKE deployments (auto-detected metadata):
+   {cluster="my-gke-cluster", namespace="chronon-prod", location="us-west1"}
    
    # Filter by specific metric patterns
-   {service_name="chronon-fetcher", __name__=~"chronon.*"}
+   {__name__=~"chronon.*"}
+   
+   # Query specific service metrics
+   {service_name="chronon-fetcher"}
    ```
 
-3. **Grafana Integration**:
-   ```bash
-   # Connect Grafana to Managed Prometheus
-   # Data source URL: https://monitoring.googleapis.com/v1/projects/PROJECT_ID/location/global/prometheus/
-   ```
-
-> **Configuration Reference:** For advanced Managed Prometheus configuration, see the [Google Cloud Managed Prometheus documentation](https://cloud.google.com/stackdriver/docs/managed-prometheus) and [OpenTelemetry setup guide](https://cloud.google.com/stackdriver/docs/managed-prometheus/setup-otel).
+> **Configuration Reference:** The setup uses the `googlemanagedprometheus` exporter with a `resourcedetection` processor (auto-detects GKE metadata) and `resource` processor (fallback for local deployments). When deployed in GKE, cluster metadata is automatically discovered. For advanced configuration, see the [Google Cloud Managed Prometheus documentation](https://cloud.google.com/stackdriver/docs/managed-prometheus) and [OpenTelemetry Google Managed Prometheus Exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/googlemanagedprometheusexporter).
