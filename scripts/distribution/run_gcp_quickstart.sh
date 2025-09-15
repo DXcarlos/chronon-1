@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Run:
+# bash scripts/distribution/run_gcp_template_quickstart.sh --canary|dev --version <version>
+
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 

@@ -5,3 +5,4 @@ gcloud 507.0.0
 bazelisk 1.25.0
 thrift 0.21.0
 
+java corretto-11.0.25.9.1
