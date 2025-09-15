@@ -1,5 +1,8 @@
 ignore:
-  # Ignore CVE-2025-58050 in libpcre2-8-0 - marked as "won't fix" with very low EPSS score
-  - vulnerability: "CVE-2025-58050"
+  # CVE-2025-7709: Integer overflow in SQLite FTS5 extension
+  # Medium severity vulnerability in libsqlite3-0 version 3.46.1-7
+  # No fix available in Debian Trixie - marked as "wont-fix"
+  - vulnerability: "CVE-2025-7709"
     package:
-      name: "libpcre2-8-0"
+      name: "libsqlite3-0"
+    fix-state: "wont-fix"
