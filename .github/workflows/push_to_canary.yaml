@@ -320,7 +320,7 @@ jobs:
 
   run_gcp_integration_tests:
     runs-on: ubuntu-latest
-    needs: [build_artifacts, push_to_gcp]
+#    needs: [build_artifacts, push_to_gcp]
 
     permissions:
       id-token: write
