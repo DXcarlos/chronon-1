@@ -68,24 +68,7 @@ set -xo pipefail
 
 SUFFIX_VALUE=${1:-"$RANDOM"}
 
-python generate_templates.py --test-id $SUFFIX_VALUE --output-dir .
-
-## Delete gcp tables to start from scratch
-if [[ "$ENVIRONMENT" == "canary" ]]; then
-  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_test__0
-  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_test_upload__0
-  bq rm -f -t canary-443022:data.gcp_training_set_${SUFFIX_VALUE}_v1_test__0
-  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_test_notds__0
-  bq rm -f -t canary-443022:data.gcp_training_set_${SUFFIX_VALUE}_v1_test_notds__0
-
-else
-  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_dev__0
-  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_dev_upload__0
-  bq rm -f -t canary-443022:data.gcp_training_set_${SUFFIX_VALUE}_v1_dev__0
-  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_dev_notds__0
-  bq rm -f -t canary-443022:data.gcp_training_set_${SUFFIX_VALUE}_v1_dev_notds__0
-fi
-##TODO: delete bigtable rows
+python scripts/distribution/generate_templates.py --test-id $SUFFIX_VALUE --output-dir .
 
 # Create a virtualenv to fresh install zipline-ai
 VENV_DIR="tmp_chronon"
@@ -210,3 +193,19 @@ echo -e "${GREEN}<<<<<.....................................SUCCEEDED!!!.........
 # Clean up
 rm `pwd`/python/test/canary/group_bys/gcp/purchases_${SUFFIX_VALUE}.py
 rm `pwd`/python/test/canary/joins/gcp/training_set_${SUFFIX_VALUE}.py
+
+## Delete gcp tables to cleanup
+if [[ "$ENVIRONMENT" == "canary" ]]; then
+  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_test__0
+  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_test_upload__0
+  bq rm -f -t canary-443022:data.gcp_training_set_${SUFFIX_VALUE}_v1_test__0
+  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_test_notds__0
+  bq rm -f -t canary-443022:data.gcp_training_set_${SUFFIX_VALUE}_v1_test_notds__0
+
+else
+  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_dev__0
+  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_dev_upload__0
+  bq rm -f -t canary-443022:data.gcp_training_set_${SUFFIX_VALUE}_v1_dev__0
+  bq rm -f -t canary-443022:data.gcp_purchases_${SUFFIX_VALUE}_v1_dev_notds__0
+  bq rm -f -t canary-443022:data.gcp_training_set_${SUFFIX_VALUE}_v1_dev_notds__0
+fi
