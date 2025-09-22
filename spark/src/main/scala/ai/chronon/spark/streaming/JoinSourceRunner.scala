@@ -394,10 +394,10 @@ class JoinSourceRunner(groupByConf: api.GroupBy, conf: Map[String, String] = Map
             logger.info(s"responses/request size: ${responses.size}/${requests.length}\n  responses: ${responses}")
             responses.foreach(response =>
               logger.info(
-                s"request: ${response.request.keys}, ts: ${response.request.atMillis}, values: ${response.values}"))
+                s"request: ${response.request.keys}, ts: ${response.request.atMillis}, values: ${response.valuesMap}"))
           }
           responses.iterator.map { response =>
-            val responseMap = response.values.get
+            val responseMap = response.valuesMap.get
             val allFields = response.request.keys ++ responseMap
             Fetcher.logResponseStats(response, context)
 

@@ -8,7 +8,7 @@ import ai.chronon.api.Builders.Derivation
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
 import ai.chronon.online.fetcher.FetchContext
-import ai.chronon.online.fetcher.Fetcher.{Request, Response}
+import ai.chronon.online.fetcher.Fetcher.{Request, Response, ResponseValue}
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.online._
 import ai.chronon.spark.Extensions._
@@ -67,7 +67,7 @@ object FetcherTestUtil {
                 _.toScala.map(jres =>
                   Response(
                     Request(jres.request.name, jres.request.keys.toScala.toMap, Option(jres.request.atMillis)),
-                    jres.values.toScala.map(_.toScala)
+                    ResponseValue.Map(jres.values.toScala.map(_.toScala))
                   )))
           } else {
             fetcher.fetchJoin(r)
@@ -232,7 +232,7 @@ object FetcherTestUtil {
       FetcherTestUtil.joinResponses(spark, requests, mockApi, useJavaFetcher = true, debug = true)._1.map { res =>
         val all: Map[String, AnyRef] =
           res.request.keys ++
-            res.values.get ++
+            res.valuesMap.get ++
             Map(tableUtils.partitionColumn -> tableUtils.partitionSpec.at(System.currentTimeMillis())) ++
             Map(Constants.TimeColumn -> lang.Long.valueOf(res.request.atMillis.get))
         val values: Array[Any] = columns.map(all.get(_).orNull)

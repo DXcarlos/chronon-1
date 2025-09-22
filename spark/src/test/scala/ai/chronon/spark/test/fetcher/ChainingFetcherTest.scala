@@ -262,7 +262,7 @@ class ChainingFetcherTest extends AnyFlatSpec {
       FetcherTestUtil.joinResponses(spark, requests, mockApi)._1.map { res =>
         val all: Map[String, AnyRef] =
           res.request.keys ++
-            res.values.get ++
+            res.valuesMap.get ++
             Map(tableUtils.partitionColumn -> endDs) ++
             Map(Constants.TimeColumn -> java.lang.Long.valueOf(res.request.atMillis.get))
         val values: Array[Any] = columns.map(all.get(_).orNull)

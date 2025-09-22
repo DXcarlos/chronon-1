@@ -20,7 +20,7 @@ import ai.chronon.api.Extensions.GroupByOps
 import ai.chronon.api.Extensions.SourceOps
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.online.fetcher.Fetcher
-import ai.chronon.online.fetcher.Fetcher.Response
+import ai.chronon.online.fetcher.Fetcher.{Response, ResponseValue}
 import ai.chronon.online._
 import ai.chronon.online.serde._
 import ai.chronon.spark.Extensions._
@@ -54,7 +54,7 @@ class MockApi(kvStore: () => KVStore, val namespace: String) extends Api(null) {
       Future(
         requests.map(req =>
           Response(req,
-                   Success(req.keys.mapValues(_.asInstanceOf[Integer] + 1).mapValues(_.asInstanceOf[AnyRef]).toMap))))
+            ResponseValue.Map(Success(req.keys.mapValues(_.asInstanceOf[Integer] + 1).mapValues(_.asInstanceOf[AnyRef]).toMap)))))
     }
   }
 

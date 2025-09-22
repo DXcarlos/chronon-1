@@ -17,8 +17,10 @@
 package ai.chronon.online
 
 import ai.chronon.api.Constants
-import ai.chronon.online.fetcher.Fetcher.{Request, Response}
+import ai.chronon.online.fetcher.Fetcher.{Request, Response, ResponseValue}
+import ai.chronon.online.fetcher.ResponseType
 import ai.chronon.online.metrics.Metrics.Context
+
 import scala.collection.{Seq, mutable}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -29,7 +31,7 @@ class ExternalSourceRegistry extends Serializable {
   class ContextualHandler extends ExternalSourceHandler {
     override def fetch(requests: Seq[Request]): Future[Seq[Response]] = {
       Future(requests.map { request =>
-        Response(request = request, values = Success(request.keys))
+        Response(request = request, value = ResponseValue.Map(Success(request.keys)))
       })
     }
   }
@@ -60,7 +62,7 @@ class ExternalSourceRegistry extends Serializable {
           val ctx = context.copy(groupBy = s"${Constants.ExternalPrefix}_$name")
           val responses = handlerMap(name).fetch(requests)
           responses.map { responses =>
-            val failures = responses.count(_.values.isFailure)
+            val failures = responses.count(_.valuesMap.isFailure)
             ctx.distribution("response.latency", System.currentTimeMillis() - startTime)
             ctx.count("response.failures", failures)
             ctx.count("response.successes", responses.size - failures)
@@ -70,7 +72,7 @@ class ExternalSourceRegistry extends Serializable {
           val failure = Failure(
             new IllegalArgumentException(
               s"$name is not registered among handlers: [${handlerMap.keys.mkString(", ")}]"))
-          Future(requests.map(request => Response(request, failure)))
+          Future(requests.map(request => Response(request, ResponseValue.Map(failure))))
         }
       }
       .toList
@@ -81,10 +83,9 @@ class ExternalSourceRegistry extends Serializable {
         allResponses
           .find(_.request == req)
           .getOrElse(Response(
-            req,
-            Failure( // logic error - some handler missed returning a response
-              new IllegalStateException(s"Missing response for request $req among \n $allResponses"))
-          )))
+            request = req,
+            value = ResponseValue.Map(Failure( // logic error - some handler missed returning a response
+              new IllegalStateException(s"Missing response for request $req among \n $allResponses"))))))
     }
   }
 }

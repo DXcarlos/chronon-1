@@ -16,14 +16,14 @@
 
 package ai.chronon.online.fetcher
 
-import ai.chronon.aggregator.row.ColumnAggregator
 import ai.chronon.api
 import ai.chronon.api.Constants.UTF8
 import ai.chronon.api.Extensions.{ExternalPartOps, JoinOps, StringOps, ThrowableOps}
 import ai.chronon.api._
 import ai.chronon.online.OnlineDerivationUtil.applyDeriveFunc
 import ai.chronon.online._
-import ai.chronon.online.fetcher.Fetcher.{JoinSchemaResponse, Request, Response, ResponseWithContext}
+import ai.chronon.online.fetcher.Fetcher.{JoinSchemaResponse, Request, Response, ResponseValue, ResponseWithContext}
+import ai.chronon.online.fetcher.ResponseType.ResponseType
 import ai.chronon.online.metrics.{Metrics, TTLCache}
 import ai.chronon.online.serde._
 import com.google.gson.Gson
@@ -48,7 +48,40 @@ object Fetcher {
                      context: Option[metrics.Metrics.Context] = None)
 
   case class PrefixedRequest(prefix: String, request: Request)
-  case class Response(request: Request, values: Try[Map[String, AnyRef]])
+
+  sealed trait ResponseValue
+  object ResponseValue {
+    case class Map(value: Try[scala.collection.immutable.Map[String, AnyRef]]) extends ResponseValue
+    case class AvroBytes(value: Try[Array[Byte]]) extends ResponseValue
+    case class AvroString(value: Try[String]) extends ResponseValue
+
+    // Add these factory methods for Java interop
+    def createMap(value: Try[scala.collection.immutable.Map[String, AnyRef]]): Map = Map(value)
+    def createAvroBytes(value: Try[Array[Byte]]): AvroBytes = AvroBytes(value)
+    def createAvroString(value: Try[String]): AvroString = AvroString(value)
+  }
+
+
+  case class Response(request: Request, value: ResponseValue) {
+    def valuesMap: Try[Map[String, AnyRef]] = value match {
+      case ResponseValue.Map(v)        => v
+    }
+
+    def valuesAvroBytes: Try[Array[Byte]] = value match {
+      case ResponseValue.AvroBytes(v)  => v
+    }
+
+    def valuesAvroString: Try[String] = value match {
+      case ResponseValue.AvroString(v) => v
+    }
+
+    def getResponseValueType : ResponseType = value match {
+      case ResponseValue.Map(_)        =>  ResponseType.Map
+      case ResponseValue.AvroBytes(_)  => ResponseType.WithAvroBytes
+      case ResponseValue.AvroString(_) => ResponseType.WithAvroString
+    }
+  }
+
   case class ResponseWithContext(request: Request,
                                  derivedValues: Map[String, AnyRef],
                                  baseValues: Map[String, AnyRef]) {
@@ -62,7 +95,7 @@ object Fetcher {
 
   def logResponseStats(response: Response, context: metrics.Metrics.Context): Unit = {
     import ai.chronon.online.metrics
-    val responseMap = response.values.get
+    val responseMap = response.valuesMap.get
     var exceptions = 0
     var nulls = 0
     responseMap.foreach { case (_, v) =>
@@ -143,7 +176,8 @@ class Fetcher(val kvStore: KVStore,
     joinPartFetcher.fetchGroupBys(requests)
   }
 
-  def fetchJoin(requests: Seq[Request], joinConf: Option[api.Join] = None): Future[Seq[Response]] = {
+
+  def fetchJoin(requests: Seq[Request], joinConf: Option[api.Join] = None, responseType: ResponseType = ResponseType.Map): Future[Seq[Response]] = {
     val ts = System.currentTimeMillis()
     val internalResponsesF = joinPartFetcher.fetchJoins(requests, joinConf)
     val externalResponsesF = fetchExternal(requests)
@@ -157,8 +191,8 @@ class Fetcher(val kvStore: KVStore,
 
         val derivedResults = zipped.map { case (internalResponse, externalResponse) =>
           val cleanInternalRequest = internalResponse.request.copy(context = None)
-          val internalMap = internalResponse.values.getOrElse(
-            Map("join_part_fetch_exception" -> internalResponse.values.failed.get.traceString))
+          val internalMap = internalResponse.valuesMap.getOrElse(
+            Map("join_part_fetch_exception" -> internalResponse.valuesMap.failed.get.traceString))
 
           val baseMap = if (externalResponse != null) {
 
@@ -172,8 +206,8 @@ class Fetcher(val kvStore: KVStore,
                    |  externalResponses:   ${externalResponses.map(_.request.name)}""".stripMargin
             )
 
-            val externalMap = externalResponse.values.getOrElse(
-              Map("external_part_fetch_exception" -> externalResponse.values.failed.get.traceString))
+            val externalMap = externalResponse.valuesMap.getOrElse(
+              Map("external_part_fetch_exception" -> externalResponse.valuesMap.failed.get.traceString))
 
             internalMap ++ externalMap
           } else {
@@ -188,8 +222,16 @@ class Fetcher(val kvStore: KVStore,
         derivedResults
       }
 
-    combinedResponsesF
+    val rawResponse = combinedResponsesF
       .map(_.iterator.map(logResponse(_, ts)).toSeq)
+
+    responseType match {
+      case ai.chronon.online.fetcher.ResponseType.Map => rawResponse
+      case ai.chronon.online.fetcher.ResponseType.WithAvroBytes => {
+        rawResponse.map(_.iterator.map(convertResponseToResponseWithAvroBytes).toSeq)
+      }
+      case ai.chronon.online.fetcher.ResponseType.WithAvroString => rawResponse.map(_.iterator.map(convertResponseToResponseWithAvroString).toSeq)
+    }
   }
 
   private def applyDerivations(ts: Long, request: Request, baseMap: Map[String, AnyRef]): ResponseWithContext = {
@@ -316,8 +358,9 @@ class Fetcher(val kvStore: KVStore,
       joinCodecCache.refresh(resp.request.name)
     }
 
-    Response(resp.request, Success(resp.derivedValues))
+    Response(resp.request, ResponseValue.Map(Success(resp.derivedValues)))
   }
+
 
   private def encodeAndPublishLog(resp: ResponseWithContext,
                                   ts: Long,
@@ -460,7 +503,7 @@ class Fetcher(val kvStore: KVStore,
     // step-3 walk the response, find all the joins to update and the result map
     responseFutures.map { responses =>
       responses.foreach { response =>
-        val responseTry: Try[Map[String, Any]] = response.values
+        val responseTry: Try[Map[String, Any]] = response.valuesMap
         val joinsToUpdate: Seq[ExternalToJoinRequest] =
           validExternalRequestToJoinRequestMap(response.request)
 
@@ -498,7 +541,7 @@ class Fetcher(val kvStore: KVStore,
         Metrics
           .Context(Metrics.Environment.JoinFetching, join = req.name)
           .distribution("external.latency.millis", System.currentTimeMillis() - startTime)
-        Response(req, resultMap(req).map(_.mapValues(_.asInstanceOf[AnyRef]).toMap))
+        Response(req, ResponseValue.Map(resultMap(req).map(_.mapValues(_.asInstanceOf[AnyRef]).toMap)))
       }
     }
   }
@@ -532,6 +575,69 @@ class Fetcher(val kvStore: KVStore,
     joinSchemaResponse
   }
 
+  def convertResponseToResponseWithAvroBytes(response: Response): Response = {
+    response.value match {
+      case ResponseValue.Map(value) =>
+        val avroBytesTry = value match {
+          case Success(features) =>
+            convertJoinFeaturesResponseToAvroBytes(features, response.request.name)
+          case Failure(exception) =>
+            Failure(exception)
+        }
+        Response(response.request, ResponseValue.AvroBytes(avroBytesTry))
+    }
+  }
+
+  def convertResponseToResponseWithAvroString(response: Response): Response = {
+    response.value match {
+      case ResponseValue.Map(value) =>
+        val avroStringTry = value match {
+          case Success(features) =>
+            convertJoinFeaturesResponseToAvroString(features, response.request.name)
+          case Failure(exception) =>
+            Failure(exception)
+        }
+        Response(response.request, ResponseValue.AvroString(avroStringTry))
+    }
+  }
+
+  private def convertJoinFeaturesResponseToAvroBytes(features: Map[String, AnyRef], joinName: String): Try[Array[Byte]] = {
+    val startTime = System.currentTimeMillis()
+    val ctx =
+      Metrics.Context(Metrics.Environment.JoinSchemaFetching, join = joinName)
+    val joinCodecTry = joinCodecCache(joinName)
+
+    joinCodecTry.flatMap { joinCodec =>
+      Try {
+        val response = encode(joinCodec.valueSchema, joinCodec.valueCodec, features)
+        ctx.distribution("avroconversionbytes.latency.millis", System.currentTimeMillis() - startTime)
+        response
+      }.recover { case exception =>
+        logger.error(s"Failed to convert features to avro for $joinName", exception)
+        throw exception
+      }
+    }
+  }
+
+  private def convertJoinFeaturesResponseToAvroString(features: Map[String, AnyRef], joinName: String): Try[String] = {
+    val startTime = System.currentTimeMillis()
+    val ctx =
+      Metrics.Context(Metrics.Environment.JoinSchemaFetching, join = joinName)
+    val joinCodecTry = joinCodecCache(joinName)
+
+    joinCodecTry.flatMap { joinCodec =>
+      Try {
+        val avroBytes = encode(joinCodec.valueSchema, joinCodec.valueCodec, features)
+        val avroString = java.util.Base64.getEncoder.encodeToString(avroBytes)
+        ctx.distribution("avroconversionstring.latency.millis", System.currentTimeMillis() - startTime)
+        avroString
+      }.recover { case exception =>
+        logger.error(s"Failed to convert features to avro for $joinName", exception)
+        throw exception
+      }
+    }
+  }
+
   private def logControlEvent(encTry: Try[JoinCodec]): Unit = {
     if (encTry.isFailure) return
 
@@ -559,4 +665,9 @@ class Fetcher(val kvStore: KVStore,
     lazy val context: Metrics.Context =
       Metrics.Context(Metrics.Environment.JoinFetching, join = joinRequest.name, groupBy = part.fullName)
   }
+}
+
+object ResponseType extends Enumeration {
+  type ResponseType = Value
+  val Map, WithAvroBytes, WithAvroString = Value
 }

@@ -163,8 +163,10 @@ object FetcherMain {
 
         // treeMap to produce a sorted result
         val tMap = new java.util.TreeMap[String, AnyRef]()
-        result.foreach(r =>
-          r.values match {
+        result.foreach(Response =>
+          // Cast Response to Response
+       {   val r = (Response.asInstanceOf[Fetcher.Response])
+          r.valuesMap match {
             case Success(valMap) => {
               if (valMap == null) {
                 logger.info("No data present for the provided key.")
@@ -179,7 +181,7 @@ object FetcherMain {
             case Failure(exception) => {
               exception.printStackTrace()
             }
-          })
+          }})
         Thread.sleep(args.interval() * 1000)
 
       })

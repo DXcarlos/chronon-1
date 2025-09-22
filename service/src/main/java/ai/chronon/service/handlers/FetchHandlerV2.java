@@ -4,6 +4,7 @@ import ai.chronon.online.JTry;
 import ai.chronon.online.JavaFetcher;
 import ai.chronon.online.JavaRequest;
 import ai.chronon.online.JavaResponse;
+import ai.chronon.online.fetcher.ResponseType;
 import ai.chronon.service.model.GetFeaturesResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,14 +38,14 @@ import static ai.chronon.service.model.GetFeaturesResponse.Result.Status.Success
  * As an example:
  * { results: [ {"status": "Success", "features": ...}, {"status": "Failure", "error": ...} ] }
  */
-public class FetchHandler implements Handler<RoutingContext> {
-    private static final Logger logger = LoggerFactory.getLogger(FetchHandler.class);
+public class FetchHandlerV2 implements Handler<RoutingContext> {
+    private static final Logger logger = LoggerFactory.getLogger(FetchHandlerV2.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final JavaFetcher fetcher;
     private final BiFunction<JavaFetcher, List<JavaRequest>, CompletableFuture<List<JavaResponse>>> fetchFunction;
 
-    public FetchHandler(JavaFetcher fetcher, BiFunction<JavaFetcher, List<JavaRequest>, CompletableFuture<List<JavaResponse>>> fetchFunction) {
+    public FetchHandlerV2(JavaFetcher fetcher, BiFunction<JavaFetcher, List<JavaRequest>, CompletableFuture<List<JavaResponse>>> fetchFunction) {
         this.fetcher = fetcher;
         this.fetchFunction = fetchFunction;
     }
@@ -78,10 +79,10 @@ public class FetchHandler implements Handler<RoutingContext> {
         // wrap the Java future we get in a Vert.x Future to not block the worker thread
         Future<List<GetFeaturesResponse.Result>> maybeFeatureResponses =
                 Future.fromCompletionStage(resultsJavaFuture)
-                      .map(result ->
-                              result.stream()
-                                      .map(FetchHandler::responseToPoJo)
-                                      .collect(Collectors.toList()));
+                        .map(result ->
+                                result.stream()
+                                        .map(FetchHandlerV2::responseToPoJo)
+                                        .collect(Collectors.toList()));
 
         maybeFeatureResponses.onSuccess(
                 resultList -> {
@@ -110,24 +111,33 @@ public class FetchHandler implements Handler<RoutingContext> {
     }
 
     public static GetFeaturesResponse.Result responseToPoJo(JavaResponse response) {
+        var valueType = response.valueType;
+        var builder = GetFeaturesResponse.Result.builder()
+                .entityKeys(response.request.keys);
 
-        if (response.values.isSuccess()) {
-
-            return GetFeaturesResponse.Result
-                    .builder()
-                    .status(Success)
-                    .entityKeys(response.request.keys)
-                    .features(response.values.getValue())
-                    .build();
+        // Get the appropriate JTry and set up success builder based on response type
+        JTry featureValues;
+        if (valueType == ResponseType.Map()) {
+            featureValues = response.values;
+            if (featureValues.isSuccess()) {
+                return builder.status(Success).features((Map<String, Object>) featureValues.getValue()).build();
+            }
+        } else if (valueType == ResponseType.WithAvroString()) {
+            featureValues = response.valuesAvroString;
+            if (featureValues.isSuccess()) {
+                return builder.status(Success).featureAvroString((String) featureValues.getValue()).build();
+            }
+        } else if (valueType == ResponseType.WithAvroBytes()) {
+            featureValues = response.valuesAvroBytes;
+            if (featureValues.isSuccess()) {
+                return builder.status(Success).featureAvroBytes((byte[]) featureValues.getValue()).build();
+            }
         } else {
-
-            return GetFeaturesResponse.Result
-                    .builder()
-                    .status(Failure)
-                    .entityKeys(response.request.keys)
-                    .error(response.values.getException().getMessage())
-                    .build();
+            return builder.status(Failure).error("Unknown response type: " + valueType).build();
         }
+
+        // Handle failure case (featureValues.isSuccess() was false)
+        return builder.status(Failure).error(featureValues.getException().getMessage()).build();
     }
 
     public static JTry<List<JavaRequest>> parseJavaRequest(String name, RequestBody body) {

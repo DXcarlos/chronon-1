@@ -54,12 +54,16 @@ public class GetFeaturesResponse {
         private final Status status;
         private final Map<String, Object> entityKeys;
         private final Map<String, Object> features;
+        private final String featureAvroString;
+        private final byte[] featureAvroBytes;
         private final String error;
 
         private Result(Builder builder) {
             this.status = builder.status;
             this.entityKeys = builder.entityKeys;
             this.features = builder.features;
+            this.featureAvroString = builder.featureAvroString;
+            this.featureAvroBytes = builder.featureAvroBytes;
             this.error = builder.error;
         }
 
@@ -69,6 +73,14 @@ public class GetFeaturesResponse {
 
         public Map<String, Object> getFeatures() {
             return features;
+        }
+
+        public String getFeatureAvroString() {
+            return featureAvroString;
+        }
+
+        public byte[] getFeatureAvroBytes() {
+            return featureAvroBytes;
         }
 
         public Map<String, Object> getEntityKeys() {
@@ -87,6 +99,8 @@ public class GetFeaturesResponse {
             private Status status;
             private Map<String, Object> entityKeys;
             private Map<String, Object> features;
+            private String featureAvroString;
+            private byte[] featureAvroBytes;
             private String error;
 
             public Builder status(Status status) {
@@ -96,6 +110,16 @@ public class GetFeaturesResponse {
 
             public Builder features(Map<String, Object> features) {
                 this.features = features;
+                return this;
+            }
+
+            public Builder featureAvroString(String featureAvroString) {
+                this.featureAvroString = featureAvroString;
+                return this;
+            }
+
+            public Builder featureAvroBytes(byte[] featureAvroBytes) {
+                this.featureAvroBytes = featureAvroBytes;
                 return this;
             }
 

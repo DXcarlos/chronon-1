@@ -300,8 +300,8 @@ class SchemaEvolutionTest extends AnyFlatSpec {
     metadataStore.putJoinConf(joinSuiteV1.joinConf)
     val fetcher = mockApi.buildFetcher(true)
     val response1 = fetchJoin(fetcher, joinSuiteV1)
-    assertTrue(response1.values.get.keys.exists(_.endsWith("_exception")))
-    assertEquals(joinSuiteV1.groupBys.length, response1.values.get.keys.size)
+    assertTrue(response1.valuesMap.get.keys.exists(_.endsWith("_exception")))
+    assertEquals(joinSuiteV1.groupBys.length, response1.valuesMap.get.keys.size)
 
     // empty responses are still logged and this schema version is still tracked
     val logs1 = mockApi.flushLoggedValues
@@ -313,7 +313,7 @@ class SchemaEvolutionTest extends AnyFlatSpec {
     runGBUpload(namespace, joinSuiteV1, tableUtils, inMemoryKvStore)
     clearTTLCache(fetcher)
     val response2 = fetchJoin(fetcher, joinSuiteV1)
-    assertEquals(joinSuiteV1.fetchExpectations._2, response2.values.get)
+    assertEquals(joinSuiteV1.fetchExpectations._2, response2.valuesMap.get)
 
     val logs2 = mockApi.flushLoggedValues
     val (dataEvent2, controlEvent2) = extractDataEventAndControlEvent(logs2)
@@ -343,10 +343,10 @@ class SchemaEvolutionTest extends AnyFlatSpec {
     val newSubMapExpected = joinSuiteV2.fetchExpectations._2.filter { case (key, _) =>
       newGroupBys.exists(gb => key.contains(gb.name))
     }
-    val newSubMapActual = response3.values.get.filter { case (key, _) =>
+    val newSubMapActual = response3.valuesMap.get.filter { case (key, _) =>
       newGroupBys.exists(gb => key.contains(gb.name))
     }
-    val existingSubMapActual = response3.values.get.filter { case (key, _) =>
+    val existingSubMapActual = response3.valuesMap.get.filter { case (key, _) =>
       existingGroupBys.exists(gb => key.contains(gb.name))
     }
     val removedSubMapOriginalData = joinSuiteV1.fetchExpectations._2.filter { case (key, _) =>
@@ -359,7 +359,7 @@ class SchemaEvolutionTest extends AnyFlatSpec {
       // new GroupBy fetches will fail because upload has not run
       assertTrue(newSubMapActual.keys.exists(_.endsWith("_exception")))
     }
-    assertFalse(response3.values.get.keys.exists(k => removedSubMapOriginalData.keys.toSet.contains(k)))
+    assertFalse(response3.valuesMap.get.keys.exists(k => removedSubMapOriginalData.keys.toSet.contains(k)))
 
     val logs3 = mockApi.flushLoggedValues
     val (dataEvent3, _) = extractDataEventAndControlEvent(logs3)
@@ -376,7 +376,7 @@ class SchemaEvolutionTest extends AnyFlatSpec {
     runGBUpload(namespace, joinSuiteV2, tableUtils, inMemoryKvStore)
     clearTTLCache(fetcher)
     val response4 = fetchJoin(fetcher, joinSuiteV2)
-    assertEquals(joinSuiteV2.fetchExpectations._2, response4.values.get)
+    assertEquals(joinSuiteV2.fetchExpectations._2, response4.valuesMap.get)
 
     val logs4 = mockApi.flushLoggedValues
     val (dataEvent4, controlEvent4) = extractDataEventAndControlEvent(logs4)

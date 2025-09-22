@@ -19,7 +19,7 @@ package ai.chronon.online.fetcher
 import ai.chronon.api.Extensions._
 import ai.chronon.api._
 import ai.chronon.online._
-import ai.chronon.online.fetcher.Fetcher.{ColumnSpec, PrefixedRequest, Request, Response}
+import ai.chronon.online.fetcher.Fetcher.{ColumnSpec, PrefixedRequest, Request, Response, ResponseValue}
 import ai.chronon.online.fetcher.FetcherCache.BatchResponses
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -111,7 +111,7 @@ class JoinPartFetcher(fetchContext: FetchContext, metadataStore: MetadataStore) 
     // re-attach groupBy responses to join
     groupByResponsesFuture
       .map { groupByResponses =>
-        val responseMap = groupByResponses.iterator.map { response => response.request -> response.values }.toMap
+        val responseMap = groupByResponses.iterator.map { response => response.request -> response.valuesMap }.toMap
         val responses = joinDecomposed.iterator.map { case (joinRequest, decomposedRequestsTry) =>
           val joinValuesTry = decomposedRequestsTry.map { groupByRequestsWithPrefix =>
             groupByRequestsWithPrefix.iterator.flatMap {
@@ -136,7 +136,7 @@ class JoinPartFetcher(fetchContext: FetchContext, metadataStore: MetadataStore) 
             ctx.distribution("internal.latency.millis", System.currentTimeMillis() - startTimeMs)
             ctx.increment("internal.request.count")
           }
-          Response(joinRequest, joinValuesTry)
+          Response(joinRequest, ResponseValue.Map(joinValuesTry))
         }.toSeq
         responses
       }

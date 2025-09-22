@@ -19,9 +19,7 @@ package ai.chronon.online.test
 import ai.chronon.aggregator.windowing.FinalBatchIr
 import ai.chronon.api.{MetaData, TimeUnit, Window}
 import ai.chronon.api.Extensions.{GroupByOps, WindowOps}
-import ai.chronon.online.fetcher.Fetcher.ColumnSpec
-import ai.chronon.online.fetcher.Fetcher.Request
-import ai.chronon.online.fetcher.Fetcher.Response
+import ai.chronon.online.fetcher.Fetcher.{ColumnSpec, Request, Response, ResponseValue}
 import ai.chronon.online.fetcher.FetcherCache.BatchResponses
 import ai.chronon.online.KVStore.TimedValue
 import ai.chronon.online.fetcher.{FetchContext, GroupByFetcher, MetadataStore}
@@ -80,7 +78,7 @@ class FetcherBaseTest extends AnyFlatSpec with MockitoSugar with Matchers with M
       def answer(invocation: InvocationOnMock): Future[Seq[Response]] = {
         val requests = invocation.getArgument(0).asInstanceOf[Seq[Request]]
         val request = requests.head
-        val response = Response(request, Success(Map(request.name -> "100")))
+        val response = Response(request, ResponseValue.Map(Success(Map(request.name -> "100"))))
         Future.successful(Seq(response))
       }
     }).when(groupByFetcher).fetchGroupBys(any())
@@ -88,7 +86,7 @@ class FetcherBaseTest extends AnyFlatSpec with MockitoSugar with Matchers with M
     // Map should contain query with valid response
     val queryResults = Await.result(groupByFetcher.fetchColumns(Seq(query)), 1.second)
     queryResults.contains(query) shouldBe true
-    queryResults.get(query).map(_.values) shouldBe Some(Success(Map(s"$GroupBy.$Column" -> "100")))
+    queryResults.get(query).map(_.valuesMap) shouldBe Some(Success(Map(s"$GroupBy.$Column" -> "100")))
 
     // GroupBy request sent to KV store for the query
     val requestsCaptor = ArgumentCaptor.forClass(classOf[Seq[_]])
@@ -109,7 +107,7 @@ class FetcherBaseTest extends AnyFlatSpec with MockitoSugar with Matchers with M
     doAnswer(new Answer[Future[Seq[fetcher.Fetcher.Response]]] {
       def answer(invocation: InvocationOnMock): Future[Seq[Response]] = {
         val requests = invocation.getArgument(0).asInstanceOf[Seq[Request]]
-        val responses = requests.map(r => Response(r, Success(Map(r.name -> "100"))))
+        val responses = requests.map(r => Response(r, ResponseValue.Map(Success(Map(r.name -> "100")))))
         Future.successful(responses)
       }
     }).when(groupByFetcher).fetchGroupBys(any())
@@ -117,9 +115,9 @@ class FetcherBaseTest extends AnyFlatSpec with MockitoSugar with Matchers with M
     // Map should contain query with valid response
     val queryResults = Await.result(groupByFetcher.fetchColumns(Seq(guestQuery, hostQuery)), 1.second)
     queryResults.contains(guestQuery) shouldBe true
-    queryResults.get(guestQuery).map(_.values) shouldBe Some(Success(Map(s"${GuestKey}_$GroupBy.$Column" -> "100")))
+    queryResults.get(guestQuery).map(_.valuesMap) shouldBe Some(Success(Map(s"${GuestKey}_$GroupBy.$Column" -> "100")))
     queryResults.contains(hostQuery) shouldBe true
-    queryResults.get(hostQuery).map(_.values) shouldBe Some(Success(Map(s"${HostKey}_$GroupBy.$Column" -> "100")))
+    queryResults.get(hostQuery).map(_.valuesMap) shouldBe Some(Success(Map(s"${HostKey}_$GroupBy.$Column" -> "100")))
 
     // GroupBy request sent to KV store for the query
     val requestsCaptor = ArgumentCaptor.forClass(classOf[Seq[_]])
@@ -146,7 +144,7 @@ class FetcherBaseTest extends AnyFlatSpec with MockitoSugar with Matchers with M
     // Map should contain query with Failure response
     val queryResults = Await.result(groupByFetcher.fetchColumns(Seq(query)), 1.second)
     queryResults.contains(query) shouldBe true
-    queryResults.get(query).map(_.values) match {
+    queryResults.get(query).map(_.valuesMap) match {
       case Some(Failure(_: IllegalStateException)) => succeed
       case _                                       => fail()
     }

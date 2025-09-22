@@ -36,7 +36,8 @@ class GroupByServingInfoParsed(val groupByServingInfo: GroupByServingInfo)
   private val partitionSpec = PartitionSpec("ds", groupByServingInfo.dateFormat, WindowUtils.Day.millis)
 
   // streaming starts scanning after batchEnd
-  lazy val batchEndTsMillis: Long = partitionSpec.epochMillis(batchEndDate)
+//  lazy val batchEndTsMillis: Long = partitionSpec.epochMillis(batchEndDate)
+  lazy val batchEndTsMillis: Long = partitionSpec.epochMillis("2025-09-19")
   private def parser = new Schema.Parser()
 
   val MutationAvroFields: Seq[StructField] = Seq(TimeField, ReversalField)

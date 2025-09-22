@@ -1,14 +1,12 @@
 package ai.chronon.online.fetcher
 
-import ai.chronon.aggregator.row.ColumnAggregator
-import ai.chronon.aggregator.windowing.ResolutionUtils
 import ai.chronon.api.Extensions._
 import ai.chronon.api._
 import ai.chronon.online.KVStore.{GetRequest, GetResponse, TimedValue}
-import ai.chronon.online.OnlineDerivationUtil.{applyDeriveFunc, buildRenameOnlyDerivationFunction}
-import ai.chronon.online.{metrics, _}
-import ai.chronon.online.fetcher.Fetcher.{ColumnSpec, PrefixedRequest, Request, Response}
+import ai.chronon.online.OnlineDerivationUtil.applyDeriveFunc
+import ai.chronon.online.fetcher.Fetcher._
 import ai.chronon.online.fetcher.FetcherCache.{BatchResponses, CachedBatchResponse}
+import ai.chronon.online._
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.collection.Seq
@@ -262,7 +260,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
 
           }
 
-          Response(request, responseMapTry)
+          Response(request, ResponseValue.Map(responseMapTry))
         }.toList
         responses
       }
@@ -298,7 +296,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
     // Start I/O and generate a mapping from query --> GroupBy response
     val groupByResponsesFuture = fetchGroupBys(groupByRequestsByQuery.values.toList)
     groupByResponsesFuture.map { groupByResponses =>
-      val resultsByRequest = groupByResponses.iterator.map { response => response.request -> response.values }.toMap
+      val resultsByRequest = groupByResponses.iterator.map { response => response.request -> response.valuesMap }.toMap
       val responseByQuery = groupByRequestsByQuery.map { case (query, request) =>
         val results = resultsByRequest
           .getOrElse(
@@ -322,7 +320,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
               }
               Failure(ex)
           }
-        val response = Response(request, results)
+        val response = Response(request, ResponseValue.Map(results))
         query -> response
       }
 
