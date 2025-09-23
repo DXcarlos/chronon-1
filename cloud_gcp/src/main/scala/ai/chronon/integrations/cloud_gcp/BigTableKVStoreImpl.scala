@@ -1,51 +1,31 @@
 package ai.chronon.integrations.cloud_gcp
 
 import ai.chronon.api.Constants.{ContinuationKey, ListEntityType, ListLimit}
-import ai.chronon.api.Extensions.GroupByOps
-import ai.chronon.api.Extensions.StringOps
-import ai.chronon.api.Extensions.WindowOps
-import ai.chronon.api.Extensions.WindowUtils
-import ai.chronon.api.GroupBy
-import ai.chronon.api.MetaData
-import ai.chronon.api.PartitionSpec
-import ai.chronon.api.TilingUtils
+import ai.chronon.api.Extensions.{GroupByOps, StringOps, WindowOps, WindowUtils}
+import ai.chronon.api.{GroupBy, MetaData, PartitionSpec, TilingUtils}
 import ai.chronon.online.KVStore
-import ai.chronon.online.KVStore.ListRequest
-import ai.chronon.online.KVStore.ListResponse
-import ai.chronon.online.KVStore.ListValue
+import ai.chronon.online.KVStore.{ListRequest, ListResponse, ListValue}
 import ai.chronon.online.metrics.Metrics
-import com.google.api.core.{ApiFuture, ApiFutures}
+import com.google.api.core.ApiFuture
 import com.google.cloud.RetryOption
-import com.google.cloud.bigquery.BigQuery
-import com.google.cloud.bigquery.BigQueryErrorMessages
-import com.google.cloud.bigquery.BigQueryRetryConfig
-import com.google.cloud.bigquery.Job
-import com.google.cloud.bigquery.JobId
-import com.google.cloud.bigquery.JobInfo
-import com.google.cloud.bigquery.QueryJobConfiguration
+import com.google.cloud.bigquery._
 import com.google.cloud.bigtable.admin.v2.BigtableTableAdminClient
-import com.google.cloud.bigtable.admin.v2.models.CreateTableRequest
-import com.google.cloud.bigtable.admin.v2.models.GCRules
+import com.google.cloud.bigtable.admin.v2.models.{CreateTableRequest, GCRules}
 import com.google.cloud.bigtable.data.v2.BigtableDataClient
+import com.google.cloud.bigtable.data.v2.models.Range.{ByteStringRange, TimestampRange}
 import com.google.cloud.bigtable.data.v2.models.{Filters, Query, RowMutation, TableId => BTTableId}
-import com.google.cloud.bigtable.data.v2.models.Range.ByteStringRange
-import com.google.cloud.bigtable.data.v2.models.Range.TimestampRange
 import com.google.protobuf.ByteString
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import org.slf4j.{Logger, LoggerFactory}
 import org.threeten.bp.Duration
 
 import java.nio.charset.Charset
-import java.util
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.{Seq, mutable}
 import scala.compat.java8.FutureConverters
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
-import scala.util.Failure
-import scala.util.Success
-import scala.collection.{Seq, mutable}
+import scala.util.{Failure, Success}
 
 /** BigTable based KV store implementation. We store a few kinds of data in our KV store:
   * 1) Entity data - An example is thrift serialized Groupby / Join configs. If entities are updated / rewritten, we
@@ -70,8 +50,8 @@ import scala.collection.{Seq, mutable}
   * store data indefinitely and also to cap the amount of data we store.
   */
 class BigTableKVStoreImpl(dataClient: BigtableDataClient,
-                          maybeAdminClient: Option[BigtableTableAdminClient] = None,
-                          maybeBigQueryClient: Option[BigQuery] = None,
+                          maybeAdminClient: scala.Option[BigtableTableAdminClient] = None,
+                          maybeBigQueryClient: scala.Option[BigQuery] = None,
                           conf: Map[String, String] = Map.empty)
     extends KVStore {
 
@@ -230,7 +210,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
                                         endTs: Long,
                                         keyBytes: Seq[Byte],
                                         dataset: String,
-                                        maybeTileSize: Option[Long] = None): (Query, Iterable[ByteString]) = {
+                                        maybeTileSize: scala.Option[Long] = None): (Query, Iterable[ByteString]) = {
     // we need to generate a rowkey corresponding to each day from the startTs to now
     val millisPerDay = 1.day.toMillis
 
@@ -552,7 +532,7 @@ object BigTableKVStore {
   }
 
   // We prefix the dataset name to the key to ensure we can have multiple datasets in the same table
-  def buildRowKey(baseKeyBytes: Seq[Byte], dataset: String, maybeTs: Option[Long] = None): Array[Byte] = {
+  def buildRowKey(baseKeyBytes: Seq[Byte], dataset: String, maybeTs: scala.Option[Long] = None): Array[Byte] = {
     val baseRowKey = s"$dataset#".getBytes(Charset.forName("UTF-8")) ++ baseKeyBytes
     maybeTs match {
       case Some(ts) =>

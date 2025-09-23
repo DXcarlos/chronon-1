@@ -95,7 +95,7 @@ class BigQueryImportTest extends AnyFlatSpec with MockitoSugar {
     assertTrue("BigQueryStagingQuery should be initialized", bigQueryStagingQuery != null)
   }
 
-  it should "generate correct export data template" in {
+  it should "generate correct export data template without setups" in {
     val stagingQueryConf = createTestStagingQuery()
     val endPartition = "2024-01-31"
 
@@ -103,12 +103,42 @@ class BigQueryImportTest extends AnyFlatSpec with MockitoSugar {
 
     val uri = "gs://test-bucket/test-path/*.parquet"
     val sql = "SELECT * FROM test_table WHERE ds = '2024-01-01'"
-    val result = bigQueryStagingQuery.exportDataTemplate(uri, sql)
+    val setups = Seq.empty[String]
+    val result = bigQueryStagingQuery.exportDataTemplate(uri, sql, setups)
 
     assertTrue("Export template should contain URI", result.contains(uri))
     assertTrue("Export template should contain SQL", result.contains(sql))
     assertTrue("Export template should use parquet format", result.contains("format = 'parquet'"))
     assertTrue("Export template should have overwrite = true", result.contains("overwrite = true"))
+    assertTrue("Export template should not contain BEGIN/END when no setups", !result.contains("BEGIN"))
+  }
+
+  it should "generate correct multi-statement query with setups" in {
+    val stagingQueryConf = createTestStagingQuery()
+    val endPartition = "2024-01-31"
+
+    val bigQueryStagingQuery = new BigQueryImport(stagingQueryConf, endPartition, tableUtils)
+
+    val uri = "gs://test-bucket/test-path/*.parquet"
+    val sql = "SELECT * FROM test_table WHERE ds = '2024-01-01'"
+    val setups = Seq(
+      "CREATE TEMP TABLE temp_data AS SELECT * FROM source_data",
+      "CREATE TEMP FUNCTION process_data(input STRING) AS (UPPER(input))"
+    )
+    val result = bigQueryStagingQuery.exportDataTemplate(uri, sql, setups)
+
+    assertTrue("Multi-statement query should contain BEGIN", result.contains("BEGIN"))
+    assertTrue("Multi-statement query should contain END;", result.contains("END;"))
+    assertTrue("Multi-statement query should contain first setup", result.contains(setups(0)))
+    assertTrue("Multi-statement query should contain second setup", result.contains(setups(1)))
+    assertTrue("Multi-statement query should contain URI", result.contains(uri))
+    assertTrue("Multi-statement query should contain SQL", result.contains(sql))
+    assertTrue("Multi-statement query should use parquet format", result.contains("format = 'parquet'"))
+    assertTrue("Multi-statement query should have overwrite = true", result.contains("overwrite = true"))
+
+    // Verify that setup statements are properly terminated with semicolons
+    assertTrue("Setup statements should end with semicolon", result.contains(setups(0) + ";"))
+    assertTrue("Setup statements should end with semicolon", result.contains(setups(1) + ";"))
   }
 
   it should "generate correct destination prefix" in {
@@ -275,5 +305,28 @@ class BigQueryImportTest extends AnyFlatSpec with MockitoSugar {
     // The sanitize method should replace dots and hyphens with underscores
     assertTrue("Base prefix should contain sanitized table name",
                basePrefix.contains("test_catalog__test_dataset__test_table"))
+  }
+
+  it should "successfully compute with setups and multi-statement query" in {
+    val stagingQueryConf = createTestStagingQuery()
+    val endPartition = "2024-01-31"
+    val mockClient = mockBigQueryClient()
+
+    val bigQueryStagingQuery = new BigQueryImport(stagingQueryConf, endPartition, tableUtils) {
+      override private[cloud_gcp] lazy val bigQueryClient: BigQuery = mockClient
+    }
+
+    val range = PartitionRange("2024-01-01", "2024-01-01")(partitionSpec)
+    val setups = Seq(
+      "CREATE TEMP TABLE temp_data AS SELECT * FROM source_data",
+      "CREATE TEMP FUNCTION process_data(input STRING) AS (UPPER(input))"
+    )
+
+    // This should not throw an exception and should execute the multi-statement query
+    bigQueryStagingQuery.compute(range, setups, Some(true))
+
+    // Verify that BigQuery client methods were called
+    verify(mockClient).create(any[JobInfo])
+    verify(mockClient).create(any[TableInfo])
   }
 }

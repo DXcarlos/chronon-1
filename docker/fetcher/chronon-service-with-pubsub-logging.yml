@@ -1,0 +1,48 @@
+name: chronon-service-pubsub
+
+services:
+  chronon-fetcher:
+    image: ziplineai/chronon-fetcher:latest
+    restart: "no"
+    ports:
+      - "9000:9000"
+      - "8907:8905"
+      - "8908:8906"
+      - "5005:5005"  # Debug port
+    volumes:
+      - ~/.config/gcloud/application_default_credentials.json:/gcp/credentials.json:ro
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-canary-443022}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-${GCP_PROJECT_ID:-canary-443022}}
+      - GCP_BIGTABLE_INSTANCE_ID=${GCP_BIGTABLE_INSTANCE_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/credentials.json
+      - CHRONON_METRICS_READER=http
+      - EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - JVM_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+      # PubSub logging configuration
+      - FETCHER_OOC_TOPIC_INFO=pubsub://canary-logging-ooc-test
+      # Optional: Schema Registry ID if using Confluent Schema Registry format
+      # - SCHEMA_REGISTRY_ID=12345
+    depends_on:
+      - otel-collector
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    restart: "no"
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./resources/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "9464:9464"
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: "no"
+    volumes:
+      - ./resources/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+    depends_on:
+      - otel-collector

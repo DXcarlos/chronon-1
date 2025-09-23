@@ -66,8 +66,7 @@ ADD_OPENS_OPTS="
 JVM_OPTS="$JVM_OPTS $ADD_OPENS_OPTS -XX:MaxMetaspaceSize=1g -XX:MaxRAMPercentage=70.0 -XX:MinRAMPercentage=70.0 -XX:InitialRAMPercentage=70.0 -XX:MaxHeapFreeRatio=100 -XX:MinHeapFreeRatio=0"
 
 echo "Starting Fetcher service with online jar $ONLINE_JAR and online class $ONLINE_CLASS"
-
-if ! java $JVM_OPTS -jar $FETCHER_JAR \
+if ! java $JVM_OPTS -cp $FETCHER_JAR:$ONLINE_JAR ai.chronon.service.ChrononServiceLauncher \
   run ai.chronon.service.FetcherVerticle \
   -Dserver.port=$FETCHER_PORT \
   -Donline.jar=$ONLINE_JAR \

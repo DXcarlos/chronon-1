@@ -1,10 +1,14 @@
 package ai.chronon.spark.batch
 
 import ai.chronon.api.Extensions._
+import ai.chronon.api.ScalaJavaConversions.JMapOps
+import ai.chronon.api._
 import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
-import ai.chronon.api.{MetaData, PartitionRange, PartitionSpec, ThriftJsonCodec}
-import ai.chronon.online.Api
+import ai.chronon.observability.PartitionStats
+import ai.chronon.online.KVStore.PutRequest
+import ai.chronon.online.{Api, KVStore}
 import ai.chronon.planner._
+import ai.chronon.spark.batch.iceberg.IcebergPartitionStatsExtractor
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.submission.SparkSessionBuilder
@@ -12,8 +16,11 @@ import ai.chronon.spark.{GroupBy, GroupByUpload, Join}
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 import org.slf4j.{Logger, LoggerFactory}
 
+import java.nio.charset.StandardCharsets
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
+import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
@@ -30,15 +37,21 @@ class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
     descr = "End date string in format yyyy-MM-dd, used for partitioning"
   )
 
-  val onlineClass = opt[String](required = true,
-                                descr =
-                                  "Fully qualified Online.Api based class. We expect the jar to be on the class path")
+  val onlineClass: ScallopOption[String] = opt[String](
+    required = true,
+    descr = "Fully qualified Online.Api based class. We expect the jar to be on the class path")
 
   val apiProps: Map[String, String] = props[String]('Z', descr = "Props to configure API Store")
 
-  val tablePartitionsDataset = opt[String](required = true,
-                                           descr = "Name of table in kv store to use to keep track of partitions",
-                                           default = Option(NodeRunner.DefaultTablePartitionsDataset))
+  val tablePartitionsDataset: ScallopOption[String] = opt[String](
+    required = true,
+    descr = "Name of table in kv store to use to keep track of partitions",
+    default = Option(NodeRunner.DefaultTablePartitionsDataset))
+
+  val tableStatsDataset: ScallopOption[String] = opt[String](
+    required = false,
+    descr = "Name of table in kv store to use to store partition statistics",
+    default = Option(Constants.TiledSummaryDataset))
 
   verify()
 }
@@ -143,6 +156,64 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
     }
   }
 
+  private[batch] def extractAndPersistPartitionStats(metricsKvStore: KVStore, outputTable: String, jobName: String)(
+      implicit partitionSpec: PartitionSpec): Unit = {
+    try {
+      logger.info(s"Extracting partition statistics for table: $outputTable")
+      val statsExtractor = new IcebergPartitionStatsExtractor(tableUtils.sparkSession)
+      val tileSummaries = statsExtractor.extractPartitionedStats(outputTable, jobName)
+
+      if (tileSummaries.nonEmpty) {
+        // Use regular KVStore but with DataQualityMetricsKVStore format
+
+        // Group tile summaries by conf name and timestamp
+        val groupedTileSummaries = tileSummaries.groupBy { case (observabilityTileKey, _) =>
+          val dayPartitionMillis =
+            IcebergPartitionStatsExtractor.extractPartitionMillisFromSlice(observabilityTileKey.getSlice, partitionSpec)
+          (observabilityTileKey.name, dayPartitionMillis)
+        }
+
+        // Process each group and create PutRequests using the new data quality metrics format
+        val putRequests = groupedTileSummaries.map { case ((confName, dayPartitionMillis), columnTileSummaries) =>
+          // Extract null counts for all columns
+          val nullCounts = columnTileSummaries.map { case (tileKey, tileSummary) =>
+            val fieldId = tileKey.getColumn.toInt // Convert fieldId string back to Int
+            fieldId -> (if (tileSummary.isSetNullCount) tileSummary.getNullCount else 0L)
+          }.toMap
+
+          // Get total row count (should be same across all columns)
+          val rowCount = columnTileSummaries.headOption.map(_._2.getCount).getOrElse(0L)
+
+          val partitionStats = new PartitionStats()
+            .setRowCount(rowCount)
+            .setNullCounts(nullCounts.map { case (k, v) =>
+              k.asInstanceOf[java.lang.Integer] -> v.asInstanceOf[java.lang.Long]
+            }.toJava)
+
+          val thriftBytes = ThriftJsonCodec.toCompactBase64(partitionStats).getBytes
+
+          // Simple key with node name and metric type - DataQualityMetricsKVStore will add year-month
+          val simpleKey = s"null_count"
+          val datasetName = s"${confName}_BATCH"
+          PutRequest(simpleKey.getBytes(StandardCharsets.UTF_8), thriftBytes, datasetName, Some(dayPartitionMillis))
+        }.toSeq
+
+        // Execute all puts
+        val kvStoreUpdates = metricsKvStore.multiPut(putRequests)
+        Await.result(kvStoreUpdates, 30.seconds)
+
+        logger.info(
+          s"Successfully persisted data quality metrics for table: $outputTable (${tileSummaries.size} tile summaries)")
+      } else {
+        logger.info(s"No tile summaries found for table: $outputTable")
+      }
+    } catch {
+      case e: Exception =>
+        logger.error(s"Failed to extract/persist data quality metrics for table: $outputTable", e)
+      // Don't fail the job if stats extraction fails
+    }
+  }
+
   override def run(metadata: MetaData, conf: NodeContent, maybeRange: Option[PartitionRange]): Unit = {
     require(maybeRange.isDefined, "Partition range must be defined for batch node runner")
     val range = maybeRange.get
@@ -180,12 +251,13 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
       api: Api,
       startDs: String,
       endDs: String,
-      tablePartitionsDataset: String
+      tablePartitionsDataset: String,
+      tableStatsDataset: Option[String]
   ): Try[Unit] = {
     Try {
       val metadata = node.metaData
       val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
-//      val kvStore = api.genKvStore
+      val kvStore = api.genKvStore
 
       logger.info(s"Starting batch node runner for '${metadata.name}'")
       val inputTablesToRange = Option(metadata.executionInfo.getTableDependencies)
@@ -218,12 +290,12 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
           })
         }
       }
-//      val kvStoreUpdates = kvStore.multiPut(allInputTablePartitions.map { case (tableName, allPartitions) =>
-//        val partitionsJson = PartitionRange.collapsedPrint(allPartitions)(range.partitionSpec)
-//        PutRequest(tableName.getBytes, partitionsJson.getBytes, tablePartitionsDataset)
-//      }.toSeq)
-//
-//      Await.result(kvStoreUpdates, Duration.Inf)
+      val kvStoreUpdates = kvStore.multiPut(allInputTablePartitions.map { case (tableName, allPartitions) =>
+        val partitionsJson = PartitionRange.collapsedPrint(allPartitions)(range.partitionSpec)
+        PutRequest(tableName.getBytes, partitionsJson.getBytes, tablePartitionsDataset)
+      }.toSeq)
+
+      Await.result(kvStoreUpdates, Duration.Inf)
 
       val missingPartitions = maybeMissingPartitions.collect {
         case (tableName, Some(missing)) if missing.nonEmpty =>
@@ -240,22 +312,34 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
         )
       } else {
         run(metadata, node.content, Option(range))
-//        val outputTablePartitionSpec = (for {
-//          meta <- Option(metadata)
-//          executionInfo <- Option(meta.executionInfo)
-//          outputTableInfo <- Option(executionInfo.outputTableInfo)
-//          definedSpec = outputTableInfo.partitionSpec(tableUtils.partitionSpec)
-//        } yield definedSpec).getOrElse(tableUtils.partitionSpec)
-//        val allOutputTablePartitions = tableUtils.partitions(metadata.executionInfo.outputTableInfo.table,
-//                                                             tablePartitionSpec = Option(outputTablePartitionSpec))
-//
-//        val outputTablePartitionsJson = PartitionRange.collapsedPrint(allOutputTablePartitions)(range.partitionSpec)
-//        val putRequest = PutRequest(metadata.executionInfo.outputTableInfo.table.getBytes,
-//                                    outputTablePartitionsJson.getBytes,
-//                                    tablePartitionsDataset)
-//        val kvStoreUpdates = kvStore.put(putRequest)
-//        Await.result(kvStoreUpdates, Duration.Inf)
+
+        val outputTablePartitionSpec = (for {
+          meta <- Option(metadata)
+          executionInfo <- Option(meta.executionInfo)
+          outputTableInfo <- Option(executionInfo.outputTableInfo)
+          definedSpec = outputTableInfo.partitionSpec(tableUtils.partitionSpec)
+        } yield definedSpec).getOrElse(tableUtils.partitionSpec)
+        val allOutputTablePartitions = tableUtils.partitions(metadata.executionInfo.outputTableInfo.table,
+                                                             tablePartitionSpec = Option(outputTablePartitionSpec))
+
+        val outputTablePartitionsJson = PartitionRange.collapsedPrint(allOutputTablePartitions)(range.partitionSpec)
+        val putRequest = PutRequest(metadata.executionInfo.outputTableInfo.table.getBytes,
+                                    outputTablePartitionsJson.getBytes,
+                                    tablePartitionsDataset)
+        val kvStoreUpdates = kvStore.put(putRequest)
+        Await.result(kvStoreUpdates, Duration.Inf)
         logger.info(s"Successfully completed batch node runner for '${metadata.name}'")
+
+        // Extract and persist partition statistics to KV store - done at the very end
+        tableStatsDataset.foreach { tableStats =>
+          val metricsKvStore = api.genMetricsKvStore(tableStats)
+          Option(metadata.outputTable) match {
+            case Some(outputTable) =>
+              extractAndPersistPartitionStats(metricsKvStore, outputTable, metadata.name)(outputTablePartitionSpec)
+            case None =>
+              logger.warn(s"Skipping partition stats extraction for '${metadata.name}' - outputTable is null")
+          }
+        }
       }
     }
   }
@@ -270,7 +354,11 @@ object BatchNodeRunner {
     val runner = new BatchNodeRunner(node, tableUtils)
     val api = instantiateApi(batchArgs.onlineClass(), batchArgs.apiProps)
     val exitCode = {
-      runner.runFromArgs(api, batchArgs.startDs(), batchArgs.endDs(), batchArgs.tablePartitionsDataset()) match {
+      runner.runFromArgs(api,
+                         batchArgs.startDs(),
+                         batchArgs.endDs(),
+                         batchArgs.tablePartitionsDataset(),
+                         batchArgs.tableStatsDataset.toOption) match {
         case Success(_) =>
           println("Batch node runner succeeded")
           0

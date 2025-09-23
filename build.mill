@@ -69,10 +69,10 @@ object Constants {
     mvn"org.apache.spark::spark-sql:$sparkVersion", 
     mvn"org.apache.spark::spark-catalyst:$sparkVersion",
     mvn"org.apache.spark::spark-hive:$sparkVersion",
-    mvn"org.apache.iceberg::iceberg-spark-runtime-3.5:1.6.1",
     mvn"org.apache.hudi::hudi-spark3.5-bundle:1.0.0",
     mvn"org.apache.hadoop:hadoop-client-api:3.3.6",
-    mvn"org.apache.hadoop:hadoop-client-runtime:3.3.6"
+    mvn"org.apache.hadoop:hadoop-client-runtime:3.3.6",
+    mvn"org.apache.iceberg::iceberg-spark-runtime-3.5:1.10.0",
   )
   
   val flinkVersion = "1.17.0"

@@ -22,8 +22,8 @@ default = Team(
             "spark.sql.shuffle.partitions": "10",
             # TODO: Please fill in the following values
             "spark.sql.catalog.bigquery_catalog.warehouse": "gs://zipline-warehouse-<customer_id>/data/tables/",
-            "spark.sql.catalog.bigquery_catalog.gcp_location": "<region>",
-            "spark.sql.catalog.bigquery_catalog.gcp_project": "<project-id>",
+            "spark.sql.catalog.bigquery_catalog.gcp.bigquery.location": "<region>",
+            "spark.sql.catalog.bigquery_catalog.gcp.bigquery.project-id": "<project-id>",
             "spark.chronon.partition.format": "<date-format>",  # ex: "yyyy-MM-dd",
             "spark.chronon.partition.column": "<partition-column-name>",  # ex: "ds",
         },

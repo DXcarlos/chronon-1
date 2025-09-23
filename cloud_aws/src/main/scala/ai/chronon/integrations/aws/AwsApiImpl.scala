@@ -54,4 +54,6 @@ class AwsApiImpl(conf: Map[String, String]) extends Api(conf) {
     * fully functional serving stack in Aws which includes logging feature responses to a stream for OOC
     */
   override def logResponse(resp: LoggableResponse): Unit = ???
+
+  override def genMetricsKvStore(tableBaseName: String): KVStore = ???
 }

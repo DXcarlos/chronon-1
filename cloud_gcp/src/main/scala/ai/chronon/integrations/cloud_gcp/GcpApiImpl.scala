@@ -14,7 +14,7 @@ import ai.chronon.online.{
 import ai.chronon.online.serde.{AvroConversions, AvroSerDe, SerDe}
 import com.google.api.gax.core.{InstantiatingExecutorProvider, NoCredentialsProvider}
 import com.google.api.gax.retrying.RetrySettings
-import com.google.cloud.bigquery.BigQueryOptions
+import com.google.cloud.bigquery.{BigQuery, BigQueryOptions}
 import com.google.cloud.bigtable.admin.v2.BigtableTableAdminClient
 import com.google.cloud.bigtable.admin.v2.BigtableTableAdminSettings
 import com.google.cloud.bigtable.data.v2.BigtableDataClient
@@ -50,6 +50,10 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
       case Some(topicInfo) if topicInfo.messageBus.toLowerCase == "kafka" =>
         val maybeSchemaRegistryId = getOptional(SchemaRegistryId, conf).map(_.toInt)
         new KafkaLoggableResponseConsumer(topicInfo, maybeSchemaRegistryId)
+      case Some(topicInfo) if topicInfo.messageBus.toLowerCase == "pubsub" =>
+        val maybeSchemaRegistryId = getOptional(SchemaRegistryId, conf).map(_.toInt)
+        val projectId = getOrElseThrow(GcpProjectId, conf)
+        new PubSubLoggableResponseConsumer(topicInfo, maybeSchemaRegistryId, projectId)
       case _ =>
         // fall back to no-op consumer
         logger.info("Falling back to NoOp online/offline response consumer as FETCHER_OOC_TOPIC_INFO isn't configured")
@@ -79,38 +83,63 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
     }
   }
 
+  override def genMetricsKvStore(tableBaseName: String): KVStore = {
+    // Try to get existing shared store first
+    Option(sharedDataQualityKvStore.get()) match {
+      case Some(existingStore) =>
+        existingStore
+      case None =>
+        dataQualityKvStoreLock.synchronized {
+          // Double check if another thread created the store while we were waiting for the lock
+          Option(sharedDataQualityKvStore.get()) match {
+            case Some(existingStore) => existingStore
+            case None =>
+              val newStore = createDataQualityKvStore(tableBaseName)
+              sharedDataQualityKvStore.set(newStore)
+              newStore
+          }
+        }
+    }
+  }
+
   override def streamDecoder(groupByServingInfoParsed: GroupByServingInfoParsed): SerDe =
     new AvroSerDe(AvroConversions.fromChrononSchema(groupByServingInfoParsed.streamChrononSchema))
 
   private def createKVStore(): KVStore = {
-
+    val (dataClient, maybeAdminClient, maybeBQClient) = createBigTableClients()
     val projectId = getOrElseThrow(GcpProjectId, conf)
     val instanceId = getOrElseThrow(GcpBigTableInstanceId, conf)
     val maybeAppProfileId = getOptional(GcpBigTableAppProfileId, conf)
-
-    // We skip upload clients (e.g. admin client, bq client) in non-upload contexts (e.g. streaming & fetching)
-    // This flag allows us to enable them in the upload contexts
     val enableUploadClients = getOptional(EnableUploadClients, conf).exists(_.toBoolean)
 
-    // Create settings builder based on whether we're in emulator mode (e.g. docker) or not
-    val (dataSettingsBuilder, maybeAdminSettingsBuilder, maybeBQClient) = sys.env.get(BigTableEmulatorHost) match {
+    logger.info(
+      s"Creating BigTableStore for $projectId and $instanceId. " +
+        s"Params: profileId: $maybeAppProfileId, adminClientEnabled: $enableUploadClients, " +
+        s"num procs = ${Runtime.getRuntime.availableProcessors()}")
 
+    new BigTableKVStoreImpl(dataClient, maybeAdminClient, maybeBQClient, conf)
+  }
+
+  private def createBigTableClients(): (BigtableDataClient, Option[BigtableTableAdminClient], Option[BigQuery]) = {
+    val projectId = getOrElseThrow(GcpProjectId, conf)
+    val instanceId = getOrElseThrow(GcpBigTableInstanceId, conf)
+    val maybeAppProfileId = getOptional(GcpBigTableAppProfileId, conf)
+    val enableUploadClients = getOptional(EnableUploadClients, conf).exists(_.toBoolean)
+
+    // Create settings builder based on whether we're in emulator mode or not
+    val (dataSettingsBuilder, maybeAdminSettingsBuilder, maybeBQClient) = sys.env.get(BigTableEmulatorHost) match {
       case Some(emulatorHostPort) =>
         val (emulatorHost, emulatorPort) = (emulatorHostPort.split(":")(0), emulatorHostPort.split(":")(1).toInt)
-
         val dataSettingsBuilder =
           BigtableDataSettings
             .newBuilderForEmulator(emulatorHost, emulatorPort)
             .setCredentialsProvider(NoCredentialsProvider.create())
-            .setMetricsProvider(NoopMetricsProvider.INSTANCE) // opt out of metrics in emulator
-
+            .setMetricsProvider(NoopMetricsProvider.INSTANCE)
         val adminSettingsBuilder =
           BigtableTableAdminSettings
             .newBuilderForEmulator(emulatorHost, emulatorPort)
             .setCredentialsProvider(NoCredentialsProvider.create())
-
         (dataSettingsBuilder, Some(adminSettingsBuilder), None)
-
       case None =>
         val dataSettingsBuilder = BigtableDataSettings.newBuilder()
         val dataSettingsBuilderWithProfileId =
@@ -126,22 +155,53 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
         }
     }
 
-    // override the bulk read batch settings
+    // Configure all the settings
     setBigTableBulkReadRowsSettings(dataSettingsBuilder)
-
-    // override thread pools
     setClientThreadPools(dataSettingsBuilder, maybeAdminSettingsBuilder)
 
-    // override retry & timeout settings
-    setClientRetrySettings(dataSettingsBuilder, conf)
+    // Configure retry settings
+    val initialRpcTimeoutDuration =
+      getOptional(BigTableInitialRpcTimeoutDuration, conf)
+        .map(Duration.parse)
+        .getOrElse(GcpApiImpl.DefaultInitialRpcTimeoutDuration)
 
+    val rpcTimeoutMultiplier =
+      getOptional(BigTableRpcTimeoutMultiplier, conf)
+        .map(_.toDouble)
+        .getOrElse(GcpApiImpl.DefaultRpcTimeoutMultiplier)
+
+    val maxRpcTimeoutDuration =
+      getOptional(BigTableMaxRpcTimeoutDuration, conf)
+        .map(Duration.parse)
+        .getOrElse(GcpApiImpl.DefaultMaxRpcTimeoutDuration)
+
+    val totalTimeoutDuration =
+      getOptional(BigTableTotalTimeoutDuration, conf)
+        .map(Duration.parse)
+        .getOrElse(GcpApiImpl.DefaultTotalTimeoutDuration)
+
+    val maxAttempts =
+      getOptional(BigTableMaxAttempts, conf)
+        .map(_.toInt)
+        .getOrElse(GcpApiImpl.DefaultMaxAttempts)
+
+    val retrySettings =
+      RetrySettings
+        .newBuilder()
+        .setInitialRetryDelayDuration(Duration.ZERO)
+        .setInitialRpcTimeoutDuration(initialRpcTimeoutDuration)
+        .setRpcTimeoutMultiplier(rpcTimeoutMultiplier)
+        .setMaxRpcTimeoutDuration(maxRpcTimeoutDuration)
+        .setTotalTimeoutDuration(totalTimeoutDuration)
+        .setMaxAttempts(maxAttempts)
+        .build()
+
+    dataSettingsBuilder.stubSettings().readRowsSettings().setRetrySettings(retrySettings)
+    dataSettingsBuilder.stubSettings().bulkReadRowsSettings().setRetrySettings(retrySettings)
+    dataSettingsBuilder.stubSettings().mutateRowSettings().setRetrySettings(retrySettings)
+
+    // Create clients
     val dataSettings = dataSettingsBuilder.setProjectId(projectId).setInstanceId(instanceId).build()
-
-    logger.info(
-      s"Creating BigTableStore for $projectId and $instanceId. " +
-        s"Params: profileId: $maybeAppProfileId, adminClientEnabled: $enableUploadClients, " +
-        s"num procs = ${Runtime.getRuntime.availableProcessors()}")
-
     val dataClient = BigtableDataClient.create(dataSettings)
 
     val maybeAdminClient = maybeAdminSettingsBuilder.map { adminSettingsBuilder =>
@@ -149,7 +209,12 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
       BigtableTableAdminClient.create(adminSettings)
     }
 
-    new BigTableKVStoreImpl(dataClient, maybeAdminClient, maybeBQClient, conf)
+    (dataClient, maybeAdminClient, maybeBQClient)
+  }
+
+  private def createDataQualityKvStore(tableBaseName: String): KVStore = {
+    val (dataClient, maybeAdminClient, _) = createBigTableClients()
+    new BigTableMetricsKvStore(dataClient, tableBaseName, maybeAdminClient, conf)
   }
 
   // BigTable's bulk read rows by default will batch calls and wait for a delay before sending them. This is not
@@ -263,6 +328,9 @@ object GcpApiImpl {
 
   private val sharedKvStore = new AtomicReference[KVStore]()
   private val kvStoreLock = new Object()
+
+  private val sharedDataQualityKvStore = new AtomicReference[KVStore]()
+  private val dataQualityKvStoreLock = new Object()
 
   private[cloud_gcp] def getOptional(key: String, conf: Map[String, String]): Option[String] =
     sys.env

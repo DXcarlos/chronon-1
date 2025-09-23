@@ -57,6 +57,12 @@ struct TileSeriesKey {
     4: optional string nodeName // name of the node - join name etc
 }
 
+// Internal use for persisting data quality metrics to KVStore.
+struct PartitionStats {
+    1: optional map<i32, i64> nullCounts
+    2: optional i64 rowCount
+}
+
 // array of tuples of (TileSummary, timestamp) ==(pivot)==> TileSummarySeries
 struct TileSummarySeries {
   1: optional list<list<double>> percentiles
@@ -73,7 +79,7 @@ struct TileSummarySeries {
   8: optional list<list<i32>> stringLengthPercentiles
 
   200: optional list<i64> timestamps
-  300: optional TileSeriesKey key
+  300: optional TileKey key
 }
 
 // (DriftMetric + old TileSummary + new TileSummary) = TileDrift
@@ -160,4 +166,14 @@ struct JoinSummaryRequest {
     3: required i64 endTs
     5: optional string percentiles  // Format: "p5,p50,p95"
     8: required string columnName
+}
+
+struct MetricsRequest {
+    1: required string confName
+    2: required i64 startTs
+    3: required i64 endTs
+}
+
+struct MetricsResponse {
+    1: required TileSummarySeries series
 }

@@ -20,7 +20,7 @@ import java.nio.file.Files
 class BigQueryExternalTest extends AnyFlatSpec with MockitoSugar {
 
   lazy val spark: SparkSession = SparkSessionBuilder.build(
-    "BigQuerySparkTest",
+    "BigQueryExternalTest",
     local = true
   )
 

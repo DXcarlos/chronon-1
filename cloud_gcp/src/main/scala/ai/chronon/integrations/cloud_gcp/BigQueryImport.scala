@@ -39,12 +39,28 @@ class BigQueryImport(stagingQueryConf: api.StagingQuery, endPartition: String, t
   private[cloud_gcp] def destPrefix(datePartitionColumn: String, datePartitionValue: String) =
     s"${basePrefix}/${datePartitionColumn}=${datePartitionValue}/*.${formatStr}"
 
-  private[cloud_gcp] def exportDataTemplate(uri: String, sql: String): String = {
+  private[cloud_gcp] def exportDataTemplate(uri: String, sql: String, setups: Seq[String]): String = {
 
     // Requirements for the sql string:
     // `ds` cannot be part of the projection, it is reserved for chronon.
     // It can be part of the WHERE clause.
-    f"""
+    val setupStatements = setups.map(setup => s"${setup};").mkString("\n")
+    val multiStatementQuery = if (setups.nonEmpty) {
+      s"""BEGIN
+         |${setupStatements}
+         |
+         |EXPORT DATA
+         |  OPTIONS (
+         |    uri = '${uri}',
+         |    format = '${formatStr}',
+         |    overwrite = true
+         |    )
+         |AS (
+         |   ${sql}
+         |);
+         |END;""".stripMargin
+    } else {
+      f"""
        |EXPORT DATA
        |  OPTIONS (
        |    uri = '${uri}',
@@ -55,11 +71,11 @@ class BigQueryImport(stagingQueryConf: api.StagingQuery, endPartition: String, t
        |   ${sql}
        |);
        |""".stripMargin
+    }
+    multiStatementQuery
   }
 
   override def compute(range: PartitionRange, setups: Seq[String], enableAutoExpand: Option[Boolean]): Unit = {
-    setups.foreach(tableUtils.sql)
-
     // Export data for all partitions sequentially
     range.partitions.foreach { currPart =>
       val renderedQuery =
@@ -73,7 +89,7 @@ class BigQueryImport(stagingQueryConf: api.StagingQuery, endPartition: String, t
       val destPath =
         destPrefix(range.partitionSpec.column, currPart)
       val exportTemplate =
-        exportDataTemplate(destPath, renderedQuery)
+        exportDataTemplate(destPath, renderedQuery, setups)
       logger.info(s"Rendered Staging Query to run is:\n$exportTemplate")
       val exportConf = QueryJobConfiguration.of(exportTemplate)
       val exportJobTry = Try {

@@ -41,7 +41,7 @@ jobs:
 
       - name: Run Other Spark tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.other.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.other.*"
 
   batch_tests:
     runs-on: ubuntu-8_cores-32_gb
@@ -63,7 +63,7 @@ jobs:
 
       - name: Run Batch tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.batch.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.batch.*"
 
   fetcher_tests:
     runs-on: ubuntu_32_core_128gb
@@ -85,7 +85,7 @@ jobs:
 
       - name: Run Fetcher tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.fetcher.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.fetcher.*"
 
   join_tests:
     runs-on: ubuntu_32_core_128gb
@@ -107,7 +107,7 @@ jobs:
 
       - name: Run Join tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.join.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.join.*"
 
   groupby_tests:
     runs-on: ubuntu_32_core_128gb
@@ -129,7 +129,7 @@ jobs:
 
       - name: Run GroupBy tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.groupby.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.groupby.*"
 
   analyzer_tests:
     runs-on: ubuntu-8_cores-32_gb
@@ -151,7 +151,7 @@ jobs:
 
       - name: Run Analyzer tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.analyzer.*" "ai.chronon.spark.test.bootstrap.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.analyzer.*" "ai.chronon.spark.bootstrap.*"
 
   streaming_tests:
     runs-on: ubuntu-8_cores-32_gb
@@ -173,7 +173,7 @@ jobs:
 
       - name: Run Streaming tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.streaming.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.streaming.*"
 
   kv_store_tests:
     runs-on: ubuntu-8_cores-32_gb
@@ -195,7 +195,7 @@ jobs:
 
       - name: Run KV Store tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.kv_store.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.kv_store.*"
 
   udafs_tests:
     runs-on: ubuntu-8_cores-32_gb
@@ -217,7 +217,7 @@ jobs:
 
       - name: Run UDAFs tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.udafs.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.udafs.*"
 
   stats_tests:
     runs-on: ubuntu-8_cores-32_gb
@@ -239,4 +239,4 @@ jobs:
 
       - name: Run Stats tests
         run: |
-          ./mill spark.test.testOnly "ai.chronon.spark.test.stats.*"
+          ./mill spark.test.testOnly "ai.chronon.spark.stats.*"

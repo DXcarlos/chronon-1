@@ -24,7 +24,7 @@ class GcpFormatProvider(override val sparkSession: SparkSession) extends Default
 
   override def readFormat(tableName: String): scala.Option[Format] = {
     val parsedCatalog = Format.getCatalog(tableName)(sparkSession)
-    val identifier = SparkBQUtils.toIdentifier(tableName)(sparkSession)
+    val identifier = SparkBQUtils.toIdentifierNoCatalog(tableName)(sparkSession)
     val cat = sparkSession.sessionState.catalogManager.catalog(parsedCatalog)
     cat match {
       case delegating: DelegatingBigQueryMetastoreCatalog =>

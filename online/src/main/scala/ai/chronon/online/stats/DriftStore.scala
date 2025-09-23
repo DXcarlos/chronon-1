@@ -55,7 +55,7 @@ class DriftStore(kvStore: KVStore,
 
   private case class SummaryResponseContext(summaries: Array[(TileSummary, Long)], tileKey: TileKey, groupName: String)
 
-  case class TileSummaryInfo(key: TileSeriesKey, summaries: Array[(TileSummary, Long)]) {
+  case class TileSummaryInfo(key: TileKey, summaries: Array[(TileSummary, Long)]) {
     def percentileToIndex(percentile: String): Int = {
       // Convert "p5" to 5, "p95" to 95, etc.
       val value = percentile.stripPrefix("p").toInt
@@ -79,7 +79,15 @@ class DriftStore(kvStore: KVStore,
     def toDriftSeries(driftMetric: DriftMetric, lookBack: Window, startMs: Long): TileDriftSeries = {
       val driftsArray = TileDriftCalculator.toTileDrifts(summaries, driftMetric, startMs, lookBack)
       val result = PivotUtils.pivot(driftsArray)
-      result.setKey(key)
+
+      // Convert TileKey to TileSeriesKey for TileDriftSeries
+      val tileSeriesKey = new TileSeriesKey()
+      tileSeriesKey.setSlice(key.getSlice)
+      tileSeriesKey.setColumn(key.getColumn)
+      tileSeriesKey.setNodeName(key.getName)
+      // Note: groupName would need to be passed separately if needed
+
+      result.setKey(tileSeriesKey)
     }
 
     def toSeries(requestedPercentiles: Seq[String] = Constants.DefaultPercentiles): TileSummarySeries = {
@@ -149,13 +157,13 @@ class DriftStore(kvStore: KVStore,
       }
 
       responseContexts.map { responseContext =>
-        val tileSeriesKey = new TileSeriesKey()
-        tileSeriesKey.setSlice(responseContext.tileKey.getSlice)
-        tileSeriesKey.setNodeName(joinConf.getMetaData.name)
-        tileSeriesKey.setGroupName(responseContext.groupName)
-        tileSeriesKey.setColumn(responseContext.tileKey.getColumn)
+        val tileKey = new TileKey()
+        tileKey.setSlice(responseContext.tileKey.getSlice)
+        tileKey.setName(joinConf.getMetaData.name)
+        tileKey.setColumn(responseContext.tileKey.getColumn)
+        tileKey.setSizeMillis(responseContext.tileKey.getSizeMillis)
 
-        TileSummaryInfo(tileSeriesKey, responseContext.summaries)
+        TileSummaryInfo(tileKey, responseContext.summaries)
       }
     }
   }

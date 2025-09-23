@@ -81,7 +81,7 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
   }
 
   it should "return ConfPlan objects for groupby configurations" in {
-    val plans = LocalRunner.processConfigurations(groupByConfigPath, "groupbys")
+    val plans = LocalRunner.processConfigurations(groupByConfigPath, "group_bys")
 
     plans should not be empty
     plans.foreach { plan =>
@@ -111,7 +111,7 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
       LocalRunner.processConfigurations(joinConfigPath, "unsupported")
     }
     exception.getMessage should include("Unsupported conf type: unsupported")
-    exception.getMessage should include("joins, staging_queries, groupbys")
+    exception.getMessage should include("joins, staging_queries, group_bys")
   }
 
   it should "handle empty directories gracefully" in {
@@ -171,7 +171,7 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
       result should have size 1
       result.head.metaData.name shouldBe "test"
 
-      val plans = LocalRunner.processConfigurations(tempDir.toString, "groupbys")
+      val plans = LocalRunner.processConfigurations(tempDir.toString, "group_bys")
       plans should have size 1
       plans.head shouldBe a[ConfPlan]
 
@@ -207,7 +207,7 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
   }
 
   it should "validate specific groupby plan structure" in {
-    val plans = LocalRunner.processConfigurations(groupByConfigPath, "groupbys")
+    val plans = LocalRunner.processConfigurations(groupByConfigPath, "group_bys")
 
     plans should not be empty
 
@@ -249,7 +249,7 @@ class LocalRunnerTest extends AnyFlatSpec with Matchers {
       }
 
       an[JsonParseException] should be thrownBy {
-        LocalRunner.processConfigurations(tempDir.toString, "groupbys")
+        LocalRunner.processConfigurations(tempDir.toString, "group_bys")
       }
 
     } finally {

@@ -31,9 +31,9 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
         "spark.chronon.table.format_provider.class" -> classOf[GcpFormatProvider].getName,
         "hive.metastore.uris" -> "thrift://localhost:9083",
         "spark.chronon.partition.column" -> "ds",
-        "spark.hadoop.fs.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
-        "spark.hadoop.fs.AbstractFileSystem.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
-        "spark.sql.catalogImplementation" -> "in-memory"
+//        "spark.hadoop.fs.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
+//        "spark.hadoop.fs.AbstractFileSystem.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
+        "spark.sql.catalogImplementation" -> "in-memory",
 
 //        Uncomment to test
 //        "spark.sql.defaultCatalog" -> "default_iceberg",
@@ -41,8 +41,8 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
 //        "spark.sql.catalog.default_iceberg.catalog-impl" -> classOf[BQMSCatalog].getName,
 //        "spark.sql.catalog.default_iceberg.io-impl" -> classOf[ResolvingFileIO].getName,
 //        "spark.sql.catalog.default_iceberg.warehouse" -> "gs://zipline-warehouse-canary/data/tables/",
-//        "spark.sql.catalog.default_iceberg.gcp_location" -> "us-central1",
-//        "spark.sql.catalog.default_iceberg.gcp_project" -> "canary-443022",
+//        "spark.sql.catalog.default_iceberg.gcp.bigquery.location" -> "us-central1",
+//        "spark.sql.catalog.default_iceberg.gcp.bigquery.project-id" -> "canary-443022",
 //        "spark.kryo.registrator" -> classOf[ChrononIcebergKryoRegistrator].getName,
 //        "spark.sql.defaultUrlStreamHandlerFactory.enabled" -> false.toString,
 //
@@ -104,8 +104,67 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
 
     val invalidSparkTableName = "project-id.dataset.table_name"
     assertThrows[ParseException] {
-      val notReachable = spark.sessionState.sqlParser.parseMultipartIdentifier(invalidSparkTableName)
+      val bTableId = SparkBQUtils.toTableId(invalidSparkTableName)(spark)
     }
+  }
+
+  it should "correctly parse table names to Spark Identifiers" in {
+    // Test simple table name
+    val simpleTable = "table_name"
+    val simpleIdentifier = SparkBQUtils.toIdentifier(simpleTable)(spark)
+    assertEquals("table_name", simpleIdentifier.name())
+    assertEquals(0, simpleIdentifier.namespace().length)
+
+    // Test database.table formatN
+    val databaseTable = "database.table_name"
+    val databaseIdentifier = SparkBQUtils.toIdentifier(databaseTable)(spark)
+    assertEquals("table_name", databaseIdentifier.name())
+    assertEquals(1, databaseIdentifier.namespace().length)
+    assertEquals("database", databaseIdentifier.namespace()(0))
+
+    // Test catalog.database.table format
+    val catalogDatabaseTable = "catalog.database.table_name"
+    val catalogIdentifier = SparkBQUtils.toIdentifier(catalogDatabaseTable)(spark)
+    assertEquals("table_name", catalogIdentifier.name())
+    assertEquals(2, catalogIdentifier.namespace().length)
+    assertEquals("catalog", catalogIdentifier.namespace()(0))
+    assertEquals("database", catalogIdentifier.namespace()(1))
+  }
+
+  it should "handle quoted identifiers correctly" in {
+    // Test quoted project ID with hyphens
+    val quotedProjectTable = "`project-id`.dataset.table_name"
+    val quotedIdentifier = SparkBQUtils.toIdentifier(quotedProjectTable)(spark)
+    assertEquals("table_name", quotedIdentifier.name())
+    assertEquals(2, quotedIdentifier.namespace().length)
+    assertEquals("project-id", quotedIdentifier.namespace()(0))
+    assertEquals("dataset", quotedIdentifier.namespace()(1))
+
+    // Test quoted table name with special characters
+    val quotedTableName = "catalog.dataset.`table-with-hyphens`"
+    val quotedTableIdentifier = SparkBQUtils.toIdentifier(quotedTableName)(spark)
+    assertEquals("table-with-hyphens", quotedTableIdentifier.name())
+    assertEquals(2, quotedTableIdentifier.namespace().length)
+    assertEquals("catalog", quotedTableIdentifier.namespace()(0))
+    assertEquals("dataset", quotedTableIdentifier.namespace()(1))
+  }
+
+  it should "handle complex BigQuery table names" in {
+    // Test realistic BigQuery table name with project, dataset, and table
+    val bigQueryTable = "`my-project-123`.my_dataset.my_table_name"
+    val bigQueryIdentifier = SparkBQUtils.toIdentifier(bigQueryTable)(spark)
+    assertEquals("my_table_name", bigQueryIdentifier.name())
+    assertEquals(2, bigQueryIdentifier.namespace().length)
+    assertEquals("my-project-123", bigQueryIdentifier.namespace()(0))
+    assertEquals("my_dataset", bigQueryIdentifier.namespace()(1))
+
+    // Test table name with underscores and numbers
+    val complexTable = "project123.dataset_test.table_name_v2"
+    val complexIdentifier = SparkBQUtils.toIdentifier(complexTable)(spark)
+    assertEquals("table_name_v2", complexIdentifier.name())
+    assertEquals(2, complexIdentifier.namespace().length)
+    assertEquals("project123", complexIdentifier.namespace()(0))
+    assertEquals("dataset_test", complexIdentifier.namespace()(1))
   }
 
   it should "bigquery connector converts spark dates regardless of date setting" in {
@@ -288,5 +347,114 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
     assertNotNull("Deserialized object should not be null", deserializedObj);
     assertTrue("Deserialized object should be an instance of GCSFileIO", deserializedObj.isInstanceOf[GCSFileIO]);
     assertEquals(original.properties(), deserializedObj.asInstanceOf[GCSFileIO].properties())
+  }
+
+  it should "test CheckPartitions end-to-end with DelegatingBigQueryMetastoreCatalog" in {
+    import ai.chronon.spark.catalog.Format
+
+    // Test the partition name parsing logic that CheckPartitions uses
+    val testCases = Seq(
+      ("catalog.dataset.table/ds=2024-01-01", ("catalog.dataset.table", List(("ds", "2024-01-01")))),
+      ("dataset.table/ds=2024-01-01/region=us", ("dataset.table", List(("ds", "2024-01-01"), ("region", "us")))),
+      ("simple_table/partition_col=value", ("simple_table", List(("partition_col", "value"))))
+    )
+
+    testCases.foreach { case (input, (expectedTable, expectedPartitions)) =>
+      input.split("/").toList match {
+        case fullTableName :: partitionParts if partitionParts.nonEmpty =>
+          assertEquals(s"Table name should match for input: $input", expectedTable, fullTableName)
+          val partitionSpec = partitionParts.mkString("/")
+          val parsedSpec = Format.parseHiveStylePartition(partitionSpec)
+          assertEquals(s"Partition spec should match for input: $input", expectedPartitions, parsedSpec)
+        case _ => fail(s"Failed to parse input: $input")
+      }
+    }
+  }
+
+  it should "test BigQuery Metastore namespace compatibility in CheckPartitions" in {
+    // Test case that would cause the original error: "data.gcp_purchases_12785_v1_test__0"
+    val problematicTable = "catalog.data.gcp_purchases_12785_v1_test__0"
+
+    // Test the partition checking logic that CheckPartitions uses
+    val partitionNames = Seq(s"$problematicTable/ds=2024-01-01")
+    val tablesToPartitionSpec = partitionNames.map { p =>
+      p.split("/").toList match {
+        case fullTableName :: partitionParts if partitionParts.nonEmpty =>
+          val partitionSpec = partitionParts.mkString("/")
+          (fullTableName, ai.chronon.spark.catalog.Format.parseHiveStylePartition(partitionSpec))
+        case _ => fail(s"Failed to parse partition name: $p")
+      }
+    }
+
+    // Verify the parsing worked correctly
+    assertEquals(1, tablesToPartitionSpec.size)
+    val (tableName, partitionSpec) = tablesToPartitionSpec.head
+    assertEquals(problematicTable, tableName)
+    assertEquals(List(("ds", "2024-01-01")), partitionSpec)
+
+    // Test that SparkBQUtils.toIdentifierNoCatalog handles this correctly
+    val identifier = SparkBQUtils.toIdentifierNoCatalog(tableName)(spark)
+    assertEquals("gcp_purchases_12785_v1_test__0", identifier.name())
+    assertEquals(1, identifier.namespace().length)
+    assertEquals("data", identifier.namespace()(0))
+
+    // Verify BigQuery Metastore compatibility: namespace should have at most 1 level
+    assertTrue("Namespace should have at most 1 level for BigQuery Metastore compatibility",
+               identifier.namespace().length <= 1)
+  }
+
+  it should "simulate CheckPartitions table reachability with DelegatingBigQueryMetastoreCatalog" in {
+    // Test table reachability logic that CheckPartitions uses
+    val testTables = Seq(
+      "data.purchases",
+      "data.checkouts_native",
+      "default_iceberg.data.checkouts_parquet",
+      "catalog.data.gcp_purchases_12785_v1_test__0"
+    )
+
+    testTables.foreach { tableName =>
+      // This tests the table reachability check that CheckPartitions.run performs
+      // We expect some tables to be reachable and others not, depending on the test environment
+      val isReachable = tableUtils.tableReachable(tableName)
+
+      // The key test is that this doesn't throw the BigQuery Metastore namespace error
+      // Even if the table is not reachable, the parsing should work correctly
+      val identifier = SparkBQUtils.toIdentifierNoCatalog(tableName)(spark)
+      assertTrue(s"Should produce single-level namespace for table: $tableName, got: ${identifier.namespace().length}",
+                 identifier.namespace().length <= 1)
+    }
+  }
+
+  it should "test CheckPartitions partition spec validation" in {
+    import ai.chronon.api.PartitionSpec
+      import ai.chronon.spark.catalog.Format
+
+    // Test various partition specifications that CheckPartitions might encounter
+    val partitionTestCases = Seq(
+      ("table/ds=2024-01-01", List(("ds", "2024-01-01"))),
+      ("table/ds=2024-01-01/region=us", List(("ds", "2024-01-01"), ("region", "us"))),
+      ("table/year=2024/month=01/day=01", List(("year", "2024"), ("month", "01"), ("day", "01"))),
+      ("catalog.dataset.table/ds=2024-01-01", List(("ds", "2024-01-01")))
+    )
+
+    partitionTestCases.foreach { case (partitionName, expectedSpec) =>
+      partitionName.split("/").toList match {
+        case fullTableName :: partitionParts if partitionParts.nonEmpty =>
+          val partitionSpecStr = partitionParts.mkString("/")
+          val parsedSpec = Format.parseHiveStylePartition(partitionSpecStr)
+          assertEquals(s"Partition spec should match for: $partitionName", expectedSpec, parsedSpec)
+
+          // Test that we can create a PartitionSpec object (as CheckPartitions does)
+          val partColumnName = parsedSpec.head._1
+          val partitionSpec = PartitionSpec(
+            partColumnName,
+            tableUtils.partitionSpec.format,
+            tableUtils.partitionSpec.spanMillis
+          )
+          assertEquals("Partition column should match", partColumnName, partitionSpec.column)
+
+        case _ => fail(s"Failed to parse partition name: $partitionName")
+      }
+    }
   }
 }

@@ -16,13 +16,13 @@
 
 package ai.chronon.online
 
-import ai.chronon.api.{BinaryType, BooleanType, Constants, DataType, LongType, StringType, StructType}
+import ai.chronon.api._
 import ai.chronon.online.KVStore._
 import ai.chronon.online.fetcher.Fetcher
-import org.apache.spark.sql.SparkSession
-import org.slf4j.{Logger, LoggerFactory}
 import ai.chronon.online.serde._
 import org.apache.avro.util.Utf8
+import org.apache.spark.sql.SparkSession
+import org.slf4j.{Logger, LoggerFactory}
 
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
@@ -219,6 +219,8 @@ abstract class Api(userConf: Map[String, String]) extends Serializable {
   def streamDecoder(groupByServingInfoParsed: GroupByServingInfoParsed): SerDe
 
   def genKvStore: KVStore
+
+  def genMetricsKvStore(tableBaseName: String): KVStore
 
   def externalRegistry: ExternalSourceRegistry
 

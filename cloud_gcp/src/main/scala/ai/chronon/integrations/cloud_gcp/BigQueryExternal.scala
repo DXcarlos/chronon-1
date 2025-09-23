@@ -3,9 +3,8 @@ package ai.chronon.integrations.cloud_gcp
 import ai.chronon.spark.catalog.Format
 import com.google.cloud.bigquery._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.{ExplainMode, FileSourceScanExec, ProjectExec, SimpleMode}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.execution.{ExplainMode, FileSourceScanExec, ProjectExec, SimpleMode}
 import org.apache.spark.sql.{Encoders, Row, SparkSession}
 
 import scala.jdk.CollectionConverters._

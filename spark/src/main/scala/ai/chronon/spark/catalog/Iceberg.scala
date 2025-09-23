@@ -31,7 +31,7 @@ case object Iceberg extends Format {
 
     val partitionsDf = sparkSession.read
       .format("iceberg")
-      .load(s"$tableName.partitions")
+      .load(s"${tableName}.partitions")
 
     val index = partitionsDf.schema.fieldIndex("partition")
     val tableUtils = TableUtils(sparkSession)

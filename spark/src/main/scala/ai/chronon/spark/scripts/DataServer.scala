@@ -62,8 +62,8 @@ class DataServer(driftSeries: Seq[TileDriftSeries], summarySeries: Seq[TileSumma
               (HttpResponseStatus.OK, mapper.writeValueAsString(driftSeries))
 
             case "/api/summary-series" =>
-              val dtos = summarySeries.map(d => convertToBytesMap(d, (tds: TileSummarySeries) => tds.getKey))
-              (HttpResponseStatus.OK, mapper.writeValueAsString(dtos))
+              // val dtos = summarySeries.map(d => convertToBytesMap(d, (tds: TileSummarySeries) => tds.getKey))
+              (HttpResponseStatus.OK, mapper.writeValueAsString(null))
 
             case "/api/metrics" =>
               val metrics = Map(

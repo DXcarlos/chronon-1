@@ -1,7 +1,7 @@
 package ai.chronon.api.planner
 
 import ai.chronon.api.thrift.TBase
-import ai.chronon.api.{Constants, GroupBy, Join, PartitionSpec, StagingQuery, ThriftJsonCodec}
+import ai.chronon.api._
 import ai.chronon.planner.ConfPlan
 
 import java.io.File
@@ -30,21 +30,21 @@ object LocalRunner {
   def processConfigurations(confSubfolder: String, confType: String)(implicit
       partitionSpec: PartitionSpec): Seq[ConfPlan] = {
     confType match {
-      case "joins" => {
+      case Constants.JoinFolder => {
         val confs = parseConfs[Join](confSubfolder)
         confs.map((c) => MonolithJoinPlanner(c)).map(_.buildPlan)
       }
-      case "staging_queries" => {
+      case Constants.StagingQueryFolder => {
         val confs = parseConfs[StagingQuery](confSubfolder)
-        confs.map((c) => new StagingQueryPlanner(c)).map(_.buildPlan)
+        confs.map((c) => StagingQueryPlanner(c)).map(_.buildPlan)
       }
-      case "groupbys" => {
+      case Constants.GroupByFolder => {
         val confs = parseConfs[GroupBy](confSubfolder)
         confs.map((c) => new GroupByPlanner(c)).map(_.buildPlan)
       }
       case _ =>
         throw new UnsupportedOperationException(
-          s"Unsupported conf type: $confType. Supported types are: joins, staging_queries, groupbys."
+          s"Unsupported conf type: $confType. Supported types are: joins, staging_queries, group_bys."
         )
     }
   }
@@ -66,7 +66,7 @@ object LocalRunner {
 
     println("Parsed configurations:")
     val plans = processConfigurations(confSubfolder, confType)
-    plans.foreach(println)
+    plans.map((plan) => ThriftJsonCodec.toJsonStr(plan)).foreach(println)
   }
 
 }

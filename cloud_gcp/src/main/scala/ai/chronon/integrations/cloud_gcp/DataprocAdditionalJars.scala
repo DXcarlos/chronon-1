@@ -3,7 +3,10 @@ package ai.chronon.integrations.cloud_gcp
 // Tracks additional Jars that need to be specified while submitting Dataproc Spark / Flink jobs as we build
 // thin jars with mill and these additional deps need to be augmented during job submission
 object DataprocAdditionalJars {
-  val additionalSparkJobJars = Array("gs://spark-lib/iceberg/iceberg-spark-runtime-3.5_2.12-1.6.1.jar")
+  val additionalSparkJobJars: Array[String] = Array(
+    // todo(tchow): upgrade when https://github.com/apache/iceberg/pull/14113 is released
+    // "gs://zipline-spark-libs/iceberg/iceberg-bigquery-1.10.0.jar"
+  )
 
   // Need a lot of the Spark jars for Flink as Flink leverages Spark's catalyst / sql components for Spark expr eval.
   // This list can be trimmed down, but a lot of these jars are needed for a class or two that if absent, results in a CNF exception.
