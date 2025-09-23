@@ -61,22 +61,21 @@ object Fetcher {
     def createAvroString(value: Try[String]): AvroString = AvroString(value)
   }
 
-
   case class Response(request: Request, value: ResponseValue) {
     def valuesMap: Try[Map[String, AnyRef]] = value match {
-      case ResponseValue.Map(v)        => v
+      case ResponseValue.Map(v) => v
     }
 
     def valuesAvroBytes: Try[Array[Byte]] = value match {
-      case ResponseValue.AvroBytes(v)  => v
+      case ResponseValue.AvroBytes(v) => v
     }
 
     def valuesAvroString: Try[String] = value match {
       case ResponseValue.AvroString(v) => v
     }
 
-    def getResponseValueType : ResponseType = value match {
-      case ResponseValue.Map(_)        =>  ResponseType.Map
+    def getResponseValueType: ResponseType = value match {
+      case ResponseValue.Map(_)        => ResponseType.Map
       case ResponseValue.AvroBytes(_)  => ResponseType.WithAvroBytes
       case ResponseValue.AvroString(_) => ResponseType.WithAvroString
     }
@@ -176,8 +175,9 @@ class Fetcher(val kvStore: KVStore,
     joinPartFetcher.fetchGroupBys(requests)
   }
 
-
-  def fetchJoin(requests: Seq[Request], joinConf: Option[api.Join] = None, responseType: ResponseType = ResponseType.Map): Future[Seq[Response]] = {
+  def fetchJoin(requests: Seq[Request],
+                joinConf: Option[api.Join] = None,
+                responseType: ResponseType = ResponseType.Map): Future[Seq[Response]] = {
     val ts = System.currentTimeMillis()
     val internalResponsesF = joinPartFetcher.fetchJoins(requests, joinConf)
     val externalResponsesF = fetchExternal(requests)
@@ -230,7 +230,8 @@ class Fetcher(val kvStore: KVStore,
       case ai.chronon.online.fetcher.ResponseType.WithAvroBytes => {
         rawResponse.map(_.iterator.map(convertResponseToResponseWithAvroBytes).toSeq)
       }
-      case ai.chronon.online.fetcher.ResponseType.WithAvroString => rawResponse.map(_.iterator.map(convertResponseToResponseWithAvroString).toSeq)
+      case ai.chronon.online.fetcher.ResponseType.WithAvroString =>
+        rawResponse.map(_.iterator.map(convertResponseToResponseWithAvroString).toSeq)
     }
   }
 
@@ -360,7 +361,6 @@ class Fetcher(val kvStore: KVStore,
 
     Response(resp.request, ResponseValue.Map(Success(resp.derivedValues)))
   }
-
 
   private def encodeAndPublishLog(resp: ResponseWithContext,
                                   ts: Long,
@@ -601,7 +601,8 @@ class Fetcher(val kvStore: KVStore,
     }
   }
 
-  private def convertJoinFeaturesResponseToAvroBytes(features: Map[String, AnyRef], joinName: String): Try[Array[Byte]] = {
+  private def convertJoinFeaturesResponseToAvroBytes(features: Map[String, AnyRef],
+                                                     joinName: String): Try[Array[Byte]] = {
     val startTime = System.currentTimeMillis()
     val ctx =
       Metrics.Context(Metrics.Environment.JoinSchemaFetching, join = joinName)

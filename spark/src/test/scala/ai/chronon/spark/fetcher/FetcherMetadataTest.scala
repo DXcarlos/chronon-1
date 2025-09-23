@@ -33,7 +33,7 @@ class FetcherMetadataTest extends AnyFlatSpec {
     val src = Source.fromResource(joinPath)
     println(s"conf resource path for dir walker: ${confResource.getPath}")
 
-    // Use standard resource loading instead of Bazel runfiles  
+    // Use standard resource loading instead of Bazel runfiles
     val runFilesResource = getClass.getClassLoader.getResource("joins").getPath.replace("/joins", "")
 
     val expected = {

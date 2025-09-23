@@ -128,13 +128,15 @@ class IcebergPartitionStatsExtractorTest
     val tileSummaries = extractor.extractPartitionedStats("spark_catalog.default.test_partitioned_table", "test_conf")
 
     tileSummaries should not be empty
-    
+
     // Helper function to get TileSummary for a specific partition and column
     def getTileSummary(partition: String, column: String): Option[TileSummary] = {
       getFieldId("test_partitioned_table", column).flatMap { fieldId =>
-        tileSummaries.find { case (tileKey, _) =>
-          tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
-        }.map(_._2)
+        tileSummaries
+          .find { case (tileKey, _) =>
+            tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
+          }
+          .map(_._2)
       }
     }
 
@@ -196,13 +198,15 @@ class IcebergPartitionStatsExtractorTest
     val tileSummaries = extractor.extractPartitionedStats("spark_catalog.default.test_partitioned_table", "test_conf")
 
     tileSummaries should not be empty
-    
+
     // Helper function to get TileSummary for a specific partition and column
     def getTileSummary(partition: String, column: String): Option[TileSummary] = {
       getFieldId("test_partitioned_table", column).flatMap { fieldId =>
-        tileSummaries.find { case (tileKey, _) =>
-          tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
-        }.map(_._2)
+        tileSummaries
+          .find { case (tileKey, _) =>
+            tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
+          }
+          .map(_._2)
       }
     }
 
@@ -210,7 +214,7 @@ class IcebergPartitionStatsExtractorTest
     val southValueSummary = getTileSummary("South", "value")
     southValueSummary should be(defined)
     southValueSummary.get.getNullCount should be(0)
-    
+
     // Test TileSummary for 'name' column in South partition
     val southNameSummary = getTileSummary("South", "name")
     southNameSummary should be(defined)
@@ -239,7 +243,7 @@ class IcebergPartitionStatsExtractorTest
       (1, 'Alice', 'North', 100.0),
       (2, 'Bob', 'North', 200.0)
       """)
-      
+
     spark.sql("""
       INSERT INTO test_partitioned_table VALUES
       (3, 'Charlie', 'North', 50.0),
@@ -254,12 +258,14 @@ class IcebergPartitionStatsExtractorTest
     // Helper functions
     def getTileSummary(partition: String, column: String): Option[TileSummary] = {
       getFieldId("test_partitioned_table", column).flatMap { fieldId =>
-        tileSummaries.find { case (tileKey, _) =>
-          tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
-        }.map(_._2)
+        tileSummaries
+          .find { case (tileKey, _) =>
+            tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
+          }
+          .map(_._2)
       }
     }
-    
+
     // Verify aggregated statistics across multiple files
     getTileSummary("North", "id").get.getCount should be(4)
     getTileSummary("North", "name").get.getNullCount should be(1) // One NULL name across all files
@@ -269,7 +275,7 @@ class IcebergPartitionStatsExtractorTest
     // Verify statistics aggregation across files
     val northValueSummary = getTileSummary("North", "value")
     northValueSummary should be(defined)
-    
+
     // Focus on testing null count aggregation which works correctly
     northValueSummary.get.getNullCount should be(0) // Correctly aggregated across files
   }
@@ -301,9 +307,11 @@ class IcebergPartitionStatsExtractorTest
     // Helper function to get TileSummary for a specific partition and column
     def getTileSummary(partition: String, column: String): Option[TileSummary] = {
       getFieldId("test_partitioned_table", column).flatMap { fieldId =>
-        tileSummaries.find { case (tileKey, _) =>
-          tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
-        }.map(_._2)
+        tileSummaries
+          .find { case (tileKey, _) =>
+            tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
+          }
+          .map(_._2)
       }
     }
 
@@ -343,9 +351,11 @@ class IcebergPartitionStatsExtractorTest
     // Helper function to get TileSummary for a specific partition and column
     def getTileSummary(partition: String, column: String): Option[TileSummary] = {
       getFieldId("test_partitioned_table", column).flatMap { fieldId =>
-        tileSummaries.find { case (tileKey, _) =>
-          tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
-        }.map(_._2)
+        tileSummaries
+          .find { case (tileKey, _) =>
+            tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
+          }
+          .map(_._2)
       }
     }
 
@@ -392,9 +402,11 @@ class IcebergPartitionStatsExtractorTest
     // Helper function to get TileSummary for a specific partition and column
     def getTileSummary(partition: String, column: String): Option[TileSummary] = {
       getFieldId("test_partitioned_table", column).flatMap { fieldId =>
-        tileSummaries.find { case (tileKey, _) =>
-          tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
-        }.map(_._2)
+        tileSummaries
+          .find { case (tileKey, _) =>
+            tileKey.getColumn == fieldId && tileKey.getSlice == s"region=$partition"
+          }
+          .map(_._2)
       }
     }
 
@@ -493,9 +505,11 @@ class IcebergPartitionStatsExtractorTest
     // Helper function to get TileSummary for a specific partition and column
     def getTileSummary(year: String, region: String, column: String): Option[TileSummary] = {
       getFieldId("test_partitioned_table", column).flatMap { fieldId =>
-        tileSummaries.find { case (tileKey, _) =>
-          tileKey.getColumn == fieldId && tileKey.getSlice == s"year=$year/region=$region"
-        }.map(_._2)
+        tileSummaries
+          .find { case (tileKey, _) =>
+            tileKey.getColumn == fieldId && tileKey.getSlice == s"year=$year/region=$region"
+          }
+          .map(_._2)
       }
     }
 
@@ -617,7 +631,8 @@ class IcebergPartitionStatsExtractorTest
       java.util.Arrays.asList(
         org.apache.iceberg.types.Types.NestedField.required(1, "id", org.apache.iceberg.types.Types.LongType.get()),
         org.apache.iceberg.types.Types.NestedField.required(2, "name", org.apache.iceberg.types.Types.StringType.get()),
-        org.apache.iceberg.types.Types.NestedField.required(3, "region", org.apache.iceberg.types.Types.StringType.get())
+        org.apache.iceberg.types.Types.NestedField
+          .required(3, "region", org.apache.iceberg.types.Types.StringType.get())
       )
     )
 
@@ -655,8 +670,10 @@ class IcebergPartitionStatsExtractorTest
     val schema = new org.apache.iceberg.Schema(
       java.util.Arrays.asList(
         org.apache.iceberg.types.Types.NestedField.required(1, "id", org.apache.iceberg.types.Types.LongType.get()),
-        org.apache.iceberg.types.Types.NestedField.required(2, "value", org.apache.iceberg.types.Types.DoubleType.get()),
-        org.apache.iceberg.types.Types.NestedField.required(3, "region", org.apache.iceberg.types.Types.StringType.get()),
+        org.apache.iceberg.types.Types.NestedField
+          .required(2, "value", org.apache.iceberg.types.Types.DoubleType.get()),
+        org.apache.iceberg.types.Types.NestedField
+          .required(3, "region", org.apache.iceberg.types.Types.StringType.get()),
         org.apache.iceberg.types.Types.NestedField.required(4, "year", org.apache.iceberg.types.Types.IntegerType.get())
       )
     )

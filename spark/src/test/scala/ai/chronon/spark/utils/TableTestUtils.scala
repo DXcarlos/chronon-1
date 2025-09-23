@@ -3,7 +3,6 @@ package ai.chronon.spark.utils
 import ai.chronon.spark.catalog.TableUtils
 import org.apache.spark.sql.SparkSession
 
-
 case class TableTestUtils(override val sparkSession: SparkSession) extends TableUtils(sparkSession: SparkSession) {
 
   def dropPartitions(tableName: String,

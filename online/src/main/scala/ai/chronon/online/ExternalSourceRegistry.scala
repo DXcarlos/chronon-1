@@ -85,7 +85,8 @@ class ExternalSourceRegistry extends Serializable {
           .getOrElse(Response(
             request = req,
             value = ResponseValue.Map(Failure( // logic error - some handler missed returning a response
-              new IllegalStateException(s"Missing response for request $req among \n $allResponses"))))))
+              new IllegalStateException(s"Missing response for request $req among \n $allResponses")))
+          )))
     }
   }
 }

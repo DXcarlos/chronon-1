@@ -53,8 +53,10 @@ class MockApi(kvStore: () => KVStore, val namespace: String) extends Api(null) {
     override def fetch(requests: collection.Seq[Fetcher.Request]): Future[collection.Seq[Fetcher.Response]] = {
       Future(
         requests.map(req =>
-          Response(req,
-            ResponseValue.Map(Success(req.keys.mapValues(_.asInstanceOf[Integer] + 1).mapValues(_.asInstanceOf[AnyRef]).toMap)))))
+          Response(
+            req,
+            ResponseValue.Map(
+              Success(req.keys.mapValues(_.asInstanceOf[Integer] + 1).mapValues(_.asInstanceOf[AnyRef]).toMap)))))
     }
   }
 

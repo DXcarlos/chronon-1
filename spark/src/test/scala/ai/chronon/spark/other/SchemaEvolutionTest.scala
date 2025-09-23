@@ -29,7 +29,15 @@ import ai.chronon.spark.Extensions.DataframeOps
 import ai.chronon.spark.{LogFlattenerJob, LoggingSchema}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.utils.{DataFrameGen, GroupByTestSuite, InMemoryKvStore, JoinTestSuite, MockApi, OnlineUtils, SchemaEvolutionUtils}
+import ai.chronon.spark.utils.{
+  DataFrameGen,
+  GroupByTestSuite,
+  InMemoryKvStore,
+  JoinTestSuite,
+  MockApi,
+  OnlineUtils,
+  SchemaEvolutionUtils
+}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, lit}
 import org.junit.Assert.{assertEquals, assertFalse, assertNotEquals, assertTrue}
@@ -40,7 +48,6 @@ import java.util.{Base64, TimeZone}
 import scala.collection.Seq
 import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, SECONDS}
-
 
 class SchemaEvolutionTest extends AnyFlatSpec {
 

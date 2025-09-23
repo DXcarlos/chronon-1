@@ -424,11 +424,9 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     val submitter = mock[DataprocSubmitter]
 
     when(submitter.run(args = args, clusterName = "test-cluster")).thenAnswer(_ =>
-      throw MoreThanOneRunningFlinkJob("Multiple running Flink jobs found")
-    )
+      throw MoreThanOneRunningFlinkJob("Multiple running Flink jobs found"))
 
-    assertThrows[MoreThanOneRunningFlinkJob](
-      submitter.run(args = args, clusterName = "test-cluster"))
+    assertThrows[MoreThanOneRunningFlinkJob](submitter.run(args = args, clusterName = "test-cluster"))
   }
   it should "fail flink check-if-job-is-running if no running flink job" in {
     val groupByName = "test-groupby-name"
@@ -440,11 +438,9 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     val submitter = mock[DataprocSubmitter]
 
     when(submitter.run(args = args, clusterName = "test-cluster")).thenAnswer(_ =>
-      throw NoRunningFlinkJob("No running Flink job found")
-    )
+      throw NoRunningFlinkJob("No running Flink job found"))
 
-    assertThrows[NoRunningFlinkJob](
-      submitter.run(args = args, clusterName = "test-cluster"))
+    assertThrows[NoRunningFlinkJob](submitter.run(args = args, clusterName = "test-cluster"))
   }
   it should "return early flink check-if-job-is-running if one flink job found" in {
     val groupByName = "test-groupby-name"
@@ -492,8 +488,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     val submitter = mock[DataprocSubmitter]
 
     when(submitter.run(args = args, clusterName = "test-cluster")).thenAnswer(_ =>
-      throw new Exception("No savepoint deploy strategy provided")
-    )
+      throw new Exception("No savepoint deploy strategy provided"))
 
     val error =
       intercept[Exception](submitter.run(args = args, clusterName = "test-cluster"))
@@ -515,8 +510,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     val submitter = mock[DataprocSubmitter]
 
     when(submitter.run(args = args, clusterName = "test-cluster")).thenAnswer(_ =>
-      throw new Exception("Multiple savepoint deploy strategies provided")
-    )
+      throw new Exception("Multiple savepoint deploy strategies provided"))
 
     val error =
       intercept[Exception](submitter.run(args = args, clusterName = "test-cluster"))
