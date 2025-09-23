@@ -179,7 +179,7 @@ object FetcherMain {
             case Failure(exception) => {
               exception.printStackTrace()
             }
-          }})
+          })
         Thread.sleep(args.interval() * 1000)
 
       })
