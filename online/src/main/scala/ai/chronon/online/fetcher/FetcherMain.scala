@@ -163,9 +163,7 @@ object FetcherMain {
 
         // treeMap to produce a sorted result
         val tMap = new java.util.TreeMap[String, AnyRef]()
-        result.foreach(Response =>
-          // Cast Response to Response
-       {   val r = (Response.asInstanceOf[Fetcher.Response])
+        result.foreach(r =>
           r.valuesMap match {
             case Success(valMap) => {
               if (valMap == null) {
