@@ -1,8 +1,12 @@
 package ai.chronon.service.handlers;
 
 import ai.chronon.online.*;
+import ai.chronon.service.model.GetFeaturesResponse;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 
 import java.util.List;
@@ -27,12 +31,50 @@ public class FetchRouterV2 {
         }
     }
 
+    public static class AvroStringOnSuccessFunction implements BiFunction<List<GetFeaturesResponse.Result>, RoutingContext, Void> {
+        @Override
+        public Void apply(List<GetFeaturesResponse.Result> resultList, RoutingContext ctx) {
+            GetFeaturesResponse.Builder responseBuilder = GetFeaturesResponse.builder();
+            responseBuilder.results(resultList);
+
+            ctx.response()
+                    .setStatusCode(200)
+                    .putHeader("content-type", "application/json")
+                    .end(JsonObject.mapFrom(responseBuilder.build()).encode());
+            return null;
+        }
+    }
+
+    public static class AvroBytesOnSuccessFunction implements BiFunction<List<GetFeaturesResponse.Result>, RoutingContext, Void> {
+        @Override
+        public Void apply(List<GetFeaturesResponse.Result> resultList, RoutingContext ctx) {
+            // check only one result as we don't support bulk for avro bytes for now
+            if (resultList.size() != 1) {
+                ctx.response()
+                        .setStatusCode(500)
+                        .putHeader("content-type", "application/json")
+                        .end(new JsonObject().put("error", "Expected exactly one result for avro bytes response").encode());
+                return null;
+            }
+            byte[] avroData = resultList.get(0).getFeatureAvroBytes();
+
+            ctx.response()
+                    .setStatusCode(200)
+                    .putHeader("content-type", "application/avro")
+                    .putHeader("Content-Length", String.valueOf(avroData.length))
+                    .end(Buffer.buffer(avroData)); // Raw binary, no JSON wrapper
+            return null;
+        }
+    }
+
     public static Router createFetchRoutes(Vertx vertx, JavaFetcher fetcher) {
         Router router = Router.router(vertx);
         router.route().handler(BodyHandler.create());
 
-        router.post("/join/avrostring/:name").handler(new FetchHandlerV2(fetcher, new JoinFetcherAvroStringFunction()));
-        router.post("/join/avrobytes/:name").handler(new FetchHandlerV2(fetcher, new JoinFetcherAvroBytesFunction()));
+
+
+        router.post("/join/avrostring/:name").handler(new FetchHandlerV2(fetcher, new JoinFetcherAvroStringFunction(), new AvroStringOnSuccessFunction()));
+        router.post("/join/avrobytes/:name").handler(new FetchHandlerV2(fetcher, new JoinFetcherAvroBytesFunction(), new AvroBytesOnSuccessFunction()));
 
         return router;
     }

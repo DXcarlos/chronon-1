@@ -44,10 +44,15 @@ public class FetchHandlerV2 implements Handler<RoutingContext> {
 
     private final JavaFetcher fetcher;
     private final BiFunction<JavaFetcher, List<JavaRequest>, CompletableFuture<List<JavaResponse>>> fetchFunction;
+    private final BiFunction<List<GetFeaturesResponse.Result>, RoutingContext, Void> onSuccessFunction;
 
-    public FetchHandlerV2(JavaFetcher fetcher, BiFunction<JavaFetcher, List<JavaRequest>, CompletableFuture<List<JavaResponse>>> fetchFunction) {
+    public FetchHandlerV2(JavaFetcher fetcher,
+                          BiFunction<JavaFetcher, List<JavaRequest>, CompletableFuture<List<JavaResponse>>> fetchFunction,
+                          BiFunction<List<GetFeaturesResponse.Result>, RoutingContext, Void> onSuccessFunction
+                          ) {
         this.fetcher = fetcher;
         this.fetchFunction = fetchFunction;
+        this.onSuccessFunction = onSuccessFunction;
     }
 
     @Override
@@ -84,19 +89,21 @@ public class FetchHandlerV2 implements Handler<RoutingContext> {
                                         .map(FetchHandlerV2::responseToPoJo)
                                         .collect(Collectors.toList()));
 
-        maybeFeatureResponses.onSuccess(
-                resultList -> {
-                    // as this is a bulkGet request, we might have some successful and some failed responses
-                    // we return the responses in the same order as they come in and mark them as successful / failed based
-                    // on the lookups
-                    GetFeaturesResponse.Builder responseBuilder = GetFeaturesResponse.builder();
-                    responseBuilder.results(resultList);
+//        maybeFeatureResponses.onSuccess(
+//                resultList -> {
+//                    // as this is a bulkGet request, we might have some successful and some failed responses
+//                    // we return the responses in the same order as they come in and mark them as successful / failed based
+//                    // on the lookups
+//                    GetFeaturesResponse.Builder responseBuilder = GetFeaturesResponse.builder();
+//                    responseBuilder.results(resultList);
+//
+//                    ctx.response()
+//                            .setStatusCode(200)
+//                            .putHeader("content-type", "application/json")
+//                            .end(JsonObject.mapFrom(responseBuilder.build()).encode());
+//                });
 
-                    ctx.response()
-                            .setStatusCode(200)
-                            .putHeader("content-type", "application/json")
-                            .end(JsonObject.mapFrom(responseBuilder.build()).encode());
-                });
+        maybeFeatureResponses.onSuccess(resultList -> onSuccessFunction.apply(resultList, ctx));
 
         maybeFeatureResponses.onFailure(
                 err -> {
