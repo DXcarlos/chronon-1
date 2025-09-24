@@ -26,12 +26,12 @@ import ai.chronon.online.fetcher.Fetcher.Request
 import ai.chronon.online.fetcher.{FetchContext, Fetcher}
 import ai.chronon.online.serde._
 import ai.chronon.spark.Extensions.DataframeOps
-import ai.chronon.spark.{LogFlattenerJob, LoggingSchema}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.utils.{DataFrameGen, GroupByTestSuite, InMemoryKvStore, JoinTestSuite, MockApi, OnlineUtils, SchemaEvolutionUtils}
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import ai.chronon.spark.utils._
+import ai.chronon.spark.{LogFlattenerJob, LoggingSchema}
 import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 import org.junit.Assert.{assertEquals, assertFalse, assertNotEquals, assertTrue}
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -56,7 +56,7 @@ class SchemaEvolutionTest extends AnyFlatSpec {
         StructField("listing_id", LongType),
         StructField("m_guests", LongType),
         StructField("m_views", LongType),
-        StructField("ts", StringType),
+        StructField("ts", StringType),œ
         StructField("ds", StringType)
       )
     )

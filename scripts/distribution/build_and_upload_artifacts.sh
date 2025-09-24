@@ -106,6 +106,7 @@ if [[ $EXPECTED_MINIMUM_MINOR_PYTHON_VERSION -gt $MINOR_PYTHON_VERSION ]] ; then
     exit 1
 fi
 
+./mill clean
 export ZIPLINE_VERSION="0.1.0+dev.$USER"
 ./mill python.wheel # we need ZIPLINE_VERSION set to build the wheel with specific version here
 

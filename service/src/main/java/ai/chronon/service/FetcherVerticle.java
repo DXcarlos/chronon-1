@@ -3,6 +3,7 @@ package ai.chronon.service;
 import ai.chronon.online.Api;
 import ai.chronon.online.JavaFetcher;
 import ai.chronon.service.handlers.FetchRouter;
+import ai.chronon.service.handlers.FetchRouterV2;
 import ai.chronon.service.handlers.JoinListHandler;
 import ai.chronon.service.handlers.JoinSchemaHandler;
 import io.vertx.core.AbstractVerticle;
@@ -50,6 +51,7 @@ public class FetcherVerticle extends AbstractVerticle {
 
         // Set up sub-routes for the various feature retrieval apis
         router.route("/v1/fetch/*").subRouter(FetchRouter.createFetchRoutes(vertx, fetcher));
+        router.route("/v2/fetch/*").subRouter(FetchRouterV2.createFetchRoutes(vertx, fetcher));
 
         // Set up route for list of online joins
         router.get("/v1/joins").handler(new JoinListHandler(fetcher));
