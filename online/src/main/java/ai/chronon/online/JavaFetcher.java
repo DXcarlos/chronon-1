@@ -169,30 +169,30 @@ public class JavaFetcher {
     // Convert java requests to scala requests
     Seq<Fetcher.Request> scalaRequests = convertJavaRequestList(requests, false, startTs);
     // Get responses from the fetcher
-    Future<FetcherResponseWithTs> scalaResponses = this.fetcher.withTs(this.fetcher.fetchJoin(scalaRequests, Option.empty(), ResponseType.Map()));
+    Future<FetcherResponseWithTs> scalaResponses = this.fetcher.withTs(this.fetcher.fetchJoin(scalaRequests, Option.empty()));
     // Convert responses to CompletableFuture
     return convertResponsesWithTs(scalaResponses, false, startTs);
   }
 
-  public CompletableFuture<List<JavaResponse>> fetchJoinV2WithAvroString(List<JavaRequest> requests) {
-    long startTs = System.currentTimeMillis();
-    // Convert java requests to scala requests
-    Seq<Fetcher.Request> scalaRequests = convertJavaRequestList(requests, false, startTs);
-    // Get responses from the fetcher
-    Future<FetcherResponseWithTs> scalaResponses = this.fetcher.withTs(this.fetcher.fetchJoin(scalaRequests, Option.empty(), ResponseType.WithAvroString()));
-    // Convert responses to CompletableFuture
-    return convertResponsesWithTs(scalaResponses, false, startTs);
-  }
+//  public CompletableFuture<List<JavaResponse>> fetchJoinV2WithAvroString(List<JavaRequest> requests) {
+//    long startTs = System.currentTimeMillis();
+//    // Convert java requests to scala requests
+//    Seq<Fetcher.Request> scalaRequests = convertJavaRequestList(requests, false, startTs);
+//    // Get responses from the fetcher
+//    Future<FetcherResponseWithTs> scalaResponses = this.fetcher.withTs(this.fetcher.fetchJoinV2(scalaRequests, Option.empty(), ResponseType.WithAvroString()));
+//    // Convert responses to CompletableFuture
+//    return convertResponsesWithTs(scalaResponses, false, startTs);
+//  }
 
-  public CompletableFuture<List<JavaResponse>> fetchJoinV2WithAvroBytes(List<JavaRequest> requests) {
-    long startTs = System.currentTimeMillis();
-    // Convert java requests to scala requests
-    Seq<Fetcher.Request> scalaRequests = convertJavaRequestList(requests, false, startTs);
-    // Get responses from the fetcher
-    Future<FetcherResponseWithTs> scalaResponses = this.fetcher.withTs(this.fetcher.fetchJoin(scalaRequests, Option.empty(), ResponseType.WithAvroBytes()));
-    // Convert responses to CompletableFuture
-    return convertResponsesWithTs(scalaResponses, false, startTs);
-  }
+//  public CompletableFuture<List<JavaResponse>> fetchJoinV2WithAvroBytes(List<JavaRequest> requests) {
+//    long startTs = System.currentTimeMillis();
+//    // Convert java requests to scala requests
+//    Seq<Fetcher.Request> scalaRequests = convertJavaRequestList(requests, false, startTs);
+//    // Get responses from the fetcher
+//    Future<FetcherResponseWithTs> scalaResponses = this.fetcher.withTs(this.fetcher.fetchJoin(scalaRequests, Option.empty(), ResponseType.WithAvroBytes()));
+//    // Convert responses to CompletableFuture
+//    return convertResponsesWithTs(scalaResponses, false, startTs);
+//  }
 
 
     public CompletableFuture<List<String>> listJoins(boolean isOnline) {

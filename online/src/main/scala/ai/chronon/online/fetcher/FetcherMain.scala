@@ -164,7 +164,7 @@ object FetcherMain {
         // treeMap to produce a sorted result
         val tMap = new java.util.TreeMap[String, AnyRef]()
         result.foreach(r =>
-          r.valuesMap match {
+          r.values match {
             case Success(valMap) => {
               if (valMap == null) {
                 logger.info("No data present for the provided key.")

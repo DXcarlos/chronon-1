@@ -46,7 +46,7 @@ class FetcherFailureTest extends AnyFlatSpec {
 
     val request = Request(joinConf.metaData.name, Map.empty)
     val (responses, _) = FetcherTestUtil.joinResponses(spark, Array(request), mockApi)
-    val responseMap = responses.head.valuesMap.get
+    val responseMap = responses.head.values.get
 
     logger.info("====== Empty request response map ======")
     logger.info(responseMap.toString)
@@ -78,7 +78,7 @@ class FetcherFailureTest extends AnyFlatSpec {
 
     val request = Request(joinConf.metaData.name, keyMap)
     val (responses, _) = FetcherTestUtil.joinResponses(spark, Array(request), mockApi)
-    val responseMap = responses.head.valuesMap.get
+    val responseMap = responses.head.values.get
     val exceptionKeys = joinConf.joinPartOps.map(jp => jp.columnPrefix + "exception")
 
     println(responseMap)

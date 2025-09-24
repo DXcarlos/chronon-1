@@ -17,8 +17,7 @@
 package ai.chronon.online
 
 import ai.chronon.api.Constants
-import ai.chronon.online.fetcher.Fetcher.{Request, Response, ResponseValue}
-import ai.chronon.online.fetcher.ResponseType
+import ai.chronon.online.fetcher.Fetcher.{Request, Response}
 import ai.chronon.online.metrics.Metrics.Context
 
 import scala.collection.{Seq, mutable}
@@ -31,7 +30,7 @@ class ExternalSourceRegistry extends Serializable {
   class ContextualHandler extends ExternalSourceHandler {
     override def fetch(requests: Seq[Request]): Future[Seq[Response]] = {
       Future(requests.map { request =>
-        Response(request = request, value = ResponseValue.Map(Success(request.keys)))
+        Response(request = request, values = Success(request.keys))
       })
     }
   }
@@ -62,7 +61,7 @@ class ExternalSourceRegistry extends Serializable {
           val ctx = context.copy(groupBy = s"${Constants.ExternalPrefix}_$name")
           val responses = handlerMap(name).fetch(requests)
           responses.map { responses =>
-            val failures = responses.count(_.valuesMap.isFailure)
+            val failures = responses.count(_.values.isFailure)
             ctx.distribution("response.latency", System.currentTimeMillis() - startTime)
             ctx.count("response.failures", failures)
             ctx.count("response.successes", responses.size - failures)
@@ -72,7 +71,7 @@ class ExternalSourceRegistry extends Serializable {
           val failure = Failure(
             new IllegalArgumentException(
               s"$name is not registered among handlers: [${handlerMap.keys.mkString(", ")}]"))
-          Future(requests.map(request => Response(request, ResponseValue.Map(failure))))
+          Future(requests.map(request => Response(request, failure)))
         }
       }
       .toList
@@ -84,8 +83,8 @@ class ExternalSourceRegistry extends Serializable {
           .find(_.request == req)
           .getOrElse(Response(
             request = req,
-            value = ResponseValue.Map(Failure( // logic error - some handler missed returning a response
-              new IllegalStateException(s"Missing response for request $req among \n $allResponses")))
+            values = Failure( // logic error - some handler missed returning a response
+              new IllegalStateException(s"Missing response for request $req among \n $allResponses"))
           )))
     }
   }

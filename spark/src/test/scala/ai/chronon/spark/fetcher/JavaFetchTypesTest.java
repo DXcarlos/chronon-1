@@ -72,7 +72,7 @@ public class JavaFetchTypesTest {
         List<JavaResponse> nullResultResponses = new ArrayList<>();
         Fetcher.Response nullScalaResponse = new Fetcher.Response(
                 requests.get(0).toScalaRequest(),
-                new Fetcher.ResponseValue.Map(new scala.util.Success<>(null)));
+                new scala.util.Success<>(null));
         nullResultResponses.add(new JavaResponse(nullScalaResponse));
 
         CompletableFuture<List<JavaResponse>> responsesF = CompletableFuture.completedFuture(nullResultResponses);

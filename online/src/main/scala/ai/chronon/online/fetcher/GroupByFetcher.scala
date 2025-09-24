@@ -260,7 +260,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
 
           }
 
-          Response(request, ResponseValue.Map(responseMapTry))
+          Response(request, responseMapTry)
         }.toList
         responses
       }
@@ -296,7 +296,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
     // Start I/O and generate a mapping from query --> GroupBy response
     val groupByResponsesFuture = fetchGroupBys(groupByRequestsByQuery.values.toList)
     groupByResponsesFuture.map { groupByResponses =>
-      val resultsByRequest = groupByResponses.iterator.map { response => response.request -> response.valuesMap }.toMap
+      val resultsByRequest = groupByResponses.iterator.map { response => response.request -> response.values }.toMap
       val responseByQuery = groupByRequestsByQuery.map { case (query, request) =>
         val results = resultsByRequest
           .getOrElse(
@@ -320,7 +320,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
               }
               Failure(ex)
           }
-        val response = Response(request, ResponseValue.Map(results))
+        val response = Response(request, results)
         query -> response
       }
 

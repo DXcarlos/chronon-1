@@ -118,7 +118,7 @@ class ExternalSourcesTest extends AnyFlatSpec {
       "ext_contextual_context_1",
       "ext_contextual_context_2"
     )
-    responses.map(_.valuesMap).foreach { m =>
+    responses.map(_.values).foreach { m =>
       assertTrue(m.isSuccess)
       assertEquals(m.get.keysIterator.toSet, keys)
       numbers.add(m.get("ext_p1_plus_one_number").asInstanceOf[Int])
@@ -153,7 +153,7 @@ class ExternalSourcesTest extends AnyFlatSpec {
 
     // test soft-fail on missing keys
     val emptyResponseF = fetcher.fetchJoin(Seq(Request(join.metaData.name, Map.empty)))
-    val emptyResponseMap = Await.result(emptyResponseF, Duration(10, SECONDS)).head.valuesMap.get
+    val emptyResponseMap = Await.result(emptyResponseF, Duration(10, SECONDS)).head.values.get
 
     val expectedKeys = Set(
       "ext_p1_plus_one_exception",

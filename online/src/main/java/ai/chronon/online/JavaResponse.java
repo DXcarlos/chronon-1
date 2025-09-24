@@ -18,7 +18,6 @@ package ai.chronon.online;
 
 import ai.chronon.api.ScalaJavaConversions;
 import ai.chronon.online.fetcher.Fetcher;
-import ai.chronon.online.fetcher.Fetcher.ResponseValue;
 import ai.chronon.online.fetcher.ResponseType;
 import scala.Enumeration;
 
@@ -39,50 +38,68 @@ public class JavaResponse {
         this.valueType = ResponseType.Map(); // since values is a Map
     }
 
-    public JavaResponse(Fetcher.Response scalaResponse) {
+    public JavaResponse(Fetcher.Response scalaResponse){
         this.request = new JavaRequest(scalaResponse.request());
-
-        Enumeration.Value valueType = scalaResponse.getResponseValueType();
-
-        if (valueType == ResponseType.Map()) {
-            this.values = JTry
-                    .fromScala(scalaResponse.valuesMap())
-                    .map(v -> {
-                        if (v != null)
-                            return ScalaJavaConversions.toJava(v);
-                        else
-                            return null;
-                    });
-            this.valueType = valueType;
-        } else if (valueType == ResponseType.WithAvroBytes()) {
-            this.valuesAvroBytes = JTry.fromScala(scalaResponse.valuesAvroBytes());
-            this.valueType = valueType;
-        } else if (valueType == ResponseType.WithAvroString()) {
-            this.valuesAvroString = JTry.fromScala(scalaResponse.valuesAvroString());
-            this.valueType = valueType;
-        } else {
-            throw new IllegalArgumentException("Unknown response type: " + valueType);
-        }
+        this.values = JTry
+                .fromScala(scalaResponse.values())
+                .map(v -> {
+                    if (v != null)
+                        return ScalaJavaConversions.toJava(v);
+                    else
+                        return null;
+                });
     }
 
     public Fetcher.Response toScala() {
-        if (this.valueType == ResponseType.Map()) {
-            return new Fetcher.Response(
-                    request.toScalaRequest(),
-                    Fetcher.ResponseValue$.MODULE$.createMap(values.map(ScalaJavaConversions::toScala).toScala())
-            );
-        } else if (this.valueType == ResponseType.WithAvroBytes()) {
-            return new Fetcher.Response(
-                    request.toScalaRequest(),
-                    Fetcher.ResponseValue$.MODULE$.createAvroBytes(valuesAvroBytes.map(v -> v).toScala())
-            );
-        } else if (this.valueType == ResponseType.WithAvroString()) {
-            return new Fetcher.Response(
-                    request.toScalaRequest(),
-                    Fetcher.ResponseValue$.MODULE$.createAvroString(valuesAvroString.map(v -> v).toScala())
-            );
-        } else {
-            throw new IllegalArgumentException("Unknown response type: " + this.valueType);
-        }
+        return new Fetcher.Response(
+                request.toScalaRequest(),
+                values.map(ScalaJavaConversions::toScala).toScala());
     }
+
+//    public JavaResponse(Fetcher.Response scalaResponse) {
+//        this.request = new JavaRequest(scalaResponse.request());
+//
+//        Enumeration.Value valueType = scalaResponse.getResponseValueType();
+//
+//        if (valueType == ResponseType.Map()) {
+//            this.values = JTry
+//                    .fromScala(scalaResponse.valuesMap())
+//                    .map(v -> {
+//                        if (v != null)
+//                            return ScalaJavaConversions.toJava(v);
+//                        else
+//                            return null;
+//                    });
+//            this.valueType = valueType;
+//        } else if (valueType == ResponseType.WithAvroBytes()) {
+//            this.valuesAvroBytes = JTry.fromScala(scalaResponse.valuesAvroBytes());
+//            this.valueType = valueType;
+//        } else if (valueType == ResponseType.WithAvroString()) {
+//            this.valuesAvroString = JTry.fromScala(scalaResponse.valuesAvroString());
+//            this.valueType = valueType;
+//        } else {
+//            throw new IllegalArgumentException("Unknown response type: " + valueType);
+//        }
+//    }
+//
+//    public Fetcher.Response toScala() {
+//        if (this.valueType == ResponseType.Map()) {
+//            return new Fetcher.Response(
+//                    request.toScalaRequest(),
+//                    Fetcher.AvroResponseValue$.MODULE$.createMap(values.map(ScalaJavaConversions::toScala).toScala())
+//            );
+//        } else if (this.valueType == ResponseType.WithAvroBytes()) {
+//            return new Fetcher.Response(
+//                    request.toScalaRequest(),
+//                    Fetcher.AvroResponseValue$.MODULE$.createAvroBytes(valuesAvroBytes.map(v -> v).toScala())
+//            );
+//        } else if (this.valueType == ResponseType.WithAvroString()) {
+//            return new Fetcher.Response(
+//                    request.toScalaRequest(),
+//                    Fetcher.AvroResponseValue$.MODULE$.createAvroString(valuesAvroString.map(v -> v).toScala())
+//            );
+//        } else {
+//            throw new IllegalArgumentException("Unknown response type: " + this.valueType);
+//        }
+//    }
 }

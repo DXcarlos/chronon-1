@@ -16,22 +16,19 @@
 
 package ai.chronon.spark.utils
 
-import ai.chronon.api.Extensions.GroupByOps
-import ai.chronon.api.Extensions.SourceOps
+import ai.chronon.api.Extensions.{GroupByOps, SourceOps}
 import ai.chronon.api.ScalaJavaConversions._
-import ai.chronon.online.fetcher.Fetcher
-import ai.chronon.online.fetcher.Fetcher.{Response, ResponseValue}
 import ai.chronon.online._
+import ai.chronon.online.fetcher.Fetcher
+import ai.chronon.online.fetcher.Fetcher.Response
 import ai.chronon.online.serde._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import java.util
 import java.util.Base64
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{CompletableFuture, ConcurrentLinkedQueue}
 import scala.collection.Seq
 import scala.concurrent.Future
 import scala.util.Success
@@ -55,8 +52,7 @@ class MockApi(kvStore: () => KVStore, val namespace: String) extends Api(null) {
         requests.map(req =>
           Response(
             req,
-            ResponseValue.Map(
-              Success(req.keys.mapValues(_.asInstanceOf[Integer] + 1).mapValues(_.asInstanceOf[AnyRef]).toMap)))))
+              Success(req.keys.mapValues(_.asInstanceOf[Integer] + 1).mapValues(_.asInstanceOf[AnyRef]).toMap))))
     }
   }
 
