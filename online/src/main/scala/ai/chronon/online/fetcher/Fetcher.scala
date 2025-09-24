@@ -16,14 +16,14 @@
 
 package ai.chronon.online.fetcher
 
-import ai.chronon.aggregator.row.ColumnAggregator
 import ai.chronon.api
 import ai.chronon.api.Constants.UTF8
 import ai.chronon.api.Extensions.{ExternalPartOps, JoinOps, StringOps, ThrowableOps}
 import ai.chronon.api._
 import ai.chronon.online.OnlineDerivationUtil.applyDeriveFunc
 import ai.chronon.online._
-import ai.chronon.online.fetcher.Fetcher.{JoinSchemaResponse, Request, Response, ResponseWithContext}
+import ai.chronon.online.fetcher.Fetcher.ResponseType.ResponseType
+import ai.chronon.online.fetcher.Fetcher.{AvroResponseValue, JoinSchemaResponse, Request, Response, ResponseType, ResponseV2, ResponseWithContext}
 import ai.chronon.online.metrics.{Metrics, TTLCache}
 import ai.chronon.online.serde._
 import com.google.gson.Gson
@@ -54,6 +54,45 @@ object Fetcher {
                                  baseValues: Map[String, AnyRef]) {
     def combinedValues: Map[String, AnyRef] = baseValues ++ derivedValues
   }
+
+  sealed trait AvroResponseValue
+  object AvroResponseValue {
+    case class Map(value: Try[scala.collection.immutable.Map[String, AnyRef]]) extends AvroResponseValue
+    case class AvroBytes(value: Try[Array[Byte]]) extends AvroResponseValue
+    case class AvroString(value: Try[String]) extends AvroResponseValue
+
+    // Add these factory methods for Java interop
+    def createMap(value: Try[scala.collection.immutable.Map[String, AnyRef]]): Map = Map(value)
+    def createAvroBytes(value: Try[Array[Byte]]): AvroBytes = AvroBytes(value)
+    def createAvroString(value: Try[String]): AvroString = AvroString(value)
+  }
+
+  object ResponseType extends Enumeration {
+    type ResponseType = Value
+    val Map, WithAvroBytes, WithAvroString = Value
+  }
+
+  case class ResponseV2(request: Request, value: AvroResponseValue) {
+    def valuesMap: Try[Map[String, AnyRef]] = value match {
+      case AvroResponseValue.Map(v) => v
+    }
+
+    def valuesAvroBytes: Try[Array[Byte]] = value match {
+      case AvroResponseValue.AvroBytes(v) => v
+    }
+
+    def valuesAvroString: Try[String] = value match {
+      case AvroResponseValue.AvroString(v) => v
+    }
+
+    def getResponseValueType: ResponseType = value match {
+      case AvroResponseValue.Map(_)        => ResponseType.Map
+      case AvroResponseValue.AvroBytes(_)  => ResponseType.WithAvroBytes
+      case AvroResponseValue.AvroString(_) => ResponseType.WithAvroString
+    }
+  }
+
+
 
   case class ColumnSpec(groupByName: String,
                         columnName: String,
@@ -190,6 +229,74 @@ class Fetcher(val kvStore: KVStore,
 
     combinedResponsesF
       .map(_.iterator.map(logResponse(_, ts)).toSeq)
+  }
+
+  private def convertJoinFeaturesResponseToAvroBytes(features: Map[String, AnyRef],
+                                                     joinName: String): Try[Array[Byte]] = {
+    val startTime = System.currentTimeMillis()
+    val ctx =
+      Metrics.Context(Metrics.Environment.JoinSchemaFetching, join = joinName)
+    val joinCodecTry = joinCodecCache(joinName)
+
+    joinCodecTry.flatMap { joinCodec =>
+      Try {
+        val response = encode(joinCodec.valueSchema, joinCodec.valueCodec, features)
+        ctx.distribution("avroconversionbytes.latency.millis", System.currentTimeMillis() - startTime)
+        response
+      }.recover { case exception =>
+        logger.error(s"Failed to convert features to avro for $joinName", exception)
+        throw exception
+      }
+    }
+  }
+
+  private def convertJoinFeaturesResponseToAvroString(features: Map[String, AnyRef], joinName: String): Try[String] = {
+    val startTime = System.currentTimeMillis()
+    val ctx =
+      Metrics.Context(Metrics.Environment.JoinSchemaFetching, join = joinName)
+    val joinCodecTry = joinCodecCache(joinName)
+
+    joinCodecTry.flatMap { joinCodec =>
+      Try {
+        val avroBytes = encode(joinCodec.valueSchema, joinCodec.valueCodec, features)
+        val avroString = java.util.Base64.getEncoder.encodeToString(avroBytes)
+        ctx.distribution("avroconversionstring.latency.millis", System.currentTimeMillis() - startTime)
+        avroString
+      }.recover { case exception =>
+        logger.error(s"Failed to convert features to avro for $joinName", exception)
+        throw exception
+      }
+    }
+  }
+
+
+  private def convertResponseToResponseWithAvroBytes(response: Response): ResponseV2 = {
+    ResponseV2(response.request, AvroResponseValue.AvroBytes(response.values.flatMap(
+      v => {
+        convertJoinFeaturesResponseToAvroBytes(v, response.request.name)
+      }
+    )))
+  }
+
+  private def convertResponseToResponseWithAvroString(response: Response): ResponseV2 = {
+    ResponseV2(response.request, AvroResponseValue.AvroString(response.values.flatMap(
+      v => {
+        convertJoinFeaturesResponseToAvroString(v, response.request.name)
+      }
+    )))
+  }
+  def fetchJoinV2(requests: Seq[Request],
+                  joinConf: Option[api.Join] = None,
+                  responseType: ResponseType = ResponseType.Map): Future[Seq[ResponseV2]] = {
+    val rawResponse = fetchJoin(requests, joinConf)
+
+    responseType match {
+      case ResponseType.WithAvroBytes => {
+        rawResponse.map(_.iterator.map(convertResponseToResponseWithAvroBytes).toSeq)
+      }
+      case ResponseType.WithAvroString =>
+        rawResponse.map(_.iterator.map(convertResponseToResponseWithAvroString).toSeq)
+    }
   }
 
   private def applyDerivations(ts: Long, request: Request, baseMap: Map[String, AnyRef]): ResponseWithContext = {
