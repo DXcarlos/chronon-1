@@ -56,7 +56,7 @@ class SchemaEvolutionTest extends AnyFlatSpec {
         StructField("listing_id", LongType),
         StructField("m_guests", LongType),
         StructField("m_views", LongType),
-        StructField("ts", StringType),œ
+        StructField("ts", StringType),
         StructField("ds", StringType)
       )
     )
