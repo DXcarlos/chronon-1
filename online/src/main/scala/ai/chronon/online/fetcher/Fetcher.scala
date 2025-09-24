@@ -143,8 +143,6 @@ object Fetcher {
                                 valueInfos: Array[JoinCodec.ValueInfo])
 }
 
-//private[online] case class FetcherResponseWithTs(responses: Seq[Fetcher.Response], endTs: Long)
-
 private[online] case class FetcherResponseWithTs[T <: BaseResponse](responses: Seq[T], endTs: Long)
 
 
@@ -178,13 +176,6 @@ class Fetcher(val kvStore: KVStore,
       FetcherResponseWithTs(response, System.currentTimeMillis())
     }
   }
-
-//
-//  private[online] def withTs(responses: Future[Seq[Response]]): Future[FetcherResponseWithTs] = {
-//    responses.map { response =>
-//      FetcherResponseWithTs(response, System.currentTimeMillis())
-//    }
-//  }
 
   def fetchGroupBys(requests: Seq[Request]): Future[Seq[Response]] = {
     joinPartFetcher.fetchGroupBys(requests)
