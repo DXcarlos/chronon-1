@@ -57,6 +57,7 @@ public class GetFeaturesResponse {
         private final String featureAvroString;
         private final byte[] featureAvroBytes;
         private final String error;
+        private final Map<String, Object> featuresErrors;
 
         private Result(Builder builder) {
             this.status = builder.status;
@@ -65,6 +66,7 @@ public class GetFeaturesResponse {
             this.featureAvroString = builder.featureAvroString;
             this.featureAvroBytes = builder.featureAvroBytes;
             this.error = builder.error;
+            this.featuresErrors = builder.featuresErrors;
         }
 
         public Status getStatus() {
@@ -91,6 +93,10 @@ public class GetFeaturesResponse {
             return error;
         }
 
+        public Map<String, Object> getFeaturesErrors() {
+            return featuresErrors;
+        }
+
         public static Builder builder() {
             return new Builder();
         }
@@ -102,6 +108,7 @@ public class GetFeaturesResponse {
             private String featureAvroString;
             private byte[] featureAvroBytes;
             private String error;
+            private Map<String, Object> featuresErrors;
 
             public Builder status(Status status) {
                 this.status = status;
@@ -130,6 +137,11 @@ public class GetFeaturesResponse {
 
             public Builder error(String error) {
                 this.error = error;
+                return this;
+            }
+
+            public Builder featuresErrors(Map<String, Object> featuresErrors) {
+                this.featuresErrors = featuresErrors;
                 return this;
             }
 

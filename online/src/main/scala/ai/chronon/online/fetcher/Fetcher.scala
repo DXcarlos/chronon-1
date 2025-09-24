@@ -22,7 +22,15 @@ import ai.chronon.api.Extensions.{ExternalPartOps, JoinOps, StringOps, Throwable
 import ai.chronon.api._
 import ai.chronon.online.OnlineDerivationUtil.applyDeriveFunc
 import ai.chronon.online._
-import ai.chronon.online.fetcher.Fetcher.{AvroResponseValue, BaseResponse, JoinSchemaResponse, Request, Response, ResponseV2, ResponseWithContext}
+import ai.chronon.online.fetcher.Fetcher.{
+  AvroResponseValue,
+  BaseResponse,
+  JoinSchemaResponse,
+  Request,
+  Response,
+  ResponseV2,
+  ResponseWithContext
+}
 import ai.chronon.online.fetcher.ResponseType.ResponseType
 import ai.chronon.online.metrics.{Metrics, TTLCache}
 import ai.chronon.online.serde._
@@ -70,7 +78,10 @@ object Fetcher {
     case class AvroString(value: Try[String]) extends AvroResponseValue
   }
 
-  case class ResponseV2(request: Request, value: AvroResponseValue) extends BaseResponse {
+  case class ResponseV2(request: Request,
+                        value: AvroResponseValue,
+                        errors: Try[scala.collection.immutable.Map[String, AnyRef]])
+      extends BaseResponse {
     def valuesMap: Try[Map[String, AnyRef]] = value match {
       case AvroResponseValue.Map(v) => v
     }
@@ -89,8 +100,6 @@ object Fetcher {
       case AvroResponseValue.AvroString(_) => ResponseType.WithAvroString
     }
   }
-
-
 
   case class ColumnSpec(groupByName: String,
                         columnName: String,
@@ -144,7 +153,6 @@ object Fetcher {
 }
 
 private[online] case class FetcherResponseWithTs[T <: BaseResponse](responses: Seq[T], endTs: Long)
-
 
 // BaseFetcher + Logging + External service calls
 class Fetcher(val kvStore: KVStore,
@@ -268,22 +276,6 @@ class Fetcher(val kvStore: KVStore,
     }
   }
 
-
-  private def convertResponseToResponseWithAvroBytes(response: Response): ResponseV2 = {
-    ResponseV2(response.request, AvroResponseValue.AvroBytes(response.values.flatMap(
-      v => {
-        convertJoinFeaturesResponseToAvroBytes(v, response.request.name)
-      }
-    )))
-  }
-
-  private def convertResponseToResponseWithAvroString(response: Response): ResponseV2 = {
-    ResponseV2(response.request, AvroResponseValue.AvroString(response.values.flatMap(
-      v => {
-        convertJoinFeaturesResponseToAvroString(v, response.request.name)
-      }
-    )))
-  }
   def fetchJoinV2(requests: Seq[Request],
                   joinConf: Option[api.Join] = None,
                   responseType: ResponseType = ResponseType.Map): Future[Seq[ResponseV2]] = {
@@ -291,10 +283,40 @@ class Fetcher(val kvStore: KVStore,
 
     responseType match {
       case ResponseType.WithAvroBytes => {
-        rawResponse.map(_.iterator.map(convertResponseToResponseWithAvroBytes).toSeq)
+        rawResponse.map(
+          _.iterator
+            .map(r => {
+              val errors = r.values match {
+                case Failure(exception) => Failure(exception)
+                case Success(valueMap) =>
+                  val exceptionMap = valueMap.filter(_._1.endsWith("_exception"))
+                  if (exceptionMap.nonEmpty) Success(exceptionMap) else Success(Map.empty[String, AnyRef])
+              }
+              ResponseV2(r.request,
+                         AvroResponseValue.AvroBytes(r.values.flatMap(v => {
+                           convertJoinFeaturesResponseToAvroBytes(v, r.request.name)
+                         })),
+                         errors)
+            })
+            .toSeq)
       }
       case ResponseType.WithAvroString =>
-        rawResponse.map(_.iterator.map(convertResponseToResponseWithAvroString).toSeq)
+        rawResponse.map(
+          _.iterator
+            .map(r => {
+              val errors = r.values match {
+                case Failure(exception) => Failure(exception)
+                case Success(valueMap) =>
+                  val exceptionMap = valueMap.filter(_._1.endsWith("_exception"))
+                  if (exceptionMap.nonEmpty) Success(exceptionMap) else Success(Map.empty[String, AnyRef])
+              }
+              ResponseV2(r.request,
+                         AvroResponseValue.AvroString(r.values.flatMap(v => {
+                           convertJoinFeaturesResponseToAvroString(v, r.request.name)
+                         })),
+                         errors)
+            })
+            .toSeq)
     }
   }
 

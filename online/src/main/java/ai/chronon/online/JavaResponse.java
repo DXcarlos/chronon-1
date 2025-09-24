@@ -30,6 +30,7 @@ public class JavaResponse {
     public JTry<Map<String, Object>> values;
     public JTry<byte[]> valuesAvroBytes;
     public JTry<String> valuesAvroString;
+    public JTry<Map<String, Object>> errorsV2;
     public Enumeration.Value valueType;
 
     public JavaResponse(JavaRequest request, JTry<Map<String, Object>> values) {
@@ -72,9 +73,15 @@ public class JavaResponse {
             this.request = new JavaRequest(responseV2.request());
             Enumeration.Value valueType = responseV2.getResponseValueType();
             this.valueType = valueType;
+            this.errorsV2 = JTry.fromScala(responseV2.errors())
+                    .map(v -> {
+                        if (v != null)
+                            return ScalaJavaConversions.toJava(v);
+                        else
+                            return null;
+                    });
             if (valueType == ResponseType.WithAvroBytes()) {
                 this.valuesAvroBytes = JTry.fromScala(responseV2.valuesAvroBytes());
-
             } else if (valueType == ResponseType.WithAvroString()) {
                 this.valuesAvroString = JTry.fromScala(responseV2.valuesAvroString());
             } else {

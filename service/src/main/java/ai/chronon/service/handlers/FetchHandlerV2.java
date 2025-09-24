@@ -96,6 +96,8 @@ public class FetchHandlerV2 implements Handler<RoutingContext> {
         var builder = GetFeaturesResponse.Result.builder()
                 .entityKeys(response.request.keys);
 
+        builder.featuresErrors(response.errorsV2.getValue());
+
         // Get the appropriate JTry and set up success builder based on response type
         JTry featureValues;
         if (valueType == ResponseType.Map()) {
