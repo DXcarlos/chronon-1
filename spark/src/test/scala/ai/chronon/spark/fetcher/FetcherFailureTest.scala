@@ -82,7 +82,7 @@ class FetcherFailureTest extends AnyFlatSpec {
     val exceptionKeys = joinConf.joinPartOps.map(jp => jp.columnPrefix + "exception")
 
     println(responseMap)
-    if(!responseMap.contains("derivation_fetch_exception")){
+    if (!responseMap.contains("derivation_fetch_exception")) {
       exceptionKeys.foreach(k => assertTrue(responseMap.contains(k)))
     }
   }

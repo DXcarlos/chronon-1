@@ -369,10 +369,8 @@ class BigQueryImportTest extends AnyFlatSpec with MockitoSugar {
     val renderedQuery = queryConfig.getQuery
 
     // Check that variables were properly substituted in setup statements
-    assertTrue("Setup should contain substituted start date",
-               renderedQuery.contains("partition_date = '2024-01-15'"))
-    assertTrue("Setup should contain substituted end date",
-               renderedQuery.contains("end_date = '2024-01-15'"))
+    assertTrue("Setup should contain substituted start date", renderedQuery.contains("partition_date = '2024-01-15'"))
+    assertTrue("Setup should contain substituted end date", renderedQuery.contains("end_date = '2024-01-15'"))
     assertTrue("Setup should not contain unsubstituted variables",
                !renderedQuery.contains("{{ start_date }}") && !renderedQuery.contains("{{ end_date }}"))
   }
@@ -395,11 +393,17 @@ class BigQueryImportTest extends AnyFlatSpec with MockitoSugar {
     // Verify the structure contains setup statements with variable placeholders
     assertTrue("Template should contain BEGIN block", result.contains("BEGIN"))
     assertTrue("Template should contain END block", result.contains("END;"))
-    assertTrue("Template should contain first setup with variables", result.contains("CREATE TEMP TABLE partition_data_{{ start_date }}"))
-    assertTrue("Template should contain second setup with variables", result.contains("CREATE TEMP FUNCTION get_end_date() AS ('{{ end_date }}')"))
-    assertTrue("Template should contain third setup with variables", result.contains("CREATE OR REPLACE VIEW test_view"))
+    assertTrue("Template should contain first setup with variables",
+               result.contains("CREATE TEMP TABLE partition_data_{{ start_date }}"))
+    assertTrue("Template should contain second setup with variables",
+               result.contains("CREATE TEMP FUNCTION get_end_date() AS ('{{ end_date }}')"))
+    assertTrue("Template should contain third setup with variables",
+               result.contains("CREATE OR REPLACE VIEW test_view"))
     assertTrue("Template should contain export data section", result.contains("EXPORT DATA"))
-    assertTrue("Template should contain main SQL with variables", result.contains("SELECT * FROM test_table WHERE ds = '{{ start_date }}' AND ds <= '{{ end_date }}'"))
+    assertTrue(
+      "Template should contain main SQL with variables",
+      result.contains("SELECT * FROM test_table WHERE ds = '{{ start_date }}' AND ds <= '{{ end_date }}'")
+    )
 
     // Verify each setup statement is properly terminated
     setups.foreach { setup =>

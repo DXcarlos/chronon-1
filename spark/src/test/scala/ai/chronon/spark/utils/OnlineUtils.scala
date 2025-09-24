@@ -34,7 +34,6 @@ import scala.annotation.tailrec
 
 object OnlineUtils {
 
-
   def putStreaming(session: SparkSession,
                    groupByConf: api.GroupBy,
                    kvStore: () => KVStore,

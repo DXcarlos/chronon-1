@@ -28,7 +28,7 @@ class PubSubFlinkSourceSpec extends AnyFlatSpec {
 
   it should "choose default parallelism" in {
     val props = Map(
-      PubSubFlinkSource.GcpProject -> "my-gcp-project",
+      PubSubFlinkSource.GcpProject -> "my-gcp-project"
     )
     val params = Map(
       PubSubFlinkSource.SubscriptionName -> "test-subscription"

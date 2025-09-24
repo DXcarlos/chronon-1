@@ -33,7 +33,7 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
         "spark.chronon.partition.column" -> "ds",
 //        "spark.hadoop.fs.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem",
 //        "spark.hadoop.fs.AbstractFileSystem.gs.impl" -> "com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS",
-        "spark.sql.catalogImplementation" -> "in-memory",
+        "spark.sql.catalogImplementation" -> "in-memory"
 
 //        Uncomment to test
 //        "spark.sql.defaultCatalog" -> "default_iceberg",
@@ -427,7 +427,7 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
 
   it should "test CheckPartitions partition spec validation" in {
     import ai.chronon.api.PartitionSpec
-      import ai.chronon.spark.catalog.Format
+    import ai.chronon.spark.catalog.Format
 
     // Test various partition specifications that CheckPartitions might encounter
     val partitionTestCases = Seq(

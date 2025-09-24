@@ -20,7 +20,7 @@ class DeserializationSchemaWrapperTest extends AnyFlatSpec with MockitoSugar {
 
   class TestCollector[T] extends Collector[T] {
     val results: ListBuffer[T] = ListBuffer.empty[T]
-    
+
     override def collect(record: T): Unit = results += record
     override def close(): Unit = {}
   }
@@ -64,7 +64,8 @@ class DeserializationSchemaWrapperTest extends AnyFlatSpec with MockitoSugar {
   it should "throw UnsupportedOperationException for single deserialize method" in {
     val mockSchema = mock[DeserializationSchema[TestData]]
     val wrapper = new DeserializationSchemaWrapper[TestData](mockSchema)
-    val pubsubMessage = PubsubMessage.newBuilder()
+    val pubsubMessage = PubsubMessage
+      .newBuilder()
       .setData(ByteString.copyFromUtf8("test"))
       .build()
 
@@ -78,7 +79,8 @@ class DeserializationSchemaWrapperTest extends AnyFlatSpec with MockitoSugar {
     val wrapper = new DeserializationSchemaWrapper[TestData](mockSchema)
     val collector = new TestCollector[TestData]()
     val testBytes = "test data".getBytes
-    val pubsubMessage = PubsubMessage.newBuilder()
+    val pubsubMessage = PubsubMessage
+      .newBuilder()
       .setData(ByteString.copyFrom(testBytes))
       .build()
 

@@ -196,7 +196,7 @@ class MergeJobVersioningTest extends AnyFlatSpec {
 
     // Replace with literal values for testing, maintaining original structure
     val productionDataWithLiterals =
-      existingProductionData //.drop(sharedColumnName, removedColumnName) // Remove existing columns
+      existingProductionData // .drop(sharedColumnName, removedColumnName) // Remove existing columns
         .withColumn(sharedColumnName, lit(999.0)) // Literal value we expect to be reused
         .withColumn(removedColumnName, lit(42L)) // This should not appear in v1 result
 
