@@ -68,11 +68,6 @@ object Fetcher {
     case class Map(value: Try[scala.collection.immutable.Map[String, AnyRef]]) extends AvroResponseValue
     case class AvroBytes(value: Try[Array[Byte]]) extends AvroResponseValue
     case class AvroString(value: Try[String]) extends AvroResponseValue
-
-    // Add these factory methods for Java interop
-    def createMap(value: Try[scala.collection.immutable.Map[String, AnyRef]]): Map = Map(value)
-    def createAvroBytes(value: Try[Array[Byte]]): AvroBytes = AvroBytes(value)
-    def createAvroString(value: Try[String]): AvroString = AvroString(value)
   }
 
   case class ResponseV2(request: Request, value: AvroResponseValue) extends BaseResponse {
