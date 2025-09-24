@@ -9,8 +9,7 @@ import org.mockito.ArgumentMatchers.any
 import org.mockito.MockitoSugar.mock
 import org.scalatest.flatspec.AnyFlatSpec
 
-class MockPubSubSchemaSerDe(topicInfo: TopicInfo, mockSchemaClient: SchemaServiceClient)
-    extends PubSubSchemaSerDe(topicInfo) {
+class MockPubSubSchemaSerDe(topicInfo: TopicInfo, mockSchemaClient: SchemaServiceClient) extends PubSubSchemaSerDe(topicInfo) {
   override def buildPubsubSchemaClient(): SchemaServiceClient = {
     mockSchemaClient
   }
@@ -18,14 +17,10 @@ class MockPubSubSchemaSerDe(topicInfo: TopicInfo, mockSchemaClient: SchemaServic
 
 class PubSubSchemaSerDeSpec extends AnyFlatSpec {
   it should "fail if the schema is not found" in {
-    val topicInfo =
-      TopicInfo("test-topic",
-                "pubsub",
-                Map(PubSubSchemaSerDe.ProjectKey -> "test-project", PubSubSchemaSerDe.SchemaIdKey -> "test-schema"))
+    val topicInfo = TopicInfo("test-topic", "pubsub", Map(PubSubSchemaSerDe.ProjectKey -> "test-project", PubSubSchemaSerDe.SchemaIdKey -> "test-schema"))
     val mockedSchemaClient = mock[SchemaServiceClient]
     val statusCode = mock[StatusCode]
-    when(mockedSchemaClient.getSchema(any[SchemaName]()))
-      .thenThrow(new NotFoundException(new IllegalArgumentException(), statusCode, true))
+    when(mockedSchemaClient.getSchema(any[SchemaName]())).thenThrow(new NotFoundException(new IllegalArgumentException(), statusCode, true))
 
     val pubSubSchemaSerDe = new MockPubSubSchemaSerDe(topicInfo, mockedSchemaClient)
     assertThrows[IllegalArgumentException] {
@@ -34,10 +29,7 @@ class PubSubSchemaSerDeSpec extends AnyFlatSpec {
   }
 
   it should "fail if the schema type is not AVRO" in {
-    val topicInfo =
-      TopicInfo("test-topic",
-                "pubsub",
-                Map(PubSubSchemaSerDe.ProjectKey -> "test-project", PubSubSchemaSerDe.SchemaIdKey -> "test-schema"))
+    val topicInfo = TopicInfo("test-topic", "pubsub", Map(PubSubSchemaSerDe.ProjectKey -> "test-project", PubSubSchemaSerDe.SchemaIdKey -> "test-schema"))
     val mockedSchemaClient = mock[SchemaServiceClient]
     val schema = Schema.newBuilder().setName("test-schema").setType(Schema.Type.PROTOCOL_BUFFER).build()
     when(mockedSchemaClient.getSchema(any[SchemaName]())).thenReturn(schema)
@@ -49,15 +41,11 @@ class PubSubSchemaSerDeSpec extends AnyFlatSpec {
   }
 
   it should "succeed if the schema is found and is of type AVRO" in {
-    val topicInfo =
-      TopicInfo("test-topic",
-                "pubsub",
-                Map(PubSubSchemaSerDe.ProjectKey -> "test-project", PubSubSchemaSerDe.SchemaIdKey -> "test-schema"))
+    val topicInfo = TopicInfo("test-topic", "pubsub", Map(PubSubSchemaSerDe.ProjectKey -> "test-project", PubSubSchemaSerDe.SchemaIdKey -> "test-schema"))
     val mockedSchemaClient = mock[SchemaServiceClient]
     val avroSchemaStr =
       "{ \"type\": \"record\", \"name\": \"test1\", \"fields\": [ { \"type\": \"string\", \"name\": \"field1\" }, { \"type\": \"int\", \"name\": \"field2\" }]}"
-    val schema =
-      Schema.newBuilder().setName("test-schema").setType(Schema.Type.AVRO).setDefinition(avroSchemaStr).build()
+    val schema = Schema.newBuilder().setName("test-schema").setType(Schema.Type.AVRO).setDefinition(avroSchemaStr).build()
     when(mockedSchemaClient.getSchema(any[SchemaName]())).thenReturn(schema)
 
     val pubSubSchemaSerDe = new MockPubSubSchemaSerDe(topicInfo, mockedSchemaClient)

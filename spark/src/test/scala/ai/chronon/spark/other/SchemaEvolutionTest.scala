@@ -41,6 +41,7 @@ import scala.collection.Seq
 import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, SECONDS}
 
+
 class SchemaEvolutionTest extends AnyFlatSpec {
 
   val spark: SparkSession = SparkSessionBuilder.build("SchemaEvolutionTest", local = true)
@@ -55,9 +56,8 @@ class SchemaEvolutionTest extends AnyFlatSpec {
         StructField("listing_id", LongType),
         StructField("m_guests", LongType),
         StructField("m_views", LongType),
-        StructField("ts", StringType),
-        œ
-          StructField ("ds", StringType)
+        StructField("ts", StringType),œ
+        StructField("ds", StringType)
       )
     )
     val rows = List(

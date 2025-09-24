@@ -22,15 +22,7 @@ import ai.chronon.api.Extensions.{ExternalPartOps, JoinOps, StringOps, Throwable
 import ai.chronon.api._
 import ai.chronon.online.OnlineDerivationUtil.applyDeriveFunc
 import ai.chronon.online._
-import ai.chronon.online.fetcher.Fetcher.{
-  AvroResponseValue,
-  BaseResponse,
-  JoinSchemaResponse,
-  Request,
-  Response,
-  ResponseV2,
-  ResponseWithContext
-}
+import ai.chronon.online.fetcher.Fetcher.{AvroResponseValue, BaseResponse, JoinSchemaResponse, Request, Response, ResponseV2, ResponseWithContext}
 import ai.chronon.online.fetcher.ResponseType.ResponseType
 import ai.chronon.online.metrics.{Metrics, TTLCache}
 import ai.chronon.online.serde._
@@ -103,6 +95,8 @@ object Fetcher {
     }
   }
 
+
+
   case class ColumnSpec(groupByName: String,
                         columnName: String,
                         prefix: Option[String],
@@ -154,7 +148,10 @@ object Fetcher {
                                 valueInfos: Array[JoinCodec.ValueInfo])
 }
 
+//private[online] case class FetcherResponseWithTs(responses: Seq[Fetcher.Response], endTs: Long)
+
 private[online] case class FetcherResponseWithTs[T <: BaseResponse](responses: Seq[T], endTs: Long)
+
 
 // BaseFetcher + Logging + External service calls
 class Fetcher(val kvStore: KVStore,
@@ -180,12 +177,19 @@ class Fetcher(val kvStore: KVStore,
   lazy val joinCodecCache: TTLCache[String, Try[JoinCodec]] = metadataStore.buildJoinCodecCache(
     Some(logControlEvent)
   )
-
+  // Generic withTs method that works with any TimestampableResponse
   private[online] def withTs[T <: BaseResponse](responses: Future[Seq[T]]): Future[FetcherResponseWithTs[T]] = {
     responses.map { response =>
       FetcherResponseWithTs(response, System.currentTimeMillis())
     }
   }
+
+//
+//  private[online] def withTs(responses: Future[Seq[Response]]): Future[FetcherResponseWithTs] = {
+//    responses.map { response =>
+//      FetcherResponseWithTs(response, System.currentTimeMillis())
+//    }
+//  }
 
   def fetchGroupBys(requests: Seq[Request]): Future[Seq[Response]] = {
     joinPartFetcher.fetchGroupBys(requests)
@@ -278,18 +282,21 @@ class Fetcher(val kvStore: KVStore,
     }
   }
 
+
   private def convertResponseToResponseWithAvroBytes(response: Response): ResponseV2 = {
-    ResponseV2(response.request,
-               AvroResponseValue.AvroBytes(response.values.flatMap(v => {
-                 convertJoinFeaturesResponseToAvroBytes(v, response.request.name)
-               })))
+    ResponseV2(response.request, AvroResponseValue.AvroBytes(response.values.flatMap(
+      v => {
+        convertJoinFeaturesResponseToAvroBytes(v, response.request.name)
+      }
+    )))
   }
 
   private def convertResponseToResponseWithAvroString(response: Response): ResponseV2 = {
-    ResponseV2(response.request,
-               AvroResponseValue.AvroString(response.values.flatMap(v => {
-                 convertJoinFeaturesResponseToAvroString(v, response.request.name)
-               })))
+    ResponseV2(response.request, AvroResponseValue.AvroString(response.values.flatMap(
+      v => {
+        convertJoinFeaturesResponseToAvroString(v, response.request.name)
+      }
+    )))
   }
   def fetchJoinV2(requests: Seq[Request],
                   joinConf: Option[api.Join] = None,

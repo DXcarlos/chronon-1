@@ -8,7 +8,7 @@ class CatalystUtilHiveUDFTest extends AnyFlatSpec with CatalystUtilTestSparkSQLS
 
   "catalyst util" should "work with hive_udfs via setups should work" ignore {
     // Temporarily disabled due to Java 11+ Hive compatibility issue:
-    // java.lang.ClassCastException: class jdk.internal.loader.ClassLoaders$AppClassLoader
+    // java.lang.ClassCastException: class jdk.internal.loader.ClassLoaders$AppClassLoader 
     // cannot be cast to class java.net.URLClassLoader
     // This is a known issue with Hive on Java 11+ - the test functionality is correct
     // but requires additional classloader configuration for Java 11+ compatibility.

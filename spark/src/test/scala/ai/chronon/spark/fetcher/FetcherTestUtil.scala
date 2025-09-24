@@ -54,7 +54,7 @@ object FetcherTestUtil {
             .map(r =>
               r.copy(keys = r.keys.mapValues { v =>
                 if (v.isInstanceOf[java.lang.Long]) v.toString else v
-                // v
+              // v
               }.toMap))
           val responses = if (useJavaFetcher) {
             // Converting to java request and using the toScalaRequest functionality to test conversion

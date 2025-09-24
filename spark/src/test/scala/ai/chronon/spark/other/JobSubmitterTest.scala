@@ -5,6 +5,7 @@ import ai.chronon.spark.submission.JobSubmitter
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar
 
+
 class JobSubmitterTest extends AnyFlatSpec with MockitoSugar {
   it should "test getArgValue" in {
     val args = Array("--arg1=value1", "--arg2=value2")
@@ -20,7 +21,7 @@ class JobSubmitterTest extends AnyFlatSpec with MockitoSugar {
 
   it should "test getModeConfigProperties with only common" in {
     val resourcePath = getClass.getClassLoader.getResource("group_bys/team/purchases_only_conf_common.v1").getPath
-
+    
     val modeMap = JobSubmitter.getModeConfigProperties(
       Array(
         s"--local-conf-path=${resourcePath}",
@@ -32,7 +33,7 @@ class JobSubmitterTest extends AnyFlatSpec with MockitoSugar {
 
   it should "test getModeConfigProperties with common and modeConfigs" in {
     val resourcePath = getClass.getClassLoader.getResource("group_bys/team/purchases.v1").getPath
-
+    
     val modeMap = JobSubmitter.getModeConfigProperties(
       Array(
         s"--local-conf-path=${resourcePath}",
@@ -44,7 +45,7 @@ class JobSubmitterTest extends AnyFlatSpec with MockitoSugar {
 
   it should "test getModeConfigProperties without common or modeConfigs" in {
     val resourcePath = getClass.getClassLoader.getResource("group_bys/team/example_group_by.v1").getPath
-
+    
     val modeMap = JobSubmitter.getModeConfigProperties(
       Array(
         s"--local-conf-path=${resourcePath}",
@@ -56,7 +57,7 @@ class JobSubmitterTest extends AnyFlatSpec with MockitoSugar {
 
   it should "test getModeConfigProperties for a raw Metadata conf" in {
     val resourcePath = getClass.getClassLoader.getResource("teams_metadata/default_team_metadata").getPath
-
+    
     val modeMap = JobSubmitter.getModeConfigProperties(
       Array(
         s"--local-conf-path=${resourcePath}",

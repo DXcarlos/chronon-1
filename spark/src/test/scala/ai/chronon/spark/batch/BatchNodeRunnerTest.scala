@@ -72,8 +72,7 @@ class MockKVStoreWithTracking extends MockKVStore {
   def getTileKeysAndSummaries: Seq[(TileKey, TileSummary)] = {
     getTileSummaryRequests.map { req =>
       val tileKey = ThriftJsonCodec.fromJsonStr[TileKey](new String(req.keyBytes), check = false, classOf[TileKey])
-      val tileSummary =
-        ThriftJsonCodec.fromJsonStr[TileSummary](new String(req.valueBytes), check = false, classOf[TileSummary])
+      val tileSummary = ThriftJsonCodec.fromJsonStr[TileSummary](new String(req.valueBytes), check = false, classOf[TileSummary])
       (tileKey, tileSummary)
     }
   }

@@ -33,6 +33,7 @@ import java.util.Locale
 
 class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
 
+
   // expected :<...88,["user4042","user[3592","user2348","user1551]"],["user4042","user...> but
   // was      :<...88,["user4042","user[4042","user3592","user3592]"],["user4042","user...>
   //
