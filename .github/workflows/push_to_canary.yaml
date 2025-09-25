@@ -1,9 +1,10 @@
 name: Push To Canary
 
 on:
-  merge_group: # Trigger on merge groups to main branch
-    branches:
-      - main
+  push:
+#  merge_group: # Trigger on merge groups to main branch
+#    branches:
+#      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
