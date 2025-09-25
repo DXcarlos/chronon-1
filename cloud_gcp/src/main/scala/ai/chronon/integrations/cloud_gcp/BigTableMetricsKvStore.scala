@@ -241,9 +241,7 @@ class BigTableMetricsKvStore(dataClient: BigtableDataClient,
         metricsContext.copy(dataset = tableId.toString)
       )
 
-      val timestampInPutRequest = request.tsMillis.getOrElse(
-        throw new IllegalArgumentException("Timestamp is required for data quality metrics")
-      )
+      val timestampInPutRequest = request.tsMillis.getOrElse(System.currentTimeMillis())
       val rowKey = buildDataQualityRowKey(request.keyBytes, Some(timestampInPutRequest))
 
       // Use day-start timestamp for coarse granularity
@@ -251,26 +249,9 @@ class BigTableMetricsKvStore(dataClient: BigtableDataClient,
       val timestampMicros = dayStartMillis * 1000
       val mutation = RowMutation.create(tableId, ByteString.copyFrom(rowKey))
 
-      // Parse the JSON value to extract metric types and store each as separate qualifiers
-      try {
-        val valueStr = new String(request.valueBytes, StandardCharsets.UTF_8)
-        val valueMap = objectMapper.readValue(valueStr, classOf[Map[String, Any]])
-
-        valueMap.foreach { case (metricName, metricValue) =>
-          val qualifier = ByteString.copyFromUtf8(metricName)
-          val serializedValue = objectMapper.writeValueAsBytes(metricValue)
-          val cellValue = ByteString.copyFrom(serializedValue)
-
-          // Simple upsert - BigTable will automatically overwrite cells with same timestamp
-          mutation.setCell(ColumnFamilyString, qualifier, timestampMicros, cellValue)
-        }
-      } catch {
-        case e: Exception =>
-          logger.warn(s"Failed to parse value as JSON, storing as single cell: ${e.getMessage}")
-          // Fallback: store the entire value under a generic qualifier
-          val cellValue = ByteString.copyFrom(request.valueBytes)
-          mutation.setCell(ColumnFamilyString, ColumnFamilyQualifier, timestampMicros, cellValue)
-      }
+      // Store the value bytes as a blob under the column family
+      val cellValue = ByteString.copyFrom(request.valueBytes)
+      mutation.setCell(ColumnFamilyString, ColumnFamilyQualifier, timestampMicros, cellValue)
 
       val startTs = System.currentTimeMillis()
       val mutateApiFuture = dataClient.mutateRowAsync(mutation)
@@ -299,11 +280,11 @@ class BigTableMetricsKvStore(dataClient: BigtableDataClient,
   def mapDatasetToTable(dataset: String): BTTableId = {
     val baseName = tableBaseName
     if (dataset.endsWith("_BATCH")) {
-      BTTableId.of(s"BATCH_${baseName}")
+      BTTableId.of(s"${baseName}_BATCH")
     } else if (dataset.endsWith("_STREAMING")) {
-      BTTableId.of(s"STREAMING_${baseName}")
+      BTTableId.of(s"${baseName}_STREAMING")
     } else {
-      BTTableId.of(s"BATCH_${baseName}")
+      BTTableId.of(s"${baseName}_BATCH")
     }
   }
 }

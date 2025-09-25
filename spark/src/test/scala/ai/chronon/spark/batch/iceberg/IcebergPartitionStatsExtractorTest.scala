@@ -749,4 +749,325 @@ class IcebergPartitionStatsExtractorTest
 
     spark.sql("DROP TABLE IF EXISTS test_empty_partitioned")
   }
+
+  "IcebergPartitionStatsExtractor.extractSchemaMapping" should "extract schema mapping for simple table" in {
+    spark.sql("""CREATE TABLE test_simple_schema (
+                |  id BIGINT,
+                |  name STRING,
+                |  value DOUBLE
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val schemaMapping = extractor.extractSchemaMapping("spark_catalog.default.test_simple_schema")
+
+    schemaMapping should have size 3
+    schemaMapping.values should contain allOf ("id", "name", "value")
+
+    // Verify field IDs are positive integers
+    schemaMapping.keys.foreach { fieldId =>
+      fieldId should be > 0
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_simple_schema")
+  }
+
+  it should "extract schema mapping for table with nested struct fields" in {
+    spark.sql("""CREATE TABLE test_nested_schema (
+                |  id BIGINT,
+                |  address STRUCT<
+                |    street: STRING,
+                |    city: STRING,
+                |    coordinates: STRUCT<
+                |      lat: DOUBLE,
+                |      lng: DOUBLE
+                |    >
+                |  >,
+                |  name STRING
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val schemaMapping = extractor.extractSchemaMapping("spark_catalog.default.test_nested_schema")
+
+    // Should include top-level fields: id, address, name
+    schemaMapping should have size 3
+    schemaMapping.values should contain allOf ("id", "address", "name")
+
+    // Verify all field IDs are unique and positive
+    val fieldIds = schemaMapping.keys.toSet
+    fieldIds should have size 3
+    fieldIds.foreach { fieldId =>
+      fieldId should be > 0
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_nested_schema")
+  }
+
+  it should "extract schema mapping for table with array fields" in {
+    spark.sql("""CREATE TABLE test_array_schema (
+                |  id BIGINT,
+                |  tags ARRAY<STRING>,
+                |  scores ARRAY<DOUBLE>,
+                |  complex_array ARRAY<STRUCT<
+                |    item_id: BIGINT,
+                |    item_name: STRING
+                |  >>
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val schemaMapping = extractor.extractSchemaMapping("spark_catalog.default.test_array_schema")
+
+    // Should include top-level fields: id, tags, scores, complex_array
+    schemaMapping should have size 4
+    schemaMapping.values should contain allOf ("id", "tags", "scores", "complex_array")
+
+    // Verify field IDs are unique and positive
+    val fieldIds = schemaMapping.keys.toSet
+    fieldIds should have size 4
+    fieldIds.foreach { fieldId =>
+      fieldId should be > 0
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_array_schema")
+  }
+
+  it should "extract schema mapping for table with map fields" in {
+    spark.sql("""CREATE TABLE test_map_schema (
+                |  id BIGINT,
+                |  simple_map MAP<STRING, STRING>,
+                |  complex_map MAP<STRING, STRUCT<
+                |    value: DOUBLE,
+                |    timestamp: TIMESTAMP
+                |  >>,
+                |  nested_map MAP<STRING, ARRAY<STRING>>
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val schemaMapping = extractor.extractSchemaMapping("spark_catalog.default.test_map_schema")
+
+    // Should include top-level fields: id, simple_map, complex_map, nested_map
+    schemaMapping should have size 4
+    schemaMapping.values should contain allOf ("id", "simple_map", "complex_map", "nested_map")
+
+    // Verify field IDs are unique and positive
+    val fieldIds = schemaMapping.keys.toSet
+    fieldIds should have size 4
+    fieldIds.foreach { fieldId =>
+      fieldId should be > 0
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_map_schema")
+  }
+
+  it should "extract schema mapping for table with mixed complex types" in {
+    spark.sql("""CREATE TABLE test_complex_mixed_schema (
+                |  id BIGINT,
+                |  user_info STRUCT<
+                |    name: STRING,
+                |    preferences: MAP<STRING, STRING>,
+                |    addresses: ARRAY<STRUCT<
+                |      type: STRING,
+                |      street: STRING,
+                |      coordinates: STRUCT<lat: DOUBLE, lng: DOUBLE>
+                |    >>
+                |  >,
+                |  metadata MAP<STRING, ARRAY<STRUCT<
+                |    key: STRING,
+                |    values: ARRAY<STRING>
+                |  >>>,
+                |  tags ARRAY<STRING>
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val schemaMapping = extractor.extractSchemaMapping("spark_catalog.default.test_complex_mixed_schema")
+
+    // Should include top-level fields: id, user_info, metadata, tags
+    schemaMapping should have size 4
+    schemaMapping.values should contain allOf ("id", "user_info", "metadata", "tags")
+
+    // Verify field IDs are unique and positive
+    val fieldIds = schemaMapping.keys.toSet
+    fieldIds should have size 4
+    fieldIds.foreach { fieldId =>
+      fieldId should be > 0
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_complex_mixed_schema")
+  }
+
+  it should "extract schema mapping for table with array of maps" in {
+    spark.sql("""CREATE TABLE test_array_of_maps (
+                |  id BIGINT,
+                |  data ARRAY<MAP<STRING, DOUBLE>>,
+                |  complex_data ARRAY<MAP<STRING, STRUCT<
+                |    name: STRING,
+                |    nested_array: ARRAY<BIGINT>
+                |  >>>
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val schemaMapping = extractor.extractSchemaMapping("spark_catalog.default.test_array_of_maps")
+
+    // Should include top-level fields: id, data, complex_data
+    schemaMapping should have size 3
+    schemaMapping.values should contain allOf ("id", "data", "complex_data")
+
+    // Verify field IDs are unique and positive
+    val fieldIds = schemaMapping.keys.toSet
+    fieldIds should have size 3
+    fieldIds.foreach { fieldId =>
+      fieldId should be > 0
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_array_of_maps")
+  }
+
+  it should "extract schema mapping for table with map of arrays" in {
+    spark.sql("""CREATE TABLE test_map_of_arrays (
+                |  id BIGINT,
+                |  simple_map_array MAP<STRING, ARRAY<STRING>>,
+                |  complex_map_array MAP<STRING, ARRAY<STRUCT<
+                |    item_id: BIGINT,
+                |    properties: MAP<STRING, STRING>
+                |  >>>
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val schemaMapping = extractor.extractSchemaMapping("spark_catalog.default.test_map_of_arrays")
+
+    // Should include top-level fields: id, simple_map_array, complex_map_array
+    schemaMapping should have size 3
+    schemaMapping.values should contain allOf ("id", "simple_map_array", "complex_map_array")
+
+    // Verify field IDs are unique and positive
+    val fieldIds = schemaMapping.keys.toSet
+    fieldIds should have size 3
+    fieldIds.foreach { fieldId =>
+      fieldId should be > 0
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_map_of_arrays")
+  }
+
+  it should "extract schema mapping for table with deeply nested structures" in {
+    spark.sql("""CREATE TABLE test_deeply_nested (
+                |  id BIGINT,
+                |  level1 STRUCT<
+                |    level2 STRUCT<
+                |      level3 STRUCT<
+                |        level4 ARRAY<MAP<STRING, STRUCT<
+                |          final_value: STRING,
+                |          final_map: MAP<STRING, ARRAY<DOUBLE>>
+                |        >>>
+                |      >
+                |    >
+                |  >
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val schemaMapping = extractor.extractSchemaMapping("spark_catalog.default.test_deeply_nested")
+
+    // Should include top-level fields: id, level1
+    schemaMapping should have size 2
+    schemaMapping.values should contain allOf ("id", "level1")
+
+    // Verify field IDs are unique and positive
+    val fieldIds = schemaMapping.keys.toSet
+    fieldIds should have size 2
+    fieldIds.foreach { fieldId =>
+      fieldId should be > 0
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_deeply_nested")
+  }
+
+  it should "extract schema mapping for table with all supported data types" in {
+    spark.sql("""CREATE TABLE test_all_types (
+                |  col_long BIGINT,
+                |  col_int INT,
+                |  col_string STRING,
+                |  col_double DOUBLE,
+                |  col_float FLOAT,
+                |  col_boolean BOOLEAN,
+                |  col_timestamp TIMESTAMP,
+                |  col_date DATE,
+                |  col_decimal DECIMAL(10,2),
+                |  col_binary BINARY,
+                |  col_array ARRAY<STRING>,
+                |  col_map MAP<STRING, INT>,
+                |  col_struct STRUCT<field1: STRING, field2: INT>
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val schemaMapping = extractor.extractSchemaMapping("spark_catalog.default.test_all_types")
+
+    // Should include all 13 fields
+    schemaMapping should have size 13
+    schemaMapping.values should contain allOf (
+      "col_long", "col_int", "col_string", "col_double", "col_float", "col_boolean",
+      "col_timestamp", "col_date", "col_decimal", "col_binary", "col_array", "col_map", "col_struct"
+    )
+
+    // Verify field IDs are unique and positive
+    val fieldIds = schemaMapping.keys.toSet
+    fieldIds should have size 13
+    fieldIds.foreach { fieldId =>
+      fieldId should be > 0
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_all_types")
+  }
+
+  it should "handle non-existent table gracefully" in {
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+
+    val exception = intercept[RuntimeException] {
+      extractor.extractSchemaMapping("spark_catalog.default.non_existent_table")
+    }
+
+    exception.getMessage should include("Failed to extract schema mapping")
+    exception.getCause should not be null
+  }
+
+  it should "handle invalid table name format gracefully" in {
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+
+    val exception = intercept[RuntimeException] {
+      extractor.extractSchemaMapping("invalid.table.name.format.too.many.parts")
+    }
+
+    exception.getMessage should include("Failed to extract schema mapping")
+  }
+
+  it should "extract schema mapping maintaining field ID consistency" in {
+    // Create table and extract schema mapping multiple times
+    spark.sql("""CREATE TABLE test_consistency (
+                |  id BIGINT,
+                |  name STRING,
+                |  data STRUCT<value: DOUBLE>
+                |) USING iceberg""".stripMargin)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+
+    val mapping1 = extractor.extractSchemaMapping("spark_catalog.default.test_consistency")
+    val mapping2 = extractor.extractSchemaMapping("spark_catalog.default.test_consistency")
+
+    // Mappings should be identical
+    mapping1 should equal(mapping2)
+
+    // Add a column and verify schema evolution
+    spark.sql("ALTER TABLE test_consistency ADD COLUMN new_field STRING")
+
+    val mapping3 = extractor.extractSchemaMapping("spark_catalog.default.test_consistency")
+
+    // New mapping should contain all original fields plus the new one
+    mapping3 should have size (mapping1.size + 1)
+    mapping3.values should contain allOf ("id", "name", "data", "new_field")
+
+    // Original field IDs should remain the same
+    mapping1.foreach { case (fieldId, fieldName) =>
+      mapping3(fieldId) should equal(fieldName)
+    }
+
+    spark.sql("DROP TABLE IF EXISTS test_consistency")
+  }
 }

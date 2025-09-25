@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   spark_tests:
-    runs-on: ubuntu-8_cores-32_gb
+    runs-on: ubuntu_32_core_128gb
     container:
       image: ghcr.io/${{ github.repository }}-ci:latest
       credentials:
@@ -44,7 +44,7 @@ jobs:
           ./mill spark.test.testOnly "ai.chronon.spark.other.*"
 
   batch_tests:
-    runs-on: ubuntu-8_cores-32_gb
+    runs-on: ubuntu_32_core_128gb
     container:
       image: ghcr.io/${{ github.repository }}-ci:latest
       credentials:

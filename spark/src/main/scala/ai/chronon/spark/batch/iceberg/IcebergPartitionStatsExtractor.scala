@@ -1,12 +1,17 @@
 package ai.chronon.spark.batch.iceberg
 
-import ai.chronon.api.PartitionSpec
-import ai.chronon.observability.{TileKey, TileSummary}
+import ai.chronon.api.ScalaJavaConversions.JMapOps
+import ai.chronon.api.{PartitionSpec, ThriftJsonCodec}
+import ai.chronon.observability._
+import ai.chronon.online.KVStore.PutRequest
 import org.apache.iceberg.spark.source.SparkTable
 import org.apache.iceberg.{DataFile, ManifestFiles}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
+import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
@@ -35,6 +40,55 @@ object IcebergPartitionStatsExtractor {
     // Convert partition value to millis using PartitionSpec
     partitionSpec.epochMillis(partitionValue)
   }
+
+  def createPartitionStatsPutRequest(
+      outputTable: String,
+      partitionStats: TileStats,
+      dayPartitionMillis: Long,
+      statsType: TileStatsType
+  ): PutRequest = {
+    val key = createMetricsRowKey(outputTable, statsType)
+    val value = ThriftJsonCodec.toCompactBase64(partitionStats).getBytes
+    val datasetName = s"${outputTable}_BATCH"
+    PutRequest(key, value, datasetName, Some(dayPartitionMillis))
+  }
+
+  def createNullCountsStats(
+      columnTileSummaries: Iterable[(TileKey, TileSummary)]
+  ): NullCounts = {
+    val nullCounts = columnTileSummaries.map { case (tileKey, tileSummary) =>
+      val fieldId = tileKey.getColumn.toInt
+      fieldId -> (if (tileSummary.isSetNullCount) tileSummary.getNullCount else 0L)
+    }.toMap
+
+    val rowCount = columnTileSummaries.headOption.map(_._2.getCount).getOrElse(0L)
+
+    new NullCounts()
+      .setRowCount(rowCount)
+      .setNullCounts(nullCounts.map { case (k, v) =>
+        k.asInstanceOf[java.lang.Integer] -> v.asInstanceOf[java.lang.Long]
+      }.toJava)
+  }
+
+  def createMetricsRowKey(outputTable: String, statsType: TileStatsType): Array[Byte] = {
+    s"${outputTable}#${statsType.name()}".getBytes(StandardCharsets.UTF_8)
+  }
+
+  def createSchemaMappingPutRequest(outputTable: String, fieldIdToNameMap: Map[Int, String]): PutRequest = {
+
+    // Serialize the mapping to JSON
+    val objectMapper = new ObjectMapper()
+    objectMapper.registerModule(DefaultScalaModule)
+    val jsonValue = objectMapper.writeValueAsString(fieldIdToNameMap)
+
+    // Create the row key following the same pattern as createMetricsRowKey
+    val key = s"${outputTable}#schema".getBytes(StandardCharsets.UTF_8)
+    val value = jsonValue.getBytes(StandardCharsets.UTF_8)
+    val datasetName = s"${outputTable}_BATCH"
+
+    PutRequest(key, value, datasetName)
+  }
+
 }
 
 case class ColumnStats(
@@ -126,8 +180,7 @@ class PartitionAccumulator(
 class IcebergPartitionStatsExtractor(spark: SparkSession) {
   import IcebergPartitionStatsExtractor.PartitionKey
 
-  def extractPartitionedStats(fullTableName: String, confName: String)(implicit
-      partitionSpec: PartitionSpec): Map[TileKey, TileSummary] = {
+  private def loadIcebergTable(fullTableName: String): org.apache.iceberg.Table = {
     val parsed = spark.sessionState.sqlParser.parseMultipartIdentifier(fullTableName)
     val (catalogName, namespace, tableName) = parsed.toList match {
       case catalog :: namespace :: table :: Nil => (catalog, namespace, table)
@@ -141,10 +194,29 @@ class IcebergPartitionStatsExtractor(spark: SparkSession) {
       .asInstanceOf[TableCatalog]
 
     val tableId = Identifier.of(Array(namespace), tableName)
-    val table = Option(catalog.loadTable(tableId)) match {
+    Option(catalog.loadTable(tableId)) match {
       case Some(sparkTable: SparkTable) => sparkTable.table()
       case _ => throw new IllegalStateException(s"Unsupported table type for Iceberg extraction: $fullTableName")
     }
+  }
+
+  def extractSchemaMapping(fullTableName: String): Map[Int, String] = {
+    try {
+      val table = loadIcebergTable(fullTableName)
+      val schema = Option(table.schema())
+        .getOrElse(throw new IllegalStateException("Table schema is null"))
+
+      // Create field ID to name mapping
+      schema.columns().asScala.map(field => field.fieldId() -> field.name()).toMap
+    } catch {
+      case e: Exception =>
+        throw new RuntimeException(s"Failed to extract schema mapping for table: $fullTableName", e)
+    }
+  }
+
+  def extractPartitionedStats(fullTableName: String, confName: String)(implicit
+      partitionSpec: PartitionSpec): Map[TileKey, TileSummary] = {
+    val table = loadIcebergTable(fullTableName)
 
     val tableSpec = Option(table.spec())
       .getOrElse(throw new IllegalStateException(s"Table spec is null for table: ${table.name()}"))

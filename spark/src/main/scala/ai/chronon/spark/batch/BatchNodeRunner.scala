@@ -1,10 +1,9 @@
 package ai.chronon.spark.batch
 
 import ai.chronon.api.Extensions._
-import ai.chronon.api.ScalaJavaConversions.JMapOps
 import ai.chronon.api._
 import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
-import ai.chronon.observability.{NullCounts, TileStats}
+import ai.chronon.observability.{TileStats, TileStatsType}
 import ai.chronon.online.KVStore.PutRequest
 import ai.chronon.online.{Api, KVStore}
 import ai.chronon.planner._
@@ -16,7 +15,6 @@ import ai.chronon.spark.{GroupBy, GroupByUpload, Join}
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 import org.slf4j.{Logger, LoggerFactory}
 
-import java.nio.charset.StandardCharsets
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.Await
@@ -171,37 +169,25 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
           (dayPartitionMillis)
         }
 
-        val putRequests = groupedTileSummaries.map { case ((dayPartitionMillis), columnTileSummaries) =>
-          // Extract null counts for all columns
-          val nullCounts = columnTileSummaries.map { case (tileKey, tileSummary) =>
-            val fieldId = tileKey.getColumn.toInt // Convert fieldId string back to Int
-            fieldId -> (if (tileSummary.isSetNullCount) tileSummary.getNullCount else 0L)
-          }.toMap
-
-          // Get total row count (should be same across all columns)
-          val rowCount = columnTileSummaries.headOption.map(_._2.getCount).getOrElse(0L)
-
-          val nullCountsStats = new NullCounts()
-            .setRowCount(rowCount)
-            .setNullCounts(nullCounts.map { case (k, v) =>
-              k.asInstanceOf[java.lang.Integer] -> v.asInstanceOf[java.lang.Long]
-            }.toJava)
-
+        val statsPutRequests = groupedTileSummaries.map { case ((dayPartitionMillis), columnTileSummaries) =>
+          val nullCountsStats = IcebergPartitionStatsExtractor.createNullCountsStats(columnTileSummaries)
           val partitionStats = TileStats.nullCounts(nullCountsStats)
-
-          val thriftBytes = ThriftJsonCodec.toCompactBase64(partitionStats).getBytes
-
-          val simpleKey = s"${outputTable}#null_counts"
-          val datasetName = s"${outputTable}_BATCH"
-          PutRequest(simpleKey.getBytes(StandardCharsets.UTF_8), thriftBytes, datasetName, Some(dayPartitionMillis))
+          IcebergPartitionStatsExtractor.createPartitionStatsPutRequest(outputTable,
+                                                                        partitionStats,
+                                                                        dayPartitionMillis,
+                                                                        TileStatsType.NULL_COUNTS)
         }.toSeq
 
-        // Execute all puts
-        val kvStoreUpdates = metricsKvStore.multiPut(putRequests)
+        val schemaMapping = statsExtractor.extractSchemaMapping(outputTable)
+        val schemaPutRequest = IcebergPartitionStatsExtractor.createSchemaMappingPutRequest(outputTable, schemaMapping)
+
+        val allPutRequests = statsPutRequests :+ schemaPutRequest
+
+        val kvStoreUpdates = metricsKvStore.multiPut(allPutRequests)
         Await.result(kvStoreUpdates, 30.seconds)
 
         logger.info(
-          s"Successfully persisted data quality metrics for table: $outputTable (${tileSummaries.size} tile summaries)")
+          s"Successfully persisted data quality metrics and schema mapping for table: $outputTable (${tileSummaries.size} tile summaries)")
       } else {
         logger.info(s"No tile summaries found for table: $outputTable")
       }
@@ -329,14 +315,19 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
         logger.info(s"Successfully completed batch node runner for '${metadata.name}'")
 
         // Extract and persist partition statistics to KV store - done at the very end
-        tableStatsDataset.foreach { tableStats =>
-          val metricsKvStore = api.genMetricsKvStore(tableStats)
-          Option(metadata.outputTable) match {
-            case Some(outputTable) =>
-              extractAndPersistPartitionStats(metricsKvStore, outputTable, metadata.name)(outputTablePartitionSpec)
-            case None =>
-              logger.warn(s"Skipping partition stats extraction for '${metadata.name}' - outputTable is null")
+        // Skip data quality metrics persistence for EXTERNAL_SOURCE_SENSOR nodes
+        if (node.content.getSetField != NodeContent._Fields.EXTERNAL_SOURCE_SENSOR) {
+          tableStatsDataset.foreach { tableStats =>
+            val metricsKvStore = api.genMetricsKvStore(tableStats)
+            Option(metadata.outputTable) match {
+              case Some(outputTable) =>
+                extractAndPersistPartitionStats(metricsKvStore, outputTable, metadata.name)(outputTablePartitionSpec)
+              case None =>
+                logger.warn(s"Skipping partition stats extraction for '${metadata.name}' - outputTable is null")
+            }
           }
+        } else {
+          logger.info(s"Skipping data quality metrics persistence for EXTERNAL_SOURCE_SENSOR node '${metadata.name}'")
         }
       }
     }

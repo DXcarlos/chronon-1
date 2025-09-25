@@ -24,6 +24,7 @@ def hub():
 def common_options(func):
     func = click.option("--repo", help="Path to chronon repo", default=".")(func)
     func = click.option("--conf", required=True, help="Conf param - required for every mode")(func)
+    func = click.option("--hub_url", help="Zipline Hub address, e.g. http://localhost:3903", default=None)(func)
     return func
 
 
@@ -54,9 +55,12 @@ def force_recompute_option(func):
     )(func)
 
 
-def submit_workflow(repo, conf, mode, start_ds, end_ds, force_recompute=False):
+def submit_workflow(repo, conf, mode, start_ds, end_ds, force_recompute=False, hub_url=None):
     hub_conf = get_hub_conf(conf, root_dir=repo)
-    zipline_hub = ZiplineHub(base_url=hub_conf.hub_url, sa_name=hub_conf.sa_name)
+    if hub_url is not None:
+        zipline_hub = ZiplineHub(base_url=hub_url, sa_name=hub_conf.sa_name)
+    else:
+        zipline_hub = ZiplineHub(base_url=hub_conf.hub_url, sa_name=hub_conf.sa_name)
     conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
     branch = get_current_branch()
 
@@ -86,9 +90,12 @@ def submit_workflow(repo, conf, mode, start_ds, end_ds, force_recompute=False):
     )
 
 
-def submit_schedule(repo, conf):
+def submit_schedule(repo, conf, hub_url=None):
     hub_conf = get_hub_conf(conf, root_dir=repo)
-    zipline_hub = ZiplineHub(base_url=hub_conf.hub_url, sa_name=hub_conf.sa_name)
+    if hub_url is not None:
+        zipline_hub = ZiplineHub(base_url=hub_url, sa_name=hub_conf.sa_name)
+    else:
+        zipline_hub = ZiplineHub(base_url=hub_conf.hub_url, sa_name=hub_conf.sa_name)
     conf_name_to_obj_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
     branch = get_current_branch()
 
@@ -125,14 +132,14 @@ def submit_schedule(repo, conf):
 @end_ds_option
 @force_recompute_option
 @handle_conf_not_found(log_error=True, callback=print_possible_confs)
-def backfill(repo, conf, start_ds, end_ds, force_recompute):
+def backfill(repo, conf, hub_url, start_ds, end_ds, force_recompute):
     """
     - Submit a backfill job to Zipline.
     Response should contain a list of confs that are different from what's on remote.
     - Call upload API to upload the conf contents for the list of confs that were different.
     - Call the actual run API with mode set to backfill.
     """
-    submit_workflow(repo, conf, RunMode.BACKFILL.value, start_ds, end_ds, force_recompute)
+    submit_workflow(repo, conf, RunMode.BACKFILL.value, start_ds, end_ds, force_recompute, hub_url=hub_url)
 
 
 # zipline hub run-adhoc --conf=compiled/joins/join
@@ -141,27 +148,27 @@ def backfill(repo, conf, start_ds, end_ds, force_recompute):
 @common_options
 @end_ds_option
 @handle_conf_not_found(log_error=True, callback=print_possible_confs)
-def run_adhoc(repo, conf, end_ds):
+def run_adhoc(repo, conf, hub_url, end_ds):
     """
     - Submit a one-off deploy job to Zipline. This submits the various jobs to allow your conf to be tested online.
     Response should contain a list of confs that are different from what's on remote.
     - Call upload API to upload the conf contents for the list of confs that were different.
     - Call the actual run API with mode set to deploy
     """
-    submit_workflow(repo, conf, RunMode.DEPLOY.value, end_ds, end_ds)
+    submit_workflow(repo, conf, RunMode.DEPLOY.value, end_ds, end_ds, hub_url=hub_url)
 
 
 # zipline hub schedule --conf=compiled/joins/join
 @hub.command()
 @common_options
 @handle_conf_not_found(log_error=True, callback=print_possible_confs)
-def schedule(repo, conf):
+def schedule(repo, conf, hub_url):
     """
     - Deploys a schedule for the specified conf to Zipline. This allows your conf to have various associated jobs run on a schedule.
     This verb will introspect your conf to determine which of its jobs need to be scheduled (or paused if turned off) based on the
     'offline_schedule' and 'online' fields.
     """
-    submit_schedule(repo, conf)
+    submit_schedule(repo, conf, hub_url=hub_url)
 
 
 def get_metadata_map(file_path):

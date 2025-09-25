@@ -51,7 +51,7 @@ def generate_dataproc_cluster_config(
                 },
             },
             "softwareConfig": {
-                "imageVersion": "2.2.50-debian12",
+                "imageVersion": "2.2.66-debian12",
                 "optionalComponents": [
                     "FLINK",
                     "JUPYTER",

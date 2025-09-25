@@ -20,8 +20,6 @@ services:
         cbt -project quickstart-project -instance quickstart-instance createfamily GROUPBY_BATCH cf &&
         cbt -project quickstart-project -instance quickstart-instance createtable GROUPBY_STREAMING &&
         cbt -project quickstart-project -instance quickstart-instance createfamily GROUPBY_STREAMING cf &&
-        cbt -project quickstart-project -instance quickstart-instance createtable TILE_SUMMARIES &&
-        cbt -project quickstart-project -instance quickstart-instance createfamily TILE_SUMMARIES cf &&
         echo 'BigTable Chronon tables created!'"
   load-serving-data:
     build:

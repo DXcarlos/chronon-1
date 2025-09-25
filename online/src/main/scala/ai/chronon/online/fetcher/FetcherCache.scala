@@ -199,10 +199,16 @@ object FetcherCache {
         var resultBytes: Array[Byte] = null
         var maxTs = 0L
 
+        // Add a one-day buffer (86400000 ms) to avoid accidentally soft-deleting keys
+        // that should remain present during batch upload processes
+        val oneDayInMillis = 86400000L
+        val softDeletionThreshold = batchEndTsMillis - oneDayInMillis
+
         val iter = timedValues.iterator
         while (iter.hasNext) {
           val tv = iter.next()
-          if (tv.millis >= batchEndTsMillis && tv.millis > maxTs) {
+          // Relax the deletion condition: only filter out values older than (batchEndTsMillis - 1 day)
+          if (tv.millis >= softDeletionThreshold && tv.millis > maxTs) {
             resultBytes = tv.bytes
             maxTs = tv.millis
           }

@@ -67,7 +67,7 @@ object Constants {
   val LabelViewPropertyKeyLabelTable: String = "label_table"
   val ChrononRunDs: String = "CHRONON_RUN_DS"
 
-  val TiledSummaryDataset: String = "TILE_SUMMARIES"
+  val TiledSummaryDataset: String = "DATA_QUALITY_METRICS"
 
   val DefaultDriftTileSize: Window = new Window(30, TimeUnit.MINUTES)
 

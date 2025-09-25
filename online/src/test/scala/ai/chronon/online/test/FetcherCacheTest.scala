@@ -174,13 +174,26 @@ class FetcherCacheTest extends AnyFlatSpec with MockitoHelper {
     assertArrayEquals(Array(2.toByte), batchBytes)
   }
 
-  it should "get batch bytes returns null if latest timed value timestamp is less than batch end" in {
+  it should "get batch bytes returns null if latest timed value timestamp is less than batch end minus one day" in {
+    val oneDayInMillis = 86400000L
     val kvStoreResponse = Success(
       Seq(TimedValue(Array(1.toByte), 1000L), TimedValue(Array(2.toByte), 1500L))
     )
     val batchResponses = BatchResponses(kvStoreResponse)
-    val batchBytes = batchResponses.getBatchBytes(2000L)
+    // All timestamps (1000L, 1500L) are more than one day before the batch end time
+    val batchBytes = batchResponses.getBatchBytes(oneDayInMillis + 2000L)
     assertNull(batchBytes)
+  }
+
+  it should "get batch bytes returns value if within one day of batch end even if before batch end" in {
+    val oneDayInMillis = 86400000L
+    val kvStoreResponse = Success(
+      Seq(TimedValue(Array(1.toByte), oneDayInMillis - 10000L), TimedValue(Array(2.toByte), oneDayInMillis - 5000L))
+    )
+    val batchResponses = BatchResponses(kvStoreResponse)
+    // The latest value (at oneDayInMillis - 5000L) is within one day of batch end (oneDayInMillis)
+    val batchBytes = batchResponses.getBatchBytes(oneDayInMillis)
+    assertArrayEquals(Array(2.toByte), batchBytes)
   }
 
   it should "get batch bytes returns null when cached batch response" in {
