@@ -330,6 +330,33 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: 11
+
+      # Bazel cache credentials removed - using Mill now
+
+      - name: Install Thrift
+        env:
+          THRIFT_VERSION: 0.21.0
+        run: |
+          sudo apt-get install automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config && \
+          curl -LSs https://archive.apache.org/dist/thrift/${{env.THRIFT_VERSION}}/thrift-${{env.THRIFT_VERSION}}.tar.gz -o thrift-${{env.THRIFT_VERSION}}.tar.gz && \
+          tar -xzf thrift-${{env.THRIFT_VERSION}}.tar.gz && \
+          cd thrift-${{env.THRIFT_VERSION}} && \
+          sudo ./configure --without-python --without-cpp --without-nodejs --without-java --disable-debug --disable-tests --disable-libs && \
+          sudo make && \
+          sudo make install && \
+          cd .. && \
+          sudo rm -rf thrift-${{env.THRIFT_VERSION}} thrift-${{env.THRIFT_VERSION}}.tar.gz
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # This should match the version used in [chronon]/.toolversions
+
       - name: Configure GCP Credentials for Canary Project
         uses: google-github-actions/auth@v2
         with:
