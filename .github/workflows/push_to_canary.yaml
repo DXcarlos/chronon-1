@@ -367,8 +367,8 @@ jobs:
         shell: bash
         run: |
           pwd
-          cp cloud_gcp_lib_deploy.jar build_output/cloud_gcp_lib_deploy.jar
-          cp service_assembly_deploy. build_output/service_assembly_deploy.jar
+          cp cloud-gcp-jar build_output/cloud_gcp_lib_deploy.jar
+          cp service-assembly-jar build_output/service_assembly_deploy.jar
           docker buildx build \
           -f docker/fetcher/Dockerfile \
           -t ziplineai/chronon-fetcher:$(git rev-parse --short HEAD) \
