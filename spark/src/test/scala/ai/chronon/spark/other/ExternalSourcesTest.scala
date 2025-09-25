@@ -113,7 +113,7 @@ class ExternalSourcesTest extends AnyFlatSpec {
     val keys = Set(
       "ext_p1_plus_one_number",
       "ext_p2_plus_one_number",
-      "ext_always_fails${FetcherUtil.FeatureExceptionSuffix}",
+      s"ext_always_fails${FetcherUtil.FeatureExceptionSuffix}",
       "ext_p3_java_plus_one_number",
       "ext_p3_java_plus_one_number_mapped",
       "ext_contextual_context_1",

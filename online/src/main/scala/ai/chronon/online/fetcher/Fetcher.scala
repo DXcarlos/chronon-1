@@ -195,8 +195,8 @@ class Fetcher(val kvStore: KVStore,
 
         val derivedResults = zipped.map { case (internalResponse, externalResponse) =>
           val cleanInternalRequest = internalResponse.request.copy(context = None)
-          val internalMap = internalResponse.values.getOrElse(
-            Map(s"join_part_fetch${FetcherUtil.FeatureExceptionSuffix}" -> internalResponse.values.failed.get.traceString))
+          val internalMap = internalResponse.values.getOrElse(Map(
+            s"join_part_fetch${FetcherUtil.FeatureExceptionSuffix}" -> internalResponse.values.failed.get.traceString))
 
           val baseMap = if (externalResponse != null) {
 
@@ -210,8 +210,8 @@ class Fetcher(val kvStore: KVStore,
                    |  externalResponses:   ${externalResponses.map(_.request.name)}""".stripMargin
             )
 
-            val externalMap = externalResponse.values.getOrElse(
-              Map(s"external_part_fetch${FetcherUtil.FeatureExceptionSuffix}" -> externalResponse.values.failed.get.traceString))
+            val externalMap = externalResponse.values.getOrElse(Map(
+              s"external_part_fetch${FetcherUtil.FeatureExceptionSuffix}" -> externalResponse.values.failed.get.traceString))
 
             internalMap ++ externalMap
           } else {
@@ -376,7 +376,9 @@ class Fetcher(val kvStore: KVStore,
         // more validation logic will be covered in compile.py to avoid this case
         joinCodecCache.refresh(joinName)
         ctx.incrementException(exception)
-        ResponseWithContext(request, Map(s"join_codec_fetch${FetcherUtil.FeatureExceptionSuffix}" -> exception.traceString), Map.empty)
+        ResponseWithContext(request,
+                            Map(s"join_codec_fetch${FetcherUtil.FeatureExceptionSuffix}" -> exception.traceString),
+                            Map.empty)
 
     }
   }
