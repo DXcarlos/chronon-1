@@ -12,6 +12,9 @@ if __name__ == "__main__":
                                       headers={'Content-Type': 'application/json'},
                                       json=[{"listing_id": "1", "user_id": "user_7"}])
 
+    if features_response.status_code != 200:
+        raise Exception(f"Failed to fetch features: {features_response.text}")
+
     results = features_response.json()['results'][0]
     features = results['features']
     # Also print as JSON for easier analysis
