@@ -368,7 +368,7 @@ jobs:
         run: |
           pwd
           ls
-          ls cloud-gcp-jar 
+          ls cloud-gcp-jar/
           cp cloud-gcp-jar build_output/cloud_gcp_lib_deploy.jar
           cp service-assembly-jar build_output/service_assembly_deploy.jar
           docker buildx build \
