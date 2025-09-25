@@ -9,13 +9,13 @@ services:
       - "8907:8905"
       - "8908:8906"
       - "5005:5005"  # Debug port
-    volumes:
-      - ~/.config/gcloud/application_default_credentials.json:/gcp/credentials.json:ro
+#    volumes:
+#      - ~/.config/gcloud/application_default_credentials.json:/gcp/credentials.json:ro
     environment:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-${GCP_PROJECT_ID}}
       - GCP_BIGTABLE_INSTANCE_ID=${GCP_BIGTABLE_INSTANCE_ID}
-      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/credentials.json
+#      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/credentials.json
       - CHRONON_METRICS_READER=http
       - EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - JVM_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
