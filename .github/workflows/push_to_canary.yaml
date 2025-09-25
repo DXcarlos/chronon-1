@@ -385,6 +385,12 @@ jobs:
         run: |
           docker ps -a
 
+      - name: curl and warm up for three minutes minutes
+        shell: bash
+        run: |
+          set -eo pipefail
+          for i in {1..24}; do curl -X POST   'http://localhost:9000/v1/fetch/join/gcp.demo.v1__1'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]' || true; sleep 10; done
+
 #  run_gcp_integration_tests:
 #    runs-on: ubuntu-latest
 #    needs: [build_artifacts, push_to_gcp]
