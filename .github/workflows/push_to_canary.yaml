@@ -337,20 +337,20 @@ jobs:
           java-version: 11
 
       # Bazel cache credentials removed - using Mill now
-
-      - name: Install Thrift
-        env:
-          THRIFT_VERSION: 0.21.0
-        run: |
-          sudo apt-get install automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config && \
-          curl -LSs https://archive.apache.org/dist/thrift/${{env.THRIFT_VERSION}}/thrift-${{env.THRIFT_VERSION}}.tar.gz -o thrift-${{env.THRIFT_VERSION}}.tar.gz && \
-          tar -xzf thrift-${{env.THRIFT_VERSION}}.tar.gz && \
-          cd thrift-${{env.THRIFT_VERSION}} && \
-          sudo ./configure --without-python --without-cpp --without-nodejs --without-java --disable-debug --disable-tests --disable-libs && \
-          sudo make && \
-          sudo make install && \
-          cd .. && \
-          sudo rm -rf thrift-${{env.THRIFT_VERSION}} thrift-${{env.THRIFT_VERSION}}.tar.gz
+#
+#      - name: Install Thrift
+#        env:
+#          THRIFT_VERSION: 0.21.0
+#        run: |
+#          sudo apt-get install automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config && \
+#          curl -LSs https://archive.apache.org/dist/thrift/${{env.THRIFT_VERSION}}/thrift-${{env.THRIFT_VERSION}}.tar.gz -o thrift-${{env.THRIFT_VERSION}}.tar.gz && \
+#          tar -xzf thrift-${{env.THRIFT_VERSION}}.tar.gz && \
+#          cd thrift-${{env.THRIFT_VERSION}} && \
+#          sudo ./configure --without-python --without-cpp --without-nodejs --without-java --disable-debug --disable-tests --disable-libs && \
+#          sudo make && \
+#          sudo make install && \
+#          cd .. && \
+#          sudo rm -rf thrift-${{env.THRIFT_VERSION}} thrift-${{env.THRIFT_VERSION}}.tar.gz
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -367,12 +367,26 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Run publish docker images local
+      - name: copy the jars and build
         shell: bash
-        id: run_publish_docker_local
         run: |
-          set -xo pipefail
-          ./scripts/distribution/publish_docker_images.sh --local
+          set -eo pipefail
+          # Download Jars from Canary for Docker build
+          gcloud storage cp gs://zipline-artifacts-dev/release/latest/jars/cloud_gcp_lib_deploy.jar build_output/cloud_gcp_lib_deploy.jar
+          gcloud storage cp gs://zipline-artifacts-dev/release/latest/jars/service_assembly_deploy.jar build_output/service_assembly_deploy.jar
+          docker buildx build \
+          -f docker/fetcher/Dockerfile \
+          -t ziplineai/chronon-fetcher:$(git rev-parse --short HEAD) \
+          -t ziplineai/chronon-fetcher:latest \
+          --load \
+          .
+
+#      - name: Run publish docker images local
+#        shell: bash
+#        id: run_publish_docker_local
+#        run: |
+#          set -xo pipefail
+#          ./scripts/distribution/publish_docker_images.sh --local
 
       - name: Run docker detached
         shell: bash
