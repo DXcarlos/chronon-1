@@ -9,8 +9,8 @@ services:
       - "8907:8905"
       - "8908:8906"
       - "5005:5005"  # Debug port
-#    volumes:
-#      - ~/.config/gcloud/application_default_credentials.json:/gcp/credentials.json:ro
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS}:${GOOGLE_APPLICATION_CREDENTIALS}
     environment:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID}
       - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-${GCP_PROJECT_ID}}

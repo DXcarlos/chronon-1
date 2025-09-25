@@ -384,6 +384,7 @@ jobs:
         shell: bash
         run: |
           echo $GOOGLE_APPLICATION_CREDENTIALS
+          gcloud auth application-default login --quiet
 
 #      - name: Run publish docker images local
 #        shell: bash
