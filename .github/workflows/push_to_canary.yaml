@@ -363,11 +363,12 @@ jobs:
           name: cloud-gcp-jar
           path: cloud-gcp-jar
 
-      - name: Rename JAR files to expected names, copy the jars and build
+      - name: Copy the jars to expected paths and build
         shell: bash
         run: |
-          mv cloud-gcp-jar/out.jar build_output/cloud_gcp_lib_deploy.jar
-          mv service-assembly-jar/out.jar build_output/service_assembly_deploy.jar
+          pwd
+          cp cloud_gcp_lib_deploy.jar build_output/cloud_gcp_lib_deploy.jar
+          cp service_assembly_deploy. build_output/service_assembly_deploy.jar
           docker buildx build \
           -f docker/fetcher/Dockerfile \
           -t ziplineai/chronon-fetcher:$(git rev-parse --short HEAD) \
