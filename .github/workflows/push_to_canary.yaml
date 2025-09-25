@@ -366,6 +366,7 @@ jobs:
       - name: Copy the jars to expected paths and build
         shell: bash
         run: |
+          mkdir build_output
           cp cloud-gcp-jar/out.jar build_output/cloud_gcp_lib_deploy.jar
           cp service-assembly-jar/out.jar build_output/service_assembly_deploy.jar
           docker buildx build \
