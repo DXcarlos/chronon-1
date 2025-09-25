@@ -98,8 +98,8 @@ object KVUploadNodeRunner {
                                              descr = "Name of table in kv store to use to keep track of partitions",
                                              default = Option(NodeRunner.DefaultTablePartitionsDataset))
     val tableStatsDataset = opt[String](required = false,
-                                             descr = "Name of table in kv store to use to store partition statistics",
-                                             default = None)
+                                        descr = "Name of table in kv store to use to store partition statistics",
+                                        default = None)
     verify()
   }
 
