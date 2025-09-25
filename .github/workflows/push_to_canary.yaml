@@ -369,10 +369,21 @@ jobs:
 
       - name: Run publish docker images local
         shell: bash
-        id: gcp_integration_tests
+        id: run_publish_docker_local
         run: |
           set -xo pipefail
           ./scripts/distribution/publish_docker_images.sh --local
+
+      - name: Run docker detached
+        shell: bash
+        id: run_docker_detached
+        run: |
+          GCP_PROJECT_ID=canary-443022 GCP_BIGTABLE_INSTANCE_ID=zipline-canary-instance docker-compose -f docker/fetcher/chronon-service-with-local-telemetry.yml up -d
+
+      - name: run docker ps
+        shell: bash
+        run: |
+          docker ps -a
 
 #  run_gcp_integration_tests:
 #    runs-on: ubuntu-latest
