@@ -49,6 +49,8 @@ if __name__ == "__main__":
 
     results = features_response.json()['results'][0]
     features_base64_avro_string = results['featureAvroString']
+    print(results)
+    features_errors = results['featuresErrors']
 
     try:
         # Decode the Avro data
@@ -71,7 +73,7 @@ if __name__ == "__main__":
         print(f"  Decoded binary size: {len(base64.b64decode(features_base64_avro_string))} bytes")
         print(f"  Decoded size in KB: {len(base64.b64decode(features_base64_avro_string)) / 1024:.2f} KB")
         print(f"  Base64 overhead: {len(features_base64_avro_string) - len(base64.b64decode(features_base64_avro_string))} bytes")
-        print()
+        print(f"Feature errors: {features_errors}")
 
     except Exception as e:
         print(f"Error decoding Avro data: {e}")

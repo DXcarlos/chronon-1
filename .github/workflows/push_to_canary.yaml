@@ -402,11 +402,32 @@ jobs:
         run: |
           docker ps -a
 
-      - name: curl and warm up for three minutes minutes
+      - name: curl and warm up for three minutes
         shell: bash
         run: |
           set -eo pipefail
-          for i in {1..24}; do curl -X POST   'http://localhost:9000/v1/fetch/join/gcp.demo.v1__1'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]' || true; docker ps -a; sleep 10; done
+          for i in {1..24}; do curl -X POST   'http://localhost:9000/v1/fetch/join/gcp.demo.v1__1'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]' || true; sleep 10; done
+
+      - name: Setup python
+        shell: bash
+        id: setup_python_venv
+        run: |
+          python3 -m venv fetcher_ci
+          pip3 install -r scripts/fetcher_tests/requirements.txt
+
+      - name: Run json string tests
+        shell: bash
+        id: run_json_string_tests
+        run: |
+          set -euxo pipefail
+          python3 scripts/fetcher_tests/json_string_test.py
+
+      - name: Run fetcher integration tests
+        shell: bash
+        id: run_fetcher_integration_tests
+        run: |
+          set -euxo pipefail
+          python3 scripts/fetcher_tests/avro_encoded_string_test.py
 
 #  run_gcp_integration_tests:
 #    runs-on: ubuntu-latest
