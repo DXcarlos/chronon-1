@@ -2,7 +2,7 @@ package ai.chronon.spark.fetcher
 
 import ai.chronon.api.Constants.MetadataDataset
 import ai.chronon.api.Extensions.JoinOps
-import ai.chronon.online.fetcher
+import ai.chronon.online.{FetcherUtil, fetcher}
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
 import ai.chronon.online.fetcher.Fetcher.Request
 import ai.chronon.spark.catalog.TableUtils
@@ -53,7 +53,7 @@ class FetcherFailureTest extends AnyFlatSpec {
     // In this case because of empty keys, both attempts to compute derivation will fail
     val derivationExceptionTypes = Seq("derivation_fetch_exception", "derivation_rename_exception")
     assertEquals(joinConf.joinParts.size() + derivationExceptionTypes.size, responseMap.size)
-    assertTrue(responseMap.keys.forall(_.endsWith("_exception")))
+    assertTrue(responseMap.keys.forall(_.endsWith(FetcherUtil.FeatureExceptionSuffix)))
   }
 
   it should "test KVStore partial failure" in {
@@ -82,7 +82,7 @@ class FetcherFailureTest extends AnyFlatSpec {
     val exceptionKeys = joinConf.joinPartOps.map(jp => jp.columnPrefix + "exception")
 
     println(responseMap)
-    if(!responseMap.contains("derivation_fetch_exception")){
+    if(!responseMap.contains(s"derivation_fetch${FetcherUtil.FeatureExceptionSuffix}")){
       exceptionKeys.foreach(k => assertTrue(responseMap.contains(k)))
     }
   }

@@ -73,29 +73,21 @@ object Fetcher {
 
   sealed trait AvroResponseValue
   object AvroResponseValue {
-    case class Map(value: Try[scala.collection.immutable.Map[String, AnyRef]]) extends AvroResponseValue
+    // TODO: do pure Avro binary
     case class AvroBytes(value: Try[Array[Byte]]) extends AvroResponseValue
     case class AvroString(value: Try[String]) extends AvroResponseValue
   }
 
   case class ResponseV2(request: Request,
                         value: AvroResponseValue,
-                        errors: Try[scala.collection.immutable.Map[String, AnyRef]])
+                        errors: Try[scala.collection.immutable.Map[String, String]])
       extends BaseResponse {
-    def valuesMap: Try[Map[String, AnyRef]] = value match {
-      case AvroResponseValue.Map(v) => v
-    }
-
-    def valuesAvroBytes: Try[Array[Byte]] = value match {
-      case AvroResponseValue.AvroBytes(v) => v
-    }
 
     def valuesAvroString: Try[String] = value match {
       case AvroResponseValue.AvroString(v) => v
     }
 
     def getResponseValueType: ResponseType = value match {
-      case AvroResponseValue.Map(_)        => ResponseType.Map
       case AvroResponseValue.AvroBytes(_)  => ResponseType.WithAvroBytes
       case AvroResponseValue.AvroString(_) => ResponseType.WithAvroString
     }
@@ -124,7 +116,7 @@ object Fetcher {
     import ai.chronon.online.metrics
 
     responseMap.foreach { case (featureName, value) =>
-      if (!featureName.endsWith("_exception")) {
+      if (!featureName.endsWith(FetcherUtil.FeatureExceptionSuffix)) {
         if (value == null)
           context.increment(
             metrics.Metrics.Name.FeatureNulls,
@@ -204,7 +196,7 @@ class Fetcher(val kvStore: KVStore,
         val derivedResults = zipped.map { case (internalResponse, externalResponse) =>
           val cleanInternalRequest = internalResponse.request.copy(context = None)
           val internalMap = internalResponse.values.getOrElse(
-            Map("join_part_fetch_exception" -> internalResponse.values.failed.get.traceString))
+            Map(s"join_part_fetch${FetcherUtil.FeatureExceptionSuffix}" -> internalResponse.values.failed.get.traceString))
 
           val baseMap = if (externalResponse != null) {
 
@@ -219,7 +211,7 @@ class Fetcher(val kvStore: KVStore,
             )
 
             val externalMap = externalResponse.values.getOrElse(
-              Map("external_part_fetch_exception" -> externalResponse.values.failed.get.traceString))
+              Map(s"external_part_fetch${FetcherUtil.FeatureExceptionSuffix}" -> externalResponse.values.failed.get.traceString))
 
             internalMap ++ externalMap
           } else {
@@ -289,8 +281,8 @@ class Fetcher(val kvStore: KVStore,
               val errors = r.values match {
                 case Failure(exception) => Failure(exception)
                 case Success(valueMap) =>
-                  val exceptionMap = valueMap.filter(_._1.endsWith("_exception"))
-                  if (exceptionMap.nonEmpty) Success(exceptionMap) else Success(Map.empty[String, AnyRef])
+                  val exceptionMap = FetcherUtil.filterFeatureMapForErrors(valueMap)
+                  if (exceptionMap.nonEmpty) Success(exceptionMap) else Success(Map.empty[String, String])
               }
               ResponseV2(r.request,
                          AvroResponseValue.AvroBytes(r.values.flatMap(v => {
@@ -307,8 +299,8 @@ class Fetcher(val kvStore: KVStore,
               val errors = r.values match {
                 case Failure(exception) => Failure(exception)
                 case Success(valueMap) =>
-                  val exceptionMap = valueMap.filter(_._1.endsWith("_exception"))
-                  if (exceptionMap.nonEmpty) Success(exceptionMap) else Success(Map.empty[String, AnyRef])
+                  val exceptionMap = FetcherUtil.filterFeatureMapForErrors(valueMap)
+                  if (exceptionMap.nonEmpty) Success(exceptionMap) else Success(Map.empty[String, String])
               }
               ResponseV2(r.request,
                          AvroResponseValue.AvroString(r.values.flatMap(v => {
@@ -354,20 +346,20 @@ class Fetcher(val kvStore: KVStore,
                 case Failure(exception) =>
                   ctx.incrementException(exception)
                   Map(
-                    "derivation_rename_exception" -> exception.traceString
+                    s"derivation_rename${FetcherUtil.FeatureExceptionSuffix}" -> exception.traceString
                       .asInstanceOf[AnyRef])
               }
 
             val derivedExceptionMap: Map[String, AnyRef] =
               Map(
-                "derivation_fetch_exception" -> exception.traceString
+                s"derivation_fetch${FetcherUtil.FeatureExceptionSuffix}" -> exception.traceString
                   .asInstanceOf[AnyRef])
 
             renameOnlyDerivedMap ++ derivedExceptionMap
         }
 
         // Preserve exceptions from baseMap
-        val baseMapExceptions = baseMap.filter(_._1.endsWith("_exception"))
+        val baseMapExceptions = baseMap.filter(_._1.endsWith(FetcherUtil.FeatureExceptionSuffix))
         val finalizedDerivedMap = derivedMap ++ baseMapExceptions
         val requestEndTs = System.currentTimeMillis()
         ctx.distribution("derivation.latency.millis", requestEndTs - derivationStartTs)
@@ -384,7 +376,7 @@ class Fetcher(val kvStore: KVStore,
         // more validation logic will be covered in compile.py to avoid this case
         joinCodecCache.refresh(joinName)
         ctx.incrementException(exception)
-        ResponseWithContext(request, Map("join_codec_fetch_exception" -> exception.traceString), Map.empty)
+        ResponseWithContext(request, Map(s"join_codec_fetch${FetcherUtil.FeatureExceptionSuffix}" -> exception.traceString), Map.empty)
 
     }
   }

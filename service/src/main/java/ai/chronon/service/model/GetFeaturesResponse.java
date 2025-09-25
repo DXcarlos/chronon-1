@@ -55,16 +55,14 @@ public class GetFeaturesResponse {
         private final Map<String, Object> entityKeys;
         private final Map<String, Object> features;
         private final String featureAvroString;
-        private final byte[] featureAvroBytes;
         private final String error;
-        private final Map<String, Object> featuresErrors;
+        private final Map<String, String> featuresErrors;
 
         private Result(Builder builder) {
             this.status = builder.status;
             this.entityKeys = builder.entityKeys;
             this.features = builder.features;
             this.featureAvroString = builder.featureAvroString;
-            this.featureAvroBytes = builder.featureAvroBytes;
             this.error = builder.error;
             this.featuresErrors = builder.featuresErrors;
         }
@@ -81,10 +79,6 @@ public class GetFeaturesResponse {
             return featureAvroString;
         }
 
-        public byte[] getFeatureAvroBytes() {
-            return featureAvroBytes;
-        }
-
         public Map<String, Object> getEntityKeys() {
             return entityKeys;
         }
@@ -93,7 +87,7 @@ public class GetFeaturesResponse {
             return error;
         }
 
-        public Map<String, Object> getFeaturesErrors() {
+        public Map<String, String> getFeaturesErrors() {
             return featuresErrors;
         }
 
@@ -106,9 +100,8 @@ public class GetFeaturesResponse {
             private Map<String, Object> entityKeys;
             private Map<String, Object> features;
             private String featureAvroString;
-            private byte[] featureAvroBytes;
             private String error;
-            private Map<String, Object> featuresErrors;
+            private Map<String, String> featuresErrors;
 
             public Builder status(Status status) {
                 this.status = status;
@@ -125,11 +118,6 @@ public class GetFeaturesResponse {
                 return this;
             }
 
-            public Builder featureAvroBytes(byte[] featureAvroBytes) {
-                this.featureAvroBytes = featureAvroBytes;
-                return this;
-            }
-
             public Builder entityKeys(Map<String, Object> entityKeys) {
                 this.entityKeys = entityKeys;
                 return this;
@@ -140,7 +128,7 @@ public class GetFeaturesResponse {
                 return this;
             }
 
-            public Builder featuresErrors(Map<String, Object> featuresErrors) {
+            public Builder featuresErrors(Map<String, String> featuresErrors) {
                 this.featuresErrors = featuresErrors;
                 return this;
             }

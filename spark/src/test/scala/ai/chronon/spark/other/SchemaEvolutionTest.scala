@@ -299,7 +299,7 @@ class SchemaEvolutionTest extends AnyFlatSpec {
     metadataStore.putJoinConf(joinSuiteV1.joinConf)
     val fetcher = mockApi.buildFetcher(true)
     val response1 = fetchJoin(fetcher, joinSuiteV1)
-    assertTrue(response1.values.get.keys.exists(_.endsWith("_exception")))
+    assertTrue(response1.values.get.keys.exists(_.endsWith(FetcherUtil.FeatureExceptionSuffix)))
     assertEquals(joinSuiteV1.groupBys.length, response1.values.get.keys.size)
 
     // empty responses are still logged and this schema version is still tracked
@@ -356,7 +356,7 @@ class SchemaEvolutionTest extends AnyFlatSpec {
     assertEquals(newGroupByCount, newSubMapActual.keys.size)
     if (newGroupByCount > 0) {
       // new GroupBy fetches will fail because upload has not run
-      assertTrue(newSubMapActual.keys.exists(_.endsWith("_exception")))
+      assertTrue(newSubMapActual.keys.exists(_.endsWith(FetcherUtil.FeatureExceptionSuffix)))
     }
     assertFalse(response3.values.get.keys.exists(k => removedSubMapOriginalData.keys.toSet.contains(k)))
 

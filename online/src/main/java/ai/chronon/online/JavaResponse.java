@@ -28,9 +28,8 @@ import java.util.Map;
 public class JavaResponse {
     public JavaRequest request;
     public JTry<Map<String, Object>> values;
-    public JTry<byte[]> valuesAvroBytes;
     public JTry<String> valuesAvroString;
-    public JTry<Map<String, Object>> errorsV2;
+    public JTry<Map<String, String>> errorsV2;
     public Enumeration.Value valueType;
 
     public JavaResponse(JavaRequest request, JTry<Map<String, Object>> values) {
@@ -80,9 +79,7 @@ public class JavaResponse {
                         else
                             return null;
                     });
-            if (valueType == ResponseType.WithAvroBytes()) {
-                this.valuesAvroBytes = JTry.fromScala(responseV2.valuesAvroBytes());
-            } else if (valueType == ResponseType.WithAvroString()) {
+            if (valueType == ResponseType.WithAvroString()) {
                 this.valuesAvroString = JTry.fromScala(responseV2.valuesAvroString());
             } else {
                 throw new IllegalArgumentException("Unknown response type: " + valueType);
@@ -92,29 +89,9 @@ public class JavaResponse {
         }
     }
 
-    // Factory methods for cleaner API
-    public static JavaResponse fromResponse(Fetcher.Response scalaResponse) {
-        return new JavaResponse(scalaResponse);
-    }
-
-    public static JavaResponse fromResponseV2(Fetcher.ResponseV2 scalaResponseV2) {
-        return new JavaResponse(scalaResponseV2);
-    }
-
-    public static JavaResponse fromBaseResponse(Fetcher.BaseResponse scalaResponse) {
-        return new JavaResponse(scalaResponse);
-    }
-
     public Fetcher.Response toScala() {
         return new Fetcher.Response(
                 request.toScalaRequest(),
                 values.map(ScalaJavaConversions::toScala).toScala());
-    }
-
-    // New method to convert to ResponseV2 if needed
-    public Fetcher.ResponseV2 toScalaV2() {
-        // This would need to be implemented based on how you want to handle the conversion
-        // For now, throwing an exception as this requires more context about your use case
-        throw new UnsupportedOperationException("Conversion to ResponseV2 not yet implemented");
     }
 }

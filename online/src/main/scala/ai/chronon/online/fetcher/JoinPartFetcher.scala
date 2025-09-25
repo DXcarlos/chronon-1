@@ -117,7 +117,7 @@ class JoinPartFetcher(fetchContext: FetchContext, metadataStore: MetadataStore) 
             groupByRequestsWithPrefix.iterator.flatMap {
 
               case Right(keyMissingException) =>
-                Map(keyMissingException.requestName + "_exception" -> keyMissingException.getMessage)
+                Map(keyMissingException.requestName + FetcherUtil.FeatureExceptionSuffix -> keyMissingException.getMessage)
 
               case Left(PrefixedRequest(prefix, groupByRequest)) =>
                 parseGroupByResponse(prefix, groupByRequest, responseMap)

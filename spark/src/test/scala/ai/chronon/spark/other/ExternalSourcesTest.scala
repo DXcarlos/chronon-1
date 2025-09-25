@@ -18,6 +18,7 @@ package ai.chronon.spark.other
 
 import ai.chronon.api.Constants.MetadataDataset
 import ai.chronon.api._
+import ai.chronon.online.FetcherUtil
 import ai.chronon.online.fetcher.Fetcher.Request
 import ai.chronon.spark.LoggingSchema
 import ai.chronon.spark.utils.{MockApi, OnlineUtils}
@@ -112,7 +113,7 @@ class ExternalSourcesTest extends AnyFlatSpec {
     val keys = Set(
       "ext_p1_plus_one_number",
       "ext_p2_plus_one_number",
-      "ext_always_fails_exception",
+      "ext_always_fails${FetcherUtil.FeatureExceptionSuffix}",
       "ext_p3_java_plus_one_number",
       "ext_p3_java_plus_one_number_mapped",
       "ext_contextual_context_1",
@@ -156,10 +157,10 @@ class ExternalSourcesTest extends AnyFlatSpec {
     val emptyResponseMap = Await.result(emptyResponseF, Duration(10, SECONDS)).head.values.get
 
     val expectedKeys = Set(
-      "ext_p1_plus_one_exception",
-      "ext_p2_plus_one_exception",
-      "ext_p3_java_plus_one_exception",
-      "ext_always_fails_exception",
+      s"ext_p1_plus_one${FetcherUtil.FeatureExceptionSuffix}",
+      s"ext_p2_plus_one${FetcherUtil.FeatureExceptionSuffix}",
+      s"ext_p3_java_plus_one${FetcherUtil.FeatureExceptionSuffix}",
+      s"ext_always_fails${FetcherUtil.FeatureExceptionSuffix}",
       "ext_contextual_context_1",
       "ext_contextual_context_2"
     )

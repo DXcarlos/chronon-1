@@ -22,11 +22,11 @@ object OnlineDerivationUtil {
   // and reintroduce the exceptions back
   private[online] def reintroduceExceptions(derived: Map[String, Any],
                                             preDerivation: Map[String, Any]): Map[String, Any] = {
-    val exceptions: Map[String, Any] = preDerivation.iterator.filter(_._1.endsWith("_exception")).toMap
+    val exceptions: Map[String, Any] = preDerivation.iterator.filter(_._1.endsWith(FetcherUtil.FeatureExceptionSuffix)).toMap
     if (exceptions.isEmpty) {
       return derived
     }
-    val exceptionParts: Array[String] = exceptions.keys.map(_.dropRight("_exception".length)).toArray
+    val exceptionParts: Array[String] = exceptions.keys.map(_.dropRight(FetcherUtil.FeatureExceptionSuffix.length)).toArray
     derived.filterKeys(key => !exceptionParts.exists(key.startsWith)).toMap ++ exceptions
   }
 

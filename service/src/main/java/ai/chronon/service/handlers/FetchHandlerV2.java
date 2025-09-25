@@ -110,11 +110,6 @@ public class FetchHandlerV2 implements Handler<RoutingContext> {
             if (featureValues.isSuccess()) {
                 return builder.status(Success).featureAvroString((String) featureValues.getValue()).build();
             }
-        } else if (valueType == ResponseType.WithAvroBytes()) {
-            featureValues = response.valuesAvroBytes;
-            if (featureValues.isSuccess()) {
-                return builder.status(Success).featureAvroBytes((byte[]) featureValues.getValue()).build();
-            }
         } else {
             return builder.status(Failure).error("Unknown response type: " + valueType).build();
         }

@@ -16,6 +16,7 @@
 
 package ai.chronon.online.test
 
+import ai.chronon.online.FetcherUtil
 import ai.chronon.online.OnlineDerivationUtil.reintroduceExceptions
 import org.junit.Assert.assertEquals
 import org.scalatest.flatspec.AnyFlatSpec
@@ -23,7 +24,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 class JoinCodecTest extends AnyFlatSpec {
   it should "reintroduce exception" in {
 
-    val preDerived = Map("group_by_2_exception" -> "ex", "group_by_1_exception" -> "ex", "group_by_4_exception" -> "ex")
+    val preDerived = Map(s"group_by_2${FetcherUtil.FeatureExceptionSuffix}" -> "ex", s"group_by_1${FetcherUtil.FeatureExceptionSuffix}" -> "ex", s"group_by_4${FetcherUtil.FeatureExceptionSuffix}" -> "ex")
     val derived = Map(
       "group_by_1_feature1" -> "val1",
       "group_by_2_feature1" -> "val1",
@@ -39,9 +40,9 @@ class JoinCodecTest extends AnyFlatSpec {
       "group_by_3_feature1" -> "val1",
       "derived1" -> "val1",
       "derived2" -> "val2",
-      "group_by_2_exception" -> "ex",
-      "group_by_1_exception" -> "ex",
-      "group_by_4_exception" -> "ex"
+      s"group_by_2${FetcherUtil.FeatureExceptionSuffix}" -> "ex",
+      s"group_by_1${FetcherUtil.FeatureExceptionSuffix}" -> "ex",
+      s"group_by_4${FetcherUtil.FeatureExceptionSuffix}" -> "ex"
     )
     assertEquals(expected, result)
   }

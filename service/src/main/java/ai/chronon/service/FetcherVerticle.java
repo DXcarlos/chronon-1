@@ -78,6 +78,7 @@ public class FetcherVerticle extends AbstractVerticle {
         // Start HTTP server
         HttpServerOptions httpOptions =
                 new HttpServerOptions()
+                        .setCompressionSupported(true)
                         .setTcpKeepAlive(true)
                         .setIdleTimeout(60)
                         // HTTP/2 specific settings - these are currently the default in our Vert.x version

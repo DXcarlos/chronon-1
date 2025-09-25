@@ -140,7 +140,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
       case Failure(exception) =>
         requestContext.metricsContext.incrementException(exception)
         logger.error(s"Failed to derive values for request: ${request.name}@${request.keys}", exception)
-        Map("derivation_exception" -> exception.traceString.asInstanceOf[AnyRef])
+        Map(s"derivation${FetcherUtil.FeatureExceptionSuffix}" -> exception.traceString.asInstanceOf[AnyRef])
     }
   }
 
