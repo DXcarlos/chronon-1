@@ -16,124 +16,124 @@ env:
   GCP_REGION: ${{secrets.GCP_REGION}}
 
 jobs:
-#  build_artifacts:
-#    runs-on: ubuntu-latest
-#
-#    permissions:
-#      contents: read
-#
-#    steps:
-#      - uses: actions/checkout@v4
-#
-#      - name: Setup JDK
-#        uses: actions/setup-java@v4
-#        with:
-#          distribution: corretto
-#          java-version: 11
-#
-#      # Bazel cache credentials removed - using Mill now
-#
-#      - name: Install Thrift
-#        env:
-#          THRIFT_VERSION: 0.21.0
-#        run: |
-#          sudo apt-get install automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config && \
-#          curl -LSs https://archive.apache.org/dist/thrift/${{env.THRIFT_VERSION}}/thrift-${{env.THRIFT_VERSION}}.tar.gz -o thrift-${{env.THRIFT_VERSION}}.tar.gz && \
-#          tar -xzf thrift-${{env.THRIFT_VERSION}}.tar.gz && \
-#          cd thrift-${{env.THRIFT_VERSION}} && \
-#          sudo ./configure --without-python --without-cpp --without-nodejs --without-java --disable-debug --disable-tests --disable-libs && \
-#          sudo make && \
-#          sudo make install && \
-#          cd .. && \
-#          sudo rm -rf thrift-${{env.THRIFT_VERSION}} thrift-${{env.THRIFT_VERSION}}.tar.gz
-#
-#      - name: Set up Python
-#        uses: actions/setup-python@v5
-#        with:
-#          python-version: '3.11' # This should match the version used in [chronon]/.toolversions
-#
-#      - name: Get the latest release tag
-#        id: get_tag
-#        run: |
-#          git fetch --tags
-#          TAG=$(git tag --sort=-creatordate | head -n 1)
-#          TAG="${TAG#v}"
-#          if [ -z "$TAG" ]; then
-#            TAG="0.0.0"
-#          fi
-#          echo "Latest release tag: $TAG"
-#
-#          echo "tag=$TAG" >> $GITHUB_OUTPUT
-#
-#      - name: Build Python Wheel
-#        id: build-wheel
-#        shell: bash
-#        env:
-#          VERSION: "${{ steps.get_tag.outputs.tag }}+${{ github.sha }}"
-#        run: |
-#          set -eo pipefail
-#          echo "Building wheel"
-#          ZIPLINE_VERSION=$VERSION ./mill python.wheel
-#
-#          EXPECTED_ZIPLINE_WHEEL="out/python/wheel.dest/dist/zipline_ai-${{ env.VERSION }}-py3-none-any.whl"
-#          if [ ! -f "$EXPECTED_ZIPLINE_WHEEL" ]; then
-#            echo "$EXPECTED_ZIPLINE_WHEEL not found"
-#            exit 1
-#          fi
-#          echo "wheel_file=$EXPECTED_ZIPLINE_WHEEL" >> $GITHUB_OUTPUT
-#          echo "wheel_name=$(basename $EXPECTED_ZIPLINE_WHEEL)" >> $GITHUB_OUTPUT
-#          echo "version=${{ env.VERSION }}" >> $GITHUB_OUTPUT
-#
-#      - name: Upload Wheel
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: zipline-ai-wheel
-#          path: ${{ steps.build-wheel.outputs.wheel_file }}
-#
-#
-#      - name: Build Mill Project
-#        id: mill-build
-#        run: |
-#          ./mill clean
-#          ./mill flink.assembly
-#          ./mill cloud_gcp.assembly
-#          ./mill cloud_aws.assembly
-#          ./mill service.assembly
-#          ./mill flink_connectors.assembly
-#
-#      - name: Upload Flink Assembly Jar
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: flink-assembly-jar
-#          path: out/flink/assembly.dest/out.jar
-#
-#      - name: Upload Cloud AWS Jar
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: cloud-aws-jar
-#          path: out/cloud_aws/assembly.dest/out.jar
-#
-#      - name: Upload Cloud GCP Jar
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: cloud-gcp-jar
-#          path: out/cloud_gcp/assembly.dest/out.jar
-#
-#      - name: Upload Service Assembly Jar
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: service-assembly-jar
-#          path: out/service/assembly.dest/out.jar
-#
-#      - name: Upload PubSub Jar
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: pubsub-jar
-#          path: out/flink_connectors/assembly.dest/out.jar
-#    outputs:
-#      wheel_file: ${{ steps.build-wheel.outputs.wheel_file }}
-#      wheel_name: ${{ steps.build-wheel.outputs.wheel_name }}
-#      version: ${{ steps.build-wheel.outputs.version }}
+  build_artifacts:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: 11
+
+      # Bazel cache credentials removed - using Mill now
+
+      - name: Install Thrift
+        env:
+          THRIFT_VERSION: 0.21.0
+        run: |
+          sudo apt-get install automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config && \
+          curl -LSs https://archive.apache.org/dist/thrift/${{env.THRIFT_VERSION}}/thrift-${{env.THRIFT_VERSION}}.tar.gz -o thrift-${{env.THRIFT_VERSION}}.tar.gz && \
+          tar -xzf thrift-${{env.THRIFT_VERSION}}.tar.gz && \
+          cd thrift-${{env.THRIFT_VERSION}} && \
+          sudo ./configure --without-python --without-cpp --without-nodejs --without-java --disable-debug --disable-tests --disable-libs && \
+          sudo make && \
+          sudo make install && \
+          cd .. && \
+          sudo rm -rf thrift-${{env.THRIFT_VERSION}} thrift-${{env.THRIFT_VERSION}}.tar.gz
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # This should match the version used in [chronon]/.toolversions
+
+      - name: Get the latest release tag
+        id: get_tag
+        run: |
+          git fetch --tags
+          TAG=$(git tag --sort=-creatordate | head -n 1)
+          TAG="${TAG#v}"
+          if [ -z "$TAG" ]; then
+            TAG="0.0.0"
+          fi
+          echo "Latest release tag: $TAG"
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Build Python Wheel
+        id: build-wheel
+        shell: bash
+        env:
+          VERSION: "${{ steps.get_tag.outputs.tag }}+${{ github.sha }}"
+        run: |
+          set -eo pipefail
+          echo "Building wheel"
+          ZIPLINE_VERSION=$VERSION ./mill python.wheel
+
+          EXPECTED_ZIPLINE_WHEEL="out/python/wheel.dest/dist/zipline_ai-${{ env.VERSION }}-py3-none-any.whl"
+          if [ ! -f "$EXPECTED_ZIPLINE_WHEEL" ]; then
+            echo "$EXPECTED_ZIPLINE_WHEEL not found"
+            exit 1
+          fi
+          echo "wheel_file=$EXPECTED_ZIPLINE_WHEEL" >> $GITHUB_OUTPUT
+          echo "wheel_name=$(basename $EXPECTED_ZIPLINE_WHEEL)" >> $GITHUB_OUTPUT
+          echo "version=${{ env.VERSION }}" >> $GITHUB_OUTPUT
+
+      - name: Upload Wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: zipline-ai-wheel
+          path: ${{ steps.build-wheel.outputs.wheel_file }}
+
+
+      - name: Build Mill Project
+        id: mill-build
+        run: |
+          ./mill clean
+          ./mill flink.assembly
+          ./mill cloud_gcp.assembly
+          ./mill cloud_aws.assembly
+          ./mill service.assembly
+          ./mill flink_connectors.assembly
+
+      - name: Upload Flink Assembly Jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: flink-assembly-jar
+          path: out/flink/assembly.dest/out.jar
+
+      - name: Upload Cloud AWS Jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-aws-jar
+          path: out/cloud_aws/assembly.dest/out.jar
+
+      - name: Upload Cloud GCP Jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-gcp-jar
+          path: out/cloud_gcp/assembly.dest/out.jar
+
+      - name: Upload Service Assembly Jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-assembly-jar
+          path: out/service/assembly.dest/out.jar
+
+      - name: Upload PubSub Jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: pubsub-jar
+          path: out/flink_connectors/assembly.dest/out.jar
+    outputs:
+      wheel_file: ${{ steps.build-wheel.outputs.wheel_file }}
+      wheel_name: ${{ steps.build-wheel.outputs.wheel_name }}
+      version: ${{ steps.build-wheel.outputs.version }}
 
 
 #  push_to_aws:
@@ -320,7 +320,7 @@ jobs:
 
   run_fetcher_integration_tests:
     runs-on: ubuntu-latest
-#    needs: [ build_artifacts, push_to_gcp ]
+    needs: [ build_artifacts ]
 
     permissions:
       id-token: write
@@ -335,22 +335,6 @@ jobs:
         with:
           distribution: corretto
           java-version: 11
-
-      # Bazel cache credentials removed - using Mill now
-#
-#      - name: Install Thrift
-#        env:
-#          THRIFT_VERSION: 0.21.0
-#        run: |
-#          sudo apt-get install automake bison flex g++ git libboost-all-dev libevent-dev libssl-dev libtool make pkg-config && \
-#          curl -LSs https://archive.apache.org/dist/thrift/${{env.THRIFT_VERSION}}/thrift-${{env.THRIFT_VERSION}}.tar.gz -o thrift-${{env.THRIFT_VERSION}}.tar.gz && \
-#          tar -xzf thrift-${{env.THRIFT_VERSION}}.tar.gz && \
-#          cd thrift-${{env.THRIFT_VERSION}} && \
-#          sudo ./configure --without-python --without-cpp --without-nodejs --without-java --disable-debug --disable-tests --disable-libs && \
-#          sudo make && \
-#          sudo make install && \
-#          cd .. && \
-#          sudo rm -rf thrift-${{env.THRIFT_VERSION}} thrift-${{env.THRIFT_VERSION}}.tar.gz
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -367,29 +351,43 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: copy the jars and build
+      - name: Download Service Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: service-assembly-jar
+          path: service-assembly-jar
+
+      - name: Download Cloud GCP Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-gcp-jar
+          path: cloud-gcp-jar
+
+      - name: Rename JAR files to expected names, copy the jars and build
         shell: bash
         run: |
-          set -eo pipefail
-          # Download Jars from Canary for Docker build
-          gcloud storage cp gs://zipline-artifacts-dev/release/latest/jars/cloud_gcp_lib_deploy.jar build_output/cloud_gcp_lib_deploy.jar
-          gcloud storage cp gs://zipline-artifacts-dev/release/latest/jars/service_assembly_deploy.jar build_output/service_assembly_deploy.jar
+          mv cloud-gcp-jar/out.jar build_output/cloud_gcp_lib_deploy.jar
+          mv service-assembly-jar/out.jar build_output/service_assembly_deploy.jar
           docker buildx build \
           -f docker/fetcher/Dockerfile \
           -t ziplineai/chronon-fetcher:$(git rev-parse --short HEAD) \
           -t ziplineai/chronon-fetcher:latest \
           --load \
           .
-      - name: gcloud auth login
-        shell: bash
-        run: |
-          echo $GOOGLE_APPLICATION_CREDENTIALS
-#      - name: Run publish docker images local
+
+#      - name: copy the jars and build
 #        shell: bash
-#        id: run_publish_docker_local
 #        run: |
-#          set -xo pipefail
-#          ./scripts/distribution/publish_docker_images.sh --local
+#          set -eo pipefail
+#          # Download Jars from Canary for Docker build
+#          gcloud storage cp gs://zipline-artifacts-dev/release/latest/jars/cloud_gcp_lib_deploy.jar build_output/cloud_gcp_lib_deploy.jar
+#          gcloud storage cp gs://zipline-artifacts-dev/release/latest/jars/service_assembly_deploy.jar build_output/service_assembly_deploy.jar
+#          docker buildx build \
+#          -f docker/fetcher/Dockerfile \
+#          -t ziplineai/chronon-fetcher:$(git rev-parse --short HEAD) \
+#          -t ziplineai/chronon-fetcher:latest \
+#          --load \
+#          .
 
       - name: Run docker detached
         shell: bash
@@ -402,11 +400,11 @@ jobs:
         run: |
           docker ps -a
 
-#      - name: curl and warm up for three minutes
-#        shell: bash
-#        run: |
-#          set -eo pipefail
-#          for i in {1..18}; do curl -X POST   'http://localhost:9000/v1/fetch/join/gcp.demo.v1__1'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]' || true; sleep 10; done
+      - name: curl and warm up the fetcher
+        shell: bash
+        run: |
+          set -eo pipefail
+          for i in {1..10}; do curl -X POST   'http://localhost:9000/v1/fetch/join/gcp.demo.v1__1'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]' || true; sleep 10; done
 
       - name: Setup python
         shell: bash
