@@ -64,7 +64,7 @@ def submit_workflow(repo, conf, mode, start_ds, end_ds, force_recompute=False, h
     conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
     branch = get_current_branch()
 
-    if branch == "main" and  mode == RunMode.BACKFILL.value:
+    if branch == "main" and mode == RunMode.BACKFILL.value:
         raise ValueError("Backfilling from the main branch is not allowed. Please switch to a feature branch.")
 
     hub_uploader.compute_and_upload_diffs(
