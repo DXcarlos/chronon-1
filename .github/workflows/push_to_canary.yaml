@@ -2,9 +2,9 @@ name: Push To Canary
 
 on:
   push:
-#  merge_group: # Trigger on merge groups to main branch
-#    branches:
-#      - main
+  merge_group: # Trigger on merge groups to main branch
+    branches:
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -136,187 +136,187 @@ jobs:
       version: ${{ steps.build-wheel.outputs.version }}
 
 
-#  push_to_aws:
-#    needs: build_artifacts
-#    runs-on: ubuntu-latest
-#
-#    permissions:
-#      id-token: write
-#
-#    steps:
-#
-#      - name: Download Python Wheel
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: zipline-ai-wheel
-#
-#      - name: Download Flink Assembly Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: flink-assembly-jar
-#          path: flink-assembly-jar
-#
-#      - name: Download Cloud AWS Lib Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: cloud-aws-jar
-#          path: cloud-aws-jar
-#
-#      - name: Download Service Assembly Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: service-assembly-jar
-#          path: service-assembly-jar
-#
-#      - name: Rename JAR files to expected names
-#        run: |
-#          # The artifacts are downloaded into directories named after the artifact
-#          # We need to move them to the current directory with the expected names
-#          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
-#          mv cloud-aws-jar/out.jar cloud_aws_lib_deploy.jar
-#          mv service-assembly-jar/out.jar service_assembly_deploy.jar
-#
-#      - name: Configure AWS Credentials
-#        uses: aws-actions/configure-aws-credentials@v4
-#        with:
-#          role-to-assume: arn:aws:iam::${{env.AWS_ACCOUNT_ID}}:role/github_actions
-#          aws-region: ${{env.AWS_REGION}}
-#
-#      - name: Push Jars to s3 Bucket
-#        shell: bash
-#        run: |
-#          set -eo pipefail
-#          aws s3 cp ${{ needs.build_artifacts.outputs.wheel_name }} s3://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/wheels/ --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#          aws s3 cp flink_assembly_deploy.jar s3://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/flink_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#          aws s3 cp cloud_aws_lib_deploy.jar s3://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/cloud_aws_lib_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#          aws s3 cp service_assembly_deploy.jar s3://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/service_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
+  push_to_aws:
+    needs: build_artifacts
+    runs-on: ubuntu-latest
 
-#  push_to_gcp:
-#    needs: build_artifacts
-#    runs-on: ubuntu-latest
-#
-#    permissions:
-#      id-token: write
-#      contents: read
-#
-#    steps:
-#      - uses: actions/checkout@v4
-#
-#      - name: Download Python Wheel
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: zipline-ai-wheel
-#
-#      - name: Download Flink Assembly Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: flink-assembly-jar
-#          path: flink-assembly-jar
-#
-#      - name: Download Cloud GCP Lib Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: cloud-gcp-jar
-#          path: cloud-gcp-jar
-#
-#      - name: Download Service Assembly Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: service-assembly-jar
-#          path: service-assembly-jar
-#
-#      - name: Download PubSub Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: pubsub-jar
-#          path: pubsub-jar
-#
-#      - name: Rename JAR files to expected names
-#        run: |
-#          # The artifacts are downloaded into directories named after the artifact
-#          # We need to move them to the current directory with the expected names
-#          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
-#          mv cloud-gcp-jar/out.jar cloud_gcp_lib_deploy.jar
-#          mv service-assembly-jar/out.jar service_assembly_deploy.jar
-#          mv pubsub-jar/out.jar connectors_pubsub_deploy.jar
-#
-#      - name: Configure GCP Credentials
-#        uses: google-github-actions/auth@v2
-#        with:
-#          project_id: ${{env.GCP_PROJECT_ID}}
-#          workload_identity_provider: projects/${{secrets.GCP_CANARY_PROJECT_NUMBER}}/locations/global/workloadIdentityPools/github-actions/providers/github
-#          service_account: github-actions@${{secrets.GCP_CANARY_PROJECT_ID}}.iam.gserviceaccount.com
-#
-#      - name: Set up Google Cloud SDK
-#        uses: google-github-actions/setup-gcloud@v2
-#
-#      - name: Push Jars to GCS Bucket
-#        shell: bash
-#        env:
-#          GAR_QUICKSTART_REPOSITORY: ${{env.GCP_REGION}}-docker.pkg.dev/${{env.GCP_PROJECT_ID}}/canary-images/quickstart
-#          IMAGE_TAG: main
-#        run: |
-#          set -eo pipefail
-#          gcloud storage cp ${{ needs.build_artifacts.outputs.wheel_name }} gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/wheels/
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/wheels/${{ needs.build_artifacts.outputs.wheel_name }} --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
-#          gcloud storage cp flink_assembly_deploy.jar gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/flink_assembly_deploy.jar
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/flink_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
-#          gcloud storage cp cloud_gcp_lib_deploy.jar gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/cloud_gcp_lib_deploy.jar
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/cloud_gcp_lib_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
-#          gcloud storage cp service_assembly_deploy.jar gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/service_assembly_deploy.jar
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/service_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
-#          gcloud storage cp connectors_pubsub_deploy.jar gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/connectors_pubsub_deploy.jar
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/connectors_pubsub_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
+    permissions:
+      id-token: write
 
-#  run_aws_integration_tests:
-#    runs-on: ubuntu-latest
-#    needs: [ build_artifacts, push_to_aws ]
-#
-#    permissions:
-#      id-token: write
-#      contents: read
-#
-#    steps:
-#
-#      - name: Checkout repo
-#        uses: actions/checkout@v4
-#
-#      - name: Configure AWS Credentials for Canary Project
-#        uses: aws-actions/configure-aws-credentials@v4
-#        with:
-#          role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/github_actions
-#          aws-region: ${{secrets.AWS_REGION}}
-#
-#      - name: Run Quickstart Integration Tests
-#        id: aws_integration_tests
-#        shell: bash
-#        run: |
-#          set -xo pipefail
-#          ./scripts/distribution/run_aws_quickstart.sh --canary --version ${{ needs.build_artifacts.outputs.version }}
-#
-#      - name:  On Fail Notify Slack
-#        id: notify_slack
-#        if: failure()
-#        uses: slackapi/slack-github-action@v1
-#        env:
-#          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AWS_WEBHOOK_URL }}
-#        with:
-#          payload: |
-#            {
-#              "text": "Zipline AWS CI Tests Failed\n\n The integration tests failed for commit <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.sha }}> on branch ${{ github.ref }}. Please check the logs for more details.",
-#              "attachments": [
-#                {
-#                  "text": "",
-#                  "color": "#ff0000"
-#                }
-#              ]
-#            }
+    steps:
+
+      - name: Download Python Wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: zipline-ai-wheel
+
+      - name: Download Flink Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: flink-assembly-jar
+          path: flink-assembly-jar
+
+      - name: Download Cloud AWS Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-aws-jar
+          path: cloud-aws-jar
+
+      - name: Download Service Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: service-assembly-jar
+          path: service-assembly-jar
+
+      - name: Rename JAR files to expected names
+        run: |
+          # The artifacts are downloaded into directories named after the artifact
+          # We need to move them to the current directory with the expected names
+          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
+          mv cloud-aws-jar/out.jar cloud_aws_lib_deploy.jar
+          mv service-assembly-jar/out.jar service_assembly_deploy.jar
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{env.AWS_ACCOUNT_ID}}:role/github_actions
+          aws-region: ${{env.AWS_REGION}}
+
+      - name: Push Jars to s3 Bucket
+        shell: bash
+        run: |
+          set -eo pipefail
+          aws s3 cp ${{ needs.build_artifacts.outputs.wheel_name }} s3://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/wheels/ --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          aws s3 cp flink_assembly_deploy.jar s3://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/flink_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          aws s3 cp cloud_aws_lib_deploy.jar s3://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/cloud_aws_lib_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          aws s3 cp service_assembly_deploy.jar s3://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/service_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+
+  push_to_gcp:
+    needs: build_artifacts
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Python Wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: zipline-ai-wheel
+
+      - name: Download Flink Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: flink-assembly-jar
+          path: flink-assembly-jar
+
+      - name: Download Cloud GCP Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-gcp-jar
+          path: cloud-gcp-jar
+
+      - name: Download Service Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: service-assembly-jar
+          path: service-assembly-jar
+
+      - name: Download PubSub Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: pubsub-jar
+          path: pubsub-jar
+
+      - name: Rename JAR files to expected names
+        run: |
+          # The artifacts are downloaded into directories named after the artifact
+          # We need to move them to the current directory with the expected names
+          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
+          mv cloud-gcp-jar/out.jar cloud_gcp_lib_deploy.jar
+          mv service-assembly-jar/out.jar service_assembly_deploy.jar
+          mv pubsub-jar/out.jar connectors_pubsub_deploy.jar
+
+      - name: Configure GCP Credentials
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{env.GCP_PROJECT_ID}}
+          workload_identity_provider: projects/${{secrets.GCP_CANARY_PROJECT_NUMBER}}/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions@${{secrets.GCP_CANARY_PROJECT_ID}}.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Push Jars to GCS Bucket
+        shell: bash
+        env:
+          GAR_QUICKSTART_REPOSITORY: ${{env.GCP_REGION}}-docker.pkg.dev/${{env.GCP_PROJECT_ID}}/canary-images/quickstart
+          IMAGE_TAG: main
+        run: |
+          set -eo pipefail
+          gcloud storage cp ${{ needs.build_artifacts.outputs.wheel_name }} gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/wheels/
+          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/wheels/${{ needs.build_artifacts.outputs.wheel_name }} --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp flink_assembly_deploy.jar gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/flink_assembly_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/flink_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp cloud_gcp_lib_deploy.jar gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/cloud_gcp_lib_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/cloud_gcp_lib_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp service_assembly_deploy.jar gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/service_assembly_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/service_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp connectors_pubsub_deploy.jar gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/connectors_pubsub_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/connectors_pubsub_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+
+  run_aws_integration_tests:
+    runs-on: ubuntu-latest
+    needs: [ build_artifacts, push_to_aws ]
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials for Canary Project
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/github_actions
+          aws-region: ${{secrets.AWS_REGION}}
+
+      - name: Run Quickstart Integration Tests
+        id: aws_integration_tests
+        shell: bash
+        run: |
+          set -xo pipefail
+          ./scripts/distribution/run_aws_quickstart.sh --canary --version ${{ needs.build_artifacts.outputs.version }}
+
+      - name:  On Fail Notify Slack
+        id: notify_slack
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_AWS_WEBHOOK_URL }}
+        with:
+          payload: |
+            {
+              "text": "Zipline AWS CI Tests Failed\n\n The integration tests failed for commit <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.sha }}> on branch ${{ github.ref }}. Please check the logs for more details.",
+              "attachments": [
+                {
+                  "text": "",
+                  "color": "#ff0000"
+                }
+              ]
+            }
 
   run_fetcher_integration_tests:
     runs-on: ubuntu-latest
@@ -374,37 +374,19 @@ jobs:
           -t ziplineai/chronon-fetcher:$(git rev-parse --short HEAD) \
           -t ziplineai/chronon-fetcher:latest \
           --load \
-          .
-
-#      - name: copy the jars and build
-#        shell: bash
-#        run: |
-#          set -eo pipefail
-#          # Download Jars from Canary for Docker build
-#          gcloud storage cp gs://zipline-artifacts-dev/release/latest/jars/cloud_gcp_lib_deploy.jar build_output/cloud_gcp_lib_deploy.jar
-#          gcloud storage cp gs://zipline-artifacts-dev/release/latest/jars/service_assembly_deploy.jar build_output/service_assembly_deploy.jar
-#          docker buildx build \
-#          -f docker/fetcher/Dockerfile \
-#          -t ziplineai/chronon-fetcher:$(git rev-parse --short HEAD) \
-#          -t ziplineai/chronon-fetcher:latest \
-#          --load \
-#          .
 
       - name: Run docker detached
         shell: bash
         id: run_docker_detached
         run: |
           GCP_PROJECT_ID=canary-443022 GCP_BIGTABLE_INSTANCE_ID=zipline-canary-instance docker compose -f docker/fetcher/chronon-service-with-local-telemetry.yml up -d
-
-      - name: run docker ps
-        shell: bash
-        run: |
           docker ps -a
 
       - name: curl and warm up the fetcher
         shell: bash
         run: |
           set -eo pipefail
+          docker ps -a
           for i in {1..10}; do curl -X POST   'http://localhost:9000/v1/fetch/join/gcp.demo.v1__1'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]' || true; sleep 10; done
 
       - name: Setup python
@@ -428,269 +410,269 @@ jobs:
           set -euxo pipefail
           python3 scripts/fetcher_tests/avro_encoded_string_test.py
 
-#  run_gcp_integration_tests:
-#    runs-on: ubuntu-latest
-#    needs: [build_artifacts, push_to_gcp]
-#
-#    permissions:
-#      id-token: write
-#      contents: read
-#
-#    steps:
-#      # Checkout the canary-confs repo with the branch with Zipline specific team.json
-#      - name: Checkout repo
-#        uses: actions/checkout@v4
-#
-#      - name: Configure GCP Credentials for Canary Project
-#        uses: google-github-actions/auth@v2
-#        with:
-#          project_id: ${{secrets.GCP_CANARY_PROJECT_ID}}
-#          workload_identity_provider: projects/${{secrets.GCP_CANARY_PROJECT_NUMBER}}/locations/global/workloadIdentityPools/github-actions/providers/github
-#          service_account: github-actions@${{secrets.GCP_CANARY_PROJECT_ID}}.iam.gserviceaccount.com
-#
-#      - name: Set up Google Cloud SDK
-#        uses: google-github-actions/setup-gcloud@v2
-#
-#      - name: Run Quickstart Integration Tests
-#        shell: bash
-#        id: gcp_integration_tests
-#        run: |
-#          set -xo pipefail
-#          ./scripts/distribution/run_gcp_template_quickstart.sh --canary --version ${{ needs.build_artifacts.outputs.version }}
-#
-#      - name:  On Fail Notify Slack
-#        id: notify_slack
-#        if: failure()
-#        uses: slackapi/slack-github-action@v1
-#        env:
-#          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GCP_WEBHOOK_URL }}
-#        with:
-#          payload: |
-#            {
-#              "text": "Zipline GCP CI Tests Failed\n\n The integration tests failed for commit <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.sha }}> on branch ${{ github.ref }}. Please check the logs for more details.",
-#              "attachments": [
-#                {
-#                  "text": "",
-#                  "color": "#ff0000"
-#                }
-#              ]
-#            }
+  run_gcp_integration_tests:
+    runs-on: ubuntu-latest
+    needs: [build_artifacts, push_to_gcp]
 
-#  push_to_aws_passing:
-#    needs: [ build_artifacts, run_gcp_integration_tests, run_aws_integration_tests ]
-#    runs-on: ubuntu-latest
-#
-#    permissions:
-#      id-token: write
-#
-#    steps:
-#
-#      - name: Download Python Wheel
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: zipline-ai-wheel
-#
-#      - name: Download Flink Assembly Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: flink-assembly-jar
-#          path: flink-assembly-jar
-#
-#      - name: Download Cloud AWS Lib Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: cloud-aws-jar
-#          path: cloud-aws-jar
-#
-#      - name: Download Service Assembly Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: service-assembly-jar
-#          path: service-assembly-jar
-#
-#      - name: Rename JAR files to expected names
-#        run: |
-#          # The artifacts are downloaded into directories named after the artifact
-#          # We need to move them to the current directory with the expected names
-#          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
-#          mv cloud-aws-jar/out.jar cloud_aws_lib_deploy.jar
-#          mv service-assembly-jar/out.jar service_assembly_deploy.jar
-#
-#      - name: Configure AWS Credentials
-#        uses: aws-actions/configure-aws-credentials@v4
-#        with:
-#          role-to-assume: arn:aws:iam::${{env.AWS_ACCOUNT_ID}}:role/github_actions
-#          aws-region: ${{env.AWS_REGION}}
-#
-#      - name: Push Jars to s3 Bucket
-#        shell: bash
-#        run: |
-#          set -eo pipefail
-#          aws s3 cp ${{ needs.build_artifacts.outputs.wheel_name }} s3://zipline-artifacts-canary/release/passing-candidate/wheels/ --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#          aws s3 cp flink_assembly_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/flink_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#          aws s3 cp cloud_aws_lib_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/cloud_aws_lib_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#          aws s3 cp service_assembly_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/service_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
+    permissions:
+      id-token: write
+      contents: read
 
-#  push_to_gcp_passing:
-#    needs: [build_artifacts, run_gcp_integration_tests, run_aws_integration_tests]
-#    runs-on: ubuntu-latest
-#
-#    permissions:
-#      id-token: write
-#      contents: read
-#
-#    steps:
-#      - uses: actions/checkout@v4
-#
-#      - name: Download Python Wheel
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: zipline-ai-wheel
-#
-#      - name: Download Flink Assembly Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: flink-assembly-jar
-#          path: flink-assembly-jar
-#
-#      - name: Download Cloud GCP Lib Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: cloud-gcp-jar
-#          path: cloud-gcp-jar
-#
-#      - name: Download Service Assembly Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: service-assembly-jar
-#          path: service-assembly-jar
-#
-#      - name: Download PubSub Jar
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: pubsub-jar
-#          path: pubsub-jar
-#
-#      - name: Rename JAR files to expected names
-#        run: |
-#          # The artifacts are downloaded into directories named after the artifact
-#          # We need to move them to the current directory with the expected names
-#          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
-#          mv cloud-gcp-jar/out.jar cloud_gcp_lib_deploy.jar
-#          mv service-assembly-jar/out.jar service_assembly_deploy.jar
-#          mv pubsub-jar/out.jar connectors_pubsub_deploy.jar
-#
-#      - name: Configure GCP Credentials
-#        uses: google-github-actions/auth@v2
-#        with:
-#          project_id: ${{env.GCP_PROJECT_ID}}
-#          workload_identity_provider: projects/${{secrets.GCP_CANARY_PROJECT_NUMBER}}/locations/global/workloadIdentityPools/github-actions/providers/github
-#          service_account: github-actions@${{secrets.GCP_CANARY_PROJECT_ID}}.iam.gserviceaccount.com
-#
-#      - name: Set up Google Cloud SDK
-#        uses: google-github-actions/setup-gcloud@v2
-#
-#      - name: Push Jars to GCS Bucket
-#        shell: bash
-#        env:
-#          GAR_QUICKSTART_REPOSITORY: ${{env.GCP_REGION}}-docker.pkg.dev/${{env.GCP_PROJECT_ID}}/canary-images/quickstart
-#          IMAGE_TAG: main
-#        run: |
-#          set -eo pipefail
-#          gcloud storage cp ${{ needs.build_artifacts.outputs.wheel_name }} gs://zipline-artifacts-canary/release/passing-candidate/wheels/
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/wheels/${{ needs.build_artifacts.outputs.wheel_name }} --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
-#          gcloud storage cp flink_assembly_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/flink_assembly_deploy.jar
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/flink_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
-#          gcloud storage cp cloud_gcp_lib_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/cloud_gcp_lib_deploy.jar
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/cloud_gcp_lib_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
-#          gcloud storage cp service_assembly_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/service_assembly_deploy.jar
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/service_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-#
-#          gcloud storage cp connectors_pubsub_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/connectors_pubsub_deploy.jar
-#          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/connectors_pubsub_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+    steps:
+      # Checkout the canary-confs repo with the branch with Zipline specific team.json
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-#  clean_up_artifacts:
-#    permissions:
-#      contents: read
-#
-#    runs-on: ubuntu-latest
-#
-#    needs: [ push_to_gcp_passing, push_to_aws_passing ]
-#
-#    steps:
-#      - name: Delete Artifacts
-#        uses: geekyeggo/delete-artifact@v5
-#        with:
-#          name: |
-#            zipline-ai-wheel
-#            flink-assembly-jar
-#            cloud-aws-jar
-#            cloud-gcp-jar
-#            service-assembly-jar
+      - name: Configure GCP Credentials for Canary Project
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{secrets.GCP_CANARY_PROJECT_ID}}
+          workload_identity_provider: projects/${{secrets.GCP_CANARY_PROJECT_NUMBER}}/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions@${{secrets.GCP_CANARY_PROJECT_ID}}.iam.gserviceaccount.com
 
-#  merge_to_main-passing-tests:
-#    needs: [run_aws_integration_tests, run_gcp_integration_tests]
-#    if: ${{ needs.run_aws_integration_tests.result == 'success' && needs.run_gcp_integration_tests.result == 'success' }}
-#    runs-on: ubuntu-latest
-#
-#    permissions:
-#      contents: write
-#
-#    steps:
-#      - name: Checkout Main Branch
-#        uses: actions/checkout@v4
-#        with:
-#          ref: main
-#          fetch-depth: 0
-#          ssh-key: ${{ secrets.CHRONON_REPO_DEPLOY_KEY }}
-#      - name: Update Stable Branch
-#        env:
-#          TARGET_BRANCH: main-passing-tests
-#        run: |
-#          echo "Merging to main branch after successful push to canary"
-#          if git show-ref --quiet refs/heads/$TARGET_BRANCH; then
-#            echo "Target branch $TARGET_BRANCH exists. Merging main into it..."
-#            git checkout $TARGET_BRANCH
-#            git merge main --no-ff -m "Merge main into $TARGET_BRANCH"
-#          else
-#            echo "Target branch $TARGET_BRANCH does not exist. Creating it..."
-#            git checkout -b $TARGET_BRANCH main
-#          fi
-#          git push origin $TARGET_BRANCH
-#
-#      - name: Create CI Status File
-#        run: |
-#          echo ${{ github.sha }} > ci_success.txt
-#
-#      - name: Update CI Artifact
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: ci_success
-#          path: ci_success.txt
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run Quickstart Integration Tests
+        shell: bash
+        id: gcp_integration_tests
+        run: |
+          set -xo pipefail
+          ./scripts/distribution/run_gcp_template_quickstart.sh --canary --version ${{ needs.build_artifacts.outputs.version }}
+
+      - name:  On Fail Notify Slack
+        id: notify_slack
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GCP_WEBHOOK_URL }}
+        with:
+          payload: |
+            {
+              "text": "Zipline GCP CI Tests Failed\n\n The integration tests failed for commit <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.sha }}> on branch ${{ github.ref }}. Please check the logs for more details.",
+              "attachments": [
+                {
+                  "text": "",
+                  "color": "#ff0000"
+                }
+              ]
+            }
+
+  push_to_aws_passing:
+    needs: [ build_artifacts, run_gcp_integration_tests, run_aws_integration_tests, run_fetcher_integration_tests ]
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    steps:
+
+      - name: Download Python Wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: zipline-ai-wheel
+
+      - name: Download Flink Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: flink-assembly-jar
+          path: flink-assembly-jar
+
+      - name: Download Cloud AWS Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-aws-jar
+          path: cloud-aws-jar
+
+      - name: Download Service Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: service-assembly-jar
+          path: service-assembly-jar
+
+      - name: Rename JAR files to expected names
+        run: |
+          # The artifacts are downloaded into directories named after the artifact
+          # We need to move them to the current directory with the expected names
+          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
+          mv cloud-aws-jar/out.jar cloud_aws_lib_deploy.jar
+          mv service-assembly-jar/out.jar service_assembly_deploy.jar
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{env.AWS_ACCOUNT_ID}}:role/github_actions
+          aws-region: ${{env.AWS_REGION}}
+
+      - name: Push Jars to s3 Bucket
+        shell: bash
+        run: |
+          set -eo pipefail
+          aws s3 cp ${{ needs.build_artifacts.outputs.wheel_name }} s3://zipline-artifacts-canary/release/passing-candidate/wheels/ --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          aws s3 cp flink_assembly_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/flink_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          aws s3 cp cloud_aws_lib_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/cloud_aws_lib_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          aws s3 cp service_assembly_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/service_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
 
 
-#  on_fail_notify_slack:
-#    needs: [run_aws_integration_tests, run_gcp_integration_tests, merge_to_main-passing-tests]
-#    if: failure()
-#    runs-on: ubuntu-latest
-#
-#    steps:
-#      - name: Send Failure Notification
-#        uses: slackapi/slack-github-action@v1
-#        env:
-#          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_TESTS_WEBHOOK_URL }}
-#        with:
-#          payload: |
-#            {
-#              "text": "Zipline CI Tests Failed\n\n The integration tests failed for commit <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.sha }}> on branch ${{ github.ref }}. Please check the logs for more details.",
-#              "attachments": [
-#                {
-#                  "text": "",
-#                  "color": "#ff0000"
-#                }
-#              ]
-#            }
+  push_to_gcp_passing:
+    needs: [build_artifacts, run_gcp_integration_tests, run_aws_integration_tests, run_fetcher_integration_tests]
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Python Wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: zipline-ai-wheel
+
+      - name: Download Flink Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: flink-assembly-jar
+          path: flink-assembly-jar
+
+      - name: Download Cloud GCP Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-gcp-jar
+          path: cloud-gcp-jar
+
+      - name: Download Service Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: service-assembly-jar
+          path: service-assembly-jar
+
+      - name: Download PubSub Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: pubsub-jar
+          path: pubsub-jar
+
+      - name: Rename JAR files to expected names
+        run: |
+          # The artifacts are downloaded into directories named after the artifact
+          # We need to move them to the current directory with the expected names
+          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
+          mv cloud-gcp-jar/out.jar cloud_gcp_lib_deploy.jar
+          mv service-assembly-jar/out.jar service_assembly_deploy.jar
+          mv pubsub-jar/out.jar connectors_pubsub_deploy.jar
+
+      - name: Configure GCP Credentials
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{env.GCP_PROJECT_ID}}
+          workload_identity_provider: projects/${{secrets.GCP_CANARY_PROJECT_NUMBER}}/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions@${{secrets.GCP_CANARY_PROJECT_ID}}.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Push Jars to GCS Bucket
+        shell: bash
+        env:
+          GAR_QUICKSTART_REPOSITORY: ${{env.GCP_REGION}}-docker.pkg.dev/${{env.GCP_PROJECT_ID}}/canary-images/quickstart
+          IMAGE_TAG: main
+        run: |
+          set -eo pipefail
+          gcloud storage cp ${{ needs.build_artifacts.outputs.wheel_name }} gs://zipline-artifacts-canary/release/passing-candidate/wheels/
+          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/wheels/${{ needs.build_artifacts.outputs.wheel_name }} --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp flink_assembly_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/flink_assembly_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/flink_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp cloud_gcp_lib_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/cloud_gcp_lib_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/cloud_gcp_lib_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp service_assembly_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/service_assembly_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/service_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp connectors_pubsub_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/connectors_pubsub_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/connectors_pubsub_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+  clean_up_artifacts:
+    permissions:
+      contents: read
+
+    runs-on: ubuntu-latest
+
+    needs: [ push_to_gcp_passing, push_to_aws_passing ]
+
+    steps:
+      - name: Delete Artifacts
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            zipline-ai-wheel
+            flink-assembly-jar
+            cloud-aws-jar
+            cloud-gcp-jar
+            service-assembly-jar
+
+  merge_to_main-passing-tests:
+    needs: [run_fetcher_integration_tests, run_aws_integration_tests, run_gcp_integration_tests]
+    if: ${{ needs.run_aws_integration_tests.result == 'success' && needs.run_gcp_integration_tests.result == 'success' }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Main Branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          ssh-key: ${{ secrets.CHRONON_REPO_DEPLOY_KEY }}
+      - name: Update Stable Branch
+        env:
+          TARGET_BRANCH: main-passing-tests
+        run: |
+          echo "Merging to main branch after successful push to canary"
+          if git show-ref --quiet refs/heads/$TARGET_BRANCH; then
+            echo "Target branch $TARGET_BRANCH exists. Merging main into it..."
+            git checkout $TARGET_BRANCH
+            git merge main --no-ff -m "Merge main into $TARGET_BRANCH"
+          else
+            echo "Target branch $TARGET_BRANCH does not exist. Creating it..."
+            git checkout -b $TARGET_BRANCH main
+          fi
+          git push origin $TARGET_BRANCH
+
+      - name: Create CI Status File
+        run: |
+          echo ${{ github.sha }} > ci_success.txt
+
+      - name: Update CI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci_success
+          path: ci_success.txt
+
+
+  on_fail_notify_slack:
+    needs: [run_fetcher_integration_tests, run_aws_integration_tests, run_gcp_integration_tests, merge_to_main-passing-tests]
+    if: failure()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Failure Notification
+        uses: slackapi/slack-github-action@v1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_TESTS_WEBHOOK_URL }}
+        with:
+          payload: |
+            {
+              "text": "Zipline CI Tests Failed\n\n The integration tests failed for commit <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|${{ github.sha }}> on branch ${{ github.ref }}. Please check the logs for more details.",
+              "attachments": [
+                {
+                  "text": "",
+                  "color": "#ff0000"
+                }
+              ]
+            }
