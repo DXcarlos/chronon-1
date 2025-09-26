@@ -134,6 +134,7 @@ class ZiplineHub:
         upload_request = {
             "diffConfs": diff_confs,
             "branch": branch,
+            "user": os.environ.get("USER")
         }
         headers = {"Content-Type": "application/json"}
         if self.base_url.startswith("https") and self.sa is not None:
