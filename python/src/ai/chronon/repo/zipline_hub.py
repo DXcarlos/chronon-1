@@ -222,7 +222,7 @@ class ZiplineHub:
         skip_long_running=False,
         orch_v2=False
     ):
-        url = f"{self.base_url}/workflow/v2/start" if orch_v2 else f"{self.base_url}/workflow/start"
+        url = f"{self.base_url}/workflow/v2/start" if orch_v2 else f"{self.base_url}/workflow/v1/start"
         end_dt = end.strftime("%Y-%m-%d") if end else date.today().strftime("%Y-%m-%d")
         start_dt = start.strftime("%Y-%m-%d") if start else (date.today() - timedelta(days=14)).strftime("%Y-%m-%d")
         workflow_request = {
