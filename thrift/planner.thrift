@@ -64,7 +64,11 @@ struct JoinMetadataUpload {
     2: optional api.Join join
 }
 
-struct JoinLoggingFlattenerNode {
+struct JoinLogFlatteningNode {
+    2: optional api.Join join
+}
+
+struct JoinConsistencyComputeNode {
     2: optional api.Join join
 }
 
@@ -88,7 +92,7 @@ union NodeContent {
     10: JoinMetadataUpload joinMetadataUpload
     11: ExternalSourceSensorNode externalSourceSensor
     12: JoinLogFlatteningNode joinLogFlatteningNode
-    13: JoinConsistencyComputeNode joinLogFlatteningNode
+    13: JoinConsistencyComputeNode joinConsistencyComputeNode
 
     // groupBy nodes
     100: GroupByBackfillNode groupByBackfill

@@ -4,7 +4,7 @@ import ai.chronon.api.Extensions.{GroupByOps, WindowUtils}
 import ai.chronon.api.Extensions._
 import ai.chronon.api.{Join, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.planner
-import ai.chronon.planner.Node
+import ai.chronon.planner.{JoinLogFlatteningNode, JoinMetadataUpload, Node}
 
 import scala.collection.JavaConverters._
 
@@ -42,9 +42,21 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
   }
 
   def logFlatteningNode: Node = {
-    val metaData = MetaDataUtils.layer(join.metaData, "log-flattening", join.metaData.name + "__log_flattening", None, outputTableOverride = Some(join.metaData.loggedTable))
-    val node = new planner.JoinLogFlatteningNode().setJoin(join)
+    val tableDeps = Seq(
+      TableDependencies.fromTable(join.metaData.executionInfo.conf.modeConfigs.get("log-flattener").get("spark.chronon.logging.events")),
+      TableDependencies.fromTable(join.metaData.executionInfo.conf.modeConfigs.get("log-flattener").get("spark.chronon.logging.schema")),
+    )
+    val metaData =
+      MetaDataUtils.layer(join.metaData,
+        "backfill",
+        join.metaData.name + "__log_flattening",
+        tableDeps,
+        outputTableOverride = Some(join.metaData.outputTable))
+    val node = new JoinLogFlatteningNode().setJoin(join)
+    toNode(metaData, _.setJoinLogFlatteningNode(node), semanticMonolithJoin(join))
   }
+
+
 
   def metadataUploadNode: Node = {
     val stepDays = 1 // Default step days for metadata upload
