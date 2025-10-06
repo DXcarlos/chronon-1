@@ -88,6 +88,13 @@
       "conf": {
         "common": {
           "spark.chronon.partition.column": "ds"
+        },
+        "modeConfigs": {
+          "log-flattener": {
+            "spark.chronon.logging.events": "data.gcp_partitioned_logging_v0__2",
+            "spark.chronon.logging.schemas": "data.gcp_logging_schema_v1__2",
+            "spark.chronon.partition.column": "ds"
+          }
         }
       },
       "env": {

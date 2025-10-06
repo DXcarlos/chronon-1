@@ -30,5 +30,6 @@ v1 = GroupBy(
     backfill_start_date="2025-09-23",
     aggregations=[Aggregation(input_column="schema_value", operation=Operation.LAST)],
     accuracy=Accuracy.SNAPSHOT,
+    output_namespace="data",
     version=2,
 )

@@ -41,6 +41,11 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     toNode(metaData, _.setMonolithJoin(node), semanticMonolithJoin(join))
   }
 
+  def logFlatteningNode: Node = {
+    val metaData = MetaDataUtils.layer(join.metaData, "log-flattening", join.metaData.name + "__log_flattening", None, outputTableOverride = Some(join.metaData.loggedTable))
+    val node = new planner.JoinLogFlatteningNode().setJoin(join)
+  }
+
   def metadataUploadNode: Node = {
     val stepDays = 1 // Default step days for metadata upload
 
