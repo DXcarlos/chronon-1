@@ -28,6 +28,7 @@ default = Team(
             "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
             "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
             "CHRONON_ONLINE_ARGS": "[ONLINE-TODO]args prefixed with -Z become constructor map for your implementation of ai.chronon.online.Api, -Zkv-host=<YOUR_HOST> -Zkv-port=<YOUR_PORT>",
+            "ARTIFACT_PREFIX": "gs://tmp-scratchpad",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
             "CUSTOMER_ID": "dev",
@@ -76,7 +77,7 @@ gcp = Team(
             "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
             "ENABLE_PUBSUB": "true",
-            "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
+            "ARTIFACT_PREFIX": "gs://tmp-scratchpad",
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
         },
         modeEnvironments={

@@ -129,10 +129,11 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
     require(node.isSetJoin, "JoinLogFlatteningJob must have a join set")
     val join = node.getJoin
     val schemaTable = tableUtils.sparkSession.conf
-      .get("spark.chronon.logging.schemas")
+      .get(Constants.LoggingSchemaTableConf)
     val eventTable = tableUtils.sparkSession.conf
-      .get("spark.chronon.logging.events")
-    new LogFlattenerJob(tableUtils.sparkSession, join, range.end, eventTable, schemaTable).buildLogTable(Some(range.start))
+      .get(Constants.LoggingEventsTableConf)
+    new LogFlattenerJob(tableUtils.sparkSession, join, range.end, eventTable, schemaTable)
+      .buildLogTable(Some(range.start))
   }
 
   private def runConsistencyJob(metadata: MetaData, node: JoinConsistencyComputeNode, range: PartitionRange): Unit = {

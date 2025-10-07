@@ -28,6 +28,7 @@ class RunMode(str, Enum):
     JOIN_PART_JOB = "join-part-job"
     MERGE_JOB = "merge-job"
     METASTORE = "metastore"
+    MONITOR = "monitor"
     INFO = "info"
 
 

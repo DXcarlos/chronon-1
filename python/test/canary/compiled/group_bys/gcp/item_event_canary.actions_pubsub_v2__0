@@ -158,7 +158,7 @@
       },
       "env": {
         "common": {
-          "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
+          "ARTIFACT_PREFIX": "gs://tmp-scratchpad",
           "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
           "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
           "CLOUD_PROVIDER": "gcp",

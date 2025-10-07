@@ -168,7 +168,7 @@ def consistency(repo, conf, hub_url, start_ds, end_ds, force_recompute, orch_v2)
     - Call upload API to upload the conf contents for the list of confs that were different.
     - Call the actual run API with mode set to backfill.
     """
-    submit_workflow(repo, conf, RunMode.CONSISTENCY_METRICS_COMPUTE.value, start_ds, end_ds, force_recompute, hub_url=hub_url, orch_v2=orch_v2)
+    submit_workflow(repo, conf, RunMode.MONITOR.value, start_ds, end_ds, force_recompute, hub_url=hub_url, orch_v2=orch_v2)
 
 # zipline hub run-adhoc --conf=compiled/joins/join
 # currently only supports one-off deploy node submission

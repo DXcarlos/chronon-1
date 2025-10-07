@@ -185,7 +185,7 @@
       },
       "env": {
         "common": {
-          "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
+          "ARTIFACT_PREFIX": "gs://tmp-scratchpad",
           "CHRONON_ONLINE_ARGS": " -Ztasks=4",
           "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
           "CLOUD_PROVIDER": "gcp",

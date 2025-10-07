@@ -2,6 +2,7 @@ package ai.chronon.api.planner
 
 import ai.chronon.api.Extensions.{GroupByOps, WindowUtils}
 import ai.chronon.api.Extensions._
+import ai.chronon.api.Constants
 import ai.chronon.api.{Join, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.planner
 import ai.chronon.planner.{JoinConsistencyComputeNode, JoinLogFlatteningNode, JoinMetadataUpload, Node}
@@ -53,29 +54,29 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
         join.metaData.name + s"__${mode.replace('-', '_')}",
         tableDeps,
         outputTableOverride = Some(join.metaData.consistencyTable)
-    )
+      )
     val node = new JoinConsistencyComputeNode().setJoin(join)
     toNode(metaData, _.setJoinConsistencyComputeNode(node), semanticMonolithJoin(join))
   }
 
   def logFlatteningNode: Node = {
     val mode = "log-flattener"
+    // Parse Metadata to generate relevant execution info we need to generate tableDeps
+    val preParseMetaData =
+      MetaDataUtils.layer(join.metaData, mode, "", Seq.empty)
     val tableDeps = Seq(
-      TableDependencies.fromTable(join.metaData.executionInfo.conf.modeConfigs.get(mode).get("spark.chronon.logging.events")),
-      TableDependencies.fromTable(join.metaData.executionInfo.conf.modeConfigs.get(mode).get("spark.chronon.logging.schema")),
+      TableDependencies.fromTable(preParseMetaData.executionInfo.conf.common.get(Constants.LoggingSchemaTableConf)),
+      TableDependencies.fromTable(preParseMetaData.executionInfo.conf.common.get(Constants.LoggingEventsTableConf))
     )
     val metaData =
       MetaDataUtils.layer(join.metaData,
-        mode,
-        join.metaData.name + s"__${mode.replace('-','_')}",
-        tableDeps,
-        outputTableOverride = Some(join.metaData.loggedTable)
-      )
+                          mode,
+                          join.metaData.name + s"_${mode.replace('-', '_')}",
+                          tableDeps,
+                          outputTableOverride = Some(join.metaData.loggedTable))
     val node = new JoinLogFlatteningNode().setJoin(join)
     toNode(metaData, _.setJoinLogFlatteningNode(node), semanticMonolithJoin(join))
   }
-
-
 
   def metadataUploadNode: Node = {
     val stepDays = 1 // Default step days for metadata upload

@@ -14,6 +14,7 @@
     },
     "env": {
       "common": {
+        "ARTIFACT_PREFIX": "gs://tmp-scratchpad",
         "CHRONON_ONLINE_ARGS": "[ONLINE-TODO]args prefixed with -Z become constructor map for your implementation of ai.chronon.online.Api, -Zkv-host=<YOUR_HOST> -Zkv-port=<YOUR_PORT>",
         "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
         "CLOUD_PROVIDER": "aws",

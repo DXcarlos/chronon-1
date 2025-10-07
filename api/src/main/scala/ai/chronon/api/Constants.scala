@@ -96,5 +96,9 @@ object Constants {
   // List entity type
   val ListEntityType: String = "entity_type"
 
+  // Spark Settings for consistency job
+  val LoggingSchemaTableConf = "spark.chronon.logging.schemas"
+  val LoggingEventsTableConf = "spark.chronon.logging.events"
+
   val DefaultPercentiles: Seq[String] = Seq("p5", "p50", "p95")
 }
