@@ -12,6 +12,8 @@ import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.{GroupBy, GroupByUpload, Join}
+import ai.chronon.spark.LogFlattenerJob
+import ai.chronon.spark.stats.ConsistencyJob
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -121,6 +123,22 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
 
     GroupByUpload.run(groupBy, range.end, Option(tableUtils))
     logger.info(s"Successfully completed groupBy upload for '${metadata.name}' for day: ${range.end}")
+  }
+
+  private def runJoinLogFlatteningJob(metadata: MetaData, node: JoinLogFlatteningNode, range: PartitionRange): Unit = {
+    require(node.isSetJoin, "JoinLogFlatteningJob must have a join set")
+    val join = node.getJoin
+    val schemaTable = tableUtils.sparkSession.conf
+      .get("spark.chronon.logging.schemas")
+    val eventTable = tableUtils.sparkSession.conf
+      .get("spark.chronon.logging.events")
+    new LogFlattenerJob(tableUtils.sparkSession, join, range.end, eventTable, schemaTable).buildLogTable(Some(range.start))
+  }
+
+  private def runConsistencyJob(metadata: MetaData, node: JoinConsistencyComputeNode, range: PartitionRange): Unit = {
+    require(node.isSetJoin, "JoinLogFlatteningJob must have a join set")
+    val join = node.getJoin
+    new ConsistencyJob(tableUtils.sparkSession, join, range.end).buildConsistencyMetrics(Some(range.start))
   }
 
   private def runMonolithJoin(metadata: MetaData, monolithJoin: MonolithJoinNode, range: PartitionRange): Unit = {
@@ -244,6 +262,10 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
             logger.error(s"ExternalSourceSensor check failed.", exception)
             throw exception
         }
+      case NodeContent._Fields.JOIN_LOG_FLATTENING_NODE =>
+        runJoinLogFlatteningJob(metadata, conf.getJoinLogFlatteningNode, range)
+      case NodeContent._Fields.JOIN_CONSISTENCY_COMPUTE_NODE =>
+        runConsistencyJob(metadata, conf.getJoinConsistencyComputeNode, range)
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported NodeContent type: ${conf.getSetField}")
     }

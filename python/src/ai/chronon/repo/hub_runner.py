@@ -95,7 +95,7 @@ def submit_workflow(repo, conf, mode, start_ds, end_ds, force_recompute=False, h
     workflow_id = response_json.get("workflowId", "N/A")
     print(" 🆔 Workflow Id:", workflow_id)
     print_wf_url(
-        conf=conf, conf_name=conf_name, mode=RunMode.BACKFILL.value, workflow_id=workflow_id, repo=repo
+        conf=conf, conf_name=conf_name, mode=mode, workflow_id=workflow_id, repo=repo
     )
 
 
@@ -152,6 +152,23 @@ def backfill(repo, conf, hub_url, start_ds, end_ds, force_recompute, orch_v2):
     """
     submit_workflow(repo, conf, RunMode.BACKFILL.value, start_ds, end_ds, force_recompute, hub_url=hub_url, orch_v2=orch_v2)
 
+# zipline hub backfill --conf=compiled/joins/join
+# consistency compute
+@hub.command()
+@common_options
+@start_ds_option
+@end_ds_option
+@force_recompute_option
+@orch_v2_option
+@handle_conf_not_found(log_error=True, callback=print_possible_confs)
+def consistency(repo, conf, hub_url, start_ds, end_ds, force_recompute, orch_v2):
+    """
+    - Submit a backfill job to Zipline.
+    Response should contain a list of confs that are different from what's on remote.
+    - Call upload API to upload the conf contents for the list of confs that were different.
+    - Call the actual run API with mode set to backfill.
+    """
+    submit_workflow(repo, conf, RunMode.CONSISTENCY_METRICS_COMPUTE.value, start_ds, end_ds, force_recompute, hub_url=hub_url, orch_v2=orch_v2)
 
 # zipline hub run-adhoc --conf=compiled/joins/join
 # currently only supports one-off deploy node submission

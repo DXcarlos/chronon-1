@@ -7,7 +7,7 @@
       "operation": 3
     }
   ],
-  "backfillStartDate": "2025-09-23",
+  "backfillStartDate": "2025-09-26",
   "keyColumns": [
     "schema_hash"
   ],
@@ -156,7 +156,7 @@
             "schema_hash": "CAST(keyBytes AS STRING)",
             "schema_value": "CAST(valueBytes AS STRING)"
           },
-          "startPartition": "2025-09-23",
+          "startPartition": "2025-09-26",
           "timeColumn": "ts_millis",
           "wheres": [
             "name='SCHEMA_PUBLISH_EVENT'"

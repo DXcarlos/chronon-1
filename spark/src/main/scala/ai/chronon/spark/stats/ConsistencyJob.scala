@@ -125,12 +125,10 @@ class ConsistencyJob(session: SparkSession, joinConf: Join, endDate: String) ext
     copiedJoin
   }
 
-  private def buildComparisonTable(): Unit = {
-    val unfilledRanges = tableUtils
-      .unfilledRanges(joinConf.metaData.comparisonTable,
-                      PartitionRange(null, endDate),
-                      Some(Seq(joinConf.metaData.loggedTable)))
-      .getOrElse(Seq.empty)
+  private def buildComparisonTable(startDate: Option[String]): Unit = {
+    val unfilledRanges = startDate
+      .map(start => Seq(PartitionRange(start, endDate)))
+      .getOrElse(tableUtils.unfilledRanges(joinConf.metaData.comparisonTable, PartitionRange(null, endDate), Some(Seq(joinConf.metaData.loggedTable))).getOrElse(Seq.empty))
     if (unfilledRanges.isEmpty) return
     val join = new chronon.spark.Join(buildComparisonJoin(), unfilledRanges.last.end, TableUtils(session))
     logger.info("Starting compute Join for comparison table")
@@ -139,7 +137,7 @@ class ConsistencyJob(session: SparkSession, joinConf: Join, endDate: String) ext
     logger.info(compareDf.schema.pretty)
   }
 
-  def buildConsistencyMetrics(): fetcher.DataMetrics = {
+  def buildConsistencyMetrics(startDate: Option[String]): fetcher.DataMetrics = {
     // migrate legacy configs without consistencySamplePercent param
     if (!joinConf.metaData.isSetConsistencySamplePercent) {
       logger.info("consistencySamplePercent is unset and will default to 100")
@@ -151,13 +149,11 @@ class ConsistencyJob(session: SparkSession, joinConf: Join, endDate: String) ext
       return fetcher.DataMetrics(Seq())
     }
 
-    buildComparisonTable()
+    buildComparisonTable(startDate)
     logger.info("Determining Range between consistency table and comparison table")
-    val unfilledRanges = tableUtils
-      .unfilledRanges(joinConf.metaData.consistencyTable,
-                      PartitionRange(null, endDate),
-                      Some(Seq(joinConf.metaData.comparisonTable)))
-      .getOrElse(Seq.empty)
+    val unfilledRanges = startDate
+      .map(start => Seq(PartitionRange(start, endDate)))
+      .getOrElse(tableUtils.unfilledRanges(joinConf.metaData.consistencyTable, PartitionRange(null, endDate), Some(Seq(joinConf.metaData.comparisonTable))).getOrElse(Seq.empty))
     if (unfilledRanges.isEmpty) return null
     val allMetrics = unfilledRanges.map { unfilled =>
       val comparisonDf = tableUtils.scanDf(null, joinConf.metaData.comparisonTable, range = Some(unfilled))

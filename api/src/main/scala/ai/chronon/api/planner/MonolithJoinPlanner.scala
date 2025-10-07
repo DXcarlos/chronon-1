@@ -4,7 +4,7 @@ import ai.chronon.api.Extensions.{GroupByOps, WindowUtils}
 import ai.chronon.api.Extensions._
 import ai.chronon.api.{Join, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.planner
-import ai.chronon.planner.{JoinLogFlatteningNode, JoinMetadataUpload, Node}
+import ai.chronon.planner.{JoinConsistencyComputeNode, JoinLogFlatteningNode, JoinMetadataUpload, Node}
 
 import scala.collection.JavaConverters._
 
@@ -41,17 +41,36 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     toNode(metaData, _.setMonolithJoin(node), semanticMonolithJoin(join))
   }
 
-  def logFlatteningNode: Node = {
+  def consistencyComputeNode: Node = {
+    val mode = "consistency-metrics-compute"
     val tableDeps = Seq(
-      TableDependencies.fromTable(join.metaData.executionInfo.conf.modeConfigs.get("log-flattener").get("spark.chronon.logging.events")),
-      TableDependencies.fromTable(join.metaData.executionInfo.conf.modeConfigs.get("log-flattener").get("spark.chronon.logging.schema")),
+      TableDependencies.fromTable(logFlatteningNode.metaData.outputTable)
+    )
+    val metaData =
+      MetaDataUtils.layer(
+        join.metaData,
+        mode,
+        join.metaData.name + s"__${mode.replace('-', '_')}",
+        tableDeps,
+        outputTableOverride = Some(join.metaData.consistencyTable)
+    )
+    val node = new JoinConsistencyComputeNode().setJoin(join)
+    toNode(metaData, _.setJoinConsistencyComputeNode(node), semanticMonolithJoin(join))
+  }
+
+  def logFlatteningNode: Node = {
+    val mode = "log-flattener"
+    val tableDeps = Seq(
+      TableDependencies.fromTable(join.metaData.executionInfo.conf.modeConfigs.get(mode).get("spark.chronon.logging.events")),
+      TableDependencies.fromTable(join.metaData.executionInfo.conf.modeConfigs.get(mode).get("spark.chronon.logging.schema")),
     )
     val metaData =
       MetaDataUtils.layer(join.metaData,
-        "backfill",
-        join.metaData.name + "__log_flattening",
+        mode,
+        join.metaData.name + s"__${mode.replace('-','_')}",
         tableDeps,
-        outputTableOverride = Some(join.metaData.outputTable))
+        outputTableOverride = Some(join.metaData.loggedTable)
+      )
     val node = new JoinLogFlatteningNode().setJoin(join)
     toNode(metaData, _.setJoinLogFlatteningNode(node), semanticMonolithJoin(join))
   }
@@ -104,11 +123,12 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
 
     val terminalNodeNames = Map(
       planner.Mode.BACKFILL -> backfill.metaData.name,
-      planner.Mode.DEPLOY -> metadataUploadNode.metaData.name
+      planner.Mode.DEPLOY -> metadataUploadNode.metaData.name,
+      planner.Mode.MONITOR -> consistencyComputeNode.metaData.name
     )
 
     confPlan
-      .setNodes((List(backfill, metadataUploadNode) ++ sensorNodes).asJava)
+      .setNodes((List(backfill, metadataUploadNode, consistencyComputeNode, logFlatteningNode) ++ sensorNodes).asJava)
       .setTerminalNodeNames(terminalNodeNames.asJava)
   }
 }
