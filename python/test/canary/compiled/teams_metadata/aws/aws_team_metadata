@@ -3,18 +3,10 @@
     "conf": {
       "common": {
         "spark.chronon.partition.column": "ds"
-      },
-      "modeConfigs": {
-        "log-flattener": {
-          "spark.chronon.logging.events": "data.gcp_partitioned_logging_v0__2",
-          "spark.chronon.logging.schemas": "data.gcp_logging_schema_v1__2",
-          "spark.chronon.partition.column": "ds"
-        }
       }
     },
     "env": {
       "common": {
-        "ARTIFACT_PREFIX": "gs://tmp-scratchpad",
         "CHRONON_ONLINE_ARGS": "[ONLINE-TODO]args prefixed with -Z become constructor map for your implementation of ai.chronon.online.Api, -Zkv-host=<YOUR_HOST> -Zkv-port=<YOUR_PORT>",
         "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
         "CLOUD_PROVIDER": "aws",

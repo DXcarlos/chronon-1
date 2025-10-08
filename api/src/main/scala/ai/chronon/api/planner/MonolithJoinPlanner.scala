@@ -42,7 +42,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     toNode(metaData, _.setMonolithJoin(node), semanticMonolithJoin(join))
   }
 
-  def consistencyComputeNode: Node = {
+  private def consistencyComputeNode: Node = {
     val mode = "consistency-metrics-compute"
     val tableDeps = Seq(
       TableDependencies.fromTable(logFlatteningNode.metaData.outputTable)
@@ -59,7 +59,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     toNode(metaData, _.setJoinConsistencyComputeNode(node), semanticMonolithJoin(join))
   }
 
-  def logFlatteningNode: Node = {
+  private def logFlatteningNode: Node = {
     val mode = "log-flattener"
     // Parse Metadata to generate relevant execution info we need to generate tableDeps
     val preParseMetaData =
@@ -71,7 +71,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     val metaData =
       MetaDataUtils.layer(join.metaData,
                           mode,
-                          join.metaData.name + s"_${mode.replace('-', '_')}",
+                          join.metaData.name + s"__${mode.replace('-', '_')}",
                           tableDeps,
                           outputTableOverride = Some(join.metaData.loggedTable))
     val node = new JoinLogFlatteningNode().setJoin(join)

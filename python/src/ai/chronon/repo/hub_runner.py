@@ -274,10 +274,11 @@ def print_wf_url(conf, conf_name, mode, workflow_id, repo="."):
             return "online"
         else:
             raise ValueError(f"Unsupported mode: {mode}")
-
-    workflow_url = f"{frontend_url.rstrip('/')}/{hub_conf_type}/{conf_name}/{_mode_string()}?workflowId={workflow_id}"
-
-    print(" 🔗 Workflow : " + workflow_url + "\n")
+    try:
+        workflow_url = f"{frontend_url.rstrip('/')}/{hub_conf_type}/{conf_name}/{_mode_string()}?workflowId={workflow_id}"
+        print(" 🔗 Workflow : " + workflow_url + "\n")
+    except ValueError:
+        print(" 🔗 Workflow tracking url not implemented \n")
 
 
 if __name__ == "__main__":
