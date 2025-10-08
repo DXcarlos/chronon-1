@@ -163,10 +163,10 @@ def backfill(repo, conf, hub_url, start_ds, end_ds, force_recompute, orch_v2):
 @handle_conf_not_found(log_error=True, callback=print_possible_confs)
 def consistency(repo, conf, hub_url, start_ds, end_ds, force_recompute, orch_v2):
     """
-    - Submit a backfill job to Zipline.
+    - Submit a consistency check job to Zipline.
     Response should contain a list of confs that are different from what's on remote.
     - Call upload API to upload the conf contents for the list of confs that were different.
-    - Call the actual run API with mode set to backfill.
+    - Call the actual run API with mode set to monitor.
     """
     submit_workflow(repo, conf, RunMode.MONITOR.value, start_ds, end_ds, force_recompute, hub_url=hub_url, orch_v2=orch_v2)
 
