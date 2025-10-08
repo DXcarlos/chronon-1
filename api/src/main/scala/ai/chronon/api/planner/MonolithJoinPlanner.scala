@@ -5,7 +5,7 @@ import ai.chronon.api.Extensions._
 import ai.chronon.api.Constants
 import ai.chronon.api.{Join, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.planner
-import ai.chronon.planner.{JoinConsistencyComputeNode, JoinLogFlatteningNode, JoinMetadataUpload, Node}
+import ai.chronon.planner.Node
 
 import scala.collection.JavaConverters._
 
@@ -55,7 +55,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
         tableDeps,
         outputTableOverride = Some(join.metaData.consistencyTable)
       )
-    val node = new JoinConsistencyComputeNode().setJoin(join)
+    val node = new planner.JoinConsistencyComputeNode().setJoin(join)
     toNode(metaData, _.setJoinConsistencyComputeNode(node), semanticMonolithJoin(join))
   }
 
@@ -74,7 +74,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
                           join.metaData.name + s"__${mode.replace('-', '_')}",
                           tableDeps,
                           outputTableOverride = Some(join.metaData.loggedTable))
-    val node = new JoinLogFlatteningNode().setJoin(join)
+    val node = new planner.JoinLogFlatteningNode().setJoin(join)
     toNode(metaData, _.setJoinLogFlatteningNode(node), semanticMonolithJoin(join))
   }
 
