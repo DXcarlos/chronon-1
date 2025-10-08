@@ -3,6 +3,8 @@ from gen_thrift.api.ttypes import Team
 from ai.chronon.repo.cluster import generate_dataproc_cluster_config
 from ai.chronon.repo.constants import RunMode
 from ai.chronon.types import ClusterConfigProperties, ConfigProperties, EnvironmentVariables
+from staging_queries.gcp.partitioned_logging import v0
+from group_bys.gcp.logging_schema import v1
 
 default = Team(
     description="Default team",
@@ -11,6 +13,12 @@ default = Team(
     conf=ConfigProperties(
         common={
             "spark.chronon.partition.column": "ds",
+        },
+        modeConfigs={
+            RunMode.LOG_FLATTENER: {
+                "spark.chronon.logging.events": v0.table,  # Partitioned log table.
+                "spark.chronon.logging.schemas": v1.table,    # Table containing schemas
+            },
         }
     ),
     env=EnvironmentVariables(
