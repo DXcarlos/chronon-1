@@ -129,9 +129,11 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
     require(node.isSetJoin, "JoinLogFlatteningJob must have a join set")
     val join = node.getJoin
     val schemaTable = tableUtils.sparkSession.conf
-      .get(Constants.LoggingSchemaTableConf)
+      .getOption(Constants.LoggingSchemaTableConf)
+      .getOrElse(throw new IllegalArgumentException(s"Missing required config: ${Constants.LoggingSchemaTableConf}"))
     val eventTable = tableUtils.sparkSession.conf
-      .get(Constants.LoggingEventsTableConf)
+      .getOption(Constants.LoggingEventsTableConf)
+      .getOrElse(throw new IllegalArgumentException(s"Missing required config: ${Constants.LoggingEventsTableConf}"))
     new LogFlattenerJob(tableUtils.sparkSession, join, range.end, eventTable, schemaTable)
       .buildLogTable(Some(range.start))
   }
