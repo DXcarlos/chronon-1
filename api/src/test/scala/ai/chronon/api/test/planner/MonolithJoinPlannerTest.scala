@@ -3,7 +3,7 @@ package ai.chronon.api.test.planner
 import ai.chronon.api
 import ai.chronon.api.Builders.{Join, MetaData}
 import ai.chronon.api.planner.{LocalRunner, MonolithJoinPlanner}
-import ai.chronon.api.{Builders, ExecutionInfo, PartitionSpec}
+import ai.chronon.api.{Builders, ConfigProperties, Constants, ExecutionInfo, PartitionSpec}
 import ai.chronon.planner.{ConfPlan, Mode}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -373,5 +373,224 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
     // Should have no GroupBy dependencies
     val tableDeps = metadataUploadNode.metaData.executionInfo.tableDependencies.asScala
     tableDeps.size should be(0)
+  }
+
+  it should "not create logging nodes when samplePercent is not set" in {
+    val join = Join(
+      metaData = MetaData(name = "testJoinNoLogging"),
+      left = Builders.Source.events(Builders.Query(), table = "test_namespace.test_table"),
+      joinParts = Seq.empty,
+      bootstrapParts = Seq.empty
+    )
+
+    val planner = MonolithJoinPlanner(join)
+    val plan = planner.buildPlan
+
+    // Should have backfill and metadata upload nodes
+    plan.nodes.asScala.find(_.content.isSetMonolithJoin) should be(defined)
+    plan.nodes.asScala.find(_.content.isSetJoinMetadataUpload) should be(defined)
+    // Should NOT have logging or consistency nodes
+    plan.nodes.asScala.find(_.content.isSetJoinLogFlatteningNode) should be(empty)
+    plan.nodes.asScala.find(_.content.isSetJoinConsistencyComputeNode) should be(empty)
+
+    // Should not have MONITOR terminal node
+    plan.terminalNodeNames.asScala.size should be(2)
+    plan.terminalNodeNames.containsKey(Mode.MONITOR) should be(false)
+  }
+
+  it should "not create logging nodes when logging tables are not configured" in {
+    val join = Join(
+      metaData = MetaData(
+        name = "testJoinNoLoggingTables",
+        samplePercent = 10.0
+      ),
+      left = Builders.Source.events(Builders.Query(), table = "test_namespace.test_table"),
+      joinParts = Seq.empty,
+      bootstrapParts = Seq.empty
+    )
+
+    val planner = MonolithJoinPlanner(join)
+    val plan = planner.buildPlan
+
+    // Should NOT have logging or consistency nodes (no logging tables configured)
+    plan.nodes.asScala.find(_.content.isSetJoinLogFlatteningNode) should be(empty)
+    plan.nodes.asScala.find(_.content.isSetJoinConsistencyComputeNode) should be(empty)
+
+    // Should not have MONITOR terminal node
+    plan.terminalNodeNames.containsKey(Mode.MONITOR) should be(false)
+  }
+
+  it should "create log flattening node when samplePercent is set and logging tables are configured" in {
+    val join = Join(
+      metaData = MetaData(
+        name = "testJoinWithLogging",
+        samplePercent = 10.0,
+        executionInfo = new ExecutionInfo()
+          .setConf(
+            new ConfigProperties()
+              .setCommon(Map(
+                Constants.LoggingSchemaTableConf -> "test_namespace.schema_table",
+                Constants.LoggingEventsTableConf -> "test_namespace.events_table"
+              ).asJava)
+          )
+      ),
+      left = Builders.Source.events(Builders.Query(), table = "test_namespace.test_table"),
+      joinParts = Seq.empty,
+      bootstrapParts = Seq.empty
+    )
+
+    val planner = MonolithJoinPlanner(join)
+    val plan = planner.buildPlan
+
+    // Should have log flattening node
+    val logFlatteningNode = plan.nodes.asScala.find(_.content.isSetJoinLogFlatteningNode)
+    logFlatteningNode should be(defined)
+    logFlatteningNode.get.metaData.name should equal("testJoinWithLogging__log_flattener")
+
+    // Should not have consistency compute node
+    plan.nodes.asScala.find(_.content.isSetJoinConsistencyComputeNode) should be(empty)
+
+    // MONITOR terminal node should point to log flattening node
+    plan.terminalNodeNames.asScala.size should be(3)
+    plan.terminalNodeNames.containsKey(Mode.MONITOR) should be(true)
+    plan.terminalNodeNames.asScala(Mode.MONITOR) should equal("testJoinWithLogging__log_flattener")
+  }
+
+  it should "create both logging and consistency nodes when both are enabled" in {
+    val metaData = MetaData(
+      name = "testJoinWithConsistency",
+      samplePercent = 10.0,
+      executionInfo = new ExecutionInfo()
+        .setConf(
+          new ConfigProperties()
+            .setCommon(Map(
+              Constants.LoggingSchemaTableConf -> "test_namespace.schema_table",
+              Constants.LoggingEventsTableConf -> "test_namespace.events_table"
+            ).asJava)
+        )
+    )
+    metaData.setConsistencyCheck(true)
+
+    val join = Join(
+      metaData = metaData,
+      left = Builders.Source.events(Builders.Query(), table = "test_namespace.test_table"),
+      joinParts = Seq.empty,
+      bootstrapParts = Seq.empty
+    )
+
+    val planner = MonolithJoinPlanner(join)
+    val plan = planner.buildPlan
+
+    // Should have both log flattening and consistency compute nodes
+    val logFlatteningNode = plan.nodes.asScala.find(_.content.isSetJoinLogFlatteningNode)
+    val consistencyNode = plan.nodes.asScala.find(_.content.isSetJoinConsistencyComputeNode)
+
+    logFlatteningNode should be(defined)
+    consistencyNode should be(defined)
+
+    logFlatteningNode.get.metaData.name should equal("testJoinWithConsistency__log_flattener")
+    consistencyNode.get.metaData.name should equal("testJoinWithConsistency__consistency_metrics_compute")
+
+    // MONITOR terminal node should point to consistency compute node
+    plan.terminalNodeNames.asScala.size should be(3)
+    plan.terminalNodeNames.containsKey(Mode.MONITOR) should be(true)
+    plan.terminalNodeNames.asScala(Mode.MONITOR) should equal("testJoinWithConsistency__consistency_metrics_compute")
+  }
+
+  it should "consistency compute node should depend on log flattening output when both enabled" in {
+    val metaData = MetaData(
+      name = "testJoinDeps",
+      samplePercent = 10.0,
+      executionInfo = new ExecutionInfo()
+        .setConf(
+          new ConfigProperties()
+            .setCommon(Map(
+              Constants.LoggingSchemaTableConf -> "test_namespace.schema_table",
+              Constants.LoggingEventsTableConf -> "test_namespace.events_table"
+            ).asJava)
+        )
+    )
+    metaData.setConsistencyCheck(true)
+
+    val join = Join(
+      metaData = metaData,
+      left = Builders.Source.events(Builders.Query(), table = "test_namespace.test_table"),
+      joinParts = Seq.empty,
+      bootstrapParts = Seq.empty
+    )
+
+    val planner = MonolithJoinPlanner(join)
+    val plan = planner.buildPlan
+
+    val consistencyNode = plan.nodes.asScala.find(_.content.isSetJoinConsistencyComputeNode).get
+    val tableDeps = consistencyNode.metaData.executionInfo.tableDependencies.asScala
+
+    // Consistency node should depend on logged table (output of log flattening)
+    tableDeps should not be empty
+    tableDeps.head.tableInfo.table should equal(join.metaData.loggedTable)
+  }
+
+  it should "log flattening node should have table dependencies from config" in {
+    val join = Join(
+      metaData = MetaData(
+        name = "testJoinLogDeps",
+        samplePercent = 10.0,
+        executionInfo = new ExecutionInfo()
+          .setConf(
+            new ConfigProperties()
+              .setCommon(Map(
+                Constants.LoggingSchemaTableConf -> "test_namespace.schema_table",
+                Constants.LoggingEventsTableConf -> "test_namespace.events_table"
+              ).asJava)
+          )
+      ),
+      left = Builders.Source.events(Builders.Query(), table = "test_namespace.test_table"),
+      joinParts = Seq.empty,
+      bootstrapParts = Seq.empty
+    )
+
+    val planner = MonolithJoinPlanner(join)
+    val plan = planner.buildPlan
+
+    val logFlatteningNode = plan.nodes.asScala.find(_.content.isSetJoinLogFlatteningNode).get
+    val tableDeps = logFlatteningNode.metaData.executionInfo.tableDependencies.asScala
+
+    tableDeps.size should be(2)
+    val depTables = tableDeps.map(_.tableInfo.table).toSet
+    depTables should contain("test_namespace.schema_table")
+    depTables should contain("test_namespace.events_table")
+  }
+
+  it should "not create consistency node when consistencyCheck is false" in {
+    val metaData = MetaData(
+      name = "testJoinNoConsistency",
+      samplePercent = 10.0,
+      executionInfo = new ExecutionInfo()
+        .setConf(
+          new ConfigProperties()
+            .setCommon(Map(
+              Constants.LoggingSchemaTableConf -> "test_namespace.schema_table",
+              Constants.LoggingEventsTableConf -> "test_namespace.events_table"
+            ).asJava)
+        )
+    )
+    metaData.setConsistencyCheck(false)
+
+    val join = Join(
+      metaData = metaData,
+      left = Builders.Source.events(Builders.Query(), table = "test_namespace.test_table"),
+      joinParts = Seq.empty,
+      bootstrapParts = Seq.empty
+    )
+
+    val planner = MonolithJoinPlanner(join)
+    val plan = planner.buildPlan
+
+    // Should have log flattening but NOT consistency compute node
+    plan.nodes.asScala.find(_.content.isSetJoinLogFlatteningNode) should be(defined)
+    plan.nodes.asScala.find(_.content.isSetJoinConsistencyComputeNode) should be(empty)
+
+    // MONITOR should point to log flattening node, not consistency
+    plan.terminalNodeNames.asScala(Mode.MONITOR) should equal("testJoinNoConsistency__log_flattener")
   }
 }

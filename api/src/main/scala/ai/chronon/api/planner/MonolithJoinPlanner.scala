@@ -78,6 +78,20 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     toNode(metaData, _.setJoinLogFlatteningNode(node), semanticMonolithJoin(join))
   }
 
+  private def hasLoggingTablesConfigured: Boolean = {
+    // It's possible the tables are defined in common or mode specific conf.
+    // So we check the layered metadata for the setting.
+    val preParseMetaData =
+      MetaDataUtils.layer(join.metaData, "log-flattener", "", Seq.empty)
+    Option(preParseMetaData.executionInfo)
+      .flatMap(ei => Option(ei.conf))
+      .flatMap(conf => Option(conf.common))
+      .exists { common =>
+        Option(common.get(Constants.LoggingSchemaTableConf)).isDefined &&
+        Option(common.get(Constants.LoggingEventsTableConf)).isDefined
+      }
+  }
+
   def metadataUploadNode: Node = {
     val stepDays = 1 // Default step days for metadata upload
 
@@ -122,14 +136,50 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
       .map((es) =>
         toNode(es.metaData, _.setExternalSourceSensor(es), ExternalSourceSensorUtil.semanticExternalSourceSensor(es)))
 
-    val terminalNodeNames = Map(
-      planner.Mode.BACKFILL -> backfill.metaData.name,
-      planner.Mode.DEPLOY -> metadataUploadNode.metaData.name,
-      planner.Mode.MONITOR -> consistencyComputeNode.metaData.name
-    )
+    // Only create log flattening node if samplePercent is set AND logging tables are configured
+    val loggingEnabled = join.metaData.isSetSamplePercent && hasLoggingTablesConfigured
+
+    // Only create consistency compute node if consistencySamplePercent is set and non-zero
+    // Consistency requires logging to be enabled first since it depends on the logged table
+    val consistencyEnabled = loggingEnabled && join.metaData.consistencyCheck
+
+    val loggingNodes = if (loggingEnabled) {
+      List(logFlatteningNode)
+    } else {
+      List.empty
+    }
+
+    val consistencyNodes = if (consistencyEnabled) {
+      List(consistencyComputeNode)
+    } else {
+      List.empty
+    }
+
+    // Determine MONITOR terminal node:
+    // - If consistency is enabled, point to consistency compute node
+    // - Else if logging is enabled, but no consistency point to log flattening node
+    // - Else don't include MONITOR mode
+    val terminalNodeNames = if (consistencyEnabled) {
+      Map(
+        planner.Mode.BACKFILL -> backfill.metaData.name,
+        planner.Mode.DEPLOY -> metadataUploadNode.metaData.name,
+        planner.Mode.MONITOR -> consistencyComputeNode.metaData.name
+      )
+    } else if (loggingEnabled) {
+      Map(
+        planner.Mode.BACKFILL -> backfill.metaData.name,
+        planner.Mode.DEPLOY -> metadataUploadNode.metaData.name,
+        planner.Mode.MONITOR -> logFlatteningNode.metaData.name
+      )
+    } else {
+      Map(
+        planner.Mode.BACKFILL -> backfill.metaData.name,
+        planner.Mode.DEPLOY -> metadataUploadNode.metaData.name
+      )
+    }
 
     confPlan
-      .setNodes((List(backfill, metadataUploadNode, consistencyComputeNode, logFlatteningNode) ++ sensorNodes).asJava)
+      .setNodes((List(backfill, metadataUploadNode) ++ loggingNodes ++ consistencyNodes ++ sensorNodes).asJava)
       .setTerminalNodeNames(terminalNodeNames.asJava)
   }
 }
