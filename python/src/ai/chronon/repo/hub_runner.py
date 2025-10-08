@@ -152,7 +152,7 @@ def backfill(repo, conf, hub_url, start_ds, end_ds, force_recompute, orch_v2):
     """
     submit_workflow(repo, conf, RunMode.BACKFILL.value, start_ds, end_ds, force_recompute, hub_url=hub_url, orch_v2=orch_v2)
 
-# zipline hub backfill --conf=compiled/joins/join
+# zipline hub consistency --conf=compiled/joins/join
 # consistency compute
 @hub.command()
 @common_options
