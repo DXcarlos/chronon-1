@@ -137,7 +137,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
   }
 
   private def runConsistencyJob(metadata: MetaData, node: JoinConsistencyComputeNode, range: PartitionRange): Unit = {
-    require(node.isSetJoin, "JoinLogFlatteningJob must have a join set")
+    require(node.isSetJoin, "JoinConsistencyComputeNode must have a join set")
     val join = node.getJoin
     new ConsistencyJob(tableUtils.sparkSession, join, range.end).buildConsistencyMetrics(Some(range.start))
   }
