@@ -228,7 +228,7 @@ class JoinPartJob(node: JoinPartNode, metaData: MetaData, range: DateRange, show
           genGroupBy(unfilledPartitionRange).temporalEvents(renamedLeftDf, Some(toTimeRange(unfilledPartitionRange)))
         }
 
-      case (EVENTS, ENTITIES, Accuracy.SNAPSHOT) => genGroupBy(shiftedPartitionRange).snapshotEntities
+      case (EVENTS, ENTITIES, Accuracy.SNAPSHOT) => genGroupBy(unfilledPartitionRange).snapshotEntities
 
       case (EVENTS, ENTITIES, Accuracy.TEMPORAL) =>
         // Snapshots and mutations are partitioned with ds holding data between <ds 00:00> and ds <23:59>.

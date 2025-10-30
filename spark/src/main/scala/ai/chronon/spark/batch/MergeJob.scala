@@ -158,13 +158,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     joinPartsToProcess.map { joinPart =>
       // Use the RelevantLeftForJoinPart utility to get the part table name
       val partTable = RelevantLeftForJoinPart.fullPartTableName(join, joinPart)
-      val effectiveRange =
-        if (join.left.dataModel == DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
-          dayStep.shift(-1)
-        } else {
-          dayStep
-        }
-      val wheres = effectiveRange.whereClauses
+      val wheres = dayStep.whereClauses
       val sql = QueryUtils.build(null, partTable, wheres)
       logger.info(s"Pulling data from joinPart table with: $sql")
       (joinPart, tableUtils.scanDfBase(null, partTable, List.empty, wheres, None))
