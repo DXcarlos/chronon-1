@@ -53,12 +53,16 @@ def main():
             f'python/test/canary/group_bys/gcp/purchases_{args.test_id}.py'
         ),
         (
-            'python/test/canary/joins/gcp/training_set.py.j2', 
+            'python/test/canary/joins/gcp/training_set.py.j2',
             f'python/test/canary/joins/gcp/training_set_{args.test_id}.py'
         ),
         (
             'python/test/canary/joins/gcp/demo.py.j2',
             f'python/test/canary/joins/gcp/demo_{args.test_id}.py'
+        ),
+        (
+            'python/test/canary/staging_queries/gcp/exports.py.j2',
+            f'python/test/canary/staging_queries/gcp/exports_{args.test_id}.py'
         )
 
     ]
