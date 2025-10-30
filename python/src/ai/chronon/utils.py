@@ -26,7 +26,7 @@ from typing import List, Optional, Union, cast
 import gen_thrift.api.ttypes as api
 
 import ai.chronon.repo.extract_objects as eo
-from ai.chronon.repo import FOLDER_NAME_TO_CLASS
+from ai.chronon.repo.constants import FOLDER_NAME_TO_CLASS
 
 ChrononJobTypes = Union[api.GroupBy, api.Join, api.StagingQuery]
 

@@ -32,10 +32,6 @@ class ScheduleModes:
     online: str
     offline_schedule: str
 
-@click.group()
-def hub():
-    pass
-
 def repo_option(func):
     return click.option("--repo", help="Path to chronon repo", default=".")(func)
 def use_auth_option(func):
@@ -163,9 +159,9 @@ def submit_schedule(repo, conf, hub_url=None, use_auth=True):
     print(" 🗓️ Schedules Deployed:", readable_schedules)
 
 
-# zipline hub backfill --conf=compiled/joins/join
+# zipline backfill --conf=compiled/joins/join
 # adhoc backfills
-@hub.command()
+@click.command()
 @common_options
 @start_ds_option
 @end_ds_option
@@ -183,9 +179,9 @@ def backfill(repo, conf, hub_url, use_auth, start_ds, end_ds, skip_compile):
     )
 
 
-# zipline hub run-adhoc --conf=compiled/joins/join
+# zipline run-adhoc --conf=compiled/joins/join
 # currently only supports one-off deploy node submission
-@hub.command()
+@click.command()
 @common_options
 @end_ds_option
 @handle_conf_not_found(log_error=True, callback=print_possible_confs)
@@ -200,8 +196,8 @@ def run_adhoc(repo, conf, hub_url, use_auth, end_ds, skip_compile):
     submit_workflow(repo, conf, RunMode.DEPLOY.value, end_ds, end_ds, hub_url=hub_url, use_auth=use_auth)
 
 
-# zipline hub schedule --conf=compiled/joins/join
-@hub.command()
+# zipline schedule --conf=compiled/joins/join
+@click.command()
 @common_options
 @handle_conf_not_found(log_error=True, callback=print_possible_confs)
 @handle_compile
@@ -213,7 +209,7 @@ def schedule(repo, conf, hub_url, use_auth, skip_compile):
     """
     submit_schedule(repo, conf, hub_url=hub_url, use_auth=use_auth)
 
-@hub.command()
+@click.command()
 @repo_option
 @hub_url_option
 @use_auth_option
@@ -239,9 +235,9 @@ def get_common_env_map(file_path, skip_metadata_extraction=False):
     common_env_map = metadata_map["executionInfo"]["env"]["common"]
     return common_env_map
 
-# zipline hub eval --conf=compiled/joins/join
+# zipline eval --conf=compiled/joins/join
 # localSparkSession evaluation of conf
-@hub.command()
+@click.command()
 @common_options
 @click.option(
     "--eval-url",

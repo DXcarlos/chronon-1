@@ -5,7 +5,7 @@ import os
 
 from gen_thrift.api.ttypes import Conf
 
-from ai.chronon.repo import (
+from ai.chronon.repo.constants import (
     FOLDER_NAME_TO_CLASS,
     FOLDER_NAME_TO_CONF_TYPE,
 )

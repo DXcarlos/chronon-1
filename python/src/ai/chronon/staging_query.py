@@ -7,7 +7,7 @@ import gen_thrift.api.ttypes as ttypes
 import gen_thrift.common.ttypes as common
 
 import ai.chronon.airflow_helpers as airflow_helpers
-from ai.chronon import utils
+from ai.chronon import query_utils, utils
 from ai.chronon.constants import AIRFLOW_DEPENDENCIES_KEY
 
 
@@ -32,7 +32,7 @@ class TableDependency:
     offset: Optional[int] = None
 
     def to_thrift(self):
-        if self.offset is None:
+        if self.partition_column is not None and self.offset is None:
             raise ValueError(f"Dependency offset for table {self.table} must be specified.")
         offset_window = common.Window(length=self.offset, timeUnit=common.TimeUnit.DAYS)
         return common.TableDependency(
@@ -157,6 +157,19 @@ def StagingQuery(
     assert isinstance(version, int), (
         f"Version must be an integer, but found {type(version).__name__}"
     )
+    tables_in_query = [query_utils.normalize_table_name(t) for t in query_utils.tables_in_query(query, dialect=ttypes.EngineType._VALUES_TO_NAMES[engine_type].lower() if engine_type else "spark")]
+    if tables_in_query:
+        assert dependencies is not None, "Dependencies must be specified if tables are in the query"
+        spec_names = set()
+        for d in dependencies:
+            if isinstance(d, TableDependency) and d.partition_column is not None:
+                spec_names.add(query_utils.normalize_table_name(d.table))
+            elif isinstance(d, dict):
+                spec_names.add(query_utils.normalize_table_name(d["spec"].split("/")[0]))
+        mismatch = set(tables_in_query) - set(spec_names)
+        if mismatch:
+            raise ValueError(f"Tables in query but not in dependencies: {mismatch}\nDependencies: {spec_names}\nTables in query: {tables_in_query}")
+        
 
     # Create execution info
     exec_info = common.ExecutionInfo(
@@ -171,7 +184,7 @@ def StagingQuery(
 
     if dependencies:
         for d in dependencies:
-            if isinstance(d, TableDependency):
+            if isinstance(d, TableDependency) and d.partition_column is not None:
                 # Create an Airflow dependency object for the table
                 airflow_dependency = airflow_helpers.create_airflow_dependency(
                     d.table,
@@ -183,6 +196,9 @@ def StagingQuery(
             elif isinstance(d, dict):
                 # If it's already a dictionary, just append it
                 airflow_dependencies.append(d)
+            elif isinstance(d, TableDependency) and d.partition_column is None:
+                # NoOp
+                pass
             else:
                 raise ValueError(
                     "Dependencies must be either TableDependency instances or dictionaries."
