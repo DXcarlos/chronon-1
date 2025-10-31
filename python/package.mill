@@ -105,18 +105,18 @@ object `package` extends PythonModule with RuffModule with PublishModule {
   def installWheel = Task {
     val wheelPath = wheel().path
     println(s"Installing wheel from: $wheelPath")
-    
+
     // Uninstall existing version first
     try {
       os.proc("pip", "uninstall", "-y", "zipline-ai").call()
     } catch {
       case _: Exception => println("No existing zipline-ai package to uninstall")
     }
-    
-    // Install the built wheel
-    os.proc("pip", "install", wheelPath.toString).call()
-    
-    println(s"Wheel installed successfully from: $wheelPath")
+
+    // Install the built wheel with hub extra
+    os.proc("pip", "install", s"${wheelPath.toString}[hub]").call()
+
+    println(s"Wheel installed successfully with [hub] extra from: $wheelPath")
   }
 
   // Install in editable mode with generated sources. Can mess ruffCheck import order (due to gen_thrift priority change)
@@ -141,9 +141,9 @@ object `package` extends PythonModule with RuffModule with PublishModule {
       }
     }
     
-    // Install in editable mode
+    // Install in editable mode with hub extra
     println(s"Working directory: $pythonDir")
-    os.proc("python", "-m", "pip", "install", "-e", ".").call(cwd = pythonDir)
-    println("Package installed in editable mode with generated sources")
+    os.proc("python", "-m", "pip", "install", "-e", ".[hub]").call(cwd = pythonDir)
+    println("Package installed in editable mode with [hub] extra and generated sources")
   }
 }

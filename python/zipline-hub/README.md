@@ -28,10 +28,13 @@ pip install zipline-hub
 For local development with editable installs:
 
 ```bash
-# Install both packages in editable mode
-pip install -e python/[hub]
+# From the chronon repo root:
+pip install -e 'python/[hub]'
 
-# Or install them separately
+# Or from the python/ directory:
+pip install -e '.[hub]'
+
+# Alternative: install separately
 pip install -e python/
 pip install -e python/zipline-hub/
 ```
