@@ -4,6 +4,7 @@ import re
 import subprocess
 import time
 import xml.etree.ElementTree as ET
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from enum import Enum
 
@@ -24,6 +25,18 @@ class JobType(Enum):
     SPARK = "spark"
     FLINK = "flink"
 
+
+@contextmanager
+def change_directory(path):
+    """
+    Context manager to temporarily change the current working directory. And return it to normal after.
+    """
+    original_dir = os.getcwd()
+    try:
+        os.chdir(path)
+        yield
+    finally:
+        os.chdir(original_dir)
 
 def retry_decorator(retries=3, backoff=20):
     def wrapper(func):

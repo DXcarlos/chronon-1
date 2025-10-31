@@ -38,14 +38,13 @@ cs
 docs/build/
 
 # Python distribution and packaging
-python/dist/
-python/eggs/
-python/sdist/
-python/build/
+python/**/dist/
+python/**/eggs/
+python/**/sdist/
+python/**/build/
 python/ai/chronon/thrift/
-python/*.egg-info/
+python/**/*.egg-info/
 *.egg
-**/*.egg-info/
 python/src/agent/
 python/src/gen_thrift/
 

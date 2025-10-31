@@ -5,7 +5,6 @@ import click
 
 from ai.chronon.cli.compile.display.console import console
 from ai.chronon.repo.compile import compile
-from ai.chronon.repo.hub_runner import hub
 from ai.chronon.repo.init import main as init_main
 from ai.chronon.repo.run import main as run_main
 
@@ -32,4 +31,16 @@ def zipline(ctx):
 zipline.add_command(compile)
 zipline.add_command(run_main)
 zipline.add_command(init_main)
-zipline.add_command(hub)
+
+# Dynamically load hub commands if zipline-hub is installed
+# Hub commands are added at the top level (e.g., zipline backfill, zipline eval)
+try:
+    from ai.chronon.repo.hub_runner import backfill, eval, schedule, cancel, run_adhoc
+    zipline.add_command(backfill)
+    zipline.add_command(eval)
+    zipline.add_command(schedule)
+    zipline.add_command(cancel)
+    zipline.add_command(run_adhoc)
+except ImportError:
+    # zipline-hub not installed, hub commands will not be available
+    pass

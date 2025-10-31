@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+# Exclude patterns
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "build",
+    "dist",
+]
+
+# Line length
+line-length = 100
+
+# Target Python version
+target-version = "py311"
+
+[tool.ruff.lint]
+# Rules to enable
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+]
+
+# Rules to ignore
+ignore = [
+    "B017",  # Unnecessary pass
+    "E501",  # line too long
+]
+
+[project]
+name = "zipline-hub"
+dynamic = ["version"]
+description = "Zipline Hub integration - Extends zipline-ai with Hub functionality"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "zipline-ai>=0.0.1",
+]

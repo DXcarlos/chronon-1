@@ -19,7 +19,7 @@ import logging
 import os
 
 from ai.chronon.logger import get_logger
-from ai.chronon.repo import FOLDER_NAME_TO_CLASS
+from ai.chronon.repo.constants import FOLDER_NAME_TO_CLASS
 
 
 def from_folder(full_path: str, cls: type, log_level=logging.INFO):

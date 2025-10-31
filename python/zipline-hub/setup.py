@@ -12,20 +12,28 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
-import glob
 import os
 import re
 
-from setuptools import find_packages, setup
+from setuptools import find_namespace_packages, setup
 
 current_dir = os.path.abspath(os.path.dirname(__file__))
 with open(os.path.join(current_dir, "README.md"), "r") as fh:
     long_description = fh.read()
 
 
-with open(os.path.join(current_dir, "requirements/base.in"), "r") as infile:
-    basic_requirements = [line for line in infile]
+# Hub-specific requirements (if any, beyond what zipline-ai provides)
+hub_requirements = [
+    "requests>=2.31.0",
+    "google-auth>=2.23.0",
+    "google-cloud-iam>=2.12.0",
+]
 
+with open(os.path.join(current_dir, "requirements/base.in"), "r") as infile:
+    base_requirements = [line.strip() for line in infile if line.strip()]
+
+# Combine base and hub-specific requirements
+install_requirements = base_requirements + hub_requirements
 
 __version__ = "0.0.1"
 __branch__ = "main"
@@ -48,38 +56,21 @@ def get_version():
 
     return version_str
 
-def get_hub_dep():
-    local_hub_path = os.path.join(current_dir, "zipline-hub")
-    if os.path.exists(local_hub_path):
-        return f"zipline-hub @ file://{os.path.abspath(local_hub_path)}"
-    return f"zipline-hub>={get_version()}"
 
-
-resources = [f for f in glob.glob('test/sample/**/*', recursive=True) if os.path.isfile(f)]
 setup(
     classifiers=[
         "Programming Language :: Python :: 3.11"
     ],
     long_description=long_description,
     long_description_content_type="text/markdown",
-    entry_points={
-        "console_scripts": [
-            "zipline=ai.chronon.repo.zipline:zipline",
-        ]
-    },
-    description="Zipline python API library",
-    install_requires=basic_requirements,
-    name="zipline-ai",
-    packages=find_packages("src"),
+    description="Zipline Hub integration - Extends zipline-ai with Hub functionality",
+    install_requires=[
+        f"zipline-ai>={get_version()}",  # Depends on core package
+    ] + install_requirements,
+    name="zipline-hub",
+    packages=find_namespace_packages(where="src", include=["ai.*"]),
     package_dir={"": "src"},
     include_package_data=True,
-    package_data={"ai.chronon": ["resources/**/*"]},
-    extras_require={
-        # Extra requirement to have access to cli commands in python2 environments.
-        "pip2compat": ["click<8"],
-        # Extra to install Hub functionality from release
-        "hub": [get_hub_dep()],
-    },
     python_requires=">=3.11",
     url=None,
     version=get_version(),

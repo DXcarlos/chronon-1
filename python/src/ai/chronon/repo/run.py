@@ -255,6 +255,7 @@ def main(
     enable_debug,
     uploader,
 ):
+    """- Download JARs and run a Zipline pipeline. Does not orchestrate upstream dependencies."""
     unknown_args = ctx.args
     click.echo("Running with args: {}".format(ctx.params))
 

@@ -27,6 +27,7 @@ from ai.chronon.cli.compile.display.console import console
 )
 @click.pass_context
 def main(ctx, chronon_root, cloud_provider):
+    """- Initialize a new Zipline project."""
     template_path = files("ai.chronon").joinpath("resources", cloud_provider.lower())
     target_path = os.path.abspath(chronon_root)
 

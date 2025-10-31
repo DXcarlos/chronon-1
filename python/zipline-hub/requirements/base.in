@@ -1,0 +1,5 @@
+# Hub-specific dependencies
+# Base dependencies are provided by zipline-ai
+requests>=2.31.0
+google-auth>=2.23.0
+google-cloud-iam>=2.12.0
