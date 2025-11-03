@@ -84,6 +84,7 @@ jobs:
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           ./mill python.test
+          ./mill python.zipline-hub.test
 
       - name: Build coverage report
         shell: bash
