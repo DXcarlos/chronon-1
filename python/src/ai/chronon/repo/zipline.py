@@ -35,7 +35,7 @@ zipline.add_command(init_main)
 # Dynamically load hub commands if zipline-hub is installed
 # Hub commands are added at the top level (e.g., zipline backfill, zipline eval)
 try:
-    from ai.chronon.repo.hub_runner import backfill, eval, schedule, cancel, run_adhoc
+    from ai.chronon.repo.hub_runner import backfill, cancel, eval, run_adhoc, schedule
     zipline.add_command(backfill)
     zipline.add_command(eval)
     zipline.add_command(schedule)
