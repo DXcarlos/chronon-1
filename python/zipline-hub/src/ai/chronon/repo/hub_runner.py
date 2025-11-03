@@ -331,5 +331,17 @@ def print_wf_url(conf, conf_name, mode, workflow_id, repo="."):
 
     print(" 🔗 Workflow : " + workflow_url + "\n")
 
+# Create the hub command group
+@click.group(help="Zipline Hub commands for managing workflows and schedules")
+def hub():
+    pass
+
+# Add hub commands
+hub.add_command(backfill)
+hub.add_command(run_adhoc)
+hub.add_command(schedule)
+hub.add_command(cancel)
+hub.add_command(eval)
+
 if __name__ == "__main__":
     hub()

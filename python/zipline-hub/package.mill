@@ -1,0 +1,152 @@
+package build.python.`zipline-hub`
+
+import mill.*
+import mill.pythonlib.*
+
+// Python API module
+object `package` extends PythonModule with RuffModule with PublishModule {
+
+  def pythonRequirementFiles = Task.Sources("requirements/base.txt")
+
+  // TODO: doing this because we want the whl to have Requires-Dist metadata.
+  def pythonDeps: T[Seq[String]] = Task {
+    // Use the same file that pythonRequirementFiles references
+    val reqFiles = pythonRequirementFiles()
+    if (reqFiles.nonEmpty) {
+      val reqFile = reqFiles.head.path
+      if (os.exists(reqFile)) {
+        os.read.lines(reqFile)
+          .map(_.trim)
+          .filter(line => line.nonEmpty && !line.startsWith("#"))
+          .filter(!_.startsWith("-"))  // Skip pip flags like -e
+          .toSeq
+      } else {
+        Seq.empty[String]
+      }
+    } else {
+      Seq.empty[String]
+    }
+  }
+
+  def mainScript = Task.Source("src/ai/chronon/repo/zipline.py")
+
+  def publishMeta = PublishMeta(
+    name = "zipline-hub",
+    description = "CLI tool for the Zipline AI platform",
+    requiresPython = ">= 3.11",
+    license = License.`Apache-2.0`,
+    authors = Seq(Developer("Zipline AI", "hello@zipline.ai")),
+    urls = Map(
+        "homepage" -> "https://zipline.ai",
+        "documentation" -> "https://docs.zipline.ai",
+        "github" -> "https://github.com/zipline-ai/chronon/",
+    )
+  )
+
+  // used by pypi
+  // https://pypi.org/project/zipline-ai/
+  // Override publishVersion to check environment variable first, then fall back to constant
+  override def publishVersion = Task {
+    Task.ctx().env.get("ZIPLINE_VERSION") match {
+      case Some(version) if version.nonEmpty => version
+      case _ => build.Constants.chrononVersion
+    }
+  }
+
+  def sources = super.sources() ++ generatedSources()
+
+  // the mill PythonModule doesn't yet support entrypoints, so extend it manually
+  def pyproject: T[String] = Task {
+    super.pyproject() + """|
+         |[project.scripts]
+         |zipline = "ai.chronon.repo.zipline:zipline"
+         |""".stripMargin
+  }
+
+
+  object test extends PythonTests, TestModule.Pytest, CoverageTests {
+    // Use main python package requirements since zipline-hub extends zipline-ai
+    // The hub-specific dependencies (google-auth, google-cloud-iam, requests) are already in the main requirements
+    def pythonRequirementFiles = Task.Sources(
+      moduleDir / os.up / os.up / "requirements" / "base.txt"  // Main python package requirements
+    )
+
+    override def sources = Task.Sources(moduleDir)
+
+    // Override forkEnv to set PYTHONPATH
+    override def forkEnv: T[Map[String, String]] = Task {
+      val generatedPath = build.python.generatedSources().head.path.toString
+      val mainPythonSrcPath = (moduleDir / os.up / os.up / "src").toString
+      val ziplineHubSrcPath = (moduleDir / os.up / "src").toString
+      val testPath = moduleDir.toString
+
+      super.forkEnv() ++ Map(
+        "PYTHONPATH" -> s"$generatedPath:$mainPythonSrcPath:$ziplineHubSrcPath:$testPath"
+      )
+    }
+
+  }
+
+
+  // Generate Python thrift files
+  def generatedSources: T[Seq[PathRef]] = Task {
+    val outputDir = Task.dest
+    os.makeDir.all(outputDir)
+
+    val sources = build.thrift.thriftSources()
+    val thriftFiles = sources.flatMap(p => os.list(p.path)).filter(_.ext == "thrift")
+
+    thriftFiles.foreach { thriftFile =>
+      println(s"Generating Python thrift for: $thriftFile")
+      os.proc("thrift", "--gen", "py", "-out", outputDir, thriftFile).call()
+    }
+
+    Seq(PathRef(outputDir))
+  }
+
+  // Build wheel and install normally
+  def installWheel = Task {
+    val wheelPath = wheel().path
+    println(s"Installing wheel from: $wheelPath")
+
+    // Uninstall existing version first
+    try {
+      os.proc("pip", "uninstall", "-y", "zipline-ai").call()
+    } catch {
+      case _: Exception => println("No existing zipline-ai package to uninstall")
+    }
+
+    // Install the built wheel with hub extra
+    os.proc("pip", "install", s"${wheelPath.toString}[hub]").call()
+
+    println(s"Wheel installed successfully with [hub] extra from: $wheelPath")
+  }
+
+  // Install in editable mode with generated sources. Can mess ruffCheck import order (due to gen_thrift priority change)
+  def installEditable() = Task.Command {
+    // Generate sources in Task.dest as usual
+    val generatedPaths = generatedSources()
+    
+    // Copy generated sources to src/
+    val pythonDir = moduleDir
+    val srcDir = pythonDir / "src"
+    generatedPaths.foreach { pathRef =>
+      val generatedDir = pathRef.path
+      println(s"Generated dir: $generatedDir")
+      if (os.exists(generatedDir)) {
+        // Copy contents of the generated directory to src/
+        os.list(generatedDir).foreach { item =>
+          if (os.isDir(item)) {
+            os.copy.over(item, srcDir / item.last, followLinks = true, replaceExisting = true, copyAttributes = false, createFolders = true)
+          }
+        }
+        println(s"Copied generated sources from $generatedDir to $srcDir")
+      }
+    }
+    
+    // Install in editable mode with hub extra
+    println(s"Working directory: $pythonDir")
+    os.proc("python", "-m", "pip", "install", "-e", ".[hub]").call(cwd = pythonDir)
+    println("Package installed in editable mode with [hub] extra and generated sources")
+  }
+}

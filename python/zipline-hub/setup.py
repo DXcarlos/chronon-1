@@ -13,7 +13,6 @@
 #     limitations under the License.
 
 import os
-import re
 
 from setuptools import find_namespace_packages, setup
 
@@ -38,23 +37,14 @@ install_requirements = base_requirements + hub_requirements
 __version__ = "0.0.1"
 __branch__ = "main"
 
-
 def get_version():
-    version_str = os.environ.get("VERSION", __version__)
-    branch_str = os.environ.get("BRANCH", __branch__)
-    # Replace "-SNAPSHOT" with ".dev"
-    version_str = version_str.replace("-SNAPSHOT", ".dev")
-    # If the prefix is the branch name, then convert it as suffix after '+' to make it Python PEP440 complaint
-    if version_str.startswith(branch_str + "-"):
-        version_str = "{}+{}".format(
-            version_str.replace(branch_str + "-", ""), branch_str
-        )
+    return os.environ.get("VERSION", __version__)
 
-    # Replace multiple continuous '-' or '_' with a single period '.'.
-    # In python version string, the label identifier that comes after '+', is all separated by periods '.'
-    version_str = re.sub(r"[-_]+", ".", version_str)
-
-    return version_str
+def get_zipline_dependency():
+    local_zipline_path = os.path.join(current_dir, "..")
+    if os.path.exists(local_zipline_path):
+        return f"zipline-ai @ file://{os.path.abspath(local_zipline_path)}"
+    return f"zipline-ai>={get_version()}"
 
 
 setup(
@@ -65,7 +55,7 @@ setup(
     long_description_content_type="text/markdown",
     description="Zipline Hub integration - Extends zipline-ai with Hub functionality",
     install_requires=[
-        f"zipline-ai>={get_version()}",  # Depends on core package
+        get_zipline_dependency(),  # Depends on core package
     ] + install_requirements,
     name="zipline-hub",
     packages=find_namespace_packages(where="src", include=["ai.*"]),
