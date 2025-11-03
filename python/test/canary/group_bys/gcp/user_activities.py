@@ -33,7 +33,7 @@ source = Source(
                 # Activity structs for last_k tracking
                 user_event_struct="STRUCT(event_type, listing_id, unix_millis(TIMESTAMP(event_time_ms)) as timestamp)",
             ),
-            time_column="unix_millis(TIMESTAMP(event_time_ms))",
+            time_column="event_time_ms",
         ),
     )
 )

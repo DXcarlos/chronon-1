@@ -1,20 +1,11 @@
-from group_bys.gcp import dim_listings, dim_merchants, user_activities
+from group_bys.gcp import dim_listings, dim_merchants, user_activities, dim_users
 from staging_queries.gcp import exports
+from external_sources import sift_score
 
-from ai.chronon.join import Derivation, Join, JoinPart
+from ai.chronon.join import Derivation, Join, JoinPart, ExternalPart, ExternalSource
 from ai.chronon.query import Query, selects
 from ai.chronon.source import EventSource
 
-"""
-This Join combines user activity events with:
-1. User-level behavioral features (from user_activities GroupBy)
-2. Listing-level attributes (from dim_listings GroupBy)
-
-Left side: Raw user activity events
-Right parts: 
-- User behavioral aggregations (keyed by user_id)
-- Listing dimension attributes (keyed by listing_id)
-"""
 
 # Left side: Raw user activity events from PubSub export
 source = EventSource(
@@ -29,6 +20,57 @@ source = EventSource(
         time_column="event_time_ms",
     ),
 )
+
+search_v0 = Join(
+    left=source,
+    row_ids=["event_id"],
+    right_parts=[
+        # User behavioral features (aggregated over time windows)
+        JoinPart(
+            group_by=user_activities.v1,
+        ),
+        # Listing dimension attributes
+        JoinPart(
+            group_by=dim_listings.v1,
+        ),
+        # User dimension attributes
+        JoinPart(
+            group_by=dim_users.v1,
+        ),
+        # Listing dimension attributes
+        JoinPart(
+            group_by=dim_merchants.v1,
+            prefix="merchant_"
+        ),
+    ],
+    # External API call features
+    online_external_parts=[
+        ExternalPart(
+            source=sift_score.v0
+        )
+    ],
+    # Fetch-time transformations
+    derivations=[
+        Derivation(
+            name="is_listing_heavy",
+            expression="IF(listing_id_weight_grams > 1000, 1, 0)"
+        ),
+        Derivation(
+            name="is_item_handmade",
+            expression="array_contains(split(listing_id_tags, ','), 'handmade')"
+        ),
+        Derivation(
+            name="*",
+            expression="*"
+        )
+    ],
+    version=10,
+    online=True,
+    output_namespace="data",
+    step_days=5,
+)
+
+
 
 # Join with user behavioral features and listing attributes
 v1 = Join(
@@ -60,9 +102,18 @@ derivations_v1 = Join(
     left=source,
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
+        # User behavioral features (aggregated over time windows)
+        JoinPart(
+            group_by=user_activities.v1,
+        ),
         # Listing dimension attributes (point-in-time lookup)
         JoinPart(
             group_by=dim_listings.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_merchants.v1,
+            prefix="merchant_"
         ),
     ],
     derivations=[
@@ -80,8 +131,8 @@ derivations_v1 = Join(
             expression="*"
         )
     ],
-    version=1,
+    version=3,
     online=True,
     output_namespace="data",
-    step_days=2,
+    step_days=5,
 )
