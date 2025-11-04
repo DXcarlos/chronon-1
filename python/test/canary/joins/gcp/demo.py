@@ -21,8 +21,8 @@ source = EventSource(
     ),
 )
 
-search_v0 = Join(
-    left=source,
+
+search_v0 = Join(    left=source,
     row_ids=["event_id"],
     right_parts=[
         # User behavioral features (aggregated over time windows)
@@ -64,7 +64,7 @@ search_v0 = Join(
             expression="*"
         )
     ],
-    version=10,
+    version=11,
     online=True,
     output_namespace="data",
     step_days=5,
