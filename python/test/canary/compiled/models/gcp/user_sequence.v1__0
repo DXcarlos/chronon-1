@@ -1,22 +1,4 @@
 {
-  "keySchema": {
-    "kind": 13,
-    "name": "modeltransform_key_schema",
-    "params": [
-      {
-        "dataType": {
-          "kind": 7
-        },
-        "name": "listing_id_headline"
-      },
-      {
-        "dataType": {
-          "kind": 7
-        },
-        "name": "listing_id_long_description"
-      }
-    ]
-  },
   "metaData": {
     "executionInfo": {
       "clusterConf": {
@@ -79,11 +61,11 @@
         }
       }
     },
-    "name": "gcp.listing.v1__2",
-    "outputNamespace": "data",
-    "sourceFile": "models/gcp/listing.py",
+    "name": "gcp.user_sequence.v1__0",
+    "outputNamespace": "models",
+    "sourceFile": "models/gcp/user_sequence.py",
     "team": "gcp",
-    "version": "2"
+    "version": "0"
   },
   "models": [
     {
@@ -95,77 +77,43 @@
         }
       },
       "inputMapping": {
-        "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))"
+        "instance": "user_id_user_event_struct_last128_30d",
+        "parameters": "CAST(map() AS MAP<STRING, STRING>)"
       },
       "metaData": {
-        "name": "gcp.listing.item_description_model__1",
         "team": "gcp",
-        "version": "1"
+        "version": "1.0"
       },
       "outputMapping": {
-        "item_embedding": "gcp_listing_item_description_model__1__embeddings.values"
-      },
-      "valueSchema": {
-        "kind": 13,
-        "name": "model_value_schema",
-        "params": [
-          {
-            "dataType": {
-              "kind": 13,
-              "name": "embeddings",
-              "params": [
-                {
-                  "dataType": {
-                    "kind": 13,
-                    "name": "statistics",
-                    "params": [
-                      {
-                        "dataType": {
-                          "kind": 0
-                        },
-                        "name": "truncated"
-                      },
-                      {
-                        "dataType": {
-                          "kind": 3
-                        },
-                        "name": "token_count"
-                      }
-                    ]
-                  },
-                  "name": "statistics"
-                },
-                {
-                  "dataType": {
-                    "kind": 12,
-                    "params": [
-                      {
-                        "dataType": {
-                          "kind": 6
-                        },
-                        "name": "elem"
-                      }
-                    ]
-                  },
-                  "name": "values"
-                }
-              ]
-            },
-            "name": "embeddings"
-          }
-        ]
+        "user_sequence_embedding": "predictions[0].embeddings.values"
       }
     }
   ],
   "passthroughFields": [
-    "user_id",
-    "listing_id",
-    "listing_id_is_active"
+    "user_id"
   ],
   "sources": [
     {
       "joinSource": {
         "join": {
+          "derivations": [
+            {
+              "expression": "IF(listing_id_weight_grams > 1000, 1, 0)",
+              "name": "is_listing_heavy"
+            },
+            {
+              "expression": "array_contains(split(listing_id_tags, ','), 'handmade')",
+              "name": "is_item_handmade"
+            },
+            {
+              "expression": "CASE WHEN user_id_sift_score > 0.85 THEN 'high' WHEN user_id_sift_score > 0.6 THEN 'medium' ELSE 'low' END",
+              "name": "user_risk_category"
+            },
+            {
+              "expression": "*",
+              "name": "*"
+            }
+          ],
           "joinParts": [
             {
               "groupBy": {
@@ -588,6 +536,37 @@
             {
               "groupBy": {
                 "keyColumns": [
+                  "user_id"
+                ],
+                "metaData": {
+                  "executionInfo": {
+                    "historicalBackfill": 0,
+                    "scheduleCron": "@daily"
+                  },
+                  "name": "gcp.dim_users.v1__0",
+                  "online": 1,
+                  "team": "gcp",
+                  "version": "0"
+                },
+                "sources": [
+                  {
+                    "entities": {
+                      "query": {
+                        "selects": {
+                          "sift_score": "RAND()",
+                          "user_id": "user"
+                        },
+                        "startPartition": "2025-01-01"
+                      },
+                      "snapshotTable": "data.gcp_exports_dim_users__0"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "groupBy": {
+                "keyColumns": [
                   "listing_id"
                 ],
                 "metaData": {
@@ -635,25 +614,20 @@
           "metaData": {
             "executionInfo": {
               "scheduleCron": "@daily",
-              "stepDays": 2
+              "stepDays": 5
             },
-            "name": "gcp.demo.v1__1",
+            "name": "gcp.demo.search_v0__11",
             "online": 1,
             "outputNamespace": "data",
             "production": 0,
             "samplePercent": 100.0,
             "team": "gcp",
-            "version": "1"
+            "version": "11"
           },
           "rowIds": [
             "event_id"
           ],
           "useLongNames": 0
-        },
-        "query": {
-          "wheres": [
-            "(listing_id_headline IS NOT NULL AND listing_id_headline != '') OR (listing_id_long_description IS NOT NULL AND listing_id_long_description != '')"
-          ]
         }
       }
     }
