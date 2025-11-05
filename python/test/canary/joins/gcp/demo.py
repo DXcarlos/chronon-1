@@ -60,6 +60,10 @@ search_v0 = Join(    left=source,
             expression="array_contains(split(listing_id_tags, ','), 'handmade')"
         ),
         Derivation(
+            name="user_risk_category",
+            expression="CASE WHEN user_id_sift_score > 0.85 THEN 'high' WHEN user_id_sift_score > 0.6 THEN 'medium' ELSE 'low' END"
+        ),
+        Derivation(
             name="*",
             expression="*"
         )

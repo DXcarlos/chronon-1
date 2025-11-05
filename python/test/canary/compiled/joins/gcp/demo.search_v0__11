@@ -9,6 +9,10 @@
       "name": "is_item_handmade"
     },
     {
+      "expression": "CASE WHEN user_id_sift_score > 0.85 THEN 'high' WHEN user_id_sift_score > 0.6 THEN 'medium' ELSE 'low' END",
+      "name": "user_risk_category"
+    },
+    {
       "expression": "*",
       "name": "*"
     }
@@ -520,7 +524,7 @@
         ],
         "metaData": {
           "columnHashes": {
-            "score": "68a47ea8f560f66e2521989f8be8d067",
+            "sift_score": "68a47ea8f560f66e2521989f8be8d067",
             "user_id": "b804bcd3fbd31b8f2e41ab6255e056b6"
           },
           "executionInfo": {
@@ -538,7 +542,7 @@
             "entities": {
               "query": {
                 "selects": {
-                  "score": "RAND()",
+                  "sift_score": "RAND()",
                   "user_id": "user"
                 },
                 "startPartition": "2025-01-01"
@@ -673,7 +677,7 @@
       "user_id_purchase_event_sum_1d": "c46ae83248ef63258a89b9c155784bf2",
       "user_id_purchase_event_sum_30d": "c46ae83248ef63258a89b9c155784bf2",
       "user_id_purchase_event_sum_7d": "c46ae83248ef63258a89b9c155784bf2",
-      "user_id_score": "457139179b98c06bb77ce80e565ef0f2",
+      "user_id_sift_score": "457139179b98c06bb77ce80e565ef0f2",
       "user_id_user_event_struct_last128_14d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
       "user_id_user_event_struct_last128_1d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
       "user_id_user_event_struct_last128_30d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
@@ -686,7 +690,8 @@
       "user_id_view_event_sum_14d": "fffe33a5913643faa801e729d55a5b53",
       "user_id_view_event_sum_1d": "fffe33a5913643faa801e729d55a5b53",
       "user_id_view_event_sum_30d": "fffe33a5913643faa801e729d55a5b53",
-      "user_id_view_event_sum_7d": "fffe33a5913643faa801e729d55a5b53"
+      "user_id_view_event_sum_7d": "fffe33a5913643faa801e729d55a5b53",
+      "user_risk_category": "9209f4b529581404821db75d8555ce0f"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_users__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_users__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_merchants__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}], \"label_join\": false}",
     "executionInfo": {

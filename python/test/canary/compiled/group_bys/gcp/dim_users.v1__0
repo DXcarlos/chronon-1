@@ -4,7 +4,7 @@
   ],
   "metaData": {
     "columnHashes": {
-      "score": "68a47ea8f560f66e2521989f8be8d067",
+      "sift_score": "68a47ea8f560f66e2521989f8be8d067",
       "user_id": "b804bcd3fbd31b8f2e41ab6255e056b6"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_users__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_users__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
@@ -83,7 +83,7 @@
       "entities": {
         "query": {
           "selects": {
-            "score": "RAND()",
+            "sift_score": "RAND()",
             "user_id": "user"
           },
           "startPartition": "2025-01-01"

@@ -16,7 +16,7 @@ source = EntitySource(
     query=Query(
         selects=selects(
             user_id="user",
-            score="RAND()"
+            sift_score="RAND()"
         ),
         start_partition="2025-01-01"
     ),
