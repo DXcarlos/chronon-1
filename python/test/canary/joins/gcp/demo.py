@@ -68,7 +68,7 @@ search_v0 = Join(    left=source,
             expression="*"
         )
     ],
-    version=11,
+    version=13,
     online=True,
     output_namespace="data",
     step_days=5,
@@ -96,6 +96,31 @@ v1 = Join(
         ),
     ],
     version=1,
+    online=True,
+    output_namespace="data",
+    step_days=2,
+)
+
+
+v1_modular = Join(
+    left=source,
+    row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
+    right_parts=[
+        # User behavioral features (aggregated over time windows)
+        JoinPart(
+            group_by=user_activities.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_listings.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_merchants.v1,
+            prefix="merchant_"
+        ),
+    ],
+    version=10,
     online=True,
     output_namespace="data",
     step_days=2,
