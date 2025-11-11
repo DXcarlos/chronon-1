@@ -23,6 +23,7 @@ class ZiplineHub:
             self.id_token = os.getenv("GCP_ID_TOKEN")
             if self.id_token:
                 print(" 🔑 Using ID token from environment")
+                self.sa = None
             elif sa_name is not None:
                 # Fallback to Google Cloud authentication
                 print(" 🔑 Generating ID token from service account credentials")
