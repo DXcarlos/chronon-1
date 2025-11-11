@@ -3,6 +3,7 @@ import mill.scalalib._
 import mill.scalalib.scalafmt._
 import coursier.maven.MavenRepository
 
+
 // Shared constants and dependencies
 object Constants {
   // Common repositories
