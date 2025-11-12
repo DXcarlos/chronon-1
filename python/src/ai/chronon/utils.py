@@ -411,9 +411,6 @@ def get_applicable_modes(conf: ChrononJobTypes) -> List[str]:
         if requires_log_flattening_task(join):
             modes.append("log-flattener")
 
-        if join.labelParts is not None:
-            modes.append("label-join")
-
     elif isinstance(conf, api.StagingQuery):
         modes.append("backfill")
     else:

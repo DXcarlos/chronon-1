@@ -384,12 +384,6 @@ class ConfValidator(object):
         if left_cols:
             join_parts = list(join.joinParts)  # Create a copy to avoid modifying the original
 
-            # Add label_parts to join_parts to validate if set
-            label_parts = join.labelParts
-            if label_parts:
-                for label_jp in label_parts.labels:
-                    join_parts.append(label_jp)
-
             # Validate join_parts
             for join_part in join_parts:
                 join_part_err = self._validate_join_part_keys(join_part, left_cols)
@@ -407,10 +401,6 @@ class ConfValidator(object):
           list of validation errors.
         """
         included_group_bys_and_prefixes = [(rp.groupBy, rp.prefix) for rp in join.joinParts]
-        # TODO: Remove label parts check in future PR that deprecates label_parts
-        included_label_parts_and_prefixes = (
-            [(lp.groupBy, lp.prefix) for lp in join.labelParts.labels] if join.labelParts else []
-        )
         included_group_bys = [tup[0] for tup in included_group_bys_and_prefixes]
 
         offline_included_group_bys = [
@@ -476,12 +466,6 @@ class ConfValidator(object):
             )
             if right_part_collisions:
                 errors.append(right_part_collisions)
-
-            label_part_collisions = detect_feature_name_collisions(
-                included_label_parts_and_prefixes, "label parts", join.metaData.name
-            )
-            if label_part_collisions:
-                errors.append(label_part_collisions)
 
         return errors
 

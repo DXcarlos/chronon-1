@@ -173,7 +173,6 @@ object Builders {
               left: Source = null,
               joinParts: Seq[JoinPart] = null,
               externalParts: Seq[ExternalPart] = null,
-              labelParts: LabelParts = null,
               bootstrapParts: Seq[BootstrapPart] = null,
               rowIds: Seq[String] = null,
               derivations: Seq[Derivation] = null,
@@ -187,8 +186,6 @@ object Builders {
         result.setJoinParts(joinParts.toJava)
       if (externalParts != null)
         result.setOnlineExternalParts(externalParts.toJava)
-      if (labelParts != null)
-        result.setLabelParts(labelParts)
       if (bootstrapParts != null)
         result.setBootstrapParts(bootstrapParts.toJava)
       if (rowIds != null)
@@ -231,17 +228,6 @@ object Builders {
       if (keyMapping != null)
         result.setKeyMapping(keyMapping.toJava)
       result.setPrefix(prefix)
-      result
-    }
-  }
-
-  object LabelPart {
-    def apply(labels: Seq[JoinPart] = null, leftStartOffset: Int = 0, leftEndOffset: Int = 0): LabelParts = {
-      val result = new LabelParts()
-      result.setLeftStartOffset(leftStartOffset)
-      result.setLeftEndOffset(leftEndOffset)
-      if (labels != null)
-        result.setLabels(labels.toJava)
       result
     }
   }

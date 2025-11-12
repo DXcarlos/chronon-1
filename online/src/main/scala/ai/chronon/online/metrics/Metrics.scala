@@ -48,7 +48,6 @@ object Metrics {
     val StagingQueryOffline = "staging_query.offline"
 
     val JoinLogFlatten = "join.log_flatten"
-    val LabelJoin = "label_join"
     val KVStore = "kv_store"
     val Orchestrator = "orchestrator"
   }

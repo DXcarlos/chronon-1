@@ -17,7 +17,6 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
   private def unsetNestedMetadata(join: Join): Unit = {
     join.unsetMetaData()
     Option(join.joinParts).foreach(_.iterator().toScala.foreach(_.groupBy.unsetMetaData()))
-    Option(join.labelParts).foreach(_.labels.iterator().toScala.foreach(_.groupBy.unsetMetaData()))
     // Keep onlineExternalParts as they affect output schema and are needed for bootstrap/merge/derivation
     // join.unsetOnlineExternalParts()
   }
@@ -26,7 +25,6 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     val copied = join.deepCopy()
     copied.metaData.unsetExecutionInfo()
     Option(copied.joinParts).foreach(_.iterator().toScala.foreach(_.groupBy.metaData.unsetExecutionInfo()))
-    Option(copied.labelParts).foreach(_.labels.iterator().toScala.foreach(_.groupBy.metaData.unsetExecutionInfo()))
     // Keep onlineExternalParts for bootstrap job to add null columns for derivations
     // copied.unsetOnlineExternalParts()
     copied
@@ -160,7 +158,6 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     val copy = result.deepCopy()
     unsetNestedMetadata(copy.join)
     copy.join.unsetDerivations()
-    copy.join.unsetLabelParts()
 
     toNode(metaData, _.setJoinMerge(result), copy)
   }
@@ -183,46 +180,8 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
 
     val copy = result.deepCopy()
     unsetNestedMetadata(copy.join)
-    copy.join.unsetLabelParts()
 
     toNode(metaData, _.setJoinDerivation(result), copy)
-  }
-
-  // these need us to additionally (groupBy backfill) generate the snapshot tables
-  private val snapshotLabelParts: Array[JoinPart] = Option(join.labelParts)
-    .map(
-      _.labels
-        .iterator()
-        .toScala
-        .filter { jp => jp.groupBy.inferredAccuracy == Accuracy.SNAPSHOT }
-        .toArray
-    )
-    .getOrElse(Array.empty)
-
-  private val labelJoinNodeOpt: Option[Node] = Option(join.labelParts).map { labelParts =>
-    val result = new LabelJoinNode()
-      .setJoin(join)
-
-    val labelNodeName = join.metaData.name + "/labeled"
-
-    val inputTable = derivationNodeOpt
-      .map(_.metaData.outputTable)
-      .getOrElse(mergeNode.metaData.outputTable)
-
-    val labelPartDeps = TableDependencies.fromJoin(join) :+ TableDependencies.fromTable(inputTable)
-
-    val metaData = MetaDataUtils
-      .layer(
-        join.metaData,
-        "label_join",
-        labelNodeName,
-        labelPartDeps
-      )
-
-    val copy = result.deepCopy()
-    unsetNestedMetadata(copy.join)
-
-    toNode(metaData, _.setLabelJoin(result), copy)
   }
 
   def offlineNodes: Seq[Node] = {
@@ -231,11 +190,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       bootstrapNodeOpt ++
       joinPartNodes ++
       Seq(mergeNode) ++
-      derivationNodeOpt ++
-      snapshotLabelParts.map(_.groupBy).map { gb =>
-        new GroupByPlanner(gb).backfillNode
-      } ++
-      labelJoinNodeOpt
+      derivationNodeOpt
   }
 
   def metadataUploadNode: Node = {
@@ -318,7 +273,6 @@ object JoinPlanner {
   private def unsetNestedMetadata(join: Join): Unit = {
     join.unsetMetaData()
     Option(join.joinParts).foreach(_.iterator().toScala.foreach(_.groupBy.unsetMetaData()))
-    Option(join.labelParts).foreach(_.labels.iterator().toScala.foreach(_.groupBy.unsetMetaData()))
     // Keep onlineExternalParts as they affect output schema and are needed for bootstrap/merge/derivation
     // join.unsetOnlineExternalParts()
   }

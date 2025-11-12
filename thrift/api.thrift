@@ -403,7 +403,6 @@ struct Join {
     // users can register external sources into Api implementation. Chronon fetcher can invoke the implementation.
     // This is applicable only for online fetching. Offline this will not be produce any values.
     5: optional list<ExternalPart> onlineExternalParts
-    6: optional LabelParts labelParts
     7: optional list<BootstrapPart> bootstrapParts
     // Fields on left that uniquely identifies a single record
     8: optional list<string> rowIds
@@ -434,19 +433,6 @@ struct BootstrapPart {
     3: optional Query query
     // Join keys to the left. If null, defaults to rowIds on the Join.
     4: optional list<string> keyColumns
-}
-
-// Labels look ahead relative to the join's left ds. (rightParts look back)
-struct LabelParts {
-    // labels are used to compute
-    1: optional list<JoinPart> labels
-    // The earliest date label should be refreshed
-    2: optional i32 leftStartOffset
-    // The most recent date label should be refreshed.
-    // e.g. left_end_offset = 3 most recent label available will be 3 days prior to 'label_ds'
-    3: optional i32 leftEndOffset
-    4: optional MetaData metaData
-//    5: optional JoinType joinType
 }
 
 // This is written by the bulk upload process into the metaDataset

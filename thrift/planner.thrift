@@ -32,10 +32,6 @@ struct JoinPartNode {
     6: optional api.JoinPart productionJoinPart
 }
 
-struct LabelJoinNode {
-    2: optional api.Join join
-}
-
 struct MonolithJoinNode {
     1: optional api.Join join
 }
@@ -79,7 +75,6 @@ union NodeContent {
     3: JoinPartNode joinPart
     4: JoinMergeNode joinMerge
     5: JoinDerivationNode joinDerivation
-    6: LabelJoinNode labelJoin
     7: MonolithJoinNode monolithJoin
     8: StagingQueryNode stagingQuery
 

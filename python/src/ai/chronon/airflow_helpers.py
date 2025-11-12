@@ -8,8 +8,6 @@ from gen_thrift.common.ttypes import TimeUnit
 import ai.chronon.utils as utils
 from ai.chronon.constants import (
     AIRFLOW_DEPENDENCIES_KEY,
-    AIRFLOW_LABEL_DEPENDENCIES_KEY,
-    PARTITION_COLUMN_KEY,
 )
 
 
@@ -154,44 +152,8 @@ def _set_join_deps(join):
                     )
                     deps.extend(_get_airflow_deps_from_source(source, source_partition_column))
 
-    label_deps = []
-    # Handle label parts
-    if join.labelParts and join.labelParts.labels:
-        join_output_table = utils.output_table_name(join, full_name=True)
-        partition_column = join.metaData.executionInfo.conf.common[PARTITION_COLUMN_KEY]
-
-        # set the dependencies on the label sources
-        for label_part in join.labelParts.labels:
-            group_by = label_part.groupBy
-
-            # set the dependency on the join output -- one for each distinct window offset
-            windows = _get_distinct_day_windows(group_by)
-            for window in windows:
-                label_deps.append(
-                    create_airflow_dependency(
-                        join_output_table, partition_column, offset=-1 * window
-                    )
-                )
-
-            if group_by and group_by.sources:
-                for source in label_part.groupBy.sources:
-                    source_query = utils.get_query(source)
-                    source_partition_column = (
-                        _get_partition_col_from_query(source_query) or default_partition_col
-                    )
-                    label_deps.extend(
-                        _get_airflow_deps_from_source(source, source_partition_column)
-                    )
-
     # Update the metadata customJson with dependencies
     _dedupe_and_set_airflow_deps_json(join, deps, AIRFLOW_DEPENDENCIES_KEY)
-
-    # Update the metadata customJson with label join deps
-    if label_deps:
-        _dedupe_and_set_airflow_deps_json(join, label_deps, AIRFLOW_LABEL_DEPENDENCIES_KEY)
-
-    # Set the t/f flag for label_join
-    _set_label_join_flag(join)
 
 
 def _set_group_by_deps(group_by):
@@ -212,16 +174,6 @@ def _set_group_by_deps(group_by):
 
     # Update the metadata customJson with dependencies
     _dedupe_and_set_airflow_deps_json(group_by, deps, AIRFLOW_DEPENDENCIES_KEY)
-
-
-def _set_label_join_flag(join):
-    existing_json = join.metaData.customJson or "{}"
-    json_map = json.loads(existing_json)
-    label_join_flag = False
-    if join.labelParts:
-        label_join_flag = True
-    json_map["label_join"] = label_join_flag
-    join.metaData.customJson = json.dumps(json_map)
 
 
 def _dedupe_and_set_airflow_deps_json(obj, deps, custom_json_key):

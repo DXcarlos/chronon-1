@@ -37,7 +37,6 @@ Derivation = group_by.Derivation
 Join = join.Join
 JoinPart = join.JoinPart
 BootstrapPart = join.BootstrapPart
-LabelParts = join.LabelParts
 ContextualSource = join.ContextualSource
 ExternalPart = join.ExternalPart
 ExternalSource = join.ExternalSource

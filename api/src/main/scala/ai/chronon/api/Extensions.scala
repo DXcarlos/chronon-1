@@ -172,13 +172,6 @@ object Extensions {
       } yield table).getOrElse(s"${metaData.outputNamespace}.${metaData.cleanName}")
     }
 
-    // legacy way of generating label info - we might end-up doing views again, but probably with better names
-    def outputLabelTable: String = s"${metaData.outputNamespace}.${metaData.cleanName}_labels"
-    def outputFinalView: String = s"${metaData.outputNamespace}.${metaData.cleanName}_labeled"
-    def outputLatestLabelView: String = s"${metaData.outputNamespace}.${metaData.cleanName}_labeled_latest"
-
-    def outputLabelTableV2: String =
-      s"${metaData.outputNamespace}.${metaData.cleanName}_with_labels" // Used for the LabelJoinV2 flow
     def loggedTable: String = s"${outputTable}_logged"
     def summaryTable: String = s"${outputTable}_summary"
     def packedSummaryTable: String = s"${outputTable}_summary_packed"
@@ -863,34 +856,6 @@ object Extensions {
 
     def constructJoinPartSchema(schemaField: StructField): StructField = {
       StructField(joinPart.columnPrefix + schemaField.name, schemaField.fieldType)
-    }
-  }
-
-  implicit class LabelPartsOps(val labelParts: LabelParts) extends Serializable {
-    def leftKeyCols: Array[String] = {
-      labelParts.labels.toScala
-        .flatMap {
-          _.rightToLeft.values
-        }
-        .toSet
-        .toArray
-    }
-
-    def setups: Seq[String] = {
-      labelParts.labels.toScala
-        .flatMap(_.groupBy.setups)
-        .distinct
-    }
-
-    // a list of columns which can identify a row on left, use user specified columns by default
-    def rowIdentifier(userRowId: util.List[String] = null, partitionColumn: String): Array[String] = {
-      if (userRowId != null && !userRowId.isEmpty) {
-        if (!userRowId.contains(partitionColumn))
-          userRowId.toScala.toArray ++ Array(partitionColumn)
-        else
-          userRowId.toScala.toArray
-      } else
-        leftKeyCols ++ Array(partitionColumn)
     }
   }
 

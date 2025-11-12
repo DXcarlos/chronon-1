@@ -318,9 +318,6 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
         new JoinDerivationJob(conf.getJoinDerivation, metadata, dateRange)(tableUtils).run()
         logger.info(s"Successfully completed join derivation job for '${metadata.name}'")
 
-      case NodeContent._Fields.LABEL_JOIN =>
-        throw new UnsupportedOperationException("LABEL_JOIN nodes are not yet supported in BatchNodeRunner")
-
       case NodeContent._Fields.GROUP_BY_UPLOAD =>
         runGroupByUpload(metadata, conf.getGroupByUpload, range)
 

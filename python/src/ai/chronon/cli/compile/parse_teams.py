@@ -95,7 +95,7 @@ def update_metadata(obj: Any, team_dict: Dict[str, Team]):
     if isinstance(obj, Join):
         join_namespace = obj.metaData.outputNamespace
 
-        # set the metadata for each join part and labelParts
+        # set the metadata for each join part
         def set_group_by_metadata(join_part_gb, output_namespace):
             if join_part_gb is not None:
                 if join_part_gb.metaData:
@@ -111,11 +111,6 @@ def update_metadata(obj: Any, team_dict: Dict[str, Team]):
             for jp in obj.joinParts or []:
                 jp.useLongNames = obj.useLongNames
                 set_group_by_metadata(jp.groupBy, join_namespace)
-
-        if obj.labelParts:
-            for lb in obj.labelParts.labels or []:
-                lb.useLongNames = obj.useLongNames
-                set_group_by_metadata(lb.groupBy, join_namespace)
 
     if metadata.executionInfo is None:
         metadata.executionInfo = ExecutionInfo()

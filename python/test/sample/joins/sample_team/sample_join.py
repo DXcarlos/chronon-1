@@ -12,7 +12,7 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
-from group_bys.sample_team import label_part_group_by, sample_group_by, sample_group_by_group_by
+from group_bys.sample_team import sample_group_by, sample_group_by_group_by
 from sources import test_sources
 
 from ai.chronon.join import (
@@ -20,7 +20,7 @@ from ai.chronon.join import (
     JoinPart,
 )
 from ai.chronon.repo.constants import RunMode
-from ai.chronon.types import EnvironmentVariables, LabelParts
+from ai.chronon.types import EnvironmentVariables
 
 v1 = Join(
     left=test_sources.staging_entities,
@@ -34,7 +34,6 @@ v1 = Join(
         }
     ),
     online=True,
-    label_part=LabelParts([JoinPart(group_by=label_part_group_by.label_part_group_by)], 1, 1),
     version=0,
 )
 

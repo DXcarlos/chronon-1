@@ -108,9 +108,6 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
       case NodeContent._Fields.GROUP_BY_BACKFILL =>
         logger.info(s"Skipping GroupBy backfill node (will be run separately): ${metadata.name}")
 
-      case NodeContent._Fields.LABEL_JOIN =>
-        logger.warn(s"LABEL_JOIN nodes not yet implemented: ${metadata.name}")
-
       case unsupported =>
         logger.warn(s"Skipping unsupported node type ${unsupported}: ${metadata.name}")
     }

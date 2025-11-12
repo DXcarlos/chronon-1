@@ -24,12 +24,3 @@ def set_templated_values(obj, cls, compile_context: CompileContext):
             obj.metaData.dependencies = [
                 _fill_template(dep, obj, namespace) for dep in obj.metaData.dependencies
             ]
-
-    if cls == Join and obj.labelParts:
-        obj.labelParts.metaData.dependencies = [
-            label_dep.replace(
-                "{{ join_backfill_table }}",
-                utils.output_table_name(obj, full_name=True),
-            )
-            for label_dep in obj.labelParts.metaData.dependencies
-        ]

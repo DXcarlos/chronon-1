@@ -35,12 +35,6 @@ class ExtensionsTest extends AnyFlatSpec {
     )
   }
 
-  it should "row identifier" in {
-    val labelPart = Builders.LabelPart();
-    val res = labelPart.rowIdentifier(Arrays.asList("yoyo", "yujia"), "ds")
-    assertTrue(res.contains("ds"))
-  }
-
   it should "part skew filter should return none when no skew key" in {
     val joinPart = Builders.JoinPart()
     val join = Builders.Join(joinParts = Seq(joinPart))

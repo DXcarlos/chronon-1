@@ -197,7 +197,6 @@ object UnionJoin {
     val disclaimer = "Support is coming soon."
     require(joinConf.left.isSetEvents, s"Only events sources are supported on the left side of the join. $disclaimer")
     require(!joinConf.isSetBootstrapParts, s"Bootstraps on fast mode are not supported yet. $disclaimer")
-    require(!joinConf.isSetLabelParts, s"Label Parts on fast mode are not supported yet. $disclaimer")
     require(joinConf.getJoinParts.size() == 1, s"Only one join-part is supported on fast mode. $disclaimer")
 
     val joinPart = joinConf.getJoinParts.get(0)
@@ -219,8 +218,7 @@ object UnionJoin {
     joinConf.left.isSetEvents &&
     joinConf.getJoinParts.size() == 1 &&
     joinConf.getJoinParts.get(0).groupBy.inferredAccuracy == Accuracy.TEMPORAL &&
-    !joinConf.isSetBootstrapParts &&
-    !joinConf.isSetLabelParts
+    !joinConf.isSetBootstrapParts
   }
 
   def computeJoinAndSave(joinConf: api.Join, dateRange: PartitionRange)(implicit tableUtils: TableUtils): Unit = {

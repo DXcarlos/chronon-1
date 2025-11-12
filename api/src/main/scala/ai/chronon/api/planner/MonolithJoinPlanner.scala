@@ -20,9 +20,6 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     Option(semanticJoin.bootstrapParts).map(_.asScala).foreach { bootstrapParts =>
       bootstrapParts.foreach(bootstrapPart => bootstrapPart.unsetMetaData())
     }
-    Option(semanticJoin.labelParts).map(_.labels).map(_.asScala).foreach { labelPart =>
-      labelPart.foreach { joinPart => joinPart.groupBy.unsetMetaData() }
-    }
     semanticJoin.unsetOnlineExternalParts()
     semanticJoin
 

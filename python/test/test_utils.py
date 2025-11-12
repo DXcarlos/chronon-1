@@ -91,13 +91,6 @@ def no_log_flattener_join():
     return no_log_flattener
 
 
-@pytest.fixture
-def label_part_join():
-    from joins.sample_team.sample_label_join import v1
-
-    return v1
-
-
 def test_edit_distance():
     assert utils.edit_distance("test", "test") == 0
     assert utils.edit_distance("test", "testy") > 0
@@ -144,7 +137,6 @@ def test_get_applicable_mode_for_joins(
     never_scheduled_join,
     consistency_check_join,
     no_log_flattener_join,
-    label_part_join,
 ):
     modes = utils.get_applicable_modes(basic_join)
     assert "backfill" in modes
@@ -164,10 +156,6 @@ def test_get_applicable_mode_for_joins(
     modes = utils.get_applicable_modes(no_log_flattener_join)
     assert "consistency-metrics-compute" not in modes
     assert "log-flattener" not in modes
-
-    modes = utils.get_applicable_modes(label_part_join)
-    assert "consistency-metrics-compute" not in modes
-    assert "label-join" in modes
 
 
 def dopen(path):
@@ -209,27 +197,6 @@ def test_get_related_table_names_for_simple_joins():
         assert not any(table.endswith("_labels") for table in tables)
         assert not any(table.endswith("_labeled") for table in tables)
         assert not any(table.endswith("_labeled_latest") for table in tables)
-        assert not any(table.endswith("_bootstrap") for table in tables)
-
-
-def test_get_related_table_names_for_label_joins():
-    with dopen(
-        "test/sample/production/joins/sample_team/sample_label_join.v1"
-    ) as conf_file:
-        json = conf_file.read()
-        join = json2thrift(json, api.Join)
-        tables = utils.get_related_table_names(join)
-
-        # Joins will have the stats-summary & log (because of default sample = 100%)
-        assert any(table.endswith("_daily_stats") for table in tables)
-        assert any(table.endswith("_logged") for table in tables)
-        # label tables should be available
-        assert any(table.endswith("_labels") for table in tables)
-        assert any(table.endswith("_labeled") for table in tables)
-        assert any(table.endswith("_labeled_latest") for table in tables)
-
-        assert not any(table.endswith("_upload") for table in tables)
-        assert not any(table.endswith("_consistency") for table in tables)
         assert not any(table.endswith("_bootstrap") for table in tables)
 
 

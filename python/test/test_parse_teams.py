@@ -14,7 +14,7 @@ Tests for the parse_teams module.
 #     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
-from gen_thrift.api.ttypes import GroupBy, Join, JoinPart, LabelParts, MetaData, Team
+from gen_thrift.api.ttypes import GroupBy, Join, JoinPart, MetaData, Team
 from gen_thrift.common.ttypes import ConfigProperties
 
 from ai.chronon.cli.compile import parse_teams
@@ -81,10 +81,6 @@ def test_update_metadata_preserves_join_part_namespace():
     join_part_gb = GroupBy(metaData=MetaData(outputNamespace="existing_jp_namespace"))
     join_part = JoinPart(groupBy=join_part_gb)
 
-    # Create a join with label parts that have existing outputNamespace
-    label_part_gb = GroupBy(metaData=MetaData(outputNamespace="existing_label_namespace"))
-    label_parts = LabelParts(labels=[JoinPart(groupBy=label_part_gb)])
-
     # Create the join object
     join = Join(
         metaData=MetaData(
@@ -92,8 +88,7 @@ def test_update_metadata_preserves_join_part_namespace():
             name="test.join.name",
             outputNamespace="join_namespace"
         ),
-        joinParts=[join_part],
-        labelParts=label_parts
+        joinParts=[join_part]
     )
 
     # Call the function
@@ -102,7 +97,6 @@ def test_update_metadata_preserves_join_part_namespace():
     # Verify outputNamespace values were preserved
     assert join.metaData.outputNamespace == "join_namespace"
     assert join.joinParts[0].groupBy.metaData.outputNamespace == "existing_jp_namespace"
-    assert join.labelParts.labels[0].groupBy.metaData.outputNamespace == "existing_label_namespace"
 
 
 def test_update_metadata_sets_missing_join_part_namespace():
@@ -118,10 +112,6 @@ def test_update_metadata_sets_missing_join_part_namespace():
     join_part_gb = GroupBy(metaData=MetaData())
     join_part = JoinPart(groupBy=join_part_gb)
 
-    # Create a join with label parts that don't have outputNamespace
-    label_part_gb = GroupBy(metaData=MetaData())
-    label_parts = LabelParts(labels=[JoinPart(groupBy=label_part_gb)])
-
     # Create the join object
     join = Join(
         metaData=MetaData(
@@ -129,8 +119,7 @@ def test_update_metadata_sets_missing_join_part_namespace():
             name="test.join.name",
             outputNamespace="join_namespace"
         ),
-        joinParts=[join_part],
-        labelParts=label_parts
+        joinParts=[join_part]
     )
 
     # Call the function
@@ -139,7 +128,6 @@ def test_update_metadata_sets_missing_join_part_namespace():
     # Verify outputNamespace values were set correctly
     assert join.metaData.outputNamespace == "join_namespace"
     assert join.joinParts[0].groupBy.metaData.outputNamespace == "join_namespace"
-    assert join.labelParts.labels[0].groupBy.metaData.outputNamespace == "join_namespace"
 
 def test_merge_team_execution_info():
     """Test that merge_team_execution_info correctly merges team execution info."""

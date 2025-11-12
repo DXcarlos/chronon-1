@@ -263,44 +263,6 @@ def ExternalPart(
     return api.ExternalPart(source=source, keyMapping=key_mapping, prefix=prefix)
 
 
-def LabelParts(
-    labels: List[api.JoinPart],
-    left_start_offset: int,
-    left_end_offset: int,
-    label_offline_schedule: str = "@daily",
-) -> api.LabelParts:
-    """
-    Used to describe labels in join. Label part can be viewed as regular join part but represent
-    label data instead of regular feature data. Once labels are mature, label join job would join
-    labels with features in the training window user specified within the label GroupBy-s.
-
-    Since label join job will run continuously based on the schedule, multiple labels could be generated but with
-    different label_ds or label version. Label join job would have all computed label versions available, as well as
-    a view of latest version for easy label retrieval.
-
-    LabelParts definition can be updated along the way, but label join job can only accommodate these changes going
-    forward unless a backfill is manually triggered.
-
-    Label aggregation is also supported but with conditions applied. Single aggregation with one window is allowed
-    for now. If aggregation is present, we would infer the left_start_offset and left_end_offset same as window size
-    and the param input will be ignored.
-
-    :param labels: List of labels
-    :param label_offline_schedule: Cron expression for Airflow to schedule a DAG for offline
-                                   label join compute tasks
-    """
-
-    exec_info = common.ExecutionInfo(
-        scheduleCron=label_offline_schedule,
-    )
-    label_metadata = api.MetaData(executionInfo=exec_info)
-
-    return api.LabelParts(
-        labels=labels,
-        metaData=label_metadata,
-    )
-
-
 def Derivation(name: str, expression: str) -> api.Derivation:
     """
     Derivation allows arbitrary SQL select clauses to be computed using columns from joinPart and externalParts,
@@ -376,7 +338,6 @@ def Join(
     bootstrap_from_log: bool = False,
     skew_keys: Dict[str, List[str]] = None,
     derivations: List[api.Derivation] = None,
-    label_part: api.LabelParts = None,
     output_namespace: str = None,
     table_properties: Dict[str, str] = None,
     online: bool = False,
@@ -456,8 +417,6 @@ def Join(
     :param bootstrap_from_log:
         If set to True, will use logging table to generate training data by default and skip continuous backfill.
         Logging will be treated as another bootstrap source, but other bootstrap_parts will take precedence.
-    :param label_part:
-        Label part which contains a list of labels and label refresh window boundary used for the Join
     :param historical_backfill:
         Flag to indicate whether join backfill should backfill previous holes.
         Setting to false will only backfill latest single partition
@@ -502,17 +461,6 @@ def Join(
         )
         # mapping ts to query.timeColumn to events only
         updated_left.events.query.selects.update({"ts": updated_left.events.query.timeColumn})
-
-    if label_part:
-        label_metadata = api.MetaData(
-            executionInfo=label_part.metaData.executionInfo,
-        )
-        label_part = api.LabelParts(
-            labels=label_part.labels,
-            leftStartOffset=label_part.leftStartOffset,
-            leftEndOffset=label_part.leftEndOffset,
-            metaData=label_metadata,
-        )
 
     consistency_sample_percent = consistency_sample_percent if check_consistency else None
 
@@ -569,7 +517,6 @@ def Join(
         onlineExternalParts=online_external_parts,
         bootstrapParts=bootstrap_parts,
         rowIds=row_ids,
-        labelParts=label_part,
         derivations=derivations,
         useLongNames=use_long_names,
     )
