@@ -56,7 +56,7 @@ def get_environ_arg(env_name, ignoreError=False) -> str:
     return value
 
 
-def get_customer_warehouse_bucket() -> str:
+def get_default_warehouse_bucket() -> str:
     return f"zipline-warehouse-{get_customer_id()}"
 
 

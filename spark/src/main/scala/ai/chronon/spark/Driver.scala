@@ -42,7 +42,6 @@ import org.apache.spark.sql.streaming.StreamingQueryListener.{
 }
 import org.rogach.scallop.{ScallopConf, ScallopOption, Subcommand}
 import org.slf4j.{Logger, LoggerFactory}
-import org.yaml.snakeyaml.Yaml
 
 import java.io.File
 import java.nio.file.{Files, Paths}

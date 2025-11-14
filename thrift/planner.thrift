@@ -60,6 +60,10 @@ struct JoinMetadataUpload {
     2: optional api.Join join
 }
 
+struct ModelTransformsUploadNode {
+    2: optional api.ModelTransforms modelTransforms
+}
+
 struct ExternalSourceSensorNode {
     1: optional api.MetaData metaData
     2: optional common.TableDependency sourceTableDependency
@@ -80,7 +84,7 @@ union NodeContent {
 
     10: JoinMetadataUpload joinMetadataUpload
     11: ExternalSourceSensorNode externalSourceSensor
-
+    12: ModelTransformsUploadNode modelTransformsUpload
 
     // groupBy nodes
     100: GroupByBackfillNode groupByBackfill

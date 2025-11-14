@@ -457,4 +457,59 @@ object Builders {
       endCutoff: String = null
   ): TableDependency = Dep(table, startOffsetDays, endOffsetDays, startCutoff, endCutoff)
 
+  object Model {
+    def apply(
+        metaData: MetaData = null,
+        inferenceSpec: InferenceSpec = null,
+        inputMapping: Map[String, String] = null,
+        outputMapping: Map[String, String] = null
+    ): Model = {
+      val result = new Model()
+      if (metaData != null)
+        result.setMetaData(metaData)
+      if (inferenceSpec != null)
+        result.setInferenceSpec(inferenceSpec)
+      if (inputMapping != null)
+        result.setInputMapping(inputMapping.toJava)
+      if (outputMapping != null)
+        result.setOutputMapping(outputMapping.toJava)
+      result
+    }
+  }
+
+  object InferenceSpec {
+    def apply(
+        modelBackend: ModelBackend = ModelBackend.VertexAI,
+        modelBackendParams: Map[String, String] = null,
+        resourceConfig: ResourceConfig = null
+    ): InferenceSpec = {
+      val result = new InferenceSpec()
+      result.setModelBackend(modelBackend)
+      if (modelBackendParams != null)
+        result.setModelBackendParams(modelBackendParams.toJava)
+      if (resourceConfig != null)
+        result.setResourceConfig(resourceConfig)
+      result
+    }
+  }
+
+  object ModelTransforms {
+    def apply(
+        sources: Seq[Source] = null,
+        models: Seq[Model] = null,
+        passthroughFields: Seq[String] = null,
+        metaData: MetaData = null
+    ): ModelTransforms = {
+      val result = new ModelTransforms()
+      if (sources != null)
+        result.setSources(sources.toJava)
+      if (models != null)
+        result.setModels(models.toJava)
+      if (passthroughFields != null)
+        result.setPassthroughFields(passthroughFields.toJava)
+      if (metaData != null)
+        result.setMetaData(metaData)
+      result
+    }
+  }
 }

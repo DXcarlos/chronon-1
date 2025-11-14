@@ -27,6 +27,7 @@ class Runner:
         self.online_jar = args.get(ONLINE_JAR_ARG)
         self.online_class = args.get(ONLINE_CLASS_ARG)
         self.online_args = args.get(ONLINE_ARGS)
+        self.warehouse_bucket = args.get("warehouse_bucket") or utils.get_default_warehouse_bucket()
 
         self.conf_type = (args.get("conf_type") or "").replace(
             "-", "_"

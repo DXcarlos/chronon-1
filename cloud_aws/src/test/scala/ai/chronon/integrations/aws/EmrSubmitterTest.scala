@@ -113,7 +113,7 @@ class EmrSubmitterTest extends AnyFlatSpec with MockitoSugar {
         ClusterId -> "j-13BASWFP15TLR"
       ),
       jobProperties = Map.empty,
-      files = List("s3://zipline-artifacts-canary/additional-confs.yaml", "s3://zipline-warehouse-canary/purchases.v1"),
+      files = List("s3://zipline-warehouse-canary/purchases.v1"),
       Map.empty,
       "group-by-backfill",
       "--conf-path",
@@ -122,8 +122,6 @@ class EmrSubmitterTest extends AnyFlatSpec with MockitoSugar {
       "2025-02-26",
       "--conf-type",
       "group_bys",
-      "--additional-conf-path",
-      "/mnt/zipline/additional-confs.yaml"
     )
     println("EMR job id: " + jobId)
     0

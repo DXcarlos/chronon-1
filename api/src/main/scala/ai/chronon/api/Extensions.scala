@@ -1319,4 +1319,17 @@ object Extensions {
       new PartitionRange(start, end)
     }
   }
+
+  implicit class ModelTransformsOps(transforms: ModelTransforms) {
+    def keyNameForKvStore: String = {
+      _keyNameForKvStore(transforms.metaData, ModelFolder)
+    }
+
+    def joinSource: Option[JoinSource] =
+      Option(transforms.sources)
+        .map(_.toScala)
+        .getOrElse(Seq.empty)
+        .find(_.isSetJoinSource)
+        .map(_.getJoinSource)
+  }
 }

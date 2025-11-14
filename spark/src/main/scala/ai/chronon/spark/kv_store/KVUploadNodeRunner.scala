@@ -26,9 +26,11 @@ class KVUploadNodeRunner(api: Api) extends NodeRunner {
 
       case NodeContent._Fields.JOIN_METADATA_UPLOAD => doUploadJoinMetadata(conf)
 
+      case NodeContent._Fields.MODEL_TRANSFORMS_UPLOAD => doUploadModelTransforms(conf)
+
       case _ =>
         throw new IllegalArgumentException(
-          "Expected GroupByUploadToKVNode or JoinMetadataUpload content but got: " + conf.getClass.getSimpleName)
+          "Expected GroupByUploadToKVNode, JoinMetadataUpload, or ModelTransformsUpload content but got: " + conf.getClass.getSimpleName)
     }
   }
 
@@ -50,6 +52,29 @@ class KVUploadNodeRunner(api: Api) extends NodeRunner {
     } catch {
       case e: Exception =>
         logger.error(s"Failed to upload Join metadata for Join: $joinName", e)
+        throw e
+    }
+  }
+
+  private def doUploadModelTransforms(conf: NodeContent): Unit = {
+    val modelTransforms = conf.getModelTransformsUpload.modelTransforms
+    val modelTransformsName = modelTransforms.metaData.name
+
+    val startTime = System.currentTimeMillis()
+    logger.info(s"Starting metadata upload for ModelTransforms: $modelTransformsName")
+
+    try {
+      val fetchContext = createFetchContext()
+      val metadataStore = new MetadataStore(fetchContext)
+      val putRequest = metadataStore.putModelTransformsConf(modelTransforms)
+      Await.result(putRequest, 1.hour)
+      val duration = (System.currentTimeMillis() - startTime) / 1000
+      logger.info(
+        s"Successfully uploaded ModelTransforms metadata for ModelTransforms: $modelTransformsName in $duration seconds")
+
+    } catch {
+      case e: Exception =>
+        logger.error(s"Failed to upload ModelTransforms metadata for ModelTransforms: $modelTransformsName", e)
         throw e
     }
   }

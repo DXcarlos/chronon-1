@@ -65,11 +65,11 @@ class MetadataStore(fetchContext: FetchContext) {
     val clazz = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
 
     val confTypeKeyword = clazz match {
-      case j if j == classOf[Join]           => JoinFolder
-      case g if g == classOf[GroupBy]        => GroupByFolder
-      case sq if sq == classOf[StagingQuery] => StagingQueryFolder
-      case m if m == classOf[Model]          => ModelFolder
-      case _                                 => throw new IllegalArgumentException(s"Unsupported conf type: $clazz")
+      case j if j == classOf[Join]              => JoinFolder
+      case g if g == classOf[GroupBy]           => GroupByFolder
+      case sq if sq == classOf[StagingQuery]    => StagingQueryFolder
+      case mt if mt == classOf[ModelTransforms] => ModelFolder
+      case _                                    => throw new IllegalArgumentException(s"Unsupported conf type: $clazz")
     }
 
     val confKey = confPathOrName.computeConfKey(confTypeKeyword)
@@ -124,6 +124,44 @@ class MetadataStore(fetchContext: FetchContext) {
                  ThriftJsonCodec.toJsonStr(join).getBytes(Constants.UTF8),
                  fetchContext.metadataDataset))
   }
+
+  def putModelTransformsConf(modelTransforms: ModelTransforms): Future[Boolean] = {
+    val modelTransformsConfKeyForKvStore = modelTransforms.keyNameForKvStore
+    logger.info(
+      s"uploading model transforms conf to dataset: ${fetchContext.metadataDataset} by key:${modelTransformsConfKeyForKvStore}")
+    fetchContext.kvStore.put(
+      PutRequest(
+        modelTransformsConfKeyForKvStore.getBytes(Constants.UTF8),
+        ThriftJsonCodec.toJsonStr(modelTransforms).getBytes(Constants.UTF8),
+        fetchContext.metadataDataset
+      ))
+  }
+
+  lazy val getModelTransformsConf: TTLCache[String, Try[ModelTransforms]] = new TTLCache[String, Try[ModelTransforms]](
+    { name =>
+      val startTimeMs = System.currentTimeMillis()
+      val result = getConf[ModelTransforms](ConfPathOrName(confName = Some(name)))
+        .recover { case e: java.util.NoSuchElementException =>
+          logger.error(
+            s"Failed to fetch conf for model transforms $name at models/$name, please check metadata upload to make sure the model transforms metadata for $name has been uploaded")
+          throw e
+        }
+      val context = metrics.Metrics.Context(metrics.Metrics.Environment.MetaDataFetching, modelTransforms = name)
+      // Throw exception after metrics. No model transforms metadata is bound to be a critical failure.
+      // This will ensure that a Failure is never cached in the getModelTransformsConf TTLCache
+      if (result.isFailure) {
+        context.withSuffix("model_transforms").incrementException(result.failed.get)
+        throw result.failed.get
+      }
+      context
+        .withSuffix("model_transforms")
+        .distribution(metrics.Metrics.Name.LatencyMillis, System.currentTimeMillis() - startTimeMs)
+      result
+    },
+    { modelTransforms =>
+      metrics.Metrics.Context(environment = "model_transforms.meta.fetch", modelTransforms = modelTransforms)
+    }
+  )
 
   def listJoins(isOnline: Boolean = true): Future[Seq[String]] = {
     import ai.chronon.online.metrics

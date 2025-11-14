@@ -238,6 +238,9 @@ def test_render_info(repo, test_conf_location, monkeypatch):
 
     monkeypatch.setattr(utils, "check_call", mock_check_call)
     monkeypatch.setattr(os.path, "exists", mock_exists)
+
+    monkeypatch.setenv("CUSTOMER_ID", "test")
+
     ctx = context()
     run.set_defaults(ctx)
     ctx.params["mode"] = "info"
@@ -267,6 +270,8 @@ def test_streaming_client(repo, test_online_group_by, monkeypatch):
 
     monkeypatch.setattr(utils, "check_output", mock_check_output)
     monkeypatch.setattr(utils, "check_call", mock_check_call)
+
+    monkeypatch.setenv("CUSTOMER_ID", "test")
 
     ctx = context()
     run.set_defaults(ctx)

@@ -131,31 +131,31 @@ class Average extends SimpleAggregator[Double, Array[Any], Double] {
   override def irType: DataType =
     StructType(
       "AvgIr",
-      Array(StructField("sum", DoubleType), StructField("count", IntType))
+      Array(StructField("sum", DoubleType), StructField("count", LongType))
     )
 
-  override def prepare(input: Double): Array[Any] = Array(input, 1)
+  override def prepare(input: Double): Array[Any] = Array(input, 1L)
 
   // mutating
   override def update(ir: Array[Any], input: Double): Array[Any] = {
     ir.update(0, ir(0).asInstanceOf[Double] + input)
-    ir.update(1, ir(1).asInstanceOf[Int] + 1)
+    ir.update(1, ir(1).asInstanceOf[Long] + 1)
     ir
   }
 
   // mutating
   override def merge(ir1: Array[Any], ir2: Array[Any]): Array[Any] = {
     ir1.update(0, ir1(0).asInstanceOf[Double] + ir2(0).asInstanceOf[Double])
-    ir1.update(1, ir1(1).asInstanceOf[Int] + ir2(1).asInstanceOf[Int])
+    ir1.update(1, ir1(1).asInstanceOf[Long] + ir2(1).asInstanceOf[Long])
     ir1
   }
 
   override def finalize(ir: Array[Any]): Double =
-    ir(0).asInstanceOf[Double] / ir(1).asInstanceOf[Int].toDouble
+    ir(0).asInstanceOf[Double] / ir(1).asInstanceOf[Long].toDouble
 
   override def delete(ir: Array[Any], input: Double): Array[Any] = {
     ir.update(0, ir(0).asInstanceOf[Double] - input)
-    ir.update(1, ir(1).asInstanceOf[Int] - 1)
+    ir.update(1, ir(1).asInstanceOf[Long] - 1)
     ir
   }
 

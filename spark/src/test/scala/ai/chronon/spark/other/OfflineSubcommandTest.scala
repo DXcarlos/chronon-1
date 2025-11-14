@@ -53,33 +53,4 @@ class OfflineSubcommandTest extends AnyFlatSpec {
     assertEquals(confPath, args.confPath())
     assertEquals(endData, args.endDate())
   }
-
-  it should "additional confs parsed correctly" in {
-    // TODO: Fix this test after cut-over
-//    implicit val formats: Formats = DefaultFormats
-//
-//    val url = getClass.getClassLoader.getResource("test-driver-additional-confs.yaml")
-//
-//    val args = new TestArgs(Seq("--conf-path", "does_not_exist", "--additional-conf-path", url.toURI.getPath).toArray)
-//    val sparkSession = args.buildSparkSession()
-//    val yamlLoader = new Yaml()
-//
-//    val confs = Option(getClass.getClassLoader
-//      .getResourceAsStream("test-driver-additional-confs.yaml"))
-//      .map(Source.fromInputStream)
-//      .map((is) =>
-//        try { is.mkString }
-//        finally { is.close })
-//      .map(yamlLoader.load(_).asInstanceOf[java.util.Map[String, Any]])
-//      .map((jMap) => Extraction.decompose(jMap.asScala.toMap))
-//      .map((jVal) => render(jVal))
-//      .map(compact)
-//      .map(parse(_).extract[Map[String, String]])
-//      .getOrElse(throw new IllegalArgumentException("Yaml conf not found or invalid yaml"))
-//
-//    val confKey = "test.yaml.key"
-//    assertEquals(confs.get(confKey), sparkSession.conf.getOption(confKey))
-//    assertEquals(Some("test_yaml_key"), sparkSession.conf.getOption(confKey))
-//    assertTrue(sparkSession.conf.getOption("nonexistent_key").isEmpty)
-  }
 }

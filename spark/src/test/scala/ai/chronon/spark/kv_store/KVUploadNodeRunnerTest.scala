@@ -4,7 +4,7 @@ import ai.chronon.api.Constants.MetadataDataset
 import ai.chronon.api._
 import ai.chronon.online.{Api, KVStore}
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
-import ai.chronon.planner.{GroupByUploadToKVNode, JoinMetadataUpload, NodeContent}
+import ai.chronon.planner.{GroupByUploadToKVNode, JoinMetadataUpload, ModelTransformsUploadNode, NodeContent}
 import ai.chronon.spark.kv_store.KVUploadNodeRunner
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -119,6 +119,33 @@ class KVUploadNodeRunnerTest
     verify(fetchContext, times(2)).metadataDataset
   }
 
+  it should "handle MODEL_TRANSFORMS_UPLOAD successfully" in {
+    // Setup test data
+    val modelTransformsMetadata = new MetaData()
+      .setName("test_model_transforms")
+      .setTeam("test_team")
+
+    val modelTransforms = new ModelTransforms()
+      .setMetaData(modelTransformsMetadata)
+
+    val modelTransformsUpload = new ModelTransformsUploadNode()
+      .setModelTransforms(modelTransforms)
+
+    val nodeContent = new NodeContent()
+    nodeContent.setModelTransformsUpload(modelTransformsUpload)
+
+    val metadata = new MetaData()
+    val range = None
+
+    // Execute - this will create a new MetadataStore internally and call putModelTransformsConf
+    runner.run(metadata, nodeContent, range)
+
+    // Verify that fetchContext was used (indicating MetadataStore creation and usage)
+    verify(fetchContext).kvStore
+    // MetadataStore.putModelTransformsConf calls metadataDataset twice, so we expect at least one call
+    verify(fetchContext, times(2)).metadataDataset
+  }
+
   it should "throw IllegalArgumentException when partition range is missing for GROUP_BY_UPLOAD_TO_KV" in {
     // Setup test data
     val groupByMetadata = new MetaData()
@@ -158,7 +185,7 @@ class KVUploadNodeRunnerTest
       runner.run(metadata, nodeContent, range)
     }
 
-    exception.getMessage should include("Expected GroupByUploadToKVNode or JoinMetadataUpload content")
+    exception.getMessage should include("Expected GroupByUploadToKVNode, JoinMetadataUpload, or ModelTransformsUpload content")
   }
 
   it should "propagate exceptions from KVStore bulkPut" in {

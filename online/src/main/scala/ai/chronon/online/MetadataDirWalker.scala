@@ -94,7 +94,7 @@ class MetadataDirWalker(dirPath: String, metadataEndPointNames: List[String], ma
               val conf = loadJsonToConf[api.StagingQuery](filePath)
               (conf, conf.map(_.keyNameForKvStore))
             case value if value.contains(s"$ModelFolder/") || maybeConfType.contains(ModelFolder) =>
-              val conf = loadJsonToConf[api.Model](filePath)
+              val conf = loadJsonToConf[api.ModelTransforms](filePath)
               (conf, conf.map(_.keyNameForKvStore))
           }
         } catch {
@@ -126,8 +126,8 @@ class MetadataDirWalker(dirPath: String, metadataEndPointNames: List[String], ma
 
               case value if value.contains(s"$ModelFolder/") || maybeConfType.contains(ModelFolder) =>
                 MetadataEndPoint
-                  .getEndPoint[api.Model](endPointName)
-                  .extractFn(confKeyName.get, conf.asInstanceOf[api.Model])
+                  .getEndPoint[api.ModelTransforms](endPointName)
+                  .extractFn(confKeyName.get, conf.asInstanceOf[api.ModelTransforms])
             }
 
             (endPointName, kVPair)

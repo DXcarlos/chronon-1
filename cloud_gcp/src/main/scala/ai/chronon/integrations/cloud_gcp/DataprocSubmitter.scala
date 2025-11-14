@@ -1,5 +1,6 @@
 package ai.chronon.integrations.cloud_gcp
 import ai.chronon.api.Builders.MetaData
+import ai.chronon.api.JobStatusType
 import ai.chronon.spark.submission.JobSubmitterConstants._
 import ai.chronon.spark.submission.{JobSubmitter, JobType, FlinkJob => TypeFlinkJob, SparkJob => TypeSparkJob}
 import com.google.api.gax.rpc.ApiException
@@ -19,20 +20,8 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
                         val projectId: String)
     extends JobSubmitter {
 
-  def formatDataprocLabel(label: String): String = {
-    // dataproc label keys and values only allow lowercase, numbers, underscores, and dashes.
-    // Replaces any character that is not:
-    // - a letter (a-z or A-Z)
-    // - /a digit (0-9)
-    // - a dash (-)
-    // - an underscore (_)
-    // with an underscore (_)
-    // And lowercase.
-    label.replaceAll("[^a-zA-Z0-9_-]", "_").toLowerCase
-  }
-
   def listRunningGroupByFlinkJobs(groupByName: String): List[String] = {
-    val groupByNameDataprocLabel = formatDataprocLabel(groupByName)
+    val groupByNameDataprocLabel = DataprocUtils.formatDataprocLabel(groupByName)
 
     //  String values for filters cannot have quotations or else search doesn't work.
     // for example "labels.job-type = flink" and NOT "labels.job-type = 'flink'"
@@ -55,7 +44,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
   def getZiplineVersionOfDataprocJob(jobId: String): String = {
     val currentJob: Job = jobControllerClient.getJob(projectId, region, jobId)
     val labels = currentJob.getLabelsMap
-    labels.get(formatDataprocLabel(ZiplineVersion))
+    labels.get(DataprocUtils.formatDataprocLabel(ZiplineVersion))
   }
 
   def getLatestFlinkCheckpoint(groupByName: String,
@@ -103,17 +92,24 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
     latestCheckpointUri
   }
 
-  override def status(jobId: String): String = {
+  override def status(jobId: String): JobStatusType = {
     try {
-
       val currentJob: Job = jobControllerClient.getJob(projectId, region, jobId)
-      currentJob.getStatus.getState.toString
+      currentJob.getStatus.getState match {
+        case JobStatus.State.PENDING                              => JobStatusType.PENDING
+        case JobStatus.State.ERROR                                => JobStatusType.FAILED
+        case JobStatus.State.DONE                                 => JobStatusType.SUCCEEDED
+        case JobStatus.State.RUNNING | JobStatus.State.SETUP_DONE => JobStatusType.RUNNING
+        case JobStatus.State.CANCEL_STARTED | JobStatus.State.CANCEL_PENDING | JobStatus.State.CANCELLED =>
+          JobStatusType.FAILED
+        case _ => JobStatusType.UNKNOWN
+      }
 
     } catch {
 
       case e: ApiException =>
         logger.error(s"Error monitoring job: ${e.getMessage}")
-        "UNKNOWN" // If there's an error, we return UNKNOWN status
+        JobStatusType.UNKNOWN // If there's an error, we return UNKNOWN status
     }
   }
 
@@ -162,11 +158,6 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
                       (args :+ "--parent-job-id" :+ jobId): _*)
     }
 
-    // attach the job type and metadata name
-    val submissionJobType = jobType match {
-      case TypeSparkJob => SparkJobType
-      case TypeFlinkJob => FlinkJobType
-    }
     val metadataName =
       submissionProperties.getOrElse(MetadataName, throw new RuntimeException("Metadata name not found"))
 
@@ -176,12 +167,11 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
       .build()
 
     try {
-      val formattedDataprocLabels = (Map(
-        JobType -> submissionJobType,
-        MetadataName -> metadataName,
-        ZiplineVersion -> submissionProperties
-          .getOrElse(ZiplineVersion, throw new RuntimeException("Zipline version not found"))
-      ) ++ labels).map(entry => (formatDataprocLabel(entry._1), formatDataprocLabel(entry._2)))
+      val formattedDataprocLabels = DataprocUtils.createFormattedDataprocLabels(
+        jobType = jobType,
+        submissionProperties = submissionProperties,
+        additionalLabels = labels
+      )
 
       val job = jobBuilder
         .setReference(jobReference(jobId))
@@ -195,7 +185,6 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
       if (jobId != submittedJobId) {
         throw new IllegalStateException(s"Computed job id $jobId does not match submitted job id $submittedJobId")
       }
-
       submittedJobId
 
     } catch {
@@ -472,7 +461,7 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
       args: Array[String],
       jobId: String
   ): Boolean = {
-    val localZiplineVersion = formatDataprocLabel(
+    val localZiplineVersion = DataprocUtils.formatDataprocLabel(
       JobSubmitter
         .getArgValue(args, LocalZiplineVersionArgKeyword)
         .getOrElse(throw new Exception("Missing required argument: " + LocalZiplineVersionArgKeyword)))

@@ -5,7 +5,7 @@ import ai.chronon.api.ScalaJavaConversions.MapOps
 import ai.chronon.spark.submission.JobSubmitterConstants.ConfTypeArgKeyword
 import ai.chronon.spark.submission.JobSubmitterConstants.LocalConfPathArgKeyword
 import ai.chronon.spark.submission.JobSubmitterConstants.OriginalModeArgKeyword
-import ai.chronon.api.{MetaData, ThriftJsonCodec}
+import ai.chronon.api.{JobStatusType, MetaData, ThriftJsonCodec}
 import ai.chronon.api.thrift.TBase
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -25,7 +25,7 @@ trait JobSubmitter {
              labels: Map[String, String],
              args: String*): String
 
-  def status(jobId: String): String
+  def status(jobId: String): JobStatusType
 
   def kill(jobId: String): Unit
 }

@@ -1,29 +1,15 @@
 package ai.chronon.integrations.aws
 
-import ai.chronon.integrations.aws.EmrSubmitter.DefaultClusterIdleTimeout
-import ai.chronon.integrations.aws.EmrSubmitter.DefaultClusterInstanceCount
-import ai.chronon.integrations.aws.EmrSubmitter.DefaultClusterInstanceType
-import ai.chronon.spark.submission.JobSubmitter
+import ai.chronon.api.JobStatusType
+import ai.chronon.integrations.aws.EmrSubmitter.{
+  DefaultClusterIdleTimeout,
+  DefaultClusterInstanceCount,
+  DefaultClusterInstanceType
+}
 import ai.chronon.spark.submission.JobSubmitterConstants._
-import ai.chronon.spark.submission.JobType
-import ai.chronon.spark.submission.{SparkJob => TypeSparkJob}
+import ai.chronon.spark.submission.{JobSubmitter, JobType, SparkJob => TypeSparkJob}
 import software.amazon.awssdk.services.emr.EmrClient
-import software.amazon.awssdk.services.emr.model.ActionOnFailure
-import software.amazon.awssdk.services.emr.model.AddJobFlowStepsRequest
-import software.amazon.awssdk.services.emr.model.Application
-import software.amazon.awssdk.services.emr.model.AutoTerminationPolicy
-import software.amazon.awssdk.services.emr.model.CancelStepsRequest
-import software.amazon.awssdk.services.emr.model.ComputeLimits
-import software.amazon.awssdk.services.emr.model.ComputeLimitsUnitType
-import software.amazon.awssdk.services.emr.model.Configuration
-import software.amazon.awssdk.services.emr.model.DescribeStepRequest
-import software.amazon.awssdk.services.emr.model.HadoopJarStepConfig
-import software.amazon.awssdk.services.emr.model.InstanceGroupConfig
-import software.amazon.awssdk.services.emr.model.InstanceRoleType
-import software.amazon.awssdk.services.emr.model.JobFlowInstancesConfig
-import software.amazon.awssdk.services.emr.model.ManagedScalingPolicy
-import software.amazon.awssdk.services.emr.model.RunJobFlowRequest
-import software.amazon.awssdk.services.emr.model.StepConfig
+import software.amazon.awssdk.services.emr.model._
 
 import scala.collection.JavaConverters._
 
@@ -210,15 +196,10 @@ class EmrSubmitter(customerId: String, emrClient: EmrClient) extends JobSubmitte
     }
   }
 
-  override def status(jobId: String): String = {
-    val describeStepResponse = emrClient.describeStep(DescribeStepRequest.builder().stepId(jobId).build())
-    val status = describeStepResponse.step().status()
-    println(status)
-    status.toString
-  }
+  override def status(jobId: String): JobStatusType = ???
 
-  override def kill(stepId: String): Unit = {
-    emrClient.cancelSteps(CancelStepsRequest.builder().stepIds(stepId).build())
+  override def kill(stepId: String): scala.Unit = {
+    val resp = emrClient.cancelSteps(CancelStepsRequest.builder().stepIds(stepId).build())
   }
 }
 
@@ -241,7 +222,7 @@ object EmrSubmitter {
   private val DefaultClusterInstanceCount = 3
   private val DefaultClusterIdleTimeout = 60 * 60 * 1 // 1h in seconds
 
-  def main(args: Array[String]): Unit = {
+  def main(args: Array[String]): scala.Unit = {
     // List of args that are not application args
     val internalArgs = Set(
       ClusterInstanceTypeArgKeyword,

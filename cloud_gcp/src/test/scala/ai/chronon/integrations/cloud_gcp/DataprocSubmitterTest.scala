@@ -687,29 +687,17 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "test formatDataprocLabel successfully for lowercase" in {
-    val submitter = DataprocSubmitter(jobControllerClient = mock[JobControllerClient],
-                                      storageClient = mock[Storage],
-                                      region = "test-region",
-                                      projectId = "test-project")
-    val label = submitter.formatDataprocLabel("TEST")
+    val label = DataprocUtils.formatDataprocLabel("TEST")
     assertEquals(label, "test")
   }
 
   it should "test formatDataprocLabel successfully and keep lowercase, numbers, underscores, and dashes" in {
-    val submitter = DataprocSubmitter(jobControllerClient = mock[JobControllerClient],
-                                      storageClient = mock[Storage],
-                                      region = "test-region",
-                                      projectId = "test-project")
-    val label = submitter.formatDataprocLabel("test-123_5")
+    val label = DataprocUtils.formatDataprocLabel("test-123_5")
     assertEquals(label, "test-123_5")
   }
 
   it should "test formatDataprocLabel successfully and replace invalid characters with underscore" in {
-    val submitter = DataprocSubmitter(jobControllerClient = mock[JobControllerClient],
-                                      storageClient = mock[Storage],
-                                      region = "test-region",
-                                      projectId = "test-project")
-    val label = submitter.formatDataprocLabel("team.groupby_test")
+    val label = DataprocUtils.formatDataprocLabel("team.groupby_test")
     assertEquals(label, "team_groupby_test")
   }
 
@@ -730,7 +718,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
       java.util.Collections.singletonList(mockJob)
     )
     val submitter = DataprocSubmitter(jobControllerClient = mockJobControllerClient,
-                                      storageClient = mock[Storage],
+                                                    storageClient = mock[Storage],
                                       region = "test-region",
                                       projectId = "test-project")
 
@@ -918,7 +906,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     val mockJobControllerClient = mock[JobControllerClient]
     when(mockJobControllerClient.getJob("test-project", "test-region", jobId)).thenReturn(mockJob)
     val submitter = DataprocSubmitter(jobControllerClient = mockJobControllerClient,
-                                      storageClient = mock[Storage],
+                                                    storageClient = mock[Storage],
                                       region = "test-region",
                                       projectId = "test-project")
 
@@ -929,7 +917,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   it should "test getLatestFlinkCheckpoint should return None if no manifest file found" in {
     val ziplineGcsClient = mock[GCSClient]
     val submitter = new DataprocSubmitter(jobControllerClient = mock[JobControllerClient],
-                                          region = "test-region",
+                                                            region = "test-region",
                                           projectId = "test-project",
                                           gcsClient = ziplineGcsClient)
 
@@ -948,7 +936,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   it should "test getLatestFlinkCheckpoint should throw exception if flink job id not found in manifest" in {
     val ziplineGcsClient = mock[GCSClient]
     val submitter = new DataprocSubmitter(jobControllerClient = mock[JobControllerClient],
-                                          region = "test-region",
+                                                            region = "test-region",
                                           projectId = "test-project",
                                           gcsClient = ziplineGcsClient)
 
@@ -969,7 +957,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   it should "test getLatestFlinkCheckpoint should return None if no checkpoints are found in GCS" in {
     val ziplineGcsClient = mock[GCSClient]
     val submitter = new DataprocSubmitter(jobControllerClient = mock[JobControllerClient],
-                                          region = "test-region",
+                                                            region = "test-region",
                                           projectId = "test-project",
                                           gcsClient = ziplineGcsClient)
 
@@ -994,7 +982,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   it should "test getLatestFlinkCheckpoint should return the latest checkpoint if found" in {
     val ziplineGcsClient = mock[GCSClient]
     val submitter = new DataprocSubmitter(jobControllerClient = mock[JobControllerClient],
-                                          region = "test-region",
+                                                            region = "test-region",
                                           projectId = "test-project",
                                           gcsClient = ziplineGcsClient)
 
@@ -1090,5 +1078,45 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
         "--event-delay-millis=10"
       )
     println(submittedJobId)
+  }
+
+  it should "test spark serverless" ignore {
+    val region = "us-central1"
+    val projectId = "canary-443022"
+    val endPoint = s"${region}-dataproc.googleapis.com:443"
+    val batchControllerClient =
+      BatchControllerClient.create(BatchControllerSettings.newBuilder().setEndpoint(endPoint).build())
+    val submitter = DataprocServerlessSubmitter(batchControllerClient, region, projectId)
+
+    val mainClass = "ai.chronon.spark.batch.BatchNodeRunner"
+    val jarUri = "gs://zipline-artifacts-dev/release/0.1.0+dev.thomaschow/jars/cloud_gcp_lib_deploy.jar"
+    val uniqueBatchId = s"batch-${System.currentTimeMillis() % 100000}"
+    val files = List("gs://zipline-warehouse-dev/metadata/execution/b473f979-5ce0-4046-beea-b9e991933d13/gcp.training_set.v1_test__0__backfill")
+    val args = Seq(
+      "--conf-path=gcp.training_set.v1_test__0__backfill",
+      "--start-ds=2025-08-15",
+      "--end-ds=2025-11-15",
+      "--online-class=ai.chronon.integrations.cloud_gcp.GcpApiImpl",
+      "--table-partitions-dataset=TABLE_PARTITIONS_thomaschow",
+      "-ZGCP_PROJECT_ID=canary-443022",
+      "-ZGCP_BIGTABLE_INSTANCE_ID=zipline-canary-instance",
+      "-ZENABLE_UPLOAD_CLIENTS=true"
+    )
+
+    val submissionProperties = Map(
+      "mainClass" -> mainClass,
+      "jarUri" -> jarUri,
+      "jobId" -> uniqueBatchId
+    )
+
+    val jobId = submitter.submit(
+      jobType = spark.submission.SparkJob,
+      submissionProperties = submissionProperties,
+      jobProperties = Map.empty,
+      files = files,
+      labels = Map.empty,
+      args = args: _*
+    )
+    println(jobId)
   }
 }

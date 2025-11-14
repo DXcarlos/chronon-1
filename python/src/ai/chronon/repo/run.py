@@ -78,6 +78,7 @@ def set_defaults(ctx):
         "render_info": os.path.join(chronon_repo_path, RENDER_INFO_DEFAULT_SCRIPT),
         "project_conf": obj.get("project_conf"),
         "artifact_prefix": os.environ.get("ARTIFACT_PREFIX"),
+        "warehouse_bucket": os.environ.get("WAREHOUSE_BUCKET"),
         "flink_state_uri": os.environ.get("FLINK_STATE_URI"),
     }
     for key, value in defaults.items():
@@ -202,6 +203,10 @@ def validate_additional_jars(ctx, param, value):
     "--artifact-prefix",
     help="Remote artifact URI to install zipline client artifacts necessary for interacting with Zipline infrastructure.",
 )
+@click.option(
+    "--warehouse-bucket",
+    help="GCS or S3 bucket to use as warehouse for staging metadata/configs.",
+)
 @click.option("--disable-cloud-logging", is_flag=True, default=False, help="Disables cloud logging")
 @click.option(
     "--enable-debug",
@@ -250,6 +255,7 @@ def main(
     validate_rows,
     join_part_name,
     artifact_prefix,
+    warehouse_bucket,
     disable_cloud_logging,
     additional_jars,
     enable_debug,
