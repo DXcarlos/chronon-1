@@ -150,7 +150,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         "merge",
         mergeNodeName,
         deps,
-        outputTableOverride = Some(join.metaData.outputTable + (if (hasDerivations) "__merged" + ""))
+        outputTableOverride = Some(join.metaData.outputTable + (if (hasDerivations) "__merged" else ""))
       )
 
     val copy = result.deepCopy()
