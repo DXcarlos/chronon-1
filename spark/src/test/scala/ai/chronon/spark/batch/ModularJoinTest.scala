@@ -245,7 +245,7 @@ class ModularJoinTest extends SparkTestBase {
     tableUtils.sql(s"SELECT * FROM $mergeJobOutputTable").show()
 
     // Verify derivation job output
-    val derivationOutputTable = s"$namespace.test_user_transaction_features__derived"
+    val derivationOutputTable = s"$namespace.test_user_transaction_features"
     tableUtils.sql(s"SELECT * FROM $derivationOutputTable").show()
 
     val expectedQuery = s"""

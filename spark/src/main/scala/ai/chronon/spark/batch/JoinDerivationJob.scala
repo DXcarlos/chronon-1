@@ -29,7 +29,7 @@ class JoinDerivationJob(node: JoinDerivationNode, metaData: MetaData, range: Dat
   private val trueLeftTable = JoinUtils.computeFullLeftSourceTableName(join)
 
   // The base table is the output of the merge job
-  private val baseTable = join.metaData.outputTable
+  private val baseTable = join.metaData.outputTable ++ "__merged"
 
   // Output table for this derivation job comes from the metadata
   private val outputTable = metaData.outputTable
