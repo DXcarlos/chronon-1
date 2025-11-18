@@ -122,7 +122,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
 
   private val joinPartNodes: Seq[Node] = join.joinParts.toScala.map { buildJoinPartNode }.toSeq
 
-  val hasDerivations = join.derivations == null || join.derivations.isEmpty
+  private val hasDerivations: Boolean = Option(join.derivations).exists(!_.isEmpty)
 
   val mergeNode: Node = {
     val result = new JoinMergeNode()
