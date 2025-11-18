@@ -186,12 +186,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     }
     val keys = partLeftKeys ++ additionalKeys
 
-    // apply prefix to value columns
-    val nonValueColumns = joinPart.rightToLeft.keys.toArray ++ Array(Constants.TimeColumn,
-                                                                     tableUtils.partitionColumn,
-                                                                     Constants.TimePartitionColumn)
-    val valueColumns = rightDf.schema.names.filterNot(nonValueColumns.contains)
-    val prefixedRightDf = rightDf.prefixColumnNames(joinPart.columnPrefix, valueColumns)
+    val prefixedRightDf = MergeJob.prefixJoinPartValueColumns(rightDf, joinPart)
 
     // apply key-renaming to key columns
     val newColumns = prefixedRightDf.columns.map { column =>
@@ -234,6 +229,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
   }
 
   /** Check for columns that have mismatched semantic hashes between two hash maps
+    *
     * @param columns The columns to check
     * @param reuseTableColHashes Hash map from the reuse table
     * @param currentColumnHashes Hash map from the current configuration
@@ -414,4 +410,17 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       JoinPartReuseAnalysis(Option(reuseTable), columnsToReuse.toSeq, joinPartsToRejoin.toSeq)
     }
   }
+}
+
+object MergeJob {
+
+  def prefixJoinPartValueColumns(rightDf: DataFrame, joinPart: JoinPart)(implicit tableUtils: TableUtils): DataFrame = {
+    val nonValueColumns = joinPart.rightToLeft.keys.toArray ++ Array(Constants.TimeColumn,
+                                                                     tableUtils.partitionColumn,
+                                                                     Constants.TimePartitionColumn)
+    val valueColumns = rightDf.schema.names.filterNot(nonValueColumns.contains)
+    val prefixedRightDf = rightDf.prefixColumnNames(joinPart.columnPrefix, valueColumns)
+    prefixedRightDf
+  }
+
 }

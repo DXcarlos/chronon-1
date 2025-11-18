@@ -141,14 +141,14 @@ class UnionJoinTest extends BaseJoinTest {
     // Join with derivations
     val joinWithDerivations = Builders.Join(
       left = Builders.Source.events(Builders.Query(startPartition = start), table = leftTable),
-      joinParts = Seq(Builders.JoinPart(groupBy = groupByWithDerivations)),
+      joinParts = Seq(Builders.JoinPart(groupBy = groupByWithDerivations).setUseLongNames(false)),
       derivations = Seq(
         Builders.Derivation(name = "*", expression = "*"), // Include all columns
-        Builders.Derivation(name = "spend_efficiency", expression = "avg_amount_7d * amount_ratio"),
+        Builders.Derivation(name = "spend_efficiency", expression = "user_id_avg_amount_7d * user_id_amount_ratio"),
         Builders.Derivation(
           name = "user_tier",
           expression =
-            "CASE WHEN amount_sum_30d > 1000 THEN 'high' WHEN amount_sum_30d > 500 THEN 'medium' ELSE 'low' END")
+            "CASE WHEN user_id_amount_sum_30d > 1000 THEN 'high' WHEN user_id_amount_sum_30d > 500 THEN 'medium' ELSE 'low' END")
       ),
       metaData =
         Builders.MetaData(name = "test.user_features_derived.union_join", namespace = namespace, team = "user_team")
@@ -161,24 +161,24 @@ class UnionJoinTest extends BaseJoinTest {
 
     // Verify that derived columns exist
     val schema = outputDf.schema
-    schema.fieldNames should contain("avg_amount_7d") // GroupBy derivation
-    schema.fieldNames should contain("amount_ratio") // GroupBy derivation
+    schema.fieldNames should contain("user_id_avg_amount_7d") // GroupBy derivation
+    schema.fieldNames should contain("user_id_amount_ratio") // GroupBy derivation
     schema.fieldNames should contain("spend_efficiency") // Join derivation
     schema.fieldNames should contain("user_tier") // Join derivation
 
     // Verify that base aggregation columns still exist due to wildcard
-    schema.fieldNames should contain("amount_sum_7d")
-    schema.fieldNames should contain("amount_count_7d")
-    schema.fieldNames should contain("amount_sum_30d")
+    schema.fieldNames should contain("user_id_amount_sum_7d")
+    schema.fieldNames should contain("user_id_amount_count_7d")
+    schema.fieldNames should contain("user_id_amount_sum_30d")
 
     val outputData = outputDf.where("user_id IS NOT NULL and ts IS NOT NULL").collect()
     outputData.length should be > 0
 
     // Verify derivation logic works - ensure we actually test the calculation
     val validRows = outputData.filter { row =>
-      val avgAmount7d = Option(row.getAs[Double]("avg_amount_7d"))
-      val amountSum7d = Option(row.getAs[Long]("amount_sum_7d"))
-      val amountCount7d = Option(row.getAs[Long]("amount_count_7d"))
+      val avgAmount7d = Option(row.getAs[Double]("user_id_avg_amount_7d"))
+      val amountSum7d = Option(row.getAs[Long]("user_id_amount_sum_7d"))
+      val amountCount7d = Option(row.getAs[Long]("user_id_amount_count_7d"))
       avgAmount7d.isDefined && amountSum7d.isDefined && amountCount7d.isDefined &&
       amountCount7d.get > 0 && amountSum7d.get > 0
     }
@@ -187,9 +187,9 @@ class UnionJoinTest extends BaseJoinTest {
 
     // Verify GroupBy derivation calculation on a valid row
     val sampleRow = validRows.head
-    val avgAmount7d = sampleRow.getAs[Double]("avg_amount_7d")
-    val amountSum7d = sampleRow.getAs[Long]("amount_sum_7d")
-    val amountCount7d = sampleRow.getAs[Long]("amount_count_7d")
+    val avgAmount7d = sampleRow.getAs[Double]("user_id_avg_amount_7d")
+    val amountSum7d = sampleRow.getAs[Long]("user_id_amount_sum_7d")
+    val amountCount7d = sampleRow.getAs[Long]("user_id_amount_count_7d")
 
     Math.abs(avgAmount7d - (amountSum7d.toDouble / amountCount7d)) should be < 0.001
   }
@@ -267,12 +267,12 @@ class UnionJoinTest extends BaseJoinTest {
     val schema = outputDf.schema
     println(schema.pretty)
     schema.fieldNames should contain("user_id")
-    schema.fieldNames should contain("item_id")
-    schema.fieldNames should contain("amount")
-    schema.fieldNames should contain("category")
+    schema.fieldNames should contain("unit_test_user_features_with_derivations_item_id")
+    schema.fieldNames should contain("unit_test_user_features_with_derivations_amount")
+    schema.fieldNames should contain("unit_test_user_features_with_derivations_category")
 
     // Derivation cols
-    schema.fieldNames should contain("avg_amount_7d")
-    schema.fieldNames should contain("amount_ratio")
+    schema.fieldNames should contain("unit_test_user_features_with_derivations_avg_amount_7d")
+    schema.fieldNames should contain("unit_test_user_features_with_derivations_amount_ratio")
   }
 }

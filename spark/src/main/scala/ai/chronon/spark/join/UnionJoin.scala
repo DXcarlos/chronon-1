@@ -6,6 +6,7 @@ import ai.chronon.api.ScalaJavaConversions.ListOps
 import ai.chronon.api.{Accuracy, Constants, PartitionRange}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.JoinUtils
+import ai.chronon.spark.batch.MergeJob
 import ai.chronon.spark.catalog.TableUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -186,9 +187,13 @@ object UnionJoin {
       // left DF columns. So we leverage the `ensureKeys` functionality on finalOutputCols to ensure that they are preserved
       val finalOutputColumns =
         groupBy.derivationsScala.finalOutputColumn(baseResultDf.columns, ensureKeys = leftDf.columns.toSeq)
+
       baseResultDf.select(finalOutputColumns: _*)
+
     } else {
+
       baseResultDf
+
     }
   }
 
@@ -204,13 +209,15 @@ object UnionJoin {
 
     val groupByDerivedDf = computeJoinPart(leftDf, joinPart, dateRange, produceFinalJoinOutput = true)
 
+    val prefixedDf = MergeJob.prefixJoinPartValueColumns(groupByDerivedDf, joinPart)
+
     // Apply Join derivations if they exist
     if (joinConf.isSetDerivations && !joinConf.derivations.isEmpty) {
       val derivations = joinConf.derivations.toScala
-      val finalOutputColumns = derivations.finalOutputColumn(groupByDerivedDf.columns)
-      groupByDerivedDf.select(finalOutputColumns: _*)
+      val finalOutputColumns = derivations.finalOutputColumn(prefixedDf.columns)
+      prefixedDf.select(finalOutputColumns: _*)
     } else {
-      groupByDerivedDf
+      prefixedDf
     }
   }
 
