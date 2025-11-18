@@ -122,6 +122,8 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
 
   private val joinPartNodes: Seq[Node] = join.joinParts.toScala.map { buildJoinPartNode }.toSeq
 
+  val hasDerivations = join.derivations == null || join.derivations.isEmpty
+
   val mergeNode: Node = {
     val result = new JoinMergeNode()
       .setJoin(join)
@@ -148,7 +150,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         "merge",
         mergeNodeName,
         deps,
-        outputTableOverride = Some(join.metaData.outputTable)
+        outputTableOverride = Some(join.metaData.outputTable + (if (hasDerivations) "__merged" + ""))
       )
 
     val copy = result.deepCopy()
@@ -158,27 +160,29 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     toNode(metaData, _.setJoinMerge(result), copy)
   }
 
-  private val derivationNodeOpt: Option[Node] = Option(join.derivations).map { _ =>
-    val result = new JoinDerivationNode()
-      .setJoin(join)
+  private val derivationNodeOpt: Option[Node] = Option(join.derivations)
+    .filterNot { _.isEmpty }
+    .map { _ =>
+      val result = new JoinDerivationNode()
+        .setJoin(join)
 
-    val derivationNodeName = join.metaData.name + "__derived"
-    val derivationOutputTable = join.metaData.outputTable + "__derived"
+      val derivationNodeName = join.metaData.name + "__derived"
+      val derivationOutputTable = join.metaData.outputTable
 
-    val metaData = MetaDataUtils
-      .layer(
-        join.metaData,
-        "derive",
-        derivationNodeName,
-        Seq(TableDependencies.fromTable(mergeNode.metaData.outputTable)),
-        outputTableOverride = Some(derivationOutputTable)
-      )
+      val metaData = MetaDataUtils
+        .layer(
+          join.metaData,
+          "derive",
+          derivationNodeName,
+          Seq(TableDependencies.fromTable(mergeNode.metaData.outputTable)),
+          outputTableOverride = Some(derivationOutputTable)
+        )
 
-    val copy = result.deepCopy()
-    joinWithoutMetadata(copy.join)
+      val copy = result.deepCopy()
+      joinWithoutMetadata(copy.join)
 
-    toNode(metaData, _.setJoinDerivation(result), copy)
-  }
+      toNode(metaData, _.setJoinDerivation(result), copy)
+    }
 
   def offlineNodes: Seq[Node] = {
 
