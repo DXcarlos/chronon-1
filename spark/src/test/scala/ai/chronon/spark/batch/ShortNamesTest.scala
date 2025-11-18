@@ -391,7 +391,7 @@ class ShortNamesTest extends SparkTestBase {
     tableUtils.sql(s"SELECT * FROM $joinPart2FullTableName").show()
 
     // Skip the joinPart that does have a bootstrap, and go straight to merge job
-    val mergeJobOutputTable = joinConf.metaData.outputTable
+    val mergeJobOutputTable = joinConf.metaData.outputTable + "__merged"
 
     val mergeJobRange = new DateRange()
       .setStartDate(start)
@@ -401,16 +401,22 @@ class ShortNamesTest extends SparkTestBase {
     val mergeMetaData = new api.MetaData()
       .setName(joinConf.metaData.name)
       .setOutputNamespace(namespace)
+      .setExecutionInfo(
+        new ExecutionInfo().setOutputTableInfo(
+          new TableInfo().setTable(
+            mergeJobOutputTable
+          )
+        )
+      )
 
-    val mergeNode = new JoinMergeNode()
-      .setJoin(joinConf)
+    val mergeNode = new JoinMergeNode().setJoin(joinConf)
 
     val finalJoinJob = new MergeJob(mergeNode, mergeMetaData, mergeJobRange, Seq(jp1, jp2))
     finalJoinJob.run()
     tableUtils.sql(s"SELECT * FROM $mergeJobOutputTable").show()
 
     // Now run the derivations job
-    val derivationOutputTable = s"$namespace.test_user_transaction_features_v1_derived"
+    val derivationOutputTable = s"$namespace.test_user_transaction_features_v1"
 
     val derivationRange = new DateRange()
       .setStartDate(start)
