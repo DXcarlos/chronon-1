@@ -102,10 +102,19 @@ def update_metadata(obj: Any, team_dict: Dict[str, Team]):
                     # Only set the outputNamespace if it hasn't been set already
                     if not join_part_gb.metaData.outputNamespace:
                         join_part_gb.metaData.outputNamespace = output_namespace
+                    # Only set the team if it hasn't been set already
+                    # TODO: ensure groupBys always have teams set (some unit tests don't have them set which is invalid).
+                    if not join_part_gb.metaData.team:
+                        join_part_gb.metaData.team = team
                 else:
                     # If there's no metaData at all, create it and set outputNamespace
                     join_part_gb.metaData = MetaData()
                     join_part_gb.metaData.outputNamespace = output_namespace
+                    join_part_gb.metaData.team = team
+
+                merge_team_execution_info(
+                    join_part_gb.metaData, team_dict, join_part_gb.metaData.team
+                )
 
         if obj.joinParts:
             for jp in obj.joinParts or []:

@@ -3,16 +3,15 @@ package ai.chronon.spark.batch
 import ai.chronon.api.DataModel.{ENTITIES, EVENTS}
 import ai.chronon.api.Extensions.{DateRangeOps, DerivationOps, GroupByOps, JoinPartOps, MetadataOps}
 import ai.chronon.api.PartitionRange.toTimeRange
-import ai.chronon.api.ScalaJavaConversions.ListOps
 import ai.chronon.api._
 import ai.chronon.online.metrics.Metrics
 import ai.chronon.planner.JoinPartNode
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.{GroupBy, JoinUtils}
 import ai.chronon.spark.join.UnionJoin
+import ai.chronon.spark.{GroupBy, JoinUtils}
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.{col, column, date_format}
+import org.apache.spark.sql.functions.{col, date_format}
 import org.apache.spark.util.sketch.BloomFilter
 import org.slf4j.{Logger, LoggerFactory}
 

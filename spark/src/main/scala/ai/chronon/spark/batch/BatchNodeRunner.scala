@@ -310,7 +310,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils) extends NodeRunner {
 
       case NodeContent._Fields.JOIN_PART =>
         logger.info(s"Running join part job for '${metadata.name}' for range: [${range.start}, ${range.end}]")
-        new JoinPartJob(conf.getJoinPart, metadata, dateRange)(tableUtils).run()
+        new JoinPartJob(conf.getJoinPart, metadata, dateRange, alignOutput = true)(tableUtils).run()
         logger.info(s"Successfully completed join part job for '${metadata.name}'")
 
       case NodeContent._Fields.JOIN_MERGE =>
