@@ -46,20 +46,31 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
       val groupBy = joinPart.groupBy
       val hasStreamingSource = groupBy.streamingSource.isDefined
 
-      // Add dependency on the GroupBy node (either uploadToKV or streaming)
-      val groupByTableName = if (hasStreamingSource) {
-        groupBy.metaData.outputTable + s"__${GroupByPlanner.Streaming}"
-      } else {
-        groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}"
-      }
-
-      val groupByDep = new TableDependency()
+      // Always create dependency on the GroupBy upload node
+      val uploadTableName = groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}"
+      val uploadDep = new TableDependency()
         .setTableInfo(
           new TableInfo()
-            .setTable(groupByTableName)
+            .setTable(uploadTableName)
         )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())
+
+      // For streaming sources, also add dependency on the streaming node
+      val streamingDep = if (hasStreamingSource) {
+        val streamingTableName = groupBy.metaData.outputTable + s"__${GroupByPlanner.Streaming}"
+        Some(
+          new TableDependency()
+            .setTableInfo(
+              new TableInfo()
+                .setTable(streamingTableName)
+            )
+            .setStartOffset(WindowUtils.zero())
+            .setEndOffset(WindowUtils.zero())
+        )
+      } else {
+        None
+      }
 
       // Add dependencies on upstream join metadata uploads if GroupBy has JoinSource
       val upstreamJoinDeps = if (hasStreamingSource) {
@@ -70,15 +81,15 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
       }
 
       // Return both the GroupBy dependency and any upstream join dependencies
-      Seq(groupByDep) ++ upstreamJoinDeps
+      Seq(uploadDep) ++ streamingDep ++ upstreamJoinDeps
     }
 
     val metaData =
       MetaDataUtils.layer(join.metaData,
-                          "metadata_upload",
-                          join.metaData.name + "__metadata_upload",
-                          allDeps,
-                          Some(stepDays))
+        "metadata_upload",
+        join.metaData.name + "__metadata_upload",
+        allDeps,
+        Some(stepDays))
     val node = new planner.JoinMetadataUpload().setJoin(join)
     toNode(metaData, _.setJoinMetadataUpload(node), semanticMonolithJoin(join))
   }

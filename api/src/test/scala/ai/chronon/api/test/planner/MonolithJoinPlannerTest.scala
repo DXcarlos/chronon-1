@@ -264,11 +264,14 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
 
     val metadataUploadNode = plan.nodes.asScala.find(_.content.isSetJoinMetadataUpload).get
 
-    // Should have dependencies on streaming GroupBy node
+    // Should have dependencies on both streaming and upload GroupBy nodes
     val tableDeps = metadataUploadNode.metaData.executionInfo.tableDependencies.asScala
     tableDeps should not be empty
-    val streamingDep = tableDeps.head
-    streamingDep.tableInfo.table should equal(streamingGroupBy.metaData.outputTable + "__streaming")
+    tableDeps should have size 2
+
+    val depTables = tableDeps.map(_.tableInfo.table).toSet
+    depTables should contain(streamingGroupBy.metaData.outputTable + "__uploadToKV")
+    depTables should contain(streamingGroupBy.metaData.outputTable + "__streaming")
   }
 
   it should "metadata upload node should depend on uploadToKV GroupBy nodes when join parts have non-streaming sources" in {
@@ -345,13 +348,14 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
 
     val metadataUploadNode = plan.nodes.asScala.find(_.content.isSetJoinMetadataUpload).get
 
-    // Should have dependencies on both streaming and uploadToKV nodes
+    // Should have dependencies on streaming node, upload node for streaming GB, and uploadToKV for non-streaming GB
     val tableDeps = metadataUploadNode.metaData.executionInfo.tableDependencies.asScala
     tableDeps should not be empty
-    tableDeps should have size 2
+    tableDeps should have size 3
 
     val depTables = tableDeps.map(_.tableInfo.table).toSet
     depTables should contain(streamingGroupBy.metaData.outputTable + "__streaming")
+    depTables should contain(streamingGroupBy.metaData.outputTable + "__uploadToKV")
     depTables should contain(nonStreamingGroupBy.metaData.outputTable + "__uploadToKV")
   }
 
@@ -565,12 +569,15 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
     val metadataUploadNode = plan.nodes.asScala.find(_.content.isSetJoinMetadataUpload).get
     val tableDeps = metadataUploadNode.metaData.executionInfo.tableDependencies.asScala
 
-    // Should only have dependency on the streaming GroupBy (streaming table)
-    tableDeps.size should be(1)
-    
+    // Should have dependency on both the streaming GroupBy (streaming table) and upload table
+    tableDeps.size should be(2)
+
     val streamingDep = tableDeps.find(_.tableInfo.table.contains("streaming_chained_gb__streaming"))
     streamingDep should be(defined)
-    
+
+    val uploadDep = tableDeps.find(_.tableInfo.table.contains("streaming_chained_gb__uploadToKV"))
+    uploadDep should be(defined)
+
     // Should NOT have upstream join metadata upload dependency (streaming node handles it)
     val upstreamJoinDeps = tableDeps.filter(_.tableInfo.table.contains("upstream_join__metadata_upload"))
     upstreamJoinDeps should be(empty)
