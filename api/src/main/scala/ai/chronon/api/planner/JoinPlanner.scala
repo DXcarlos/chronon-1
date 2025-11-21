@@ -237,10 +237,10 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
 
     val metaData =
       MetaDataUtils.layer(join.metaData,
-        "metadata_upload",
-        join.metaData.name + "__metadata_upload",
-        allDeps.toSeq,
-        Some(stepDays))
+                          "metadata_upload",
+                          join.metaData.name + "__metadata_upload",
+                          allDeps.toSeq,
+                          Some(stepDays))
     val node = new JoinMetadataUpload().setJoin(joinWithoutExecutionInfo)
 
     val copy = joinWithoutExecutionInfo.deepCopy()
@@ -248,7 +248,6 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
 
     toNode(metaData, _.setJoinMetadataUpload(node), copy)
   }
-
 
   def unionJoinNode: Node = {
     val result = new planner.UnionJoinNode()
