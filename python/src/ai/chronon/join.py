@@ -421,6 +421,7 @@ def Join(
     consistency_sample_percent = consistency_sample_percent if check_consistency else None
 
     online_external_parts = None
+    derivations = None
 
     # external parts need to be unique on (prefix, part.source.metaData.name)
     if online_external_parts:

@@ -20,12 +20,11 @@ Right parts:
 # Left side: Raw user activity events from PubSub export
 source = EventSource(
     # This will be the BigQuery table that receives the PubSub data
-    table=exports.user_activities.table,
+    table=exports.purchase_events.table,
     query=Query(
         selects=selects(
             user_id="user_id",
             listing_id="listing_id",
-            row_id="event_id"
         ),
         time_column="event_time_ms",
     ),
@@ -54,17 +53,14 @@ demo_v1 = Join(
     online_external_parts=[
         ExternalPart(sift_score.v0)
     ],
-    # Fetch-time derivations
+    # Fetch-time transformations
     derivations=[
-        Derivation(
-            name="is_listing_heavy",
-            expression="IF(listing_id_weight_grams > 1000, 1, 0)"
-        ),
-        # with a built-in Spark fn
+        # Normalize sift score
         Derivation(
             name="sift_score_normalized",
             expression="ip_sift_score / ip_sift_score_avg_30d"
         ),
+        # Carry-through of base features
         Derivation(
             name="*",
             expression="*"
@@ -73,7 +69,7 @@ demo_v1 = Join(
     version=1,
     online=True,
     output_namespace="data",
-    step_days=2,
+    step_days=10,
 )
 
 
