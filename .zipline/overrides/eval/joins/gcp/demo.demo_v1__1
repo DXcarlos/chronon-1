@@ -1,0 +1,148 @@
+Pulling configuration from 
+/Users/varantzanoyan/repos/chronon/python/test/canary/teams.py
+
+Join-s:
+  Parsed 14 previously compiled objects.
+  No new changes detected
+
+GroupBy-s:
+  Parsed 14 previously compiled objects.
+  No new changes detected
+
+StagingQuery-s:
+  Parsed 17 previously compiled objects.
+  No new changes detected
+
+ModelTransforms-s:
+  Parsed 2 previously compiled objects.
+  No new changes detected
+
+
+
+ 🔐 Using Google Cloud authentication for ZiplineHub.
+ 🔑 Generating ID token from default credentials
+
+ 🧮 Computed hashes for 47 local files.
+ ✅ Remote contains all local files. No need to upload 'vz/demo_branch'.
+ ✅ 47 hashes updated on branch 'vz/demo_branch'.
+
+ 🟢 Eval job finished successfully
+Join Configuration: gcp.demo.demo_v1__1
+  - Left table: data.gcp_exports_purchase_events__0
+  - Join parts: 3
+  - Conf dependencies: 4
+  - External tables: 0
+  - Output Schema:
+   [left]    ts: long
+   [left]    user_id: string
+   [left]    listing_id: long
+   [left]    ds: string
+   [joinPart: gcp.user_activities.v1__1]    user_id_view_event_sum_1d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_view_event_sum_7d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_view_event_sum_14d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_view_event_sum_30d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_click_event_sum_1d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_click_event_sum_7d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_click_event_sum_14d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_click_event_sum_30d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_purchase_event_sum_1d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_purchase_event_sum_7d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_purchase_event_sum_14d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_purchase_event_sum_30d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_favorite_event_sum_1d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_favorite_event_sum_7d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_favorite_event_sum_14d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_favorite_event_sum_30d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_add_to_cart_event_sum_1d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_add_to_cart_event_sum_7d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_add_to_cart_event_sum_14d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_add_to_cart_event_sum_30d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_view_event_average_1d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_view_event_average_7d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_view_event_average_14d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_view_event_average_30d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_click_event_average_1d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_click_event_average_7d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_click_event_average_14d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_click_event_average_30d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_purchase_event_average_1d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_purchase_event_average_7d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_purchase_event_average_14d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_purchase_event_average_30d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_favorite_event_average_1d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_favorite_event_average_7d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_favorite_event_average_14d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_favorite_event_average_30d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_add_to_cart_event_average_1d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_add_to_cart_event_average_7d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_add_to_cart_event_average_14d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_add_to_cart_event_average_30d: double
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_mobile_sum_1d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_mobile_sum_7d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_mobile_sum_14d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_mobile_sum_30d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_desktop_sum_1d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_desktop_sum_7d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_desktop_sum_14d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_desktop_sum_30d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_tablet_sum_1d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_tablet_sum_7d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_tablet_sum_14d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_is_tablet_sum_30d: long
+   [joinPart: gcp.user_activities.v1__1]    user_id_user_event_struct_last128_1d: Array[
+  Struct(
+    event_type: string (nullable)
+    listing_id: long (nullable)
+    timestamp: long (nullable)
+  ) (nullable)
+]
+   [joinPart: gcp.user_activities.v1__1]    user_id_user_event_struct_last128_7d: Array[
+  Struct(
+    event_type: string (nullable)
+    listing_id: long (nullable)
+    timestamp: long (nullable)
+  ) (nullable)
+]
+   [joinPart: gcp.user_activities.v1__1]    user_id_user_event_struct_last128_14d: Array[
+  Struct(
+    event_type: string (nullable)
+    listing_id: long (nullable)
+    timestamp: long (nullable)
+  ) (nullable)
+]
+   [joinPart: gcp.user_activities.v1__1]    user_id_user_event_struct_last128_30d: Array[
+  Struct(
+    event_type: string (nullable)
+    listing_id: long (nullable)
+    timestamp: long (nullable)
+  ) (nullable)
+]
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_headline: string
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_is_in_stock: integer
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_is_active: boolean
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_tags: string
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_long_description: string
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_price_cents: long
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_main_image_path: string
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_secondary_image_paths: string
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_is_expensive: integer
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_primary_category: string
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_currency: string
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_inventory_count: long
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_merchant_id: long
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_weight_grams: long
+   [joinPart: gcp.dim_listings.v1__0]    listing_id_brief_description: string
+   [joinPart: gcp.dim_merchants.v1__0]   merchant__listing_id_primary_category: string
+   [externalPart: gcp.sift_score.v1__0]  ip_address__sift_score: double
+   [derivation]                          ip_address__sift_score_normalized: double
+
+
+Lineage:
+[Join] gcp.demo.demo_v1__1
+├── ✅ [StagingQuery] gcp.exports.purchase_events__0
+├── ✅ [GroupBy] gcp.user_activities.v1__1
+│   └── ✅ [StagingQuery] gcp.exports.purchase_events__0
+├── ✅ [GroupBy] gcp.dim_listings.v1__0
+│   └── ✅ [StagingQuery] gcp.exports.dim_listings__0
+└── ✅ [GroupBy] gcp.dim_merchants.v1__0
+    └── ✅ [StagingQuery] gcp.exports.dim_merchants__0

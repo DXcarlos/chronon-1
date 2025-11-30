@@ -9,7 +9,7 @@ This model takes the user activity sequence from the demo search_v0 join and tra
 into a user embedding that captures behavioral patterns, preferences, and risk signals.
 """
 
-source = JoinSource(join=demo.search_v0)
+source = JoinSource(join=demo.v0)
 
 activities_v0 = Model(
     version="1.0",
@@ -30,6 +30,7 @@ activities_v0 = Model(
 )
 
 # Create user_sequence model transforms
+# Eval, Backfill 
 v1 = ModelTransforms(
     sources=[source],
     models=[activities_v0],

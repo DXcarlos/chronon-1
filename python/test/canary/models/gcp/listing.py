@@ -22,8 +22,7 @@ statistics = DataType.STRUCT("statistics", ("truncated", DataType.BOOLEAN), ("to
 values = DataType.LIST(DataType.DOUBLE)
 embeddings = DataType.STRUCT("embeddings", ("statistics", statistics), ("values", values))
 
-item_description_model = Model(
-    version="1",
+item_description_model = Model( version="1",
     inference_spec=InferenceSpec(
         model_backend=ModelBackend.VERTEXAI,
         model_backend_params={
