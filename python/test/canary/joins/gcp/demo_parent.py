@@ -1,13 +1,12 @@
-from gen_thrift.api.ttypes import EventSource, Source, JoinSource
-
 from group_bys.gcp import dim_listings, dim_merchants
 from staging_queries.gcp import exports
 
 from ai.chronon.group_by import Aggregation, Operation, TimeUnit, Window
 from ai.chronon.join import Derivation, Join, JoinPart
 from ai.chronon.query import Query, selects
-from ai.chronon.source import EventSource
+from ai.chronon.source import EventSource, JoinSource
 from ai.chronon.types import EnvironmentVariables
+from entities.entities import user, listing
 
 source = EventSource(
     # This will be the BigQuery table that receives the PubSub data
@@ -17,6 +16,7 @@ source = EventSource(
         selects=selects(user_id="user_id", listing_id="listing_id", row_id="event_id"),
         time_column="unix_millis(TIMESTAMP(event_time_ms))",
     ),
+    entities={"user_id": user, "listing_id": listing},
 )
 
 """
@@ -50,4 +50,5 @@ upstream_join_source = JoinSource(
         ),
         time_column="ts",
     ),
+    entities={"user_id": user, "listing_id": listing},
 )

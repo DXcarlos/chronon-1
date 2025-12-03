@@ -622,6 +622,7 @@
         "metaData": {
           "columnHashes": {
             "listing_id": "56b684bc2ca64fd442ccd845604e5e70",
+            "merchant_id": "938b95eedc1ebfc3f60b417c2b6d0e21",
             "primary_category": "62491a3e7c13a27a3eeb765ba460169f"
           },
           "executionInfo": {
@@ -700,6 +701,7 @@
               "query": {
                 "selects": {
                   "listing_id": "merchant_id",
+                  "merchant_id": "merchant_id",
                   "primary_category": "primary_category"
                 },
                 "startPartition": "2025-01-01"
@@ -747,6 +749,7 @@
       "listing_id_tags": "b4a3e64fad103c2caf6fcadb2e68f1dd",
       "listing_id_weight_grams": "7d01ad6aa1db30922ff461f2d0d62ee7",
       "merchant__listing_id_listing_id": "74857a06805db28ecb0d7e350f031dfd",
+      "merchant__listing_id_merchant_id": "74857a06805db28ecb0d7e350f031dfd",
       "merchant__listing_id_primary_category": "c4a356b0561263aa879220c3829eb41f",
       "row_id": "596506e0a4fef5508ebdcda7e6eb1072",
       "ts": "d1ae44a8f84a262685dbf1bdb9f8d46e",

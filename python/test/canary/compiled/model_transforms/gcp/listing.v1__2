@@ -670,6 +670,7 @@
                       "query": {
                         "selects": {
                           "listing_id": "merchant_id",
+                          "merchant_id": "merchant_id",
                           "primary_category": "primary_category"
                         },
                         "startPartition": "2025-01-01"

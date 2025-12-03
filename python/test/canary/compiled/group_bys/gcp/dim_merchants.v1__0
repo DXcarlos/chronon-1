@@ -5,6 +5,7 @@
   "metaData": {
     "columnHashes": {
       "listing_id": "56b684bc2ca64fd442ccd845604e5e70",
+      "merchant_id": "938b95eedc1ebfc3f60b417c2b6d0e21",
       "primary_category": "62491a3e7c13a27a3eeb765ba460169f"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_merchants__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
@@ -85,6 +86,7 @@
         "query": {
           "selects": {
             "listing_id": "merchant_id",
+            "merchant_id": "merchant_id",
             "primary_category": "primary_category"
           },
           "startPartition": "2025-01-01"

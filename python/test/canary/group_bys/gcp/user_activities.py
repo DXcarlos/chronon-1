@@ -3,7 +3,9 @@ from staging_queries.gcp import exports
 
 from ai.chronon.group_by import Aggregation, GroupBy, Operation, TimeUnit, Window
 from ai.chronon.query import Query, selects
+from ai.chronon.source import EventSource
 from ai.chronon.types import EnvironmentVariables
+from entities.entities import user
 
 """
 This GroupBy aggregates user activity metrics from the user-activities-v0 topic.
@@ -11,8 +13,7 @@ It tracks various user behaviors (views, clicks, purchases, favorites, add_to_ca
 with last_k, sum, and average aggregations over multiple time windows.
 """
 
-source = Source(
-    events=EventSource(
+source = EventSource(
         # This will be the BigQuery table that receives the PubSub data
         table=exports.user_activities.table,
         topic="pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities",
@@ -35,8 +36,8 @@ source = Source(
             ),
             time_column="unix_millis(TIMESTAMP(event_time_ms))",
         ),
+        entities={"user_id": user},
     )
-)
 
 # Define window sizes for aggregations (1d, 7d, 14d, 30d)
 window_sizes = [Window(length=days, time_unit=TimeUnit.DAYS) for days in [1, 7, 14, 30]]
@@ -73,7 +74,7 @@ aggregations.extend([
 
 v1 = GroupBy(
     sources=[source],
-    keys=["user_id"],  # Aggregate by user
+    keys=[user],  # Aggregate by user
     online=True,
     version=1,
     aggregations=aggregations,

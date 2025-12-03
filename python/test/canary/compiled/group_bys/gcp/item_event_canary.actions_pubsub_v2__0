@@ -133,6 +133,7 @@
       "events": {
         "query": {
           "selects": {
+            "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
             "add_cart": "IF(event_type = 'backend_add_to_cart', 1, 0)",
             "favorite": "IF(event_type = 'backend_favorite_item2', 1, 0)",
             "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",

@@ -235,8 +235,9 @@ def get_mod_and_var_name_from_gc(obj, mod_prefix):
 
 
 def __set_name(obj, cls, mod_prefix):
+    if obj is not None and hasattr(obj, "metaData") and obj.metaData.name is not None:
+        return obj.metaData.name
     module_qualifier = get_mod_name_from_gc(obj, mod_prefix)
-
     module = importlib.import_module(module_qualifier)
     eo.import_module_set_name(module, cls)
 

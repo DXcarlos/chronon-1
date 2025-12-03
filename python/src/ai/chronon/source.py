@@ -2,14 +2,52 @@
 Wrappers to directly create Source objects.
 """
 
+import logging
+from functools import wraps
+
 import gen_thrift.api.ttypes as ttypes
 
+import ai.chronon.utils as utils
+from ai.chronon.repo.entity_register import Entity, EntityRegister
 
+
+def apply_entities(fn):
+    """
+    Decorator that applies entity selections using the `entities`
+    kwarg passed to the wrapped function.
+    I entity_register is passed, it will be used to register the entities based on the query.selects.
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        source = fn(*args, **kwargs)
+
+        entities: Entity = kwargs.get("entities")
+        entity_registry: EntityRegister = kwargs.get("entity_registry")
+        if not entities and not entity_registry:
+            return source
+        query = kwargs.get("query")
+        table = utils.get_table(source)
+        if entities is not None:
+            for entity_col, entity in entities.items():
+                if entity_col in query.selects:
+                    entity.select(entity_col, table, expr=query.selects[entity_col])
+        elif entity_registry is not None:
+            for entity in entity_registry.entity_registrations.values():
+                for column in entity.default:
+                    if column in query.selects:
+                        logging.debug(f"Auto-registering entity {entity.name} for column {column} in table {table} based on default columns")
+                        entity.select(column, table, expr=query.selects[column])
+        return source
+    return wrapper
+
+@apply_entities
 def EventSource(
     table: str,
     query: ttypes.Query,
     topic: str = None,
     is_cumulative: bool = None,
+    entities: dict[str, Entity] = None,
+    entity_registry: EntityRegister = None,
 ) -> ttypes.Source:
     """
     Event Sources represent data that gets generated over-time.
@@ -33,11 +71,14 @@ def EventSource(
     )
 
 
+@apply_entities
 def EntitySource(
     snapshot_table: str,
     query: ttypes.Query,
     mutation_table: str = None,
     mutation_topic: str = None,
+    entities: dict[str, Entity] = None,
+    entity_registry: EntityRegister = None,
 ) -> ttypes.Source:
     """
     Entity Sources represent data that gets mutated over-time - at row-level. This is a group of three data elements.
@@ -68,8 +109,8 @@ def EntitySource(
         )
     )
 
-
-def JoinSource(join: ttypes.Join, query: ttypes.Query = None) -> ttypes.Source:
+@apply_entities
+def JoinSource(join: ttypes.Join, query: ttypes.Query = None, entities: dict[str, Entity] = None, entity_registry: EntityRegister = None) -> ttypes.Source:
     """
     The output of a join can be used as a source for `GroupBy`.
     Useful for expressing complex computation in chronon.

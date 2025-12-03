@@ -3,20 +3,20 @@ from staging_queries.gcp import exports
 from ai.chronon.group_by import GroupBy
 from ai.chronon.query import Query, selects
 from ai.chronon.source import EntitySource
+from entities.entities import listing, merchant, entity_register
 
 """
 This GroupBy creates a simple passthrough transformation on the dim_listings table.
 It selects key columns from the dimension table with no aggregations,
 providing a clean interface to listing attributes for joins and feature engineering.
 """
-
 source = EntitySource(
     # BigQuery table written directly by the batch process
     snapshot_table=exports.dim_listings.table,
     query=Query(
         selects=selects(
             listing_id="listing_id",
-            merchant_id="merchant_id", 
+            merchant_id="merchant_id",
             headline="headline",
             brief_description="brief_description",
             long_description="long_description",
@@ -35,12 +35,13 @@ source = EntitySource(
         ),
         start_partition="2025-01-01"
     ),
-    
+    entity_registry=entity_register,
 )
+
 
 v1 = GroupBy(
     sources=[source],
-    keys=["listing_id"],  # Key by listing_id for point lookups
+    keys=[listing],  # Key by listing_id for point lookups
     online=True,
     version=0,
     aggregations=None,  # No aggregations - this is a simple passthrough

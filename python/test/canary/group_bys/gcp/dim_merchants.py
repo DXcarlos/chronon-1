@@ -3,6 +3,7 @@ from staging_queries.gcp import exports
 from ai.chronon.group_by import GroupBy
 from ai.chronon.query import Query, selects
 from ai.chronon.source import EntitySource
+from entities.entities import merchant
 
 """
 This GroupBy creates a simple passthrough transformation on the dim_listings table.
@@ -20,11 +21,12 @@ source = EntitySource(
         ),
         start_partition="2025-01-01"
     ),
+    entities={"listing_id": merchant},
 )
 
 v1 = GroupBy(
     sources=[source],
-    keys=["listing_id"],  # Key by listing_id for point lookups
+    keys=[merchant],  # Key by listing_id for point lookups
     online=True,
     version=0,
     aggregations=None,  # No aggregations - this is a simple passthrough

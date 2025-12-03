@@ -23,6 +23,7 @@ import gen_thrift.common.ttypes as common
 
 import ai.chronon.utils as utils
 import ai.chronon.windows as window_utils
+from ai.chronon.repo.entity_register import Entity
 
 OperationType = int  # type(zthrift.Operation.FIRST)
 
@@ -412,6 +413,11 @@ def get_output_col_names(aggregation):
     return bucketed_names
 
 
+def final_key_columns(key, source):
+    if isinstance(key, Entity):   
+        return key.select_registrations[utils.get_table(source)].column
+    return key
+
 def GroupBy(
     sources: Union[List[utils.ANY_SOURCE_TYPE], utils.ANY_SOURCE_TYPE],
     keys: List[str],
@@ -576,7 +582,6 @@ def GroupBy(
     assert version is None or isinstance(version, int), (
         f"Version must be an integer or None, but found {type(version).__name__}"
     )
-
     agg_inputs = []
     if aggregations is not None:
         agg_inputs = [agg.inputColumn for agg in aggregations]
@@ -594,6 +599,8 @@ def GroupBy(
         if query.selects is None:
             query.selects = {}
         for col in required_columns:
+            if isinstance(col, Entity):
+                col = col.select_registrations[utils.get_table(source)].expr
             if col not in query.selects:
                 query.selects[col] = col
         if "ts" in query.selects:  # ts cannot be in selects.
@@ -654,10 +661,10 @@ def GroupBy(
         columnTags=column_tags if column_tags else None,
         version=str(version) if version is not None else None,
     )
-
+    final_keys = [final_key_columns(key, sources[0]) for key in keys]
     group_by = ttypes.GroupBy(
         sources=sources,
-        keyColumns=keys,
+        keyColumns=final_keys,
         aggregations=aggregations,
         metaData=metadata,
         accuracy=accuracy,
@@ -667,5 +674,14 @@ def GroupBy(
 
     # Add the table property that calls the private function
     group_by.__class__.table = property(lambda self: _get_output_table_name(self, full_name=True))
-
+    for key in keys:
+        if isinstance(key, Entity):
+            key.register_aggregation(
+                final_keys, 
+                aggregations, 
+                parent=group_by, 
+                input=utils.get_table(sources[0]), 
+                derivations=derivations, 
+                selects=utils.get_query(sources[0]).selects
+            )
     return group_by

@@ -26,6 +26,7 @@ import ai.chronon.repo.extract_objects as eo
 import ai.chronon.utils as utils
 from ai.chronon.cli.compile import parse_teams
 from ai.chronon.data_types import DataType, FieldsType
+from ai.chronon.repo.entity_register import Entity
 
 logging.basicConfig(level=logging.INFO)
 
@@ -505,5 +506,17 @@ def Join(
 
     # Add the table property that calls the private function
     join.__class__.table = property(lambda self: _get_output_table_name(self, full_name=True))
+
+    # Register join with entities if applicable
+    if Entity._global_register is not None:
+        try:
+            left_table = utils.get_table(updated_left)
+            # Check all registered entities to see if any match this join's left source
+            for _entity_name, entity in Entity._global_register.entity_registrations.items():
+                if left_table in entity.select_registrations:
+                    entity.register_feature_query(join, left_table)
+        except Exception:
+            # Silently ignore errors in entity registration
+            pass
 
     return join

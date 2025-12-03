@@ -3,6 +3,8 @@ from gen_thrift.api.ttypes import EventSource, Source
 from ai.chronon.group_by import Aggregation, GroupBy, Operation
 from ai.chronon.query import Query, selects
 from ai.chronon.types import ConfigProperties, EnvironmentVariables
+from entities.entities import listing, entity_register
+from ai.chronon.source import EventSource
 
 _action_events = [
     "backend_add_to_cart",
@@ -14,8 +16,7 @@ _action_events_csv = ", ".join([f"'{event}'" for event in _action_events])
 _action_events_filter = f"event_type in ({_action_events_csv})"
 
 def build_source(topic: str) -> Source:
-    return Source(
-        events=EventSource(
+    return EventSource(
             # This source table contains a custom struct ('attributes') that enables
             # attributes['key'] style access pattern in a BQ native table.
             table="data.item_events_parquet_compat_partitioned",
@@ -31,13 +32,13 @@ def build_source(topic: str) -> Source:
                 wheres=[_action_events_filter],
                 time_column="timestamp",
             ),
+            entity_registry=entity_register,
         )
-    )
 
 def build_actions_groupby(source: Source) -> GroupBy:
     return GroupBy(
         sources=[source],
-        keys=["listing_id"],
+        keys=[listing],
         online=True,
         version=0,
         aggregations=[
