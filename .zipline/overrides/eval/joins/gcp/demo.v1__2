@@ -140,6 +140,7 @@ Join Configuration: gcp.demo.demo_v1__1
 Lineage:
 [Join] gcp.demo.demo_v1__1
 ├── ✅ [StagingQuery] gcp.exports.purchase_events__0
+├── ✅ [ExternalPart] gcp.sift_score.v1__0
 ├── ✅ [GroupBy] gcp.user_activities.v1__1
 │   └── ✅ [StagingQuery] gcp.exports.purchase_events__0
 ├── ✅ [GroupBy] gcp.dim_listings.v1__0

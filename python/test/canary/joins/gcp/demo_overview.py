@@ -11,7 +11,7 @@ This Join combines user activity events with:
 1. User-level behavioral features (from user_activities GroupBy)
 2. Listing-level attributes (from dim_listings GroupBy)
 
-Left side: Purchase events
+Left side: Raw user activity events
 Right parts: 
 - User behavioral aggregations (keyed by user_id)
 - Listing dimension attributes (keyed by listing_id)
@@ -31,10 +31,11 @@ source = EventSource(
 )
 
 # Example Join
-dev_v10 = Join(
+v1 = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[
+        # User behavioral features (aggregated over time windows)
         JoinPart(
             group_by=user_activities.v1,
         ),
@@ -48,8 +49,28 @@ dev_v10 = Join(
             prefix="merchant_"
         ),
     ],
-    version=0,
+    version=1,
     online=True,
     output_namespace="data",
     step_days=10,
 )
+
+"""
+# External API calls
+online_external_parts=[
+    ExternalPart(sift_score.v0)
+],
+# Read time transformations
+derivations=[
+    # Normalize sift score
+    Derivation(
+        name="sift_score_normalized",
+        expression="ip_sift_score / ip_sift_score_avg_30d"
+    ),
+    # Carry-through of base features
+    Derivation(
+        name="*",
+        expression="*"
+    )
+],
+"""

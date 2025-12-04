@@ -7,9 +7,9 @@ from ai.chronon.source import JoinSource
 """
 This model takes the user activity sequence from the demo search_v0 join and transforms it
 into a user embedding that captures behavioral patterns, preferences, and risk signals.
-"""
 
-source = JoinSource(join=demo.v0)
+
+source = JoinSource(join=demo.v1)
 
 activities_v0 = Model(
     version="1.0",
@@ -38,3 +38,4 @@ v1 = ModelTransforms(
     version=0,
     output_namespace="models"
 )
+"""

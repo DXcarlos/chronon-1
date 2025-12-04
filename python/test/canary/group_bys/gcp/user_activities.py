@@ -33,7 +33,7 @@ source = Source(
 )
 
 # Define window sizes for aggregations (1d, 7d, 14d, 30d)
-window_sizes = [Window(length=days, time_unit=TimeUnit.DAYS) for days in [1, 7, 14, 30]]
+window_sizes = [Window(length=days, time_unit=TimeUnit.DAYS) for days in [1, 5, 7]]
 
 # Event type columns for aggregations
 event_columns = ["view_event", "click_event", "purchase_event"]
@@ -57,12 +57,12 @@ aggregations.extend([
     Aggregation(input_column=col, operation=Operation.LAST_K(128), windows=window_sizes)
     for col in last_k_columns
 ])
-    
+
 v1 = GroupBy(
     sources=[source],
     keys=["user_id"],  # Aggregate by user
     online=True,
-    version=2,
+    version=5,
     aggregations=aggregations,
     step_days=4,
     env_vars=EnvironmentVariables(

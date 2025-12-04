@@ -22,7 +22,7 @@ def get_select_star_export(table: str, partition_column: str = "_PARTITIONTIME")
     )
 
 
-def get_native_partition_export(table: str, partition_column: str):
+def get_native_partition_export(table: str, partition_column: str, version = 0):
     native_partition_sql = f"""
     SELECT 
         *,
@@ -38,13 +38,14 @@ def get_native_partition_export(table: str, partition_column: str):
         dependencies=[
             TableDependency(table=f"demo.`{table}`", partition_column=partition_column, offset=0)
         ],
-        version=0,
+        version=version,
+        step_days=5
     )
 
 
 
-user_activities = get_native_partition_export("user-activities", "_PARTITIONTIME")
-purchase_events = user_activities
+user_activities = get_native_partition_export("user-activities", "_PARTITIONTIME", version = 27)
+purchase_events = get_native_partition_export("user-activities", "_PARTITIONTIME")
 checkouts = get_native_partition_export("checkouts", "_PARTITIONTIME")
 dim_listings = get_select_star_export("dim_listings", "ds")
 dim_merchants = get_select_star_export("dim_merchants", "ds")

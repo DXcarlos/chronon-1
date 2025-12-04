@@ -444,48 +444,48 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           td.getTableInfo.table -> DependencyResolver.computeInputRange(range, td).map(_.translate(inputPartSpec))
         })
         .toMap
-      val allInputTablePartitions = inputTablesToRange.map {
-        case (tableName, maybePartitionRange) => {
-          // The partitions returned here are going to follow the tableUtils.partitionSpec default spec.
-          tableName -> tableUtils.partitions(tableName, tablePartitionSpec = maybePartitionRange.map(_.partitionSpec))
-        }
-      }
-
-      val maybeMissingPartitions = inputTablesToRange.map {
-        case (tableName, maybePartitionRange) => {
-          tableName -> maybePartitionRange.map((requestedPR) => {
-            // Need to normalize back again to the default spec before diffing against the existing partitions.
-            try {
-              requestedPR.translate(tableUtils.partitionSpec).partitions.diff(allInputTablePartitions(tableName))
-            } catch {
-              case e: Exception =>
-                logger.error(s"Error computing missing partitions for table $tableName.")
-                throw e
-            }
-          })
-        }
-      }
-      val kvStoreUpdates = kvStore.multiPut(allInputTablePartitions.map { case (tableName, allPartitions) =>
-        val partitionsJson = PartitionRange.collapsedPrint(allPartitions)(range.partitionSpec)
-        PutRequest(tableName.getBytes, partitionsJson.getBytes, tablePartitionsDataset)
-      }.toSeq)
-
-      Await.result(kvStoreUpdates, Duration.Inf)
-
-      val missingPartitions = maybeMissingPartitions.collect {
-        case (tableName, Some(missing)) if missing.nonEmpty =>
-          tableName -> missing
-      }
-      if (missingPartitions.nonEmpty) {
-        throw new RuntimeException(
-          "The following input tables are missing partitions for the requested range:\n" +
-            missingPartitions
-              .map { case (tableName, missing) =>
-                s"Table: $tableName, Missing Partitions: ${missing.mkString(", ")}"
-              }
-              .mkString("\n")
-        )
-      } else {
+//      val allInputTablePartitions = inputTablesToRange.map {
+//        case (tableName, maybePartitionRange) => {
+//          // The partitions returned here are going to follow the tableUtils.partitionSpec default spec.
+//          tableName -> tableUtils.partitions(tableName, tablePartitionSpec = maybePartitionRange.map(_.partitionSpec))
+//        }
+//      }
+//
+//      val maybeMissingPartitions = inputTablesToRange.map {
+//        case (tableName, maybePartitionRange) => {
+//          tableName -> maybePartitionRange.map((requestedPR) => {
+//            // Need to normalize back again to the default spec before diffing against the existing partitions.
+//            try {
+//              requestedPR.translate(tableUtils.partitionSpec).partitions.diff(allInputTablePartitions(tableName))
+//            } catch {
+//              case e: Exception =>
+//                logger.error(s"Error computing missing partitions for table $tableName.")
+//                throw e
+//            }
+//          })
+//        }
+//      }
+//      val kvStoreUpdates = kvStore.multiPut(allInputTablePartitions.map { case (tableName, allPartitions) =>
+//        val partitionsJson = PartitionRange.collapsedPrint(allPartitions)(range.partitionSpec)
+//        PutRequest(tableName.getBytes, partitionsJson.getBytes, tablePartitionsDataset)
+//      }.toSeq)
+//
+//      Await.result(kvStoreUpdates, Duration.Inf)
+//
+//      val missingPartitions = maybeMissingPartitions.collect {
+//        case (tableName, Some(missing)) if missing.nonEmpty =>
+//          tableName -> missing
+//      }
+//      if (missingPartitions.nonEmpty) {
+//        throw new RuntimeException(
+//          "The following input tables are missing partitions for the requested range:\n" +
+//            missingPartitions
+//              .map { case (tableName, missing) =>
+//                s"Table: $tableName, Missing Partitions: ${missing.mkString(", ")}"
+//              }
+//              .mkString("\n")
+//        )
+//      } else {
         run(metadata, node.content, Option(range))
         try {
           postJobActions(metadata = metadata,
@@ -498,7 +498,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             // Don't fail the job if post-job actions fail
             logger.error(s"Post-job actions failed for '${metadata.name}'", e)
         }
-      }
+//      }
     } match {
       case Success(_) => {
         logger.info("Batch node runner completed successfully")
