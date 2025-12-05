@@ -1,4 +1,4 @@
-from group_bys.gcp import dim_listings, dim_merchants, user_activities
+from group_bys.gcp import dim_listings, dim_merchants, user_activities, dim_users
 from staging_queries.gcp import exports
 
 from ai.chronon.join import Derivation, Join, JoinPart, ExternalPart
@@ -31,7 +31,7 @@ source = EventSource(
 )
 
 # Example Join
-dev_v10 = Join(
+purchase_fraud_prediction_vX7 = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[
@@ -42,13 +42,28 @@ dev_v10 = Join(
         JoinPart(
             group_by=dim_listings.v1,
         ),
-        # Merchant features
+    ],
+    version=1,
+    online=True,
+    output_namespace="data",
+    step_days=10,
+)
+
+
+# Updated to user the new user_activities features
+purchase_fraud_prediction_vX6 = Join(
+    left=source,
+    row_ids=["event_id"],
+    right_parts=[
         JoinPart(
-            group_by=dim_merchants.v1,
-            prefix="merchant_"
+            group_by=user_activities.v2,
+        ),
+        # Listing features
+        JoinPart(
+            group_by=dim_listings.v1,
         ),
     ],
-    version=0,
+    version=1,
     online=True,
     output_namespace="data",
     step_days=10,

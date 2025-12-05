@@ -1,5 +1,6 @@
 from ai.chronon.staging_query import EngineType, StagingQuery, TableDependency
 
+VERSION=24
 
 def get_select_star_export(table: str, partition_column: str = "_PARTITIONTIME"):
     bigquery_export_sql = f"""
@@ -18,11 +19,12 @@ def get_select_star_export(table: str, partition_column: str = "_PARTITIONTIME")
         dependencies=[
             TableDependency(table=f"demo.`{table}`", partition_column=partition_column, offset=0)
         ],
-        version=0,
+        version=VERSION,
+        step_days=5
     )
 
 
-def get_native_partition_export(table: str, partition_column: str, version = 0):
+def get_native_partition_export(table: str, partition_column: str):
     native_partition_sql = f"""
     SELECT 
         *,
@@ -38,13 +40,14 @@ def get_native_partition_export(table: str, partition_column: str, version = 0):
         dependencies=[
             TableDependency(table=f"demo.`{table}`", partition_column=partition_column, offset=0)
         ],
-        version=version,
+        version=VERSION,
         step_days=5
     )
 
 
 
-user_activities = get_native_partition_export("user-activities", "_PARTITIONTIME", version = 27)
+user_activities = get_native_partition_export("user-activities", "_PARTITIONTIME")
+user_activities_v2 = get_native_partition_export("user-activities", "_PARTITIONTIME")
 purchase_events = get_native_partition_export("user-activities", "_PARTITIONTIME")
 checkouts = get_native_partition_export("checkouts", "_PARTITIONTIME")
 dim_listings = get_select_star_export("dim_listings", "ds")

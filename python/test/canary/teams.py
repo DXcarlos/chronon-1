@@ -104,6 +104,145 @@ gcp = Team(
             "spark.chronon.coalesce.factor": "10",
             "spark.default.parallelism": "10",
             "spark.sql.shuffle.partitions": "10",
+            "spark.executor.memory": "1G",
+            "spark.executor.cores": "1",
+            "spark.driver.memory": "1G",
+            "spark.driver.cores": "1",
+        },
+        modeConfigs={
+            RunMode.BACKFILL: {
+                "spark.chronon.backfill_cloud_provider": "gcp",  # dummy test config
+            }
+        }
+    ),
+    clusterConf=ClusterConfigProperties(
+        modeClusterConfigs={
+            RunMode.UPLOAD: {
+                "dataproc.config": generate_dataproc_cluster_config(2, "canary-443022", "gs://zipline-artifacts-canary",
+                                                                    idle_timeout="300s",
+                                                                    worker_host_type="n2-highmem-4",
+                                                                    master_host_type="n2-highmem-8")
+            }
+        }
+    ),
+)
+
+
+trust = Team(
+    outputNamespace="data",
+    env=EnvironmentVariables(
+        common={
+            "CLOUD_PROVIDER": "gcp",
+            "CUSTOMER_ID": "dev",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "ENABLE_PUBSUB": "true",
+            "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+        },
+        modeEnvironments={
+            RunMode.UPLOAD: {
+                "GCP_DATAPROC_CLUSTER_NAME": "zipline-transient-upload-cluster"
+            }
+        }
+    ),
+    conf=ConfigProperties(
+        common={
+            "spark.chronon.cloud_provider": "gcp",  # dummy test config
+            "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
+            "spark.chronon.partition.format": "yyyy-MM-dd",
+            "spark.chronon.table.gcs.temporary_gcs_bucket": "zipline-warehouse-canary",
+            "spark.chronon.partition.column": "ds",
+            "spark.chronon.table.gcs.connector_output_dataset": "data",
+            "spark.chronon.table.gcs.connector_output_project": "canary-443022",
+            "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
+            "spark.chronon.table_write.format": "iceberg",
+            "spark.sql.catalog.spark_catalog.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+            "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
+            "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
+            "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+            "spark.sql.catalog.spark_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+            "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+            "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
+            "spark.sql.catalog.default_iceberg.gcp.bigquery.project-id": "canary-443022",
+            "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+            "spark.sql.catalog.default_iceberg": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+            "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+            "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
+            "spark.chronon.coalesce.factor": "10",
+            "spark.default.parallelism": "10",
+            "spark.sql.shuffle.partitions": "10",
+        },
+        modeConfigs={
+            RunMode.BACKFILL: {
+                "spark.chronon.backfill_cloud_provider": "gcp",  # dummy test config
+            }
+        }
+    ),
+    clusterConf=ClusterConfigProperties(
+        modeClusterConfigs={
+            RunMode.UPLOAD: {
+                "dataproc.config": generate_dataproc_cluster_config(2, "canary-443022", "gs://zipline-artifacts-canary",
+                                                                    idle_timeout="300s",
+                                                                    worker_host_type="n2-highmem-4",
+                                                                    master_host_type="n2-highmem-8")
+            }
+        }
+    ),
+)
+
+personalization = Team(
+    outputNamespace="data",
+    env=EnvironmentVariables(
+        common={
+            "CLOUD_PROVIDER": "gcp",
+            "CUSTOMER_ID": "dev",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "ENABLE_PUBSUB": "true",
+            "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+        },
+        modeEnvironments={
+            RunMode.UPLOAD: {
+                "GCP_DATAPROC_CLUSTER_NAME": "zipline-transient-upload-cluster"
+            }
+        }
+    ),
+    conf=ConfigProperties(
+        common={
+            "spark.chronon.cloud_provider": "gcp",  # dummy test config
+            "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
+            "spark.chronon.partition.format": "yyyy-MM-dd",
+            "spark.chronon.table.gcs.temporary_gcs_bucket": "zipline-warehouse-canary",
+            "spark.chronon.partition.column": "ds",
+            "spark.chronon.table.gcs.connector_output_dataset": "data",
+            "spark.chronon.table.gcs.connector_output_project": "canary-443022",
+            "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
+            "spark.chronon.table_write.format": "iceberg",
+            "spark.sql.catalog.spark_catalog.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+            "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
+            "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
+            "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+            "spark.sql.catalog.spark_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+            "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+            "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
+            "spark.sql.catalog.default_iceberg.gcp.bigquery.project-id": "canary-443022",
+            "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+            "spark.sql.catalog.default_iceberg": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+            "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+            "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
+            "spark.chronon.coalesce.factor": "10",
+            "spark.default.parallelism": "10",
+            "spark.sql.shuffle.partitions": "10",
         },
         modeConfigs={
             RunMode.BACKFILL: {
