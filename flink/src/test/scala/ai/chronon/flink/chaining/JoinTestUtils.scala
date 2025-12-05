@@ -52,6 +52,7 @@ class TestApi extends Api(Map.empty) with Serializable {
   // Implement required abstract methods
   override def externalRegistry: ExternalSourceRegistry = null
   override def genMetricsKvStore(tableBaseName: String): KVStore = new TestKVStore()
+  override def genEnhancedStatsKvStore(tableBaseName: String): KVStore = new TestKVStore()
   override def logResponse(resp: LoggableResponse): Unit = {}
   override def streamDecoder(groupByServingInfoParsed: GroupByServingInfoParsed): SerDe = null
 

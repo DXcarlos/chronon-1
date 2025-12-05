@@ -58,6 +58,7 @@ object Constants {
   val ChrononRunDs: String = "CHRONON_RUN_DS"
 
   val TiledSummaryDataset: String = "DATA_QUALITY_METRICS"
+  val EnhancedStatsDataset: String = "ENHANCED_STATS"
 
   val DefaultDriftTileSize: Window = new Window(30, TimeUnit.MINUTES)
 

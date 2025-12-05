@@ -154,6 +154,7 @@ struct ExecutionInfo {
     12: optional bool historicalBackfill
     13: optional list<TableDependency> tableDependencies
     14: optional TableInfo outputTableInfo
+    15: optional bool enableStatsCompute
 
     200: optional list<KvDependency> kvDependencies
     201: optional KvInfo outputKvInfo

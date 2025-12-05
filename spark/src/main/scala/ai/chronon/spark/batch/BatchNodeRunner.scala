@@ -6,7 +6,8 @@ import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
 import ai.chronon.observability.{TileStats, TileStatsType}
 import ai.chronon.online.KVStore.PutRequest
 import ai.chronon.online.{Api, KVStore}
-import ai.chronon.planner._
+import ai.chronon.planner.{JoinStatsComputeNode, JoinStatsUploadToKVNode, _}
+import ai.chronon.spark.Extensions._
 import ai.chronon.spark.batch.iceberg.IcebergPartitionStatsExtractor
 import ai.chronon.spark.batch.{StagingQuery => StagingQueryUtil}
 import ai.chronon.spark.catalog.TableUtils
@@ -226,6 +227,90 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     }
   }
 
+  private def runJoinStatsCompute(metadata: MetaData,
+                                  joinStatsCompute: JoinStatsComputeNode,
+                                  range: PartitionRange): Unit = {
+    require(joinStatsCompute.isSetJoin, "JoinStatsComputeNode must have a join set")
+    val joinConf = joinStatsCompute.join
+    val joinName = metadata.name
+
+    // TODO: Support step-days > 1 for stats computation
+    //   Currently processes the entire date range [range.start, range.end] in one batch.
+    //   For large date ranges or resource-constrained environments, allow processing in steps:
+    //     - Add stepDays parameter (default = entire range)
+    //     - Iterate through range in stepDays chunks (e.g., 3 days at a time)
+    //     - Write each chunk to output table incrementally
+    //   Benefits: Better memory management, checkpointing for long-running jobs, partial progress on failures
+    logger.info(s"Running stats compute for join '$joinName' for range: [${range.start}, ${range.end}]")
+
+    // Import the necessary stats classes
+    import ai.chronon.spark.stats.EnhancedStatsCompute
+
+    // Get the join output table from dependencies - the first table dependency should be the join output
+    val joinOutputTable = Option(metadata.executionInfo)
+      .flatMap(ei => Option(ei.getTableDependencies))
+      .map(_.asScala.head.getTableInfo.table)
+      .getOrElse(
+        throw new IllegalStateException(s"Could not determine join output table for stats compute node: $joinName"))
+
+    logger.info(s"Reading join output from table: $joinOutputTable")
+
+    // Read the join output for the specified partition range
+    val joinOutputDf = tableUtils.sql(
+      s"SELECT * FROM $joinOutputTable WHERE ${tableUtils.partitionColumn} >= '${range.start}' AND ${tableUtils.partitionColumn} <= '${range.end}'"
+    )
+
+    // Extract key columns from the join configuration
+    // Use Try to handle potential NPE from keyColumns method when join parts are null
+    val keys = scala.util.Try(joinConf.keyColumns).toOption.map(_.toSeq).getOrElse(Seq.empty)
+    if (keys.nonEmpty) {
+      logger.info(s"Computing enhanced statistics with keys: ${keys.mkString(", ")}")
+    } else {
+      logger.info(s"Computing enhanced statistics without key exclusions (all columns will be analyzed)")
+    }
+
+    // Create EnhancedStatsCompute instance
+    val enhancedStats = new EnhancedStatsCompute(
+      inputDf = joinOutputDf,
+      keys = keys,
+      name = joinConf.metaData.name
+    )
+
+    // Compute daily summary statistics
+    val timedKvRdd = enhancedStats.enhancedDailySummary(
+      sample = 1.0,
+      timeBucketMinutes = 0 // Daily tiles
+    )
+
+    // Convert to Avro DataFrame format (with key_bytes, value_bytes, ts columns)
+    // This format can be uploaded directly to KV store
+    val avroDf = timedKvRdd.toAvroDf
+    val outputTable = metadata.outputTable
+    avroDf.show()
+
+    // Add partition column (ds) derived from timestamp for partitioning
+    val avroDfWithPartition = avroDf.withTimeBasedColumn(tableUtils.partitionColumn).drop("key_json").drop("value_json")
+
+    val recordCount = avroDfWithPartition.count()
+    logger.info(s"Saving $recordCount stats records to table: $outputTable")
+
+    // Write the stats in Avro format to the output table, partitioned by day
+    // Using insertPartitions which handles the table format provider (iceberg)
+    tableUtils.insertPartitions(
+      df = avroDfWithPartition,
+      tableName = outputTable,
+      saveMode = org.apache.spark.sql.SaveMode.Overwrite
+    )
+
+    // Upload to KV store using the proper EnhancedStatsStore method
+    logger.info(s"Uploading $recordCount stats records to KV store")
+    import ai.chronon.spark.stats.EnhancedStatsStore
+    val statsStore = new EnhancedStatsStore(api, Constants.EnhancedStatsDataset)(tableUtils)
+    statsStore.upload(timedKvRdd, putsPerRequest = 100)
+
+    logger.info(s"Successfully computed and saved stats for join '$joinName'")
+  }
+
   private[batch] def extractAndPersistPartitionStats(metricsKvStore: KVStore, outputTable: String, confName: String)(
       implicit partitionSpec: PartitionSpec): Unit = {
     try {
@@ -367,6 +452,12 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           modelPlatformProvider
         )
         logger.info(s"Successfully completed model transforms backfill for '${metadata.name}'")
+
+      case NodeContent._Fields.JOIN_STATS_COMPUTE =>
+        logger.info(s"Running join stats compute for '${metadata.name}' for range: [${range.start}, ${range.end}]")
+        require(conf.getJoinStatsCompute.isSetJoin, "JoinStatsComputeNode must have a join set")
+        runJoinStatsCompute(metadata, conf.getJoinStatsCompute, range)
+        logger.info(s"Successfully completed join stats compute for '${metadata.name}'")
 
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported NodeContent type: ${conf.getSetField}")
@@ -534,7 +625,10 @@ object BatchNodeRunner {
     val cl = Thread.currentThread().getContextClassLoader
     val cls = cl.loadClass(onlineClass)
     val constructor = cls.getConstructors.apply(0)
-    val onlineImpl = constructor.newInstance(props)
+    // Convert to regular Map to ensure serializability (Scallop's LazyMap is not serializable)
+    // Force a copy by converting to HashMap and back to ensure it's not a LazyMap
+    val serializableProps: Map[String, String] = scala.collection.immutable.HashMap(props.toSeq: _*)
+    val onlineImpl = constructor.newInstance(serializableProps)
     onlineImpl.asInstanceOf[Api]
   }
 }

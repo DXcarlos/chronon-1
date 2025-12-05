@@ -368,7 +368,7 @@ object FrequentItemType extends Enumeration {
 
 case class ItemsSketchIR[T](sketch: ItemsSketch[T], sketchType: ItemType)
 
-trait FrequentItemsFriendly[Input] {
+trait FrequentItemsFriendly[Input] extends Serializable {
   def serializer: ArrayOfItemsSerDe[Input]
   def sketchType: FrequentItemType.ItemType
 }

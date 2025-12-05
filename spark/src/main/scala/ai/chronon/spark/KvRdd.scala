@@ -45,6 +45,7 @@ object GenericRowHandler {
       }
       result
     }
+    case x: Array[_] => x.asInstanceOf[Array[Any]] // Handle plain arrays directly
   }
 }
 
@@ -120,7 +121,8 @@ case class KvRdd(data: RDD[(Array[Any], Array[Any])], keySchema: StructType, val
 case class TimedKvRdd(data: RDD[(Array[Any], Array[Any], Long)],
                       keySchema: StructType,
                       valueSchema: StructType,
-                      storeSchemasPrefix: Option[String] = None)(implicit sparkSession: SparkSession)
+                      storeSchemasPrefix: Option[String] = None,
+                      metadata: Option[Map[String, String]] = None)(implicit sparkSession: SparkSession)
     extends BaseKvRdd {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   val withTime = true
@@ -148,25 +150,46 @@ case class TimedKvRdd(data: RDD[(Array[Any], Array[Any], Long)],
     if (storeSchemasPrefix.isDefined) {
       val ts = System.currentTimeMillis()
       val schemaPrefix = storeSchemasPrefix.get
+      logger.info(s"Using schema prefix: $schemaPrefix")
+      val keyStr = s"$schemaPrefix${api.Constants.TimedKvRDDKeySchemaKey}"
+      val valStr = s"$schemaPrefix${api.Constants.TimedKvRDDValueSchemaKey}"
       val schemaRows: Seq[Array[Any]] = Seq(
         Array(
-          s"$schemaPrefix${api.Constants.TimedKvRDDKeySchemaKey}".getBytes(api.Constants.UTF8),
+          keyStr.getBytes(api.Constants.UTF8),
           schemasStr(0).getBytes(api.Constants.UTF8),
-          api.Constants.TimedKvRDDKeySchemaKey,
+          keyStr,
           schemasStr(0),
           ts
         ),
         Array(
-          s"$schemaPrefix${api.Constants.TimedKvRDDValueSchemaKey}".getBytes(api.Constants.UTF8),
+          valStr.getBytes(api.Constants.UTF8),
           schemasStr(1).getBytes(api.Constants.UTF8),
-          api.Constants.TimedKvRDDValueSchemaKey,
+          valStr,
           schemasStr(1),
           ts
         )
       )
-      val schemasRdd: RDD[Row] = sparkSession.sparkContext.parallelize(schemaRows.map(new GenericRow(_)))
-      val schemasDf = sparkSession.createDataFrame(schemasRdd, rowSchema)
-      return dataDf.union(schemasDf)
+
+      // Add metadata rows if provided
+      val metadataRows: Seq[Array[Any]] = metadata
+        .map { metaMap =>
+          metaMap.map { case (key, value) =>
+            val metaKey = s"$schemaPrefix/$key"
+            Array(
+              metaKey.getBytes(api.Constants.UTF8),
+              value.getBytes(api.Constants.UTF8),
+              metaKey,
+              value,
+              ts
+            )
+          }.toSeq
+        }
+        .getOrElse(Seq.empty)
+
+      val allRows = schemaRows ++ metadataRows
+      val allRowsRdd: RDD[Row] = sparkSession.sparkContext.parallelize(allRows.map(new GenericRow(_)))
+      val allRowsDf = sparkSession.createDataFrame(allRowsRdd, rowSchema)
+      return dataDf.union(allRowsDf)
     }
     dataDf
   }

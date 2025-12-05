@@ -93,6 +93,25 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
     }
   }
 
+  override def genEnhancedStatsKvStore(tableBaseName: String): KVStore = {
+    // Try to get existing shared store first
+    Option(sharedEnhancedStatsKvStore.get()) match {
+      case Some(existingStore) =>
+        existingStore
+      case None =>
+        enhancedStatsKvStoreLock.synchronized {
+          // Double check if another thread created the store while we were waiting for the lock
+          Option(sharedEnhancedStatsKvStore.get()) match {
+            case Some(existingStore) => existingStore
+            case None =>
+              val newStore = createEnhancedStatsKvStore(tableBaseName)
+              sharedEnhancedStatsKvStore.set(newStore)
+              newStore
+          }
+        }
+    }
+  }
+
   override def streamDecoder(groupByServingInfoParsed: GroupByServingInfoParsed): SerDe =
     new AvroSerDe(AvroConversions.fromChrononSchema(groupByServingInfoParsed.streamChrononSchema))
 
@@ -208,6 +227,11 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
   private def createDataQualityKvStore(tableBaseName: String): KVStore = {
     val (dataClient, maybeAdminClient, _) = createBigTableClients()
     new BigTableMetricsKvStore(dataClient, tableBaseName, maybeAdminClient, conf)
+  }
+
+  private def createEnhancedStatsKvStore(tableBaseName: String): KVStore = {
+    val (dataClient, maybeAdminClient, _) = createBigTableClients()
+    new EnhancedDatasetKVStoreImpl(dataClient, tableBaseName, maybeAdminClient, conf)
   }
 
   // BigTable's bulk read rows by default will batch calls and wait for a delay before sending them. This is not
@@ -352,6 +376,9 @@ object GcpApiImpl {
 
   private val sharedDataQualityKvStore = new AtomicReference[KVStore]()
   private val dataQualityKvStoreLock = new Object()
+
+  private val sharedEnhancedStatsKvStore = new AtomicReference[KVStore]()
+  private val enhancedStatsKvStoreLock = new Object()
 
   private val modelPlatformCache = new ConcurrentHashMap[String, ModelPlatform]()
 

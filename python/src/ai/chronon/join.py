@@ -309,6 +309,7 @@ def Join(
     env_vars: common.EnvironmentVariables = None,
     cluster_conf: common.ClusterConfigProperties = None,
     step_days: int = None,
+    enable_stats_compute: bool = None,
 ) -> api.Join:
     """
     Construct a join object. A join can pull together data from various GroupBy's both offline and online. This is also
@@ -399,6 +400,10 @@ def Join(
         Cluster configuration properties for the join.
     :param step_days:
         The maximum number of days to output at once
+    :param enable_stats_compute:
+        Whether to enable enhanced statistics computation and upload for this join.
+        When True, stats compute and upload nodes will be added to the workflow.
+    :type enable_stats_compute: bool
     """
     # Normalize row_ids
     if isinstance(row_ids, str):
@@ -451,6 +456,7 @@ def Join(
         stepDays=step_days,
         historicalBackfill=historical_backfill,
         clusterConf=cluster_conf,
+        enableStatsCompute=enable_stats_compute,
     )
 
     metadata = api.MetaData(

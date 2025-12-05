@@ -6,6 +6,7 @@ import ai.chronon.service.handlers.FetchRouter;
 import ai.chronon.service.handlers.FetchRouterV2;
 import ai.chronon.service.handlers.JoinListHandler;
 import ai.chronon.service.handlers.JoinSchemaHandler;
+import ai.chronon.service.handlers.StatsHandler;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Promise;
 import io.vertx.core.http.Http2Settings;
@@ -36,7 +37,7 @@ public class FetcherVerticle extends AbstractVerticle {
         .onSuccess(fetcher -> {
             try {
                 // This code runs back on the event loop when the blocking operation completes
-                startHttpServer(cfgStore.getServerPort(), cfgStore.encodeConfig(), fetcher, startPromise);
+                startHttpServer(cfgStore.getServerPort(), cfgStore.encodeConfig(), api, fetcher, startPromise);
             } catch (Exception e) {
                 startPromise.fail(e);
             }
@@ -44,7 +45,7 @@ public class FetcherVerticle extends AbstractVerticle {
         .onFailure(startPromise::fail);
     }
 
-    protected void startHttpServer(int port, String configJsonString, JavaFetcher fetcher, Promise<Void> startPromise) throws Exception {
+    protected void startHttpServer(int port, String configJsonString, Api api, JavaFetcher fetcher, Promise<Void> startPromise) throws Exception {
         Router router = Router.router(vertx);
 
         // Define routes
@@ -58,6 +59,9 @@ public class FetcherVerticle extends AbstractVerticle {
 
         // Set up route for retrieval of Join schema
         router.get("/v1/join/:name/schema").handler(new JoinSchemaHandler(fetcher));
+
+        // Set up route for fetching enhanced statistics
+        router.get("/v1/stats/:tableName").handler(new StatsHandler(api));
 
         // Health check route
         router.get("/ping").handler(ctx -> {

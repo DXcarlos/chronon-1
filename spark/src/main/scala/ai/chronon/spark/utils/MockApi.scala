@@ -122,4 +122,6 @@ class MockApi(kvStore: () => KVStore, val namespace: String) extends Api(null) {
   }
 
   override def genMetricsKvStore(tableBaseName: String): KVStore = kvStore()
+
+  override def genEnhancedStatsKvStore(tableBaseName: String): KVStore = kvStore()
 }

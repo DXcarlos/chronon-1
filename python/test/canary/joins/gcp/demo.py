@@ -12,7 +12,7 @@ This Join combines user activity events with:
 2. Listing-level attributes (from dim_listings GroupBy)
 
 Left side: Raw user activity events
-Right parts: 
+Right parts:
 - User behavioral aggregations (keyed by user_id)
 - Listing dimension attributes (keyed by listing_id)
 """
@@ -54,6 +54,7 @@ v1 = Join(
     online=True,
     output_namespace="data",
     step_days=2,
+    enable_stats_compute=True,
 )
 
 # Example join with some derivations
@@ -86,7 +87,7 @@ derivations_v1 = Join(
             name="price_bucket",
             expression=
             """
-                CASE 
+                CASE
                     WHEN listing_id_price_cents < 1000 THEN 0
                     WHEN listing_id_price_cents < 5000 THEN 1
                     WHEN listing_id_price_cents < 10000 THEN 2

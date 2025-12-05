@@ -16,6 +16,7 @@
 
 package ai.chronon.aggregator.row
 
+import ai.chronon.aggregator.row.StatsGenerator.MetricTransform
 import ai.chronon.api
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
@@ -36,6 +37,7 @@ object StatsGenerator {
 
   val nullSuffix = "__null"
   val nullRateSuffix = "__null_rate"
+  val zeroSuffix = "__zero"
   val totalColumn = "total"
   // Leveraged to build a CDF. Consider using native KLLSketch CDF/PMF methods.
   val finalizedPercentilesMerged: Array[Double] = Array(0.01) ++ (5 until 100 by 5).map(_.toDouble / 100) ++ Array(0.99)
@@ -47,13 +49,15 @@ object StatsGenerator {
     *
     * IsNull: Check if the input is null.
     *
+    * IsZero: Check if the input equals zero (for numeric columns).
+    *
     * Raw: Operate in the input column.
     *
     * One: lit(true) in spark. Used for row counts leveraged to obtain null rate values.
     */
   object InputTransform extends Enumeration {
     type InputTransform = Value
-    val IsNull, Raw, One = Value
+    val IsNull, IsZero, Raw, One = Value
   }
   import InputTransform._
 
@@ -119,6 +123,86 @@ object StatsGenerator {
           numericTransforms(name)
         } else {
           anyTransforms(name)
+        }
+      }
+      .sortBy(_.name)
+    metrics :+ MetricTransform(totalColumn, InputTransform.One, api.Operation.COUNT)
+  }
+
+  /** Enhanced stats for high-cardinality numeric columns (approx cardinality, max, min, nulls, zeros, mean, std dev, median, histogram) */
+  def highCardinalityNumericTransforms(column: String): Seq[MetricTransform] =
+    anyTransforms(column) ++ Seq(
+      MetricTransform(column, InputTransform.IsZero, operation = api.Operation.SUM, suffix = zeroSuffix),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.MAX),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.MIN),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.AVERAGE),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.VARIANCE),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.APPROX_UNIQUE_COUNT),
+      MetricTransform(
+        column,
+        InputTransform.Raw,
+        operation = api.Operation.APPROX_PERCENTILE,
+        argMap = Map("percentiles" -> s"[${finalizedPercentilesMerged.mkString(", ")}]").toJava
+      )
+    )
+
+  /** Enhanced stats for boolean columns (null count, true count)
+    * For booleans we track:
+    * - Null count (from anyTransforms)
+    * - True count (by summing the boolean column where true=1, false=0)
+    * - False count can be derived as: total_count - true_count - null_count
+    * - Total count is added globally
+    */
+  def booleanTransforms(column: String): Seq[MetricTransform] =
+    anyTransforms(column) ++ Seq(
+      // Count true values by summing the raw boolean column (true=1, false=0)
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.SUM, suffix = "_true")
+    )
+
+  /** Enhanced stats for low-cardinality categorical columns (count, nulls, unique, top value, histogram) */
+  def lowCardinalityCategoricalTransforms(column: String): Seq[MetricTransform] =
+    anyTransforms(column) ++ Seq(
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.UNIQUE_COUNT),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.HISTOGRAM)
+    )
+
+  /** Build enhanced metrics with cardinality awareness.
+    * @param fields Schema fields as (name, dataType) pairs
+    * @param cardinalityMap Map of column names to their approximate unique counts
+    * @param cardinalityThreshold Threshold to distinguish low vs high cardinality (default 100)
+    */
+  def buildEnhancedMetrics(fields: Seq[(String, api.DataType)],
+                           cardinalityMap: Map[String, Long],
+                           cardinalityThreshold: Int = 100): Seq[MetricTransform] = {
+    val metrics = fields
+      .flatMap { case (name, dataType) =>
+        if (ignoreColumns.contains(name)) {
+          Seq.empty
+        } else {
+          // Skip complex types (List, Map, Struct) for now - they don't support standard aggregations
+          dataType match {
+            case _: api.ListType | _: api.MapType | _: api.StructType =>
+              Seq.empty
+            case _ =>
+              val cardinality = cardinalityMap.getOrElse(name, 0L)
+              val isLowCardinality = cardinality <= cardinalityThreshold
+
+              // Special handling for boolean columns
+              if (dataType == api.BooleanType) {
+                booleanTransforms(name)
+              } else if (api.DataType.isNumeric(dataType) && dataType != api.ByteType) {
+                // Numeric columns: always use high-cardinality transforms
+                highCardinalityNumericTransforms(name)
+              } else if (isLowCardinality) {
+                // Non-numeric low-cardinality: treat as categorical
+                lowCardinalityCategoricalTransforms(name)
+              } else {
+                // Non-numeric high-cardinality: basic transforms only
+                anyTransforms(name) ++ Seq(
+                  MetricTransform(name, InputTransform.Raw, operation = api.Operation.APPROX_UNIQUE_COUNT)
+                )
+              }
+          }
         }
       }
       .sortBy(_.name)

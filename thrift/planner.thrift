@@ -92,6 +92,15 @@ struct ExternalSourceSensorNode {
     // When running TriggerExpr we need to use the proper engine.
     5: optional api.EngineType engineType
 }
+
+struct JoinStatsComputeNode {
+    1: optional api.Join join
+}
+
+struct JoinStatsUploadToKVNode {
+    1: optional api.Join join
+}
+
 union NodeContent {
     // join nodes
     1: SourceWithFilterNode sourceWithFilter
@@ -110,6 +119,9 @@ union NodeContent {
     14: CreateModelEndpointNode createModelEndpoint
     15: DeployModelNode deployModel
     16: TrainModelNode trainModel
+
+    // Stats Node
+    20: JoinStatsComputeNode joinStatsCompute
 
     // groupBy nodes
     100: GroupByBackfillNode groupByBackfill

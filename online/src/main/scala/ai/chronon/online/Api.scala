@@ -226,6 +226,8 @@ abstract class Api(userConf: Map[String, String]) extends Serializable {
 
   def genMetricsKvStore(tableBaseName: String): KVStore
 
+  def genEnhancedStatsKvStore(tableBaseName: String): KVStore
+
   def externalRegistry: ExternalSourceRegistry
 
   private var timeoutMillis: Long = 10000
