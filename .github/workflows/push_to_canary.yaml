@@ -647,9 +647,26 @@ jobs:
           name: ci_success
           path: ci_success.txt
 
+  canary_gatekeeper:
+    needs: [ push_to_aws_passing, push_to_gcp_passing ]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verify Workflow Success
+        run: |
+          # If the upstream jobs didn't succeed, fail this job.
+          if [[ "${{ needs.push_to_aws_passing.result }}" != "success" ]]; then
+            echo "AWS Passing Push failed."
+            exit 1
+          fi
+          if [[ "${{ needs.push_to_gcp_passing.result }}" != "success" ]]; then
+            echo "GCP Passing Push failed."
+            exit 1
+          fi
+          echo "All checks passed!"
 
   on_fail_notify_slack:
-    needs: [ run_fetcher_integration_tests, run_aws_integration_tests, run_gcp_integration_tests, merge_to_main-passing-tests ]
+    needs: [ run_fetcher_integration_tests, run_aws_integration_tests, run_gcp_integration_tests, merge_to_main-passing-tests, canary_gatekeeper ]
     if: failure()
     runs-on: ubuntu-latest
 
