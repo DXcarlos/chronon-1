@@ -236,6 +236,14 @@ object Extensions {
       metaData.nameWithoutVersion.split('.').tail.mkString(".")
     }
 
+    def schedulePartitionSpec = Option(metaData.executionInfo.schedule) match {
+      case Some("@daily") | None => PartitionSpec.daily
+      case Some(unknownSchedule) => throw new UnsupportedOperationException(
+        s"Schedule of type $unknownSchedule are not supported. " +
+          s"Currently only '@daily' is supported"
+      )
+    }
+
   }
 
   // one per output column - so single window

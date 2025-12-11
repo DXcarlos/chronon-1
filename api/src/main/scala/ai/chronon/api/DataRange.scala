@@ -62,6 +62,14 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
     PartitionRange(newStart, newEnd)
   }
 
+  def fullyCovers(otherRange: PartitionRange): Boolean = {
+    start <= otherRange.start && end >= otherRange.end
+  }
+
+  def overlaps(otherRange: PartitionRange): Boolean = {
+    start <= otherRange.end && end >= otherRange.start
+  }
+
   override def toTimePoints: Array[Long] = {
     assert(start != null && end != null, "Can't request timePoint conversion when PartitionRange is unbounded")
     Stream

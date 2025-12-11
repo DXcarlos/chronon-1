@@ -160,4 +160,5 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long) {
 
 object PartitionSpec {
   val daily: PartitionSpec = PartitionSpec("ds", "yyyy-MM-dd", 24 * 60 * 60 * 1000)
+  // TODO: Add hourly support
 }
