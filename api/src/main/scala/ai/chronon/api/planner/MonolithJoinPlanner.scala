@@ -130,7 +130,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
       val statsCompute = statsComputeNode
 
       // When stats are enabled, stats upload becomes the terminal node for BACKFILL
-      // This ensures the dependency chain: backfill -> statsCompute -> statsUpload
+      // This ensures the dependency chain: backfill -> statsCompute
       val terminals = Map(
         planner.Mode.BACKFILL -> statsCompute.metaData.name,
         planner.Mode.DEPLOY -> metadataUpload.metaData.name

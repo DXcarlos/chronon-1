@@ -16,7 +16,6 @@
 
 package ai.chronon.aggregator.row
 
-import ai.chronon.aggregator.row.StatsGenerator.MetricTransform
 import ai.chronon.api
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
