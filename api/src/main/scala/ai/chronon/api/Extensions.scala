@@ -244,6 +244,14 @@ object Extensions {
       )
     }
 
+    def maxAttempts: Int = {
+      if(metaData.executionInfo != null && metaData.executionInfo.isSetMaxAttempts) {
+        metaData.executionInfo.maxAttempts
+      } else {
+        3
+      }
+    }
+
   }
 
   // one per output column - so single window
