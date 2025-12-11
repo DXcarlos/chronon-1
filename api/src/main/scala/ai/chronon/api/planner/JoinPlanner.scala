@@ -179,13 +179,63 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     toNode(metaData, _.setJoinDerivation(result), copy)
   }
 
+  private val statsComputeNodeOpt: Option[Node] = {
+    val enableStatsCompute = Option(join.metaData.executionInfo)
+      .flatMap(ei => Option(ei.enableStatsCompute))
+      .exists(_.booleanValue())
+
+    if (enableStatsCompute) {
+      Some {
+        val result = new JoinStatsComputeNode()
+          .setJoin(join)
+
+        val statsComputeNodeName = join.metaData.name + "__stats_compute"
+
+        // Stats compute depends on the final output (derivation if present, otherwise merge)
+        val inputTable = derivationNodeOpt
+          .map(_.metaData.outputTable)
+          .getOrElse(mergeNode.metaData.outputTable)
+
+        val stepDays = 1 // Stats computed daily
+
+        val tableDep = new TableDependency()
+          .setTableInfo(
+            new TableInfo()
+              .setTable(inputTable)
+              .setPartitionColumn(outputPartitionSpec.column)
+              .setPartitionFormat(outputPartitionSpec.format)
+              .setPartitionInterval(WindowUtils.hours(outputPartitionSpec.spanMillis))
+          )
+          .setStartOffset(WindowUtils.zero())
+          .setEndOffset(WindowUtils.zero())
+
+        val metaData = MetaDataUtils
+          .layer(
+            join.metaData,
+            "stats_compute",
+            statsComputeNodeName,
+            Seq(tableDep),
+            Some(stepDays)
+          )
+
+        val copy = result.deepCopy()
+        joinWithoutMetadata(copy.join)
+
+        toNode(metaData, _.setJoinStatsCompute(result), copy)
+      }
+    } else {
+      None
+    }
+  }
+
   def offlineNodes: Seq[Node] = {
 
     Seq(leftSourceNode) ++
       bootstrapNodeOpt ++
       joinPartNodes ++
       Seq(mergeNode) ++
-      derivationNodeOpt
+      derivationNodeOpt ++
+      statsComputeNodeOpt
   }
 
   def metadataUploadNode: Node = {
