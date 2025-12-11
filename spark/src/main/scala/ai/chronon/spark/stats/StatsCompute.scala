@@ -215,7 +215,7 @@ class EnhancedStatsCompute(inputDf: DataFrame, keys: Seq[String], name: String, 
         else partitionSpec.epochMillis(row.getAs[String](partitionIdx)))
       .aggregateByKey(enhancedAggregator.init)(seqOp = enhancedAggregator.updateWithReturn,
                                                combOp = enhancedAggregator.merge)
-      .mapValues(enhancedAggregator.normalize(_))
+      .mapValues(enhancedAggregator.normalize)
       .map { case (k, v) => (Array(keyName), v, k) }
 
     // Prepare metadata for reconstructing the aggregator

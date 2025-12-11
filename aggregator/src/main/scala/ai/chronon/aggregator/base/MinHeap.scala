@@ -20,7 +20,7 @@ import java.util
 
 // An implementation of a fast non-strict min-heap,
 // The topK isn't sorted, just collected until the size exceeds k
-class MinHeap[T](maxSize: Int, ordering: Ordering[T]) extends Serializable {
+class MinHeap[T](maxSize: Int, ordering: Ordering[T]) {
   private val reverseComparator = ordering.reverse
 
   type ContainerType[T] = util.ArrayList[T]
