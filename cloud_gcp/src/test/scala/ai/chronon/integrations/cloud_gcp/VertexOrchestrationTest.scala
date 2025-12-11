@@ -26,6 +26,15 @@ class VertexOrchestrationTest extends AnyFlatSpec with Matchers {
     resourceConfig.setMinReplicaCount(1)
     trainingSpec.setResourceConfig(resourceConfig)
 
+    val rawTable = "random-table"
+    val eventSource = new EventSource()
+      .setTable(rawTable)
+    val source = new Source()
+    source.setEvents(eventSource)
+    trainingSpec.setTrainingDataSource(source)
+
+    trainingSpec.setTrainingDataWindow(new Window().setLength(1).setTimeUnit(TimeUnit.DAYS))
+
     val modelName = "test_model"
     val version = "v1"
     val date = "2025-12-09"
@@ -51,9 +60,12 @@ class VertexOrchestrationTest extends AnyFlatSpec with Matchers {
     pythonPackageSpec.getPythonModule shouldBe "trainer.main"
     pythonPackageSpec.getPackageUrisCount shouldBe 1
     pythonPackageSpec.getPackageUris(0) shouldBe pythonPackageUri
-    pythonPackageSpec.getArgsCount shouldBe 2
+    pythonPackageSpec.getArgsCount shouldBe 5
     pythonPackageSpec.getArgsList.asScala should contain("--learning_rate=0.001")
     pythonPackageSpec.getArgsList.asScala should contain("--epochs=100")
+    pythonPackageSpec.getArgsList.asScala should contain(s"--input-table=$rawTable")
+    pythonPackageSpec.getArgsList.asScala should contain("--start-ds=2025-12-08")
+    pythonPackageSpec.getArgsList.asScala should contain(s"--end-ds=$date")
 
     val machineSpec = workerPoolSpec.getMachineSpec
     machineSpec.getMachineType shouldBe "n1-standard-4"
@@ -66,6 +78,14 @@ class VertexOrchestrationTest extends AnyFlatSpec with Matchers {
   it should "use default python module when not specified" in {
     val trainingSpec = new TrainingSpec()
     trainingSpec.setImage("gcr.io/my-project/trainer:v1")
+
+    val eventSource = new EventSource()
+      .setTable("random-table")
+    val source = new Source()
+    source.setEvents(eventSource)
+    trainingSpec.setTrainingDataSource(source)
+    trainingSpec.setTrainingDataWindow(new Window().setLength(1).setTimeUnit(TimeUnit.DAYS))
+
     // Don't set pythonModule
 
     val customJob = VertexOrchestration.buildCustomJob(

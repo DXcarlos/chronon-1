@@ -21,13 +21,17 @@ def compute_group_by_columns_hashes(
     # Get the base semantic fields that apply to all columns
     base_semantics = []
     for source in group_by.sources:
-        base_semantics.extend(_extract_source_semantic_info(source, group_by.keyColumns))
+        base_semantics.extend(
+            _extract_source_semantic_info(source, group_by.keyColumns)
+        )
 
     # Add the major version to semantic fields
     group_by_minor_version_suffix = f"__{group_by.metaData.version}"
     group_by_major_version = group_by.metaData.name
     if group_by_major_version.endswith(group_by_minor_version_suffix):
-        group_by_major_version = group_by_major_version[: -len(group_by_minor_version_suffix)]
+        group_by_major_version = group_by_major_version[
+            : -len(group_by_minor_version_suffix)
+        ]
     base_semantics.append(f"group_by_name:{group_by_major_version}")
 
     # Compute the semantic hash for each output column
@@ -38,7 +42,9 @@ def compute_group_by_columns_hashes(
         output_to_hash[output_col] = semantic_hash
 
     if exclude_keys:
-        output = {k: v for k, v in output_to_hash.items() if k not in group_by.keyColumns}
+        output = {
+            k: v for k, v in output_to_hash.items() if k not in group_by.keyColumns
+        }
     else:
         output = output_to_hash
     if group_by.derivations:
@@ -60,16 +66,22 @@ def compute_join_column_hashes(join: Join) -> Dict[str, str]:
     # Get the base semantics from the left side (table and key expression)
     base_semantic_fields = []
 
-    output_columns = get_pre_derived_join_features(join) | get_pre_derived_source_keys(join.left)
+    output_columns = get_pre_derived_join_features(join) | get_pre_derived_source_keys(
+        join.left
+    )
 
     if join.derivations:
-        return build_derived_columns(output_columns, join.derivations, base_semantic_fields)
+        return build_derived_columns(
+            output_columns, join.derivations, base_semantic_fields
+        )
     else:
         return output_columns
 
 
 def get_pre_derived_join_features(join: Join) -> Dict[str, str]:
-    return get_pre_derived_join_internal_features(join) | get_pre_derived_external_features(join)
+    return get_pre_derived_join_internal_features(
+        join
+    ) | get_pre_derived_external_features(join)
 
 
 def get_pre_derived_external_features(join: Join) -> Dict[str, str]:
@@ -114,7 +126,8 @@ def get_pre_derived_join_internal_features(join: Join) -> Dict[str, str]:
         # Build key mapping semantics - include left side key expressions
         if jp.keyMapping:
             key_mapping_semantics = [
-                "join_keys:" + ",".join(f"{k}:{v}" for k, v in sorted(jp.keyMapping.items()))
+                "join_keys:"
+                + ",".join(f"{k}:{v}" for k, v in sorted(jp.keyMapping.items()))
             ]
         else:
             key_mapping_semantics = []
@@ -137,7 +150,9 @@ def get_pre_derived_join_internal_features(join: Join) -> Dict[str, str]:
             left_key_expressions.append(f"left_key:{left_key_name}={left_key_expr}")
 
         # These semantics apply to all features in the joinPart
-        jp_base_semantics = key_mapping_semantics + left_key_expressions + join_base_semantic_fields
+        jp_base_semantics = (
+            key_mapping_semantics + left_key_expressions + join_base_semantic_fields
+        )
 
         pre_derived_group_by_features = get_pre_derived_group_by_features(
             jp.groupBy, jp_base_semantics
@@ -168,7 +183,9 @@ def get_pre_derived_group_by_columns(group_by: GroupBy) -> Dict[str, str]:
         for source in group_by.sources:
             source_selects = extract_selects(source)  # Map[str, str]
             key_expressions.append(source_selects.get(key_column, key_column))
-        output_columns_to_hashes[key_column] = _compute_semantic_hash(sorted(key_expressions))
+        output_columns_to_hashes[key_column] = _compute_semantic_hash(
+            sorted(key_expressions)
+        )
     return output_columns_to_hashes
 
 
@@ -201,11 +218,15 @@ def get_pre_derived_group_by_features(
                 combined_selects[key].add(val)
 
         # Build a unified map of key to select expression from all sources
-        unified_selects = {key: ",".join(sorted(vals)) for key, vals in combined_selects.items()}
+        unified_selects = {
+            key: ",".join(sorted(vals)) for key, vals in combined_selects.items()
+        }
 
         # now compute the hashes on base semantics + expression
         selected_hashes = {
-            key: _compute_semantic_hash(base_semantics + [val] + additional_semantic_fields)
+            key: _compute_semantic_hash(
+                base_semantics + [val] + additional_semantic_fields
+            )
             for key, val in unified_selects.items()
         }
         output_columns.update(selected_hashes)
@@ -219,12 +240,16 @@ def _get_base_group_by_semantic_fields(group_by: GroupBy) -> List[str]:
     """
     base_semantics = []
     for source in group_by.sources:
-        base_semantics.extend(_extract_source_semantic_info(source, group_by.keyColumns))
+        base_semantics.extend(
+            _extract_source_semantic_info(source, group_by.keyColumns)
+        )
 
     return sorted(base_semantics)
 
 
-def _extract_source_semantic_info(source: Source, key_columns: List[str] = None) -> List[str]:
+def _extract_source_semantic_info(
+    source: Source, key_columns: List[str] = None
+) -> List[str]:
     """
     Extract source information for semantic hashing.
     Returns list of semantic components.
@@ -299,7 +324,9 @@ def build_derived_columns(
         for derivation in derivations:
             if base_columns_to_hashes.get(derivation.expression):
                 # don't change the semantics if you're just passing a base column through derivations
-                output_columns[derivation.name] = base_columns_to_hashes[derivation.expression]
+                output_columns[derivation.name] = base_columns_to_hashes[
+                    derivation.expression
+                ]
             if derivation.name != "*":
                 # Identify base fields present within the derivation to include in the semantic hash
                 # We go long to short to avoid taking both a windowed feature and the unwindowed feature

@@ -60,7 +60,6 @@ ctr_model = Model(
             machine_type="n1-standard-4"
         ),
         job_configs={
-            "n-samples": "1000",
             "max-depth": "4",
             "eta": "0.1",
             "num-boost-round": "50"

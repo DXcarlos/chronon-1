@@ -1,91 +1,30 @@
 """
 Test XGBoost model example to test model training + deployment
 """
-
 import argparse
 import json
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 from typing import Dict, List, Tuple
-import os
 from pathlib import Path
 
 from google.cloud import bigquery
 import os
 
+GCP_PROJECT_ID = "canary-443022"
 
-def generate_synthetic_training_data(n_samples: int = 1000, seed: int = 42) -> Tuple[pd.DataFrame, List[int]]:
-    """
-    Generate synthetic training data with 4 simple features
-
-    Args:
-        n_samples: Number of samples to generate
-        seed: Random seed for reproducibility
-
-    Returns:
-        Tuple of (X_train DataFrame, y_train list)
-    """
-    np.random.seed(seed)
-
-    X_train_data = []
-    y_train = []
-
-    for i in range(n_samples):
-        # Generate features directly
-        user_id_click_event_average_7d = np.random.uniform(0, 1)  # Average click rate
-        listing_price_cents = np.random.choice([
-            np.random.randint(500, 2000),
-            np.random.randint(5000, 15000),
-            np.random.randint(20000, 100000)
-        ])
-        price_log = np.log1p(listing_price_cents)
-
-        # Price bucket
-        if listing_price_cents < 1000:
-            price_bucket = 0
-        elif listing_price_cents < 5000:
-            price_bucket = 1
-        elif listing_price_cents < 10000:
-            price_bucket = 2
-        elif listing_price_cents < 50000:
-            price_bucket = 3
-        else:
-            price_bucket = 4
-
-        sample = {
-            'user_id_click_event_average_7d': user_id_click_event_average_7d,
-            'listing_price_cents': int(listing_price_cents),
-            'price_log': price_log,
-            'price_bucket': price_bucket
-        }
-
-        X_train_data.append(sample)
-
-        # Generate label based on simple rules
-        prob = 0.1  # Base probability
-        if user_id_click_event_average_7d > 0.5:
-            prob += 0.3
-        if 1000 < listing_price_cents < 20000:
-            prob += 0.25
-        if price_bucket in [1, 2]:
-            prob += 0.15
-
-        label = np.random.binomial(1, min(prob, 0.9))
-        y_train.append(label)
-
-    X_train_df = pd.DataFrame(X_train_data)
-    return X_train_df, y_train
-
-def get_training_data_df(zipline_ctr_label_table: str = 'canary-443022.data.gcp_demo_derivations_v1__2', start_ds: str = '2025-10-03', end_ds: str = '2025-10-03') -> Tuple[pd.DataFrame, List[int]]:
-    client = bigquery.Client()
-    # Note: If your environment doesn't imply a project, explicitly pass it: bigquery.Client(project="your-project-id")
+def get_training_data_df(input_table: str, start_ds: str, end_ds: str) -> Tuple[pd.DataFrame, List[int]]:
+    client = bigquery.Client(project=GCP_PROJECT_ID)
 
     # 2. Define your Query
     sql_query = f"""
-        SELECT user_id_click_event_average_7d, listing_id_price_cents AS listing_price_cents, price_log, price_bucket, label
-        FROM ${zipline_ctr_label_table} where ds BETWEEN '{start_ds}' AND '{end_ds}'
+        SELECT coalesce(user_id_click_event_average_7d,0), coalesce(listing_id_price_cents,0) AS listing_price_cents, coalesce(price_log,0), price_bucket, label
+        FROM {input_table} where ds BETWEEN '{start_ds}' AND '{end_ds}'
     """
+
+    print(f"Running query to fetch training data from {input_table} between {start_ds} and {end_ds}:")
+    print(sql_query)
 
     # 3. Run the query and convert to DataFrame
     df = client.query(sql_query).to_dataframe()
@@ -94,8 +33,6 @@ def get_training_data_df(zipline_ctr_label_table: str = 'canary-443022.data.gcp_
     x_train_df = df.drop(columns=['label'])
     y_train = df['label'].tolist()
     return x_train_df, y_train
-
-
 
 def train_model(
     X_train: pd.DataFrame,
@@ -173,15 +110,40 @@ def save_model(model: xgb.Booster, output_path: str):
 
     print(f"Metadata saved to {metadata_file}")
 
+class TrainingCLIParser(argparse.ArgumentParser):
+    """
+    A base argparse parser for training scripts to inherit from.
+    Automatically adds common arguments.
+    """
+
+    def __init__(self, description: str = "Model Training Script", *args, **kwargs):
+        INPUT_TABLE_KEYWORD = "--input-table"
+        START_DS_KEYWORD = "--start-ds"
+        END_DS_KEYWORD = "--end-ds"
+
+        super().__init__(description=description, *args, **kwargs)
+        self.add_argument(
+            INPUT_TABLE_KEYWORD,
+            type=str,
+            help="Table containing features",
+        )
+
+        self.add_argument(
+            START_DS_KEYWORD,
+            type=str,
+            help="Start partition date (yyyy-MM-dd) for training data",
+        )
+
+        self.add_argument(
+            END_DS_KEYWORD,
+            type=str,
+            help="End partition date (yyyy-MM-dd) for training data",
+        )
+
 
 def main():
-    parser = argparse.ArgumentParser(description='Train XGBoost CTR model')
 
-    # Data parameters
-    parser.add_argument('--n-samples', type=int, default=1000,
-                        help='Number of training samples to generate')
-    parser.add_argument('--seed', type=int, default=42,
-                        help='Random seed for reproducibility')
+    parser = TrainingCLIParser(description='Train XGBoost CTR model')
 
     # Model hyperparameters
     parser.add_argument('--max-depth', type=int, default=4,
@@ -202,24 +164,13 @@ def main():
     print("XGBoost CTR Model Training")
     print("="*80)
     print(f"Configuration:")
-    print(f"  Training samples: {args.n_samples}")
     print(f"  Max depth: {args.max_depth}")
     print(f"  Learning rate: {args.eta}")
     print(f"  Boosting rounds: {args.num_boost_round}")
     print(f"  Model output: {args.model_dir}")
-    print(f"  Random seed: {args.seed}")
     print("="*80)
 
-    # Generate training data
-    # print("\n1. Generating synthetic training data...")
-    # X_train, y_train = generate_synthetic_training_data(
-    #     n_samples=args.n_samples,
-    #     seed=args.seed
-    # )
-    # print(f"   Generated {len(X_train)} samples")
-    # print(f"   Positive class ratio: {sum(y_train)/len(y_train):.2%}")
-
-    X_train, y_train = get_training_data_df()
+    X_train, y_train = get_training_data_df(args.input_table, args.start_ds, args.end_ds)
     # Train model
     print("\n2. Training model...")
     model = train_model(
@@ -228,7 +179,6 @@ def main():
         max_depth=args.max_depth,
         eta=args.eta,
         num_boost_round=args.num_boost_round,
-        seed=args.seed
     )
 
     # Save model

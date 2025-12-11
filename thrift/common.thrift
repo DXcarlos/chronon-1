@@ -163,3 +163,10 @@ struct ExecutionInfo {
     # in which case we will be polling
     # in the future we will add other types of dependencies
 }
+
+// Shared constants that can be used in python and scala
+
+// Training CLI Parser keyword arguments
+const string INPUT_TABLE_KEYWORD = "--input-table"
+const string START_DS_KEYWORD = "--start-ds"
+const string END_DS_KEYWORD = "--end-ds"

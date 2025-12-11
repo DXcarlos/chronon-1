@@ -54,10 +54,15 @@ class ModelNodeRunner(api: Api) extends NodeRunner {
       val trainingJobName = Await.result(modelPlatform.submitTrainingJob(submitTrainingRequest), 10.minutes)
 
       // TODO: should hook this up with the orchestration's step checking instead of polling here
-      pollForJobCompletion(modelPlatform, SubmitTrainingJob, trainingJobName, 2.hours.toMillis)
+      val finalStatus = pollForJobCompletion(modelPlatform, SubmitTrainingJob, trainingJobName, 2.hours.toMillis)
 
       val duration = (System.currentTimeMillis() - startTime) / 1000
-      logger.info(s"Successfully trained Model: $modelName (resource: $trainingJobName) in $duration seconds")
+      if (finalStatus.jobStatusType == JobStatusType.SUCCEEDED) {
+        logger.info(s"Successfully trained Model: $modelName (resource: $trainingJobName) in $duration seconds")
+      } else {
+        throw new RuntimeException(
+          s"Training job $trainingJobName for Model: $modelName did not succeed. Final status: ${finalStatus.jobStatusType}. ${finalStatus.message}")
+      }
     } catch {
       case e: Exception =>
         logger.error(s"Failed to train Model: $modelName", e)

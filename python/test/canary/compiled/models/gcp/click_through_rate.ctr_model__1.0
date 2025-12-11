@@ -106,7 +106,6 @@
     "jobConfigs": {
       "eta": "0.1",
       "max-depth": "4",
-      "n-samples": "1000",
       "num-boost-round": "50"
     },
     "pythonModule": "trainer.train",

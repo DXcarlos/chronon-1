@@ -1,6 +1,6 @@
 {
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_demo_derivations_v1__2_with_offset_0\", \"spec\": \"data.gcp_demo_derivations_v1__2/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_demo_derivations_v1__2__derived_with_offset_0\", \"spec\": \"data.gcp_demo_derivations_v1__2__derived/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -73,7 +73,7 @@
     "team": "gcp",
     "version": "0"
   },
-  "query": "\nSELECT \n    *,\n    case when rand() < 0.5 then 0 else 1 end as label\nFROM data.gcp_demo_derivations_v1__2\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
+  "query": "\nSELECT \n    *,\n    case when rand() < 0.5 then 0 else 1 end as label\nFROM data.gcp_demo_derivations_v1__2__derived\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
   "tableDependencies": [
     {
       "endOffset": {
@@ -90,7 +90,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.gcp_demo_derivations_v1__2"
+        "table": "data.gcp_demo_derivations_v1__2__derived"
       }
     }
   ]

@@ -1,6 +1,8 @@
 package ai.chronon.integrations.cloud_gcp
 
-import ai.chronon.api.{JobStatusType, ResourceConfig, ServingContainerConfig, TrainingSpec}
+import ai.chronon.api.Extensions.SourceOps
+import ai.chronon.api.commonConstants.{END_DS_KEYWORD, INPUT_TABLE_KEYWORD, START_DS_KEYWORD}
+import ai.chronon.api.{JobStatusType, PartitionSpec, ResourceConfig, ServingContainerConfig, TrainingSpec}
 import ai.chronon.online.metrics.FlexibleExecutionContext
 import ai.chronon.online.{DeployModelRequest, ModelJobStatus, TrainingRequest}
 import com.google.api.core.ApiFuture
@@ -341,6 +343,12 @@ object VertexOrchestration {
         pythonPackageSpecBuilder.addArgs(s"--$key=$value")
       }
     }
+
+    pythonPackageSpecBuilder.addArgs(s"${INPUT_TABLE_KEYWORD}=${trainingSpec.getTrainingDataSource.table}")
+    val startDs = PartitionSpec.daily.minus(date, trainingSpec.trainingDataWindow)
+    val endDs = date
+    pythonPackageSpecBuilder.addArgs(s"$START_DS_KEYWORD=$startDs")
+    pythonPackageSpecBuilder.addArgs(s"$END_DS_KEYWORD=$endDs")
 
     // Build MachineSpec
     val resourceConfig = trainingSpec.getResourceConfig
