@@ -111,7 +111,8 @@
                       "metaData": {
                         "executionInfo": {
                           "historicalBackfill": 0,
-                          "scheduleCron": "@daily"
+                          "scheduleCron": "@daily",
+                          "stepDays": 5
                         },
                         "name": "gcp.dim_listings.v1__0",
                         "online": 1,
@@ -142,7 +143,7 @@
                               },
                               "startPartition": "2025-01-01"
                             },
-                            "snapshotTable": "data.gcp_exports_dim_listings__24"
+                            "snapshotTable": "data.gcp_exports_dim_listings__51"
                           }
                         }
                       ]
@@ -160,7 +161,7 @@
                       },
                       "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
                     },
-                    "table": "data.gcp_exports_user_activities__24",
+                    "table": "data.gcp_exports_user_activities__51",
                     "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
                   }
                 },
@@ -207,19 +208,19 @@
         },
         "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
       },
-      "table": "data.gcp_exports_user_activities__24",
+      "table": "data.gcp_exports_user_activities__51",
       "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
     }
   },
   "metaData": {
     "columnHashes": {
-      "listing_id": "b4a0142e940451a8beee511469eeefa5",
-      "row_id": "c1b59a89485563de99e81f4b31366518",
-      "ts": "7ca1196dc77ce7f5d0bfd7107a47beca",
-      "user_id": "213acae5411e2addb70bb8c25f93e6b7",
-      "user_id_price_cents_last100_7d": "85749890c6800f363027b427d89a13ef"
+      "listing_id": "9ddea06f51c7ffe5ceedee9e77b200ec",
+      "row_id": "e40e5907da5ad6c798715b9cbd8df543",
+      "ts": "3f6d1d44672216ea47fc0217b6c0f40c",
+      "user_id": "291aa433e85c75e6da8c76772e093bc1",
+      "user_id_price_cents_last100_7d": "70c7904384239efb46814a0cfd7baccf"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__24_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__24/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__51_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

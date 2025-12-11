@@ -1,27 +1,170 @@
 {
+  "aggregations": [
+    {
+      "argMap": {},
+      "inputColumn": "view_event",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 5,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "click_event",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 5,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "purchase_event",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 5,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "view_event",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 5,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "click_event",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 5,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "purchase_event",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 5,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {
+        "k": "128"
+      },
+      "inputColumn": "user_event_struct",
+      "operation": 13,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 5,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    }
+  ],
   "keyColumns": [
-    "listing_id"
+    "user_id"
   ],
   "metaData": {
     "columnHashes": {
-      "brief_description": "3d7d4f358e8da80b76e8dd16f17b6ee2",
-      "currency": "6b6ce2b82be48417076afb80b4526aa6",
-      "headline": "d13eae56365c440bcce0138a6af2ee0b",
-      "inventory_count": "e4ae86bd93c7664328c1cdb322c5cedd",
-      "is_active": "138374e79509668cf8c1f8ea21f1f000",
-      "is_expensive": "0f66882b5025cddf8e418b1526ee83ab",
-      "is_in_stock": "6b7170e2c9dde7eed67c2426b3b32ab8",
-      "listing_id": "87abed52cf94613ad331e764f466e449",
-      "long_description": "04daa9467339f2cce8fc9fcbc10fc848",
-      "main_image_path": "d022c5c4998d9374eab2bab9bc3455a6",
-      "merchant_id": "c22db7c4c3bca7c3f5644bf6bbf90192",
-      "price_cents": "853f6b804126d2500f1b05c731b247b8",
-      "primary_category": "45af4c0437c019987348155dea2835b2",
-      "secondary_image_paths": "fa89055aa1430503af5c60ec5dbc71c6",
-      "tags": "5236fcb50d63764bc2ae015e6313480c",
-      "weight_grams": "3c7d482b3b999adf2d32c64d8ef6b6c1"
+      "click_event_average_1d": "0b923d7f3f7851a851f74477c5864c21",
+      "click_event_average_5d": "0b923d7f3f7851a851f74477c5864c21",
+      "click_event_average_7d": "0b923d7f3f7851a851f74477c5864c21",
+      "click_event_sum_1d": "0b923d7f3f7851a851f74477c5864c21",
+      "click_event_sum_5d": "0b923d7f3f7851a851f74477c5864c21",
+      "click_event_sum_7d": "0b923d7f3f7851a851f74477c5864c21",
+      "purchase_event_average_1d": "45facc5a1cfba1bc26822a8b92b5340e",
+      "purchase_event_average_5d": "45facc5a1cfba1bc26822a8b92b5340e",
+      "purchase_event_average_7d": "45facc5a1cfba1bc26822a8b92b5340e",
+      "purchase_event_sum_1d": "45facc5a1cfba1bc26822a8b92b5340e",
+      "purchase_event_sum_5d": "45facc5a1cfba1bc26822a8b92b5340e",
+      "purchase_event_sum_7d": "45facc5a1cfba1bc26822a8b92b5340e",
+      "user_event_struct_last128_1d": "4627ad03a8dfc4ce7276b445616f0f9c",
+      "user_event_struct_last128_5d": "4627ad03a8dfc4ce7276b445616f0f9c",
+      "user_event_struct_last128_7d": "4627ad03a8dfc4ce7276b445616f0f9c",
+      "user_id": "295300ddd20f7eb808d8a975f443dfa6",
+      "view_event_average_1d": "71b13842b6ca2d1ba063c50d51d9484e",
+      "view_event_average_5d": "71b13842b6ca2d1ba063c50d51d9484e",
+      "view_event_average_7d": "71b13842b6ca2d1ba063c50d51d9484e",
+      "view_event_sum_1d": "71b13842b6ca2d1ba063c50d51d9484e",
+      "view_event_sum_5d": "71b13842b6ca2d1ba063c50d51d9484e",
+      "view_event_sum_7d": "71b13842b6ca2d1ba063c50d51d9484e"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_listings__51_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities_v3__51_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities_v3__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -67,7 +210,7 @@
       "env": {
         "common": {
           "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
-          "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+          "CHRONON_ONLINE_ARGS": "-Ztasks=1",
           "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",
           "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "dev",
@@ -88,40 +231,34 @@
       },
       "historicalBackfill": 0,
       "scheduleCron": "@daily",
-      "stepDays": 5
+      "stepDays": 4
     },
-    "name": "gcp.dim_listings.v1__0",
+    "name": "gcp.user_activities.v3__5",
     "online": 1,
     "outputNamespace": "data",
-    "sourceFile": "group_bys/gcp/dim_listings.py",
+    "sourceFile": "group_bys/gcp/user_activities.py",
+    "tags": {
+      "pii_level": "high"
+    },
     "team": "gcp",
-    "version": "0"
+    "version": "5"
   },
   "sources": [
     {
-      "entities": {
+      "events": {
         "query": {
           "selects": {
-            "brief_description": "brief_description",
-            "currency": "currency",
-            "headline": "headline",
-            "inventory_count": "inventory_count",
-            "is_active": "is_active",
-            "is_expensive": "IF(price_cents > 10000, 1, 0)",
-            "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+            "click_event": "IF(event_type = 'click', 1, 0)",
             "listing_id": "listing_id",
-            "long_description": "long_description",
-            "main_image_path": "main_image_path",
-            "merchant_id": "merchant_id",
-            "price_cents": "price_cents",
-            "primary_category": "primary_category",
-            "secondary_image_paths": "secondary_image_paths",
-            "tags": "tags",
-            "weight_grams": "weight_grams"
+            "purchase_event": "IF(event_type = 'purchase', 1, 0)",
+            "user_event_struct": "STRUCT(event_type, listing_id, unix_millis(TIMESTAMP(event_time_ms)) as timestamp)",
+            "user_id": "user_id",
+            "view_event": "IF(event_type_bad_col = 'view', 1, 0)"
           },
-          "startPartition": "2025-01-01"
+          "timeColumn": "event_time_ms"
         },
-        "snapshotTable": "data.gcp_exports_dim_listings__51"
+        "table": "data.gcp_exports_user_activities_v3__51",
+        "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
       }
     }
   ]

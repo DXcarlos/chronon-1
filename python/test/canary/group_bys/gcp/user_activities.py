@@ -58,6 +58,7 @@ aggregations.extend([
     for col in last_k_columns
 ])
 
+# [{"user_id": "user_1"}]
 v1 = GroupBy(
     sources=[source],
     keys=["user_id"],  # Aggregate by user
@@ -65,7 +66,7 @@ v1 = GroupBy(
     version=5,
     tags={"pii_level": "high"},
     aggregations=aggregations,
-    step_days=4,
+    step_days=5,
     env_vars=EnvironmentVariables(
         common={
             "CHRONON_ONLINE_ARGS": "-Ztasks=1",
@@ -96,15 +97,56 @@ source_v2 = Source(
 )
 
 aggregations_v2 = []
-window_sizes_v2 = [Window(length=days, time_unit=TimeUnit.DAYS) for days in [1, 5, 7]]
+window_sizes_v2 = [Window(length=days, time_unit=TimeUnit.DAYS) for days in [1, 2, 3, 5, 7]]
 # Event type aggregations - Sum and Average over various windows
 aggregations_v2.extend([
     Aggregation(input_column=col, operation=Operation.SUM, windows=window_sizes_v2)
     for col in event_columns
 ])
 
+# [{"user_id": "user_1"}]
 v2 = GroupBy(
     sources=[source_v2],
+    keys=["user_id"],  # Aggregate by user
+    online=True,
+    version=5,
+    tags={"pii_level": "high"},
+    aggregations=aggregations_v2,
+    step_days=4,
+    env_vars=EnvironmentVariables(
+        common={
+            "CHRONON_ONLINE_ARGS": "-Ztasks=1",
+        }
+    ),
+)
+
+
+# Fetch
+
+source_v3 = Source(
+    events=EventSource(
+        # This will be the BigQuery table that receives the PubSub data
+        table=exports.user_activities_v3.table,
+        topic="pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities",
+        query=Query(
+            selects=selects(
+                user_id="user_id",
+                listing_id="listing_id",
+                # Create binary flags for each event type
+                view_event="IF(event_type_bad_col = 'view', 1, 0)",
+                click_event="IF(event_type = 'click', 1, 0)", 
+                purchase_event="IF(event_type = 'purchase', 1, 0)",
+                # Activity structs for last_k tracking -- for embeddings
+                user_event_struct="STRUCT(event_type, listing_id, unix_millis(TIMESTAMP(event_time_ms)) as timestamp)",
+            ),
+            time_column="event_time_ms",
+        ),
+    )
+)
+
+# [{"user_id": "user_1"}]
+v3 = GroupBy(
+    sources=[source_v3],
     keys=["user_id"],  # Aggregate by user
     online=True,
     version=5,

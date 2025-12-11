@@ -43,5 +43,6 @@ v1 = GroupBy(
     keys=["listing_id"],  # Key by listing_id for point lookups
     online=True,
     version=0,
+    step_days=5,
     aggregations=None,  # No aggregations - this is a simple passthrough
 )

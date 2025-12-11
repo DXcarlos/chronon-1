@@ -7,22 +7,22 @@
         ],
         "metaData": {
           "columnHashes": {
-            "brief_description": "02b8545367494c53079243bb660b68f1",
-            "currency": "4654ef90a3b56a2481a85e3abb6add7f",
-            "headline": "3b27ec09ee6d6f4f0a0c97631a0e15b3",
-            "inventory_count": "d92e19c25a369c06274f282cc5499dcd",
-            "is_active": "39683224b011572fcd0f31d73f2c474b",
-            "is_expensive": "1c12cb3adcfe4d9a05ef07c6d9018516",
-            "is_in_stock": "f0df0840507c28c0eee5227c626c4ba4",
-            "listing_id": "9b4ca9d5daed76c17a7429a0c35ebfd0",
-            "long_description": "9dcbe647e00855d940208a40d17a35aa",
-            "main_image_path": "a8cae2e1d42d4368bed6d64fdad97595",
-            "merchant_id": "1376e82d753a0a49fd23b4cdd155e62a",
-            "price_cents": "995d819ceb33e7348fe205cae85e5098",
-            "primary_category": "66c0658303ae2107bcb7433f14640fa4",
-            "secondary_image_paths": "310dc191b114c24652c8b0f2b358154c",
-            "tags": "f99f4f6cd755f81c595cb329a9b22754",
-            "weight_grams": "496495953bb3cb85ea2c7699a6b3d6ba"
+            "brief_description": "3d7d4f358e8da80b76e8dd16f17b6ee2",
+            "currency": "6b6ce2b82be48417076afb80b4526aa6",
+            "headline": "d13eae56365c440bcce0138a6af2ee0b",
+            "inventory_count": "e4ae86bd93c7664328c1cdb322c5cedd",
+            "is_active": "138374e79509668cf8c1f8ea21f1f000",
+            "is_expensive": "0f66882b5025cddf8e418b1526ee83ab",
+            "is_in_stock": "6b7170e2c9dde7eed67c2426b3b32ab8",
+            "listing_id": "87abed52cf94613ad331e764f466e449",
+            "long_description": "04daa9467339f2cce8fc9fcbc10fc848",
+            "main_image_path": "d022c5c4998d9374eab2bab9bc3455a6",
+            "merchant_id": "c22db7c4c3bca7c3f5644bf6bbf90192",
+            "price_cents": "853f6b804126d2500f1b05c731b247b8",
+            "primary_category": "45af4c0437c019987348155dea2835b2",
+            "secondary_image_paths": "fa89055aa1430503af5c60ec5dbc71c6",
+            "tags": "5236fcb50d63764bc2ae015e6313480c",
+            "weight_grams": "3c7d482b3b999adf2d32c64d8ef6b6c1"
           },
           "executionInfo": {
             "clusterConf": {
@@ -89,7 +89,8 @@
               }
             },
             "historicalBackfill": 0,
-            "scheduleCron": "@daily"
+            "scheduleCron": "@daily",
+            "stepDays": 5
           },
           "name": "gcp.dim_listings.v1__0",
           "online": 1,
@@ -121,7 +122,7 @@
                 },
                 "startPartition": "2025-01-01"
               },
-              "snapshotTable": "data.gcp_exports_dim_listings__24"
+              "snapshotTable": "data.gcp_exports_dim_listings__51"
             }
           }
         ]
@@ -140,34 +141,34 @@
         },
         "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
       },
-      "table": "data.gcp_exports_user_activities__24",
+      "table": "data.gcp_exports_user_activities__51",
       "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
     }
   },
   "metaData": {
     "columnHashes": {
-      "listing_id": "b4a0142e940451a8beee511469eeefa5",
-      "listing_id_brief_description": "a851d54b844a8e51514f2618df021c04",
-      "listing_id_currency": "16239fdb906bf04c95fc84e30d57b9bb",
-      "listing_id_headline": "f1b8e3f0347e51c7718399e1161ba6af",
-      "listing_id_inventory_count": "fddcbac50489bcb56705692a7bac9536",
-      "listing_id_is_active": "92b5a004a0d87d2c75deffe8aa50f029",
-      "listing_id_is_expensive": "bb290a4c7d635c8659cdc4eaf012cd9c",
-      "listing_id_is_in_stock": "0d0ddf9ba74e304792457dc77e045bd4",
-      "listing_id_listing_id": "87c1cd952c1e611a46863982ccfb89fb",
-      "listing_id_long_description": "b5acb5d96d8f5c4bb61b6366025084b7",
-      "listing_id_main_image_path": "80709e3d9a01ef955dab38852af3a690",
-      "listing_id_merchant_id": "ee64fa950480024a162e9f8fddd01f1f",
-      "listing_id_price_cents": "e7e9c8367ab37d4c360bd9b54671261f",
-      "listing_id_primary_category": "637ade32e3d327888d576865dd005e3a",
-      "listing_id_secondary_image_paths": "86ce0c676e2137bb05e18fd82dc26d9c",
-      "listing_id_tags": "3c211f7710e7bc328349c929e300f516",
-      "listing_id_weight_grams": "b5e7bdec4d3ba98391167b758028cec4",
-      "row_id": "c1b59a89485563de99e81f4b31366518",
-      "ts": "7ca1196dc77ce7f5d0bfd7107a47beca",
-      "user_id": "213acae5411e2addb70bb8c25f93e6b7"
+      "listing_id": "9ddea06f51c7ffe5ceedee9e77b200ec",
+      "listing_id_brief_description": "19f21e5b42c9e7c1832cab61b9a858bf",
+      "listing_id_currency": "103b448785eb74197a6f8f0cefb55eff",
+      "listing_id_headline": "3f0ae582c35fcbf630086ad61316e40f",
+      "listing_id_inventory_count": "53230b666ec8514916d699ebea915d17",
+      "listing_id_is_active": "48f4e9b630d98c98a0e26cec99e26b98",
+      "listing_id_is_expensive": "093f50ad86476375536fd63ef8282631",
+      "listing_id_is_in_stock": "6417f281e739861c405d72069b7663c0",
+      "listing_id_listing_id": "3b14917305e4928f7ffccd539e463645",
+      "listing_id_long_description": "f6c0534fbebc2bb29d5d7b4d2a906c1b",
+      "listing_id_main_image_path": "cc392151413dfe78285b19f868e715c5",
+      "listing_id_merchant_id": "9c7519e3408e9cd8cbeb54ed85b7c14b",
+      "listing_id_price_cents": "8a0bd47a36c802b073d04fb5793921cf",
+      "listing_id_primary_category": "fed7c7d2290eab1c1b56120e643b268c",
+      "listing_id_secondary_image_paths": "0bdad712847731e3470f13d6673e831f",
+      "listing_id_tags": "ba15726f232b4ff7537cda6a673d911a",
+      "listing_id_weight_grams": "1eadd210134ec3c570bd234482d41ffa",
+      "row_id": "e40e5907da5ad6c798715b9cbd8df543",
+      "ts": "3f6d1d44672216ea47fc0217b6c0f40c",
+      "user_id": "291aa433e85c75e6da8c76772e093bc1"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__24_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__24/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__24_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__24/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__51_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__51/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__51_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

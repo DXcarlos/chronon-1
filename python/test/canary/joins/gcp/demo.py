@@ -31,7 +31,7 @@ source = EventSource(
 )
 
 # Example Join
-purchase_fraud_prediction_vX7 = Join(
+checkout_fraud_v1 = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[
@@ -51,7 +51,7 @@ purchase_fraud_prediction_vX7 = Join(
 
 
 # Updated to user the new user_activities features
-purchase_fraud_prediction_vX6 = Join(
+checkout_fraud_v2 = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[

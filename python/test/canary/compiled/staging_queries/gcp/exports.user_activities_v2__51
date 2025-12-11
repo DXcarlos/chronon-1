@@ -69,11 +69,11 @@
       "scheduleCron": "@daily",
       "stepDays": 5
     },
-    "name": "gcp.exports.user_activities_v2__24",
+    "name": "gcp.exports.user_activities_v2__51",
     "outputNamespace": "data",
     "sourceFile": "staging_queries/gcp/exports.py",
     "team": "gcp",
-    "version": "24"
+    "version": "51"
   },
   "query": "\n    SELECT \n        *,\n        TIMESTAMP_TRUNC(_PARTITIONTIME, DAY) as ds\n    FROM demo.`user-activities`\n    WHERE \n    _PARTITIONTIME BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [

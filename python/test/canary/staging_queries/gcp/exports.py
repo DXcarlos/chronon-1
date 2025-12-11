@@ -1,6 +1,6 @@
 from ai.chronon.staging_query import EngineType, StagingQuery, TableDependency
 
-VERSION=24
+VERSION=51
 
 def get_select_star_export(table: str, partition_column: str = "_PARTITIONTIME"):
     bigquery_export_sql = f"""
@@ -48,6 +48,7 @@ def get_native_partition_export(table: str, partition_column: str):
 
 user_activities = get_native_partition_export("user-activities", "_PARTITIONTIME")
 user_activities_v2 = get_native_partition_export("user-activities", "_PARTITIONTIME")
+user_activities_v3 = get_native_partition_export("user-activities", "_PARTITIONTIME")
 purchase_events = get_native_partition_export("user-activities", "_PARTITIONTIME")
 checkouts = get_native_partition_export("checkouts", "_PARTITIONTIME")
 dim_listings = get_select_star_export("dim_listings", "ds")

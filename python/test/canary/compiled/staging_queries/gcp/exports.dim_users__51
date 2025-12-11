@@ -1,7 +1,7 @@
 {
   "engineType": 1,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo__user_activities__with_offset_0\", \"spec\": \"demo.`user-activities`/_PARTITIONTIME={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo__dim_users__with_offset_0\", \"spec\": \"demo.`dim_users`/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -69,13 +69,13 @@
       "scheduleCron": "@daily",
       "stepDays": 5
     },
-    "name": "gcp.exports.purchase_events__24",
+    "name": "gcp.exports.dim_users__51",
     "outputNamespace": "data",
     "sourceFile": "staging_queries/gcp/exports.py",
     "team": "gcp",
-    "version": "24"
+    "version": "51"
   },
-  "query": "\n    SELECT \n        *,\n        TIMESTAMP_TRUNC(_PARTITIONTIME, DAY) as ds\n    FROM demo.`user-activities`\n    WHERE \n    _PARTITIONTIME BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "query": "\n    SELECT \n        * \n    FROM demo.`dim_users`\n    WHERE \n    TIMESTAMP_TRUNC(ds, DAY) BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [
     {
       "endOffset": {
@@ -87,12 +87,12 @@
         "timeUnit": 1
       },
       "tableInfo": {
-        "partitionColumn": "_PARTITIONTIME",
+        "partitionColumn": "ds",
         "partitionInterval": {
           "length": 1,
           "timeUnit": 1
         },
-        "table": "demo.`user-activities`"
+        "table": "demo.`dim_users`"
       }
     }
   ]

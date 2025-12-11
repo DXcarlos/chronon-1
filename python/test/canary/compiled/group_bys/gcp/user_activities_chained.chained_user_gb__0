@@ -110,7 +110,8 @@
                 "metaData": {
                   "executionInfo": {
                     "historicalBackfill": 0,
-                    "scheduleCron": "@daily"
+                    "scheduleCron": "@daily",
+                    "stepDays": 5
                   },
                   "name": "gcp.dim_listings.v1__0",
                   "online": 1,
@@ -141,7 +142,7 @@
                         },
                         "startPartition": "2025-01-01"
                       },
-                      "snapshotTable": "data.gcp_exports_dim_listings__24"
+                      "snapshotTable": "data.gcp_exports_dim_listings__51"
                     }
                   }
                 ]
@@ -159,7 +160,7 @@
                 },
                 "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
               },
-              "table": "data.gcp_exports_user_activities__24",
+              "table": "data.gcp_exports_user_activities__51",
               "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
             }
           },

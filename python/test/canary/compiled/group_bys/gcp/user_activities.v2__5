@@ -10,6 +10,14 @@
           "timeUnit": 1
         },
         {
+          "length": 2,
+          "timeUnit": 1
+        },
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
           "length": 5,
           "timeUnit": 1
         },
@@ -26,6 +34,14 @@
       "windows": [
         {
           "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 2,
+          "timeUnit": 1
+        },
+        {
+          "length": 3,
           "timeUnit": 1
         },
         {
@@ -48,81 +64,11 @@
           "timeUnit": 1
         },
         {
-          "length": 5,
+          "length": 2,
           "timeUnit": 1
         },
         {
-          "length": 7,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {},
-      "inputColumn": "view_event",
-      "operation": 8,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        },
-        {
-          "length": 5,
-          "timeUnit": 1
-        },
-        {
-          "length": 7,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {},
-      "inputColumn": "click_event",
-      "operation": 8,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        },
-        {
-          "length": 5,
-          "timeUnit": 1
-        },
-        {
-          "length": 7,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {},
-      "inputColumn": "purchase_event",
-      "operation": 8,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        },
-        {
-          "length": 5,
-          "timeUnit": 1
-        },
-        {
-          "length": 7,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {
-        "k": "128"
-      },
-      "inputColumn": "user_event_struct",
-      "operation": 13,
-      "windows": [
-        {
-          "length": 1,
+          "length": 3,
           "timeUnit": 1
         },
         {
@@ -141,30 +87,24 @@
   ],
   "metaData": {
     "columnHashes": {
-      "click_event_average_1d": "3d3547d56660a78b7b4f1cd9f71d19c1",
-      "click_event_average_5d": "3d3547d56660a78b7b4f1cd9f71d19c1",
-      "click_event_average_7d": "3d3547d56660a78b7b4f1cd9f71d19c1",
-      "click_event_sum_1d": "3d3547d56660a78b7b4f1cd9f71d19c1",
-      "click_event_sum_5d": "3d3547d56660a78b7b4f1cd9f71d19c1",
-      "click_event_sum_7d": "3d3547d56660a78b7b4f1cd9f71d19c1",
-      "purchase_event_average_1d": "7298d8c2809a0d54fc3d11bee1493136",
-      "purchase_event_average_5d": "7298d8c2809a0d54fc3d11bee1493136",
-      "purchase_event_average_7d": "7298d8c2809a0d54fc3d11bee1493136",
-      "purchase_event_sum_1d": "7298d8c2809a0d54fc3d11bee1493136",
-      "purchase_event_sum_5d": "7298d8c2809a0d54fc3d11bee1493136",
-      "purchase_event_sum_7d": "7298d8c2809a0d54fc3d11bee1493136",
-      "user_event_struct_last128_1d": "0a149b745503eeaecebd7b6d3cf2072d",
-      "user_event_struct_last128_5d": "0a149b745503eeaecebd7b6d3cf2072d",
-      "user_event_struct_last128_7d": "0a149b745503eeaecebd7b6d3cf2072d",
-      "user_id": "8f42c50e6712eacd12115ccffc3f2d05",
-      "view_event_average_1d": "7cb43b47c4d6eba0b16252a62a5fefa6",
-      "view_event_average_5d": "7cb43b47c4d6eba0b16252a62a5fefa6",
-      "view_event_average_7d": "7cb43b47c4d6eba0b16252a62a5fefa6",
-      "view_event_sum_1d": "7cb43b47c4d6eba0b16252a62a5fefa6",
-      "view_event_sum_5d": "7cb43b47c4d6eba0b16252a62a5fefa6",
-      "view_event_sum_7d": "7cb43b47c4d6eba0b16252a62a5fefa6"
+      "click_event_sum_1d": "86f656bac957032e6b933664c5f6261e",
+      "click_event_sum_2d": "86f656bac957032e6b933664c5f6261e",
+      "click_event_sum_3d": "86f656bac957032e6b933664c5f6261e",
+      "click_event_sum_5d": "86f656bac957032e6b933664c5f6261e",
+      "click_event_sum_7d": "86f656bac957032e6b933664c5f6261e",
+      "purchase_event_sum_1d": "80f96c1d1c598a01c04be3aeaa239d97",
+      "purchase_event_sum_2d": "80f96c1d1c598a01c04be3aeaa239d97",
+      "purchase_event_sum_3d": "80f96c1d1c598a01c04be3aeaa239d97",
+      "purchase_event_sum_5d": "80f96c1d1c598a01c04be3aeaa239d97",
+      "purchase_event_sum_7d": "80f96c1d1c598a01c04be3aeaa239d97",
+      "user_id": "1adc863d3a8ed16d062fa45c2e0ba732",
+      "view_event_sum_1d": "41a30001a955334469c52a793da52426",
+      "view_event_sum_2d": "41a30001a955334469c52a793da52426",
+      "view_event_sum_3d": "41a30001a955334469c52a793da52426",
+      "view_event_sum_5d": "41a30001a955334469c52a793da52426",
+      "view_event_sum_7d": "41a30001a955334469c52a793da52426"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities_v2__24_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities_v2__24/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities_v2__51_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities_v2__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -257,7 +197,7 @@
           },
           "timeColumn": "event_time_ms"
         },
-        "table": "data.gcp_exports_user_activities_v2__24",
+        "table": "data.gcp_exports_user_activities_v2__51",
         "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
       }
     }

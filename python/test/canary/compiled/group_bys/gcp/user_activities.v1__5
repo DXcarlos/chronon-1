@@ -141,30 +141,30 @@
   ],
   "metaData": {
     "columnHashes": {
-      "click_event_average_1d": "2e69366adb0dd7937110de12a4ae014d",
-      "click_event_average_5d": "2e69366adb0dd7937110de12a4ae014d",
-      "click_event_average_7d": "2e69366adb0dd7937110de12a4ae014d",
-      "click_event_sum_1d": "2e69366adb0dd7937110de12a4ae014d",
-      "click_event_sum_5d": "2e69366adb0dd7937110de12a4ae014d",
-      "click_event_sum_7d": "2e69366adb0dd7937110de12a4ae014d",
-      "purchase_event_average_1d": "06e57b744fc750a8a378495dbe498c28",
-      "purchase_event_average_5d": "06e57b744fc750a8a378495dbe498c28",
-      "purchase_event_average_7d": "06e57b744fc750a8a378495dbe498c28",
-      "purchase_event_sum_1d": "06e57b744fc750a8a378495dbe498c28",
-      "purchase_event_sum_5d": "06e57b744fc750a8a378495dbe498c28",
-      "purchase_event_sum_7d": "06e57b744fc750a8a378495dbe498c28",
-      "user_event_struct_last128_1d": "6ee3ffa7b3739cb0ac420da230d88c7d",
-      "user_event_struct_last128_5d": "6ee3ffa7b3739cb0ac420da230d88c7d",
-      "user_event_struct_last128_7d": "6ee3ffa7b3739cb0ac420da230d88c7d",
-      "user_id": "55c7bcaa24b90bd9f63169a81d861973",
-      "view_event_average_1d": "ec320642dfd845a7cc307888ebb8a084",
-      "view_event_average_5d": "ec320642dfd845a7cc307888ebb8a084",
-      "view_event_average_7d": "ec320642dfd845a7cc307888ebb8a084",
-      "view_event_sum_1d": "ec320642dfd845a7cc307888ebb8a084",
-      "view_event_sum_5d": "ec320642dfd845a7cc307888ebb8a084",
-      "view_event_sum_7d": "ec320642dfd845a7cc307888ebb8a084"
+      "click_event_average_1d": "15948f9bb3e8c66aeeabb0228e06d439",
+      "click_event_average_5d": "15948f9bb3e8c66aeeabb0228e06d439",
+      "click_event_average_7d": "15948f9bb3e8c66aeeabb0228e06d439",
+      "click_event_sum_1d": "15948f9bb3e8c66aeeabb0228e06d439",
+      "click_event_sum_5d": "15948f9bb3e8c66aeeabb0228e06d439",
+      "click_event_sum_7d": "15948f9bb3e8c66aeeabb0228e06d439",
+      "purchase_event_average_1d": "1083e85e7bd3a03e598ee7879aa08a3e",
+      "purchase_event_average_5d": "1083e85e7bd3a03e598ee7879aa08a3e",
+      "purchase_event_average_7d": "1083e85e7bd3a03e598ee7879aa08a3e",
+      "purchase_event_sum_1d": "1083e85e7bd3a03e598ee7879aa08a3e",
+      "purchase_event_sum_5d": "1083e85e7bd3a03e598ee7879aa08a3e",
+      "purchase_event_sum_7d": "1083e85e7bd3a03e598ee7879aa08a3e",
+      "user_event_struct_last128_1d": "88a666c7544b1afe5b7eec2afffa6a3c",
+      "user_event_struct_last128_5d": "88a666c7544b1afe5b7eec2afffa6a3c",
+      "user_event_struct_last128_7d": "88a666c7544b1afe5b7eec2afffa6a3c",
+      "user_id": "6455c41dcb708084767bdc131b753b7f",
+      "view_event_average_1d": "f54e5578f7aeaeb167a5a5a0f06ab37b",
+      "view_event_average_5d": "f54e5578f7aeaeb167a5a5a0f06ab37b",
+      "view_event_average_7d": "f54e5578f7aeaeb167a5a5a0f06ab37b",
+      "view_event_sum_1d": "f54e5578f7aeaeb167a5a5a0f06ab37b",
+      "view_event_sum_5d": "f54e5578f7aeaeb167a5a5a0f06ab37b",
+      "view_event_sum_7d": "f54e5578f7aeaeb167a5a5a0f06ab37b"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__24_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__24/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__51_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -231,7 +231,7 @@
       },
       "historicalBackfill": 0,
       "scheduleCron": "@daily",
-      "stepDays": 4
+      "stepDays": 5
     },
     "name": "gcp.user_activities.v1__5",
     "online": 1,
@@ -257,7 +257,7 @@
           },
           "timeColumn": "event_time_ms"
         },
-        "table": "data.gcp_exports_user_activities__24",
+        "table": "data.gcp_exports_user_activities__51",
         "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
       }
     }
