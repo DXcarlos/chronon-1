@@ -92,11 +92,11 @@ if [[ "$LOCAL_BUILD" != true ]]; then
 else
     echo "Building locally without push"
     docker buildx build \
-      --platform linux/amd64,linux/arm64 \
+      --platform linux/arm64 \
       -f docker/fetcher/Dockerfile \
       -t ziplineai/chronon-fetcher:$(git rev-parse --short HEAD) \
       -t ziplineai/chronon-fetcher:latest \
-      --load \
+      --push \
       .
 fi
 

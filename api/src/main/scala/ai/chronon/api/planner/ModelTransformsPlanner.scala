@@ -34,11 +34,15 @@ class ModelTransformsPlanner(modelTransforms: ModelTransforms)(implicit outputPa
             // For join sources, depend on the join's output table
             val upstreamJoin = source.getJoinSource.getJoin
 
+            // TODO: change this after join output table alignment
+            println("checking for derivations")
             // check if derivations
             if (upstreamJoin.isSetDerivations && !upstreamJoin.getDerivations.isEmpty) {
+              println("found derivations table")
               val derivationOutputTable = upstreamJoin.metaData.outputTable + "__derived"
               Some(fromTable(derivationOutputTable, source.getJoinSource.query))
             } else {
+              println("no derivations.")
               val upstreamJoinOutputTable = upstreamJoin.metaData.outputTable
               Some(fromTable(upstreamJoinOutputTable, source.getJoinSource.query))
             }

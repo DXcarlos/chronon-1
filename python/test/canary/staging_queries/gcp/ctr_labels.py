@@ -8,12 +8,28 @@ v1 = StagingQuery(
 SELECT 
     *,
     case when rand() < 0.5 then 0 else 1 end as label
-FROM {demo.derivations_v1.table}__derived
+FROM {demo.ctr_features_v1.table}__derived
 WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 """,
     output_namespace="data",
     dependencies=[
-        TableDependency(table=f"{demo.derivations_v1.table}__derived", partition_column="ds", offset=0),
+        TableDependency(table=f"{demo.ctr_features_v1.table}__derived", partition_column="ds", offset=0),
+    ],
+    version=0,
+)
+
+
+v2_predemo1 = StagingQuery(
+    query=f"""
+SELECT 
+    *,
+    case when rand() < 0.5 then 0 else 1 end as label
+FROM {demo.ctr_features_v2_predemo1.table}__derived
+WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
+""",
+    output_namespace="data",
+    dependencies=[
+        TableDependency(table=f"{demo.ctr_features_v2_predemo1.table}__derived", partition_column="ds", offset=0),
     ],
     version=0,
 )

@@ -15,7 +15,7 @@ default = Team(
     ),
     env=EnvironmentVariables(
         common={
-            "VERSION": "latest",
+            "VERSION": "0.1.0+dev.varantzanoyan",
             "JOB_MODE": "local[*]",
             "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
             "CHRONON_ONLINE_CLASS": "[ONLINE-TODO]your.online.class",

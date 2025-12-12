@@ -91,7 +91,7 @@
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
-          "VERSION": "latest"
+          "VERSION": "0.1.0+dev.varantzanoyan"
         }
       }
     },
@@ -191,7 +191,7 @@
               "JOB_MODE": "local[*]",
               "PARTITION_COLUMN": "ds",
               "PARTITION_FORMAT": "yyyy-MM-dd",
-              "VERSION": "latest"
+              "VERSION": "0.1.0+dev.varantzanoyan"
             }
           }
         },
@@ -279,7 +279,7 @@
               "name": "price_log"
             },
             {
-              "expression": "\n                CASE \n                    WHEN listing_id_price_cents < 1000 THEN 0\n                    WHEN listing_id_price_cents < 5000 THEN 1\n                    WHEN listing_id_price_cents < 10000 THEN 2\n                    WHEN listing_id_price_cents < 50000 THEN 3\n                    ELSE 4\n                END\n            ",
+              "expression": "\n                CASE\n                    WHEN listing_id_price_cents < 1000 THEN 0\n                    WHEN listing_id_price_cents < 5000 THEN 1\n                    WHEN listing_id_price_cents < 10000 THEN 2\n                    WHEN listing_id_price_cents < 50000 THEN 3\n                    ELSE 4\n                END\n            ",
               "name": "price_bucket"
             },
             {
@@ -723,10 +723,11 @@
           },
           "metaData": {
             "executionInfo": {
+              "enableStatsCompute": 1,
               "scheduleCron": "@daily",
               "stepDays": 2
             },
-            "name": "gcp.demo.derivations_v1__2",
+            "name": "gcp.demo.ctr_features_v1__2",
             "online": 1,
             "outputNamespace": "data",
             "production": 0,

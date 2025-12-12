@@ -5,15 +5,27 @@
     "params": [
       {
         "dataType": {
-          "kind": 7
+          "kind": 6
         },
-        "name": "listing_id_headline"
+        "name": "user_id_click_event_average_7d"
       },
       {
         "dataType": {
-          "kind": 7
+          "kind": 4
         },
-        "name": "listing_id_long_description"
+        "name": "listing_id_price_cents"
+      },
+      {
+        "dataType": {
+          "kind": 6
+        },
+        "name": "price_log"
+      },
+      {
+        "dataType": {
+          "kind": 3
+        },
+        "name": "price_bucket"
       }
     ]
   },
@@ -83,23 +95,39 @@
         }
       }
     },
-    "name": "gcp.listing.v1__2",
+    "name": "gcp.ctr.v2__1",
     "outputNamespace": "data",
-    "sourceFile": "model_transforms/gcp/listing.py",
+    "sourceFile": "model_transforms/gcp/ctr.py",
     "team": "gcp",
-    "version": "2"
+    "version": "1"
   },
   "models": [
     {
+      "deploymentConf": {
+        "containerConfig": {
+          "image": "us-central1-docker.pkg.dev/canary-443022/canary-images/ctr-predictor:v1"
+        },
+        "endpointConfig": {
+          "endpointName": "test_ctr_model"
+        },
+        "resourceConfig": {
+          "machineType": "n1-standard-4",
+          "maxReplicaCount": 3,
+          "minReplicaCount": 1
+        },
+        "rolloutStrategy": {
+          "rolloutType": 2
+        }
+      },
       "inferenceSpec": {
         "modelBackend": 0,
         "modelBackendParams": {
-          "model_name": "gemini-embedding-001",
-          "model_type": "publisher"
+          "model_name": "test_ctr_model",
+          "model_type": "custom"
         }
       },
       "inputMapping": {
-        "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))"
+        "instance": "named_struct('user_id_click_event_average_7d', user_id_click_event_average_7d, 'listing_price_cents', listing_id_price_cents, 'price_log', price_log, 'price_bucket', price_bucket)"
       },
       "metaData": {
         "executionInfo": {
@@ -167,13 +195,49 @@
             }
           }
         },
-        "name": "gcp.listing.item_description_model__1",
+        "name": "gcp.click_through_rate.ctr_model_v2predemo__1.0",
         "outputNamespace": "data",
         "team": "gcp",
-        "version": "1"
+        "version": "1.0"
       },
+      "modelArtifactBaseUri": "gs://zipline-warehouse-models",
       "outputMapping": {
-        "item_embedding": "gcp_listing_item_description_model__1__embeddings.values"
+        "ctr": "gcp_click_through_rate_ctr_model__1_0__score"
+      },
+      "trainingConf": {
+        "image": "us-docker.pkg.dev/vertex-ai/training/xgboost-cpu.2-1:latest",
+        "jobConfigs": {
+          "eta": "0.1",
+          "max-depth": "4",
+          "num-boost-round": "50"
+        },
+        "pythonModule": "trainer.train",
+        "resourceConfig": {
+          "machineType": "n1-standard-4",
+          "maxReplicaCount": 1,
+          "minReplicaCount": 1
+        },
+        "schedule": "@daily",
+        "trainingDataSource": {
+          "events": {
+            "query": {
+              "selects": {
+                "ds": "ds",
+                "label": "label",
+                "listing_price_cents": "listing_id_price_cents",
+                "price_bucket": "price_bucket",
+                "price_log": "price_log",
+                "user_id_click_event_average_7d": "user_id_click_event_average_7d"
+              },
+              "startPartition": "2025-07-01"
+            },
+            "table": "data.gcp_ctr_labels_v2_predemo1__0"
+          }
+        },
+        "trainingDataWindow": {
+          "length": 1,
+          "timeUnit": 1
+        }
       },
       "valueSchema": {
         "kind": 13,
@@ -181,47 +245,9 @@
         "params": [
           {
             "dataType": {
-              "kind": 13,
-              "name": "embeddings",
-              "params": [
-                {
-                  "dataType": {
-                    "kind": 13,
-                    "name": "statistics",
-                    "params": [
-                      {
-                        "dataType": {
-                          "kind": 0
-                        },
-                        "name": "truncated"
-                      },
-                      {
-                        "dataType": {
-                          "kind": 3
-                        },
-                        "name": "token_count"
-                      }
-                    ]
-                  },
-                  "name": "statistics"
-                },
-                {
-                  "dataType": {
-                    "kind": 12,
-                    "params": [
-                      {
-                        "dataType": {
-                          "kind": 6
-                        },
-                        "name": "elem"
-                      }
-                    ]
-                  },
-                  "name": "values"
-                }
-              ]
+              "kind": 6
             },
-            "name": "embeddings"
+            "name": "score"
           }
         ]
       }
@@ -230,13 +256,83 @@
   "passthroughFields": [
     "user_id",
     "listing_id",
-    "listing_id_is_active"
+    "user_id_click_event_average_7d",
+    "listing_id_price_cents",
+    "price_log",
+    "price_bucket"
   ],
   "sources": [
     {
       "joinSource": {
         "join": {
+          "derivations": [
+            {
+              "expression": "IF(listing_id_weight_grams > 1000, 1, 0)",
+              "name": "is_listing_heavy"
+            },
+            {
+              "expression": "array_contains(split(listing_id_tags, ','), 'handmade')",
+              "name": "is_item_handmade"
+            },
+            {
+              "expression": "log1p(listing_id_price_cents)",
+              "name": "price_log"
+            },
+            {
+              "expression": "\n                CASE\n                    WHEN listing_id_price_cents < 1000 THEN 0\n                    WHEN listing_id_price_cents < 10000 THEN 1\n                    WHEN listing_id_price_cents < 20000 THEN 2\n                    WHEN listing_id_price_cents < 50000 THEN 3\n                    ELSE 4\n                END\n            ",
+              "name": "price_bucket"
+            },
+            {
+              "expression": "*",
+              "name": "*"
+            }
+          ],
           "joinParts": [
+            {
+              "groupBy": {
+                "keyColumns": [
+                  "listing_id"
+                ],
+                "metaData": {
+                  "executionInfo": {
+                    "historicalBackfill": 0,
+                    "scheduleCron": "@daily"
+                  },
+                  "name": "gcp.dim_listings.v1__0",
+                  "online": 1,
+                  "team": "gcp",
+                  "version": "0"
+                },
+                "sources": [
+                  {
+                    "entities": {
+                      "query": {
+                        "selects": {
+                          "brief_description": "brief_description",
+                          "currency": "currency",
+                          "headline": "headline",
+                          "inventory_count": "inventory_count",
+                          "is_active": "is_active",
+                          "is_expensive": "IF(price_cents > 10000, 1, 0)",
+                          "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+                          "listing_id": "listing_id",
+                          "long_description": "long_description",
+                          "main_image_path": "main_image_path",
+                          "merchant_id": "merchant_id",
+                          "price_cents": "price_cents",
+                          "primary_category": "primary_category",
+                          "secondary_image_paths": "secondary_image_paths",
+                          "tags": "tags",
+                          "weight_grams": "weight_grams"
+                        },
+                        "startPartition": "2025-01-01"
+                      },
+                      "snapshotTable": "data.gcp_exports_dim_listings__0"
+                    }
+                  }
+                ]
+              }
+            },
             {
               "groupBy": {
                 "aggregations": [
@@ -609,83 +705,6 @@
                   }
                 ]
               }
-            },
-            {
-              "groupBy": {
-                "keyColumns": [
-                  "listing_id"
-                ],
-                "metaData": {
-                  "executionInfo": {
-                    "historicalBackfill": 0,
-                    "scheduleCron": "@daily"
-                  },
-                  "name": "gcp.dim_listings.v1__0",
-                  "online": 1,
-                  "team": "gcp",
-                  "version": "0"
-                },
-                "sources": [
-                  {
-                    "entities": {
-                      "query": {
-                        "selects": {
-                          "brief_description": "brief_description",
-                          "currency": "currency",
-                          "headline": "headline",
-                          "inventory_count": "inventory_count",
-                          "is_active": "is_active",
-                          "is_expensive": "IF(price_cents > 10000, 1, 0)",
-                          "is_in_stock": "IF(inventory_count > 0, 1, 0)",
-                          "listing_id": "listing_id",
-                          "long_description": "long_description",
-                          "main_image_path": "main_image_path",
-                          "merchant_id": "merchant_id",
-                          "price_cents": "price_cents",
-                          "primary_category": "primary_category",
-                          "secondary_image_paths": "secondary_image_paths",
-                          "tags": "tags",
-                          "weight_grams": "weight_grams"
-                        },
-                        "startPartition": "2025-01-01"
-                      },
-                      "snapshotTable": "data.gcp_exports_dim_listings__0"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "groupBy": {
-                "keyColumns": [
-                  "listing_id"
-                ],
-                "metaData": {
-                  "executionInfo": {
-                    "historicalBackfill": 0,
-                    "scheduleCron": "@daily"
-                  },
-                  "name": "gcp.dim_merchants.v1__0",
-                  "online": 1,
-                  "team": "gcp",
-                  "version": "0"
-                },
-                "sources": [
-                  {
-                    "entities": {
-                      "query": {
-                        "selects": {
-                          "listing_id": "merchant_id",
-                          "primary_category": "primary_category"
-                        },
-                        "startPartition": "2025-01-01"
-                      },
-                      "snapshotTable": "data.gcp_exports_dim_merchants__0"
-                    }
-                  }
-                ]
-              },
-              "prefix": "merchant_"
             }
           ],
           "left": {
@@ -704,27 +723,21 @@
           },
           "metaData": {
             "executionInfo": {
-              "enableStatsCompute": 1,
               "scheduleCron": "@daily",
               "stepDays": 2
             },
-            "name": "gcp.demo.v1__1",
+            "name": "gcp.demo.ctr_features_v2_predemo1__2",
             "online": 1,
             "outputNamespace": "data",
             "production": 0,
             "samplePercent": 100.0,
             "team": "gcp",
-            "version": "1"
+            "version": "2"
           },
           "rowIds": [
             "event_id"
           ],
           "useLongNames": 0
-        },
-        "query": {
-          "wheres": [
-            "(listing_id_headline IS NOT NULL AND listing_id_headline != '') OR (listing_id_long_description IS NOT NULL AND listing_id_long_description != '')"
-          ]
         }
       }
     }

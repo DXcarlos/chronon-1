@@ -13,7 +13,7 @@
       "name": "price_log"
     },
     {
-      "expression": "\n                CASE \n                    WHEN listing_id_price_cents < 1000 THEN 0\n                    WHEN listing_id_price_cents < 5000 THEN 1\n                    WHEN listing_id_price_cents < 10000 THEN 2\n                    WHEN listing_id_price_cents < 50000 THEN 3\n                    ELSE 4\n                END\n            ",
+      "expression": "\n                CASE\n                    WHEN listing_id_price_cents < 1000 THEN 0\n                    WHEN listing_id_price_cents < 10000 THEN 1\n                    WHEN listing_id_price_cents < 20000 THEN 2\n                    WHEN listing_id_price_cents < 50000 THEN 3\n                    ELSE 4\n                END\n            ",
       "name": "price_bucket"
     },
     {
@@ -107,7 +107,7 @@
                 "JOB_MODE": "local[*]",
                 "PARTITION_COLUMN": "ds",
                 "PARTITION_FORMAT": "yyyy-MM-dd",
-                "VERSION": "latest"
+                "VERSION": "0.1.0+dev.varantzanoyan"
               }
             },
             "historicalBackfill": 0,
@@ -602,7 +602,7 @@
                 "JOB_MODE": "local[*]",
                 "PARTITION_COLUMN": "ds",
                 "PARTITION_FORMAT": "yyyy-MM-dd",
-                "VERSION": "latest"
+                "VERSION": "0.1.0+dev.varantzanoyan"
               }
             },
             "historicalBackfill": 0,
@@ -678,7 +678,7 @@
       "listing_id_secondary_image_paths": "1001bcbe2b97f447bb20a64c6d8ab297",
       "listing_id_tags": "b4a3e64fad103c2caf6fcadb2e68f1dd",
       "listing_id_weight_grams": "7d01ad6aa1db30922ff461f2d0d62ee7",
-      "price_bucket": "385cc823910901c038cb3d1ff1128618",
+      "price_bucket": "f07cfb075dbbd3f16588fc26b406699b",
       "price_log": "947a4c1a7b445b6fb8a3e0c7c4e1aa39",
       "row_id": "596506e0a4fef5508ebdcda7e6eb1072",
       "ts": "d1ae44a8f84a262685dbf1bdb9f8d46e",
@@ -802,13 +802,13 @@
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
-          "VERSION": "latest"
+          "VERSION": "0.1.0+dev.varantzanoyan"
         }
       },
       "scheduleCron": "@daily",
       "stepDays": 2
     },
-    "name": "gcp.demo.derivations_v1__2",
+    "name": "gcp.demo.ctr_features_v2_predemo1__2",
     "online": 1,
     "outputNamespace": "data",
     "production": 0,

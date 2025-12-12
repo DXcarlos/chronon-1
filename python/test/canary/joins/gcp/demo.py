@@ -58,7 +58,7 @@ v1 = Join(
 )
 
 # Example join with some derivations
-derivations_v1 = Join(
+ctr_features_v1 = Join(
     left=source,
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
@@ -91,6 +91,57 @@ derivations_v1 = Join(
                     WHEN listing_id_price_cents < 1000 THEN 0
                     WHEN listing_id_price_cents < 5000 THEN 1
                     WHEN listing_id_price_cents < 10000 THEN 2
+                    WHEN listing_id_price_cents < 50000 THEN 3
+                    ELSE 4
+                END
+            """
+        ),
+        Derivation(
+            name="*",
+            expression="*"
+        )
+    ],
+    version=2,
+    online=True,
+    output_namespace="data",
+    step_days=2,
+    enable_stats_compute=True,
+)
+
+
+ctr_features_v2_predemo1 = Join(
+    left=source,
+    row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
+    right_parts=[
+        JoinPart(
+            group_by=dim_listings.v1,
+        ),
+        JoinPart(
+            group_by=user_activities.v1,
+        ),        
+    ],
+    derivations=[
+        Derivation(
+            name="is_listing_heavy",
+            expression="IF(listing_id_weight_grams > 1000, 1, 0)"
+        ),
+        # with a built-in Spark fn
+        Derivation(
+            name="is_item_handmade",
+            expression="array_contains(split(listing_id_tags, ','), 'handmade')"
+        ),
+        Derivation(
+            name="price_log",
+            expression="log1p(listing_id_price_cents)"
+        ),
+        Derivation(
+            name="price_bucket",
+            expression=
+            """
+                CASE
+                    WHEN listing_id_price_cents < 1000 THEN 0
+                    WHEN listing_id_price_cents < 10000 THEN 1
+                    WHEN listing_id_price_cents < 20000 THEN 2
                     WHEN listing_id_price_cents < 50000 THEN 3
                     ELSE 4
                 END

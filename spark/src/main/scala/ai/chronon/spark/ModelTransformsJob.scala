@@ -143,7 +143,11 @@ object ModelTransformsJob {
     if (maybeJoinSource.nonEmpty) {
       val joinSource = maybeJoinSource.get
       val joinMetadata = Option(joinSource.join).map(_.metaData)
-      val joinOutputTable = joinMetadata.map(_.outputTable).orNull
+
+      // TODO: change this after join output table alignment
+      val hasDerivations = Option(joinSource.join).exists(_.isSetDerivations)
+      val baseTable = joinMetadata.map(_.outputTable).orNull
+      val joinOutputTable = if(hasDerivations) baseTable + "__derived" else baseTable
 
       require(joinOutputTable != null, s"Join $joinMetadata must have an output table defined")
       logger.info(s"Reading from JoinSource based on Join: ${joinMetadata.map(_.name)}, table: $joinOutputTable")
