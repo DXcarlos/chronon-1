@@ -33,7 +33,7 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
 
     val modelTransforms = B.ModelTransforms(
       metaData = B.MetaData(name = "test_model_transforms"),
-      models = Seq(testModel)
+      modelParts = Seq(B.ModelPart(testModel, "test_model"))
     )
 
     val mockPlatform = new TestModelPlatform(Map(
@@ -66,7 +66,7 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
     )
 
     val modelTransforms = B.ModelTransforms(
-      models = Seq(testModel),
+      modelParts = Seq(B.ModelPart(testModel, "scorer")),
       metaData = B.MetaData(name = "test_model_transforms"),
     )
 
@@ -108,7 +108,7 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
     )
 
     val modelTransforms = B.ModelTransforms(
-      models = Seq(testModel),
+      modelParts = Seq(B.ModelPart(testModel, "model1")),
       metaData = B.MetaData(name = "test_model_transforms"),
       passthroughFields = Seq("user_id", "session_id")
     )
@@ -147,19 +147,23 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
       metaData = B.MetaData(name = "embedding_model"),
       inferenceSpec = B.InferenceSpec(ModelBackend.VertexAI)
     )
-    
+
     val scoringModel = B.Model(
-      metaData = B.MetaData(name = "scoring_model"), 
+      metaData = B.MetaData(name = "scoring_model"),
       inferenceSpec = B.InferenceSpec(ModelBackend.VertexAI)
     )
-    
+
     val classificationModel = B.Model(
       metaData = B.MetaData(name = "classification_model"),
       inferenceSpec = B.InferenceSpec(ModelBackend.VertexAI)
     )
 
     val modelTransforms = B.ModelTransforms(
-      models = Seq(embeddingModel, scoringModel, classificationModel),
+      modelParts = Seq(
+        B.ModelPart(embeddingModel, "embedding_model"),
+        B.ModelPart(scoringModel, "scoring_model"),
+        B.ModelPart(classificationModel, "classification_model")
+      ),
       metaData = B.MetaData(name = "test_model_transforms"),
     )
 
@@ -210,12 +214,12 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
       "user_id" -> StringType,
       "session_id" -> StringType
     )
-    
+
     val outputSchema = B.structSchema("output_schema",
       "model_prediction" -> StringType,
       "model_confidence" -> DoubleType
     )
-    
+
     val testModel = B.Model(
       metaData = B.MetaData(name = "mapping_model"),
       inferenceSpec = B.InferenceSpec(ModelBackend.VertexAI),
@@ -224,14 +228,14 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
         "model_session" -> "session_id"      // model expects "model_session", we have "session_id"
       ),
       outputMapping = Map(
-        "prediction" -> "mapping_model__model_prediction",  // model returns "model_prediction" (prefixed as "mapping_model__model_prediction"), we want "prediction"
-        "confidence" -> "mapping_model__model_confidence"   // model returns "model_confidence" (prefixed as "mapping_model__model_confidence"), we want "confidence"
+        "prediction" -> "model_prediction",  // model returns "model_prediction" (unprefixed), we want "prediction"
+        "confidence" -> "model_confidence"   // model returns "model_confidence" (unprefixed), we want "confidence"
       ),
       valueSchema = outputSchema
     )
 
     val modelTransforms = B.ModelTransforms(
-      models = Seq(testModel),
+      modelParts = Seq(B.ModelPart(testModel, "mapping_model")),
       metaData = B.MetaData(name = "test_model_transforms"),
       keySchema = inputSchema
     )
@@ -255,14 +259,14 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
     // Verify
     whenReady(responseFuture) { responses =>
       responses should have size 1
-      
+
       val response = responses.head
       response.request.name shouldBe "test"
       response.values should be a 'success
-      
+
       val expectedResult = Map(
-        "mapping_model__prediction" -> "positive",    // output mapping applied: model_prediction -> prediction, then prefixed
-        "mapping_model__confidence" -> 0.95           // output mapping applied: model_confidence -> confidence, then prefixed
+        "mapping_model__prediction" -> "positive",    // output mapping applied: model_prediction -> prediction, then prefixed with "mapping_model"
+        "mapping_model__confidence" -> 0.95           // output mapping applied: model_confidence -> confidence, then prefixed with "mapping_model"
       )
 
       response.values.get shouldBe expectedResult
@@ -275,19 +279,23 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
       metaData = B.MetaData(name = "working_model_1"),
       inferenceSpec = B.InferenceSpec(ModelBackend.VertexAI)
     )
-    
+
     val failingModel = B.Model(
       metaData = B.MetaData(name = "failing_model"),
       inferenceSpec = B.InferenceSpec(ModelBackend.SageMaker)
     )
-    
+
     val workingModel2 = B.Model(
       metaData = B.MetaData(name = "working_model_2"),
       inferenceSpec = B.InferenceSpec(ModelBackend.VertexAI)
     )
 
     val modelTransforms = B.ModelTransforms(
-      models = Seq(workingModel1, failingModel, workingModel2),
+      modelParts = Seq(
+        B.ModelPart(workingModel1, "working_model_1"),
+        B.ModelPart(failingModel, "failing_model"),
+        B.ModelPart(workingModel2, "working_model_2")
+      ),
       metaData = B.MetaData(name = "test_model_transforms"),
     )
 
@@ -340,7 +348,7 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
     )
 
     val modelTransforms = B.ModelTransforms(
-      models = Seq(testModel),
+      modelParts = Seq(B.ModelPart(testModel, "join_only_model")),
       metaData = B.MetaData(name = "test_model_transforms")
     )
 
@@ -386,7 +394,7 @@ class ModelTransformsFetcherTest extends AnyFlatSpec with Matchers with ScalaFut
     )
 
     val modelTransforms = B.ModelTransforms(
-      models = Seq(testModel),
+      modelParts = Seq(B.ModelPart(testModel, "mixed_test_model")),
       metaData = B.MetaData(name = "test_model_transforms")
     )
 

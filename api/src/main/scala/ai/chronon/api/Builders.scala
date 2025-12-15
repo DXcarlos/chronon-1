@@ -480,6 +480,19 @@ object Builders {
     }
   }
 
+  object ModelPart {
+    def apply(
+        model: Model,
+        prefix: String = null
+    ): ModelPart = {
+      val result = new ModelPart()
+      result.setModel(model)
+      if (prefix != null)
+        result.setPrefix(prefix)
+      result
+    }
+  }
+
   object InferenceSpec {
     def apply(
         modelBackend: ModelBackend = ModelBackend.VertexAI,
@@ -510,22 +523,24 @@ object Builders {
   object ModelTransforms {
     def apply(
         sources: Seq[Source] = null,
-        models: Seq[Model] = null,
+        modelParts: Seq[ModelPart] = null,
         passthroughFields: Seq[String] = null,
         metaData: MetaData = null,
-        keySchema: TDataType = null
+        keySchema: TDataType = null,
+        useLongNames: Boolean = false
     ): ModelTransforms = {
       val result = new ModelTransforms()
       if (sources != null)
         result.setSources(sources.toJava)
-      if (models != null)
-        result.setModels(models.toJava)
+      if (modelParts != null)
+        result.setModelParts(modelParts.toJava)
       if (passthroughFields != null)
         result.setPassthroughFields(passthroughFields.toJava)
       if (metaData != null)
         result.setMetaData(metaData)
       if (keySchema != null)
         result.setKeySchema(keySchema)
+      result.setUseLongNames(useLongNames)
       result
     }
   }

@@ -70,11 +70,11 @@ class ModelTransformsFetcher(modelPlatformProvider: ModelPlatformProvider, debug
       return Future.successful(Seq.empty)
     }
 
-    val models = Option(modelTransforms.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
-    if (models.isEmpty) {
+    val modelParts = Option(modelTransforms.modelParts).map(_.asScala.toSeq).getOrElse(Seq.empty)
+    if (modelParts.isEmpty) {
       if (debug) {
         logger.info(
-          s"No models defined in model transforms: ${modelTransforms.metaData.name}, returning passthrough only")
+          s"No model parts defined in model transforms: ${modelTransforms.metaData.name}, returning passthrough only")
       }
       return Future.successful(requests.map(createPassthroughResponse(_, modelTransforms)))
     }
@@ -83,7 +83,7 @@ class ModelTransformsFetcher(modelPlatformProvider: ModelPlatformProvider, debug
     val ctx =
       Metrics.Context(Metrics.Environment.ModelTransformsFetching, modelTransforms = modelTransforms.metaData.name)
 
-    processBulkModelTransforms(requests, models, modelTransforms, ctx, ts)
+    processBulkModelTransforms(requests, modelParts, modelTransforms, ctx, ts)
   }
 
   private def createPassthroughResponse(request: Request, modelTransforms: api.ModelTransforms): Response = {
@@ -92,7 +92,7 @@ class ModelTransformsFetcher(modelPlatformProvider: ModelPlatformProvider, debug
   }
 
   private def processBulkModelTransforms(requests: Seq[Request],
-                                         models: Seq[api.Model],
+                                         modelParts: Seq[api.ModelPart],
                                          modelTransforms: api.ModelTransforms,
                                          ctx: Metrics.Context,
                                          ts: Long): Future[Seq[Response]] = {
@@ -102,15 +102,23 @@ class ModelTransformsFetcher(modelPlatformProvider: ModelPlatformProvider, debug
       logger.info(s"Derived ${modelTransforms.metaData.name}'s keySchema = ${keySchema.get}")
     }
 
-    val modelResultFutures = models.map { model =>
-      processBulkModelPredict(requests, model, keySchema)
+    val useLongNames = modelTransforms.isSetUseLongNames && modelTransforms.useLongNames
+
+    val modelResultFutures = modelParts.map { modelPart =>
+      processBulkModelPredict(requests, modelPart, keySchema, useLongNames)
         .recover { case exception =>
           ctx.incrementException(exception)
-          logger.error(s"Model ${model.metaData.name} failed, returning error features", exception)
+          logger.error(s"Model ${modelPart.model.metaData.name} failed, returning error features", exception)
           // Return error features for this model instead of failing entire request
+          val modelName = modelPart.model.metaData.cleanName
+          val customPrefix = Option(modelPart.prefix).getOrElse("")
+          val errorKey = if (useLongNames) {
+            s"$modelName${FetcherUtil.FeatureExceptionSuffix}"
+          } else {
+            s"$customPrefix${FetcherUtil.FeatureExceptionSuffix}"
+          }
           requests.map { request =>
-            val errorFeatures =
-              Map(s"${model.metaData.name}${FetcherUtil.FeatureExceptionSuffix}" -> exception.traceString)
+            val errorFeatures = Map(errorKey -> exception.traceString)
             request -> errorFeatures
           }
         }
@@ -140,9 +148,13 @@ class ModelTransformsFetcher(modelPlatformProvider: ModelPlatformProvider, debug
   }
 
   private def processBulkModelPredict(requests: Seq[Request],
-                                      model: api.Model,
-                                      keySchema: Option[api.DataType]): Future[Seq[(Request, Map[String, AnyRef])]] = {
+                                      modelPart: api.ModelPart,
+                                      keySchema: Option[api.DataType],
+                                      useLongNames: Boolean): Future[Seq[(Request, Map[String, AnyRef])]] = {
 
+    val model = modelPart.model
+    val modelName = model.metaData.cleanName
+    val customPrefix = Option(modelPart.prefix).getOrElse("")
     val ctx = Metrics.Context(Metrics.Environment.ModelPredict, model = model.metaData.name)
     val modelPreprocessStartTime = System.currentTimeMillis()
 
@@ -205,36 +217,23 @@ class ModelTransformsFetcher(modelPlatformProvider: ModelPlatformProvider, debug
             inputToRequests.map { case (transformedInput, _) =>
               val predictionOutput = inputToPrediction(transformedInput)
 
-              // predictionOutput is already the Map[String, AnyRef] from the prediction JSON object
+              // predictionOutput is the Map[String, AnyRef] from the prediction JSON object
               val postProcessStartTime = System.currentTimeMillis()
 
-              // Prefix raw model output keys with model name to match ModelTransformsJob behavior
-              val modelName = model.metaData.cleanName
-              val prefixedPredictionOutput = predictionOutput.map { case (k, v) => s"${modelName}__$k" -> v }
-
-              val prefixedValueSchema = computePrefixedValueSchema(model, modelName)
-              val mappedResults = applyMapping(model.outputMapping,
-                                               prefixedPredictionOutput,
-                                               prefixedValueSchema,
-                                               s"output_mapping_${model.metaData.name}")
-
-              // Prefix the output mapping result keys as well
-              // Only prefix if there was an output mapping, otherwise the keys are already prefixed
-              val hasOutputMapping = Option(model.outputMapping).exists(!_.isEmpty)
-              val modelResults = if (hasOutputMapping) {
-                mappedResults.map { case (k, v) => s"${modelName}__$k" -> v }
+              val finalResults = if (useLongNames) {
+                applyLongNamesPostProcessing(model, modelName, predictionOutput)
               } else {
-                mappedResults
+                applyCustomPrefixPostProcessing(model, customPrefix, predictionOutput)
               }
 
               if (debug) {
                 logger.info(
-                  s"Model ${model.metaData.name} output mapping. Value schema: $prefixedValueSchema\n model_output = $predictionOutput\n " +
-                    s"prefixed_output = $prefixedPredictionOutput\n mapped_output = $mappedResults\n final_output = $modelResults")
+                  s"Model ${model.metaData.name} (useLongNames=$useLongNames, customPrefix='$customPrefix')\n " +
+                    s"model_output = $predictionOutput\n final_output = $finalResults")
               }
               ctx.distribution("model_postprocess.latency.millis", System.currentTimeMillis() - postProcessStartTime)
 
-              transformedInput -> modelResults
+              transformedInput -> finalResults
             }.toMap
 
           case Failure(exception) =>
@@ -251,6 +250,52 @@ class ModelTransformsFetcher(modelPlatformProvider: ModelPlatformProvider, debug
       case exception: Throwable =>
         ctx.incrementException(exception)
         Future.failed(exception)
+    }
+  }
+
+  // We take the prediction outputs, prefix with model name, apply output mapping on top of these prefixed fields
+  private def applyLongNamesPostProcessing(model: Model,
+                                           modelName: String,
+                                           predictionOutput: Map[String, AnyRef]): Map[String, AnyRef] = {
+    // Prefix model outputs with model name
+    val prefixedOutput = predictionOutput.map { case (k, v) => s"${modelName}__$k" -> v }
+
+    // Get value schema with prefixed field names
+    val valueSchema = computePrefixedValueSchema(model, modelName)
+
+    // Apply output mapping to prefixed fields
+    val mappedResults = applyMapping(model.outputMapping,
+                                     prefixedOutput,
+                                     valueSchema,
+                                     s"output_mapping_${model.metaData.name}")
+
+    // Output mapping keys also get prefixed when useLongNames=true
+    if (Option(model.outputMapping).exists(!_.isEmpty)) {
+      mappedResults.map { case (k, v) => s"${modelName}__$k" -> v }
+    } else {
+      mappedResults
+    }
+  }
+
+  // When we skip long names, we keep the original prediction output field names,
+  // apply output mapping on these unprefixed fields, and then apply custom prefix if provided
+  private def applyCustomPrefixPostProcessing(model: Model,
+                                              customPrefix: String,
+                                              predictionOutput: Map[String, AnyRef]): Map[String, AnyRef] = {
+    // Get unprefixed value schema
+    val valueSchema = Option(model.valueSchema).map(api.DataType.fromTDataType)
+
+    // Apply output mapping to unprefixed fields
+    val mappedResults = applyMapping(model.outputMapping,
+                                     predictionOutput,
+                                     valueSchema,
+                                     s"output_mapping_${model.metaData.name}")
+
+    // Apply custom prefix to final output fields
+    if (customPrefix.nonEmpty) {
+      mappedResults.map { case (k, v) => s"${customPrefix}__$k" -> v }
+    } else {
+      mappedResults
     }
   }
 
