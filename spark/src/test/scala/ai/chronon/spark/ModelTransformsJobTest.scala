@@ -48,8 +48,8 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val model1OutputMapping = if (includeOutputMapping) {
       Map(
-        "final_score" -> "model1__score * 2.0",
-        "category" -> "model1__category"  // Pass through category
+        "final_score" -> "score * 2.0",
+        "category" -> "category"
       )
     } else {
       null
@@ -182,7 +182,7 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelTransforms = new ModelTransforms()
       .setMetaData(B.MetaData(name = "test_model_transforms_basic").setOutputNamespace(namespace))
-      .setModels(Seq(model1, model2).asJava)
+      .setModelParts(Seq(B.ModelPart(model1, "model1"), B.ModelPart(model2, "model2")).asJava)
       .setPassthroughFields(Seq("user_id", "item_id").asJava)
       .setSources(Seq(source).asJava)
 
@@ -229,7 +229,7 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelTransforms = new ModelTransforms()
       .setMetaData(B.MetaData(name = "test_model_transforms_events").setOutputNamespace(namespace))
-      .setModels(Seq(model1, model2).asJava)
+      .setModelParts(Seq(B.ModelPart(model1, "model1"), B.ModelPart(model2, "model2")).asJava)
       .setPassthroughFields(Seq("user_id", "event_type").asJava)
       .setSources(Seq(source).asJava)
 
@@ -299,7 +299,7 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelTransforms = new ModelTransforms()
       .setMetaData(B.MetaData(name = "test_model_transforms_query").setOutputNamespace(namespace))
-      .setModels(Seq(model1, model2).asJava)
+      .setModelParts(Seq(B.ModelPart(model1, "model1"), B.ModelPart(model2, "model2")).asJava)
       .setPassthroughFields(Seq("user_id", "product_id").asJava)
       .setSources(Seq(source).asJava)
 
@@ -360,7 +360,7 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelTransforms = new ModelTransforms()
       .setMetaData(B.MetaData(name = "test_model_transforms_mappings").setOutputNamespace(namespace))
-      .setModels(Seq(model1, model2).asJava)
+      .setModelParts(Seq(B.ModelPart(model1, "model1"), B.ModelPart(model2, "model2")).asJava)
       .setPassthroughFields(Seq("user_id", "item_id").asJava)
       .setSources(Seq(source).asJava)
 
@@ -431,7 +431,7 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelTransforms = new ModelTransforms()
       .setMetaData(B.MetaData(name = "test_model_transforms_null_name").setOutputNamespace(namespace))
-      .setModels(Seq(modelWithoutName).asJava)
+      .setModelParts(Seq(B.ModelPart(modelWithoutName, "model")).asJava)
       .setPassthroughFields(Seq("user_id", "item_id").asJava)
       .setSources(Seq(source).asJava)
 
@@ -494,7 +494,7 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelTransforms = new ModelTransforms()
       .setMetaData(B.MetaData(name = "test_model_transforms_failure").setOutputNamespace(namespace))
-      .setModels(Seq(model).asJava)
+      .setModelParts(Seq(B.ModelPart(model, "failing_model")).asJava)
       .setPassthroughFields(Seq("user_id", "item_id").asJava)
       .setSources(Seq(source).asJava)
 
@@ -563,7 +563,7 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelTransforms = new ModelTransforms()
       .setMetaData(B.MetaData(name = "test_model_transforms_empty_models").setOutputNamespace(namespace))
-      .setModels(Seq.empty.asJava)  // Empty models sequence
+      .setModelParts(Seq.empty.asJava)  // Empty model parts sequence
       .setPassthroughFields(Seq("user_id", "item_id").asJava)
       .setSources(Seq(source).asJava)
 
@@ -640,7 +640,7 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelTransforms = new ModelTransforms()
       .setMetaData(B.MetaData(name = "test_model_transforms_struct").setOutputNamespace(namespace))
-      .setModels(Seq(model).asJava)
+      .setModelParts(Seq(B.ModelPart(model, "struct_model")).asJava)
       .setPassthroughFields(Seq("user_id", "item_id").asJava)
       .setSources(Seq(source).asJava)
 
@@ -725,7 +725,7 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelTransforms = new ModelTransforms()
       .setMetaData(B.MetaData(name = "test_model_transforms_schema").setOutputNamespace(namespace))
-      .setModels(Seq(model1, model2).asJava)
+      .setModelParts(Seq(B.ModelPart(model1, "model1"), B.ModelPart(model2, "model2")).asJava)
       .setPassthroughFields(Seq("user_id", "item_id").asJava)
       .setSources(Seq(source).asJava)
 
@@ -748,6 +748,86 @@ class ModelTransformsJobTest extends SparkTestBase {
     // Verify source fields not in passthrough are NOT present
     actualFields should not contain "feature1"
     actualFields should not contain "feature2"
+  }
+
+  it should "allow conflicting field names when useLongNames=true" in {
+    val joinSourceTable = createJoinSourceTable("join_source_conflict")
+
+    val joinMetadata = B.MetaData(name = "test_join_conflict")
+      .setOutputNamespace(namespace)
+
+    val outputTableInfo = new TableInfo().setTable(joinSourceTable)
+    val executionInfo = new ExecutionInfo().setOutputTableInfo(outputTableInfo)
+    joinMetadata.setExecutionInfo(executionInfo)
+
+    val joinConf = B.Join(
+      left = B.Source.events(
+        query = B.Query(startPartition = monthAgo),
+        table = joinSourceTable
+      ),
+      joinParts = Seq.empty,
+      metaData = joinMetadata
+    )
+
+    val joinSource = new JoinSource()
+      .setJoin(joinConf)
+      .setQuery(null)
+
+    val source = new Source()
+    source.setJoinSource(joinSource)
+
+    // Create two models with overlapping field names in valueSchema
+    val model1 = B.Model(
+      metaData = B.MetaData(name = "model1"),
+      inferenceSpec = B.InferenceSpec(ModelBackend.VertexAI),
+      valueSchema = B.structSchema("model1_output",
+        "score" -> DoubleType,  // Conflicting field
+        "category" -> StringType
+      )
+    )
+
+    val model2 = B.Model(
+      metaData = B.MetaData(name = "model2"),
+      inferenceSpec = B.InferenceSpec(ModelBackend.VertexAI),
+      valueSchema = B.structSchema("model2_output",
+        "score" -> DoubleType,  // Conflicting field
+        "prediction" -> StringType
+      )
+    )
+
+    // When useLongNames=true, conflicting fields are allowed (they get prefixed with model name)
+    val modelTransforms = new ModelTransforms()
+      .setMetaData(B.MetaData(name = "test_model_transforms_conflict").setOutputNamespace(namespace))
+      .setModelParts(Seq(B.ModelPart(model1, "model1"), B.ModelPart(model2, "model2")).asJava)
+      .setPassthroughFields(Seq("user_id", "item_id").asJava)
+      .setSources(Seq(source).asJava)
+      .setUseLongNames(true)  // Enable long names to support conflicting fields
+
+    val testPlatformProvider = createMockPlatformProvider()
+    val dateRange = PartitionRange(monthAgo, today)(tableUtils.partitionSpec)
+
+    // Should NOT throw an exception - conflicts are allowed with useLongNames=true
+    noException should be thrownBy {
+      ModelTransformsJob.computeBackfill(
+        modelTransforms,
+        dateRange,
+        tableUtils,
+        testPlatformProvider
+      )
+    }
+
+    // Verify the output schema contains prefixed field names
+    val sourceDf = tableUtils.sql(
+      s"SELECT * FROM $joinSourceTable WHERE ds >= '$monthAgo' AND ds <= '$today'"
+    )
+    val outputSchema = ModelTransformsJob.computeOutputSchema(sourceDf, modelTransforms, tableUtils)
+    val fieldNames = outputSchema.fieldNames.toSet
+
+    // Both models should have their own namespaced "score" field
+    fieldNames should contain("model1__score")
+    fieldNames should contain("model2__score")
+    fieldNames should contain("model1__category")
+    fieldNames should contain("model2__prediction")
   }
 }
 

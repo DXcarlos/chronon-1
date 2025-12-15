@@ -40,27 +40,28 @@ object ModelTransformsJob {
                           tableUtils: TableUtils): StructType = {
     validateModelTransformsConfig(modelTransformsConf)
 
-    val models = Option(modelTransformsConf.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
+    val modelParts = Option(modelTransformsConf.modelParts).map(_.asScala.toSeq).getOrElse(Seq.empty)
     val passthroughFields = Option(modelTransformsConf.passthroughFields).map(_.asScala.toSet).getOrElse(Set.empty)
+    val useLongNames = modelTransformsConf.isSetUseLongNames && modelTransformsConf.useLongNames
 
     // Always include partition column and time column in passthrough, even if not explicitly specified
     val requiredColumns = Set(tableUtils.partitionColumn, Constants.TimeColumn)
     val allPassthroughFields = passthroughFields ++ requiredColumns.filter(sourceDf.columns.contains)
 
-    if (models.isEmpty) {
-      logger.info("No models defined, returning passthrough fields only")
+    if (modelParts.isEmpty) {
+      logger.info("No model parts defined, returning passthrough fields only")
       val fieldsToSelect = sourceDf.columns.filter(allPassthroughFields.contains)
       return StructType(sourceDf.schema.fields.filter(f => fieldsToSelect.contains(f.name)))
     }
 
     // Apply input mappings using the existing applyAllMappings method
     val dfWithInputMappings = applyAllMappings(sourceDf,
-                                               models,
-                                               getMappingFn = _.inputMapping,
-                                               getPrefixFn = model => s"${model.metaData.cleanName}__input")
+                                               modelParts,
+                                               getMappingFn = _.model.inputMapping,
+                                               getPrefixFn = modelPart => s"${modelPart.model.metaData.cleanName}__input")
 
     // Add model inference output fields
-    val schemaAfterInference = determineInferenceOutputSchema(dfWithInputMappings.schema, models)
+    val schemaAfterInference = determineInferenceOutputSchema(dfWithInputMappings.schema, modelParts, useLongNames)
 
     // Create an empty DataFrame with the post-inference schema
     val sparkSession = tableUtils.sparkSession
@@ -69,16 +70,23 @@ object ModelTransformsJob {
       schemaAfterInference
     )
 
-    // Apply output mappings using the existing applyAllMappings method
+    // Apply output mappings
     val dfWithOutputMappings = applyAllMappings(emptyDfAfterInference,
-                                                models,
-                                                getMappingFn = _.outputMapping,
-                                                getPrefixFn = model => model.metaData.cleanName)
+                                                modelParts,
+                                                getMappingFn = _.model.outputMapping,
+                                                getPrefixFn = _ => "") // No additional prefix for output mappings
+
+    // Apply custom prefixes from ModelPart (only when useLongNames=false)
+    val dfWithPrefixes = if (useLongNames) {
+      dfWithOutputMappings
+    } else {
+      applyCustomPrefixes(dfWithOutputMappings, modelParts)
+    }
 
     // Select only the fields we want to keep: passthrough fields + final model output fields
-    val fieldsToKeep = computeFinalFieldsToKeep(models, allPassthroughFields)
+    val fieldsToKeep = computeFinalFieldsToKeep(modelParts, allPassthroughFields, useLongNames)
 
-    StructType(dfWithOutputMappings.schema.fields.filter(f => fieldsToKeep.contains(f.name)))
+    StructType(dfWithPrefixes.schema.fields.filter(f => fieldsToKeep.contains(f.name)))
   }
 
   def computeBackfill(
@@ -171,61 +179,72 @@ object ModelTransformsJob {
       tableUtils: TableUtils
   ): DataFrame = {
 
-    val models = Option(modelTransformsConf.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
+    val modelParts = Option(modelTransformsConf.modelParts).map(_.asScala.toSeq).getOrElse(Seq.empty)
     val passthroughFields = Option(modelTransformsConf.passthroughFields).map(_.asScala.toSet).getOrElse(Set.empty)
+    val useLongNames = modelTransformsConf.isSetUseLongNames && modelTransformsConf.useLongNames
 
     // Always include partition column and time column in passthrough, even if not explicitly specified
     val requiredColumns = Set(tableUtils.partitionColumn, Constants.TimeColumn)
     val allPassthroughFields = passthroughFields ++ requiredColumns.filter(sourceDf.columns.contains)
 
-    if (models.isEmpty) {
-      logger.info("No models defined, returning passthrough fields only")
+    if (modelParts.isEmpty) {
+      logger.info("No model parts defined, returning passthrough fields only")
       val fieldsToSelect = sourceDf.columns.filter(allPassthroughFields.contains)
       return sourceDf.select(fieldsToSelect.map(col): _*)
     }
 
-    logger.info(s"Processing with ${models.size} models, batch size: $BatchSize")
+    logger.info(s"Processing with ${modelParts.size} model parts, batch size: $BatchSize, useLongNames: $useLongNames")
 
     processBatchedModelInference(
       sourceDf,
-      models,
+      modelParts,
       allPassthroughFields,
       modelPlatformProvider,
-      timeoutMillis
+      timeoutMillis,
+      useLongNames
     )
   }
 
   private def processBatchedModelInference(
       sourceDf: DataFrame,
-      models: Seq[api.Model],
+      modelParts: Seq[api.ModelPart],
       passthroughFields: Set[String],
       modelPlatformProvider: ModelPlatformProvider,
-      timeoutMillis: Long
+      timeoutMillis: Long,
+      useLongNames: Boolean
   ): DataFrame = {
 
     logger.info(s"Source schema:\n${sourceDf.schema.catalogString}")
 
     // apply input mappings for all models. We produce intermediate cols prefixed with the model name
     val dfWithInputMappings = applyAllMappings(sourceDf,
-                                               models,
-                                               getMappingFn = _.inputMapping,
-                                               getPrefixFn = model => s"${model.metaData.cleanName}__input")
+                                               modelParts,
+                                               getMappingFn = _.model.inputMapping,
+                                               getPrefixFn = modelPart => s"${modelPart.model.metaData.cleanName}__input")
     logger.info(s"Schema after input mappings:\n${dfWithInputMappings.schema.catalogString}")
 
     val dfWithInferenceResults =
-      batchedModelInference(dfWithInputMappings, models, modelPlatformProvider, timeoutMillis)
+      batchedModelInference(dfWithInputMappings, modelParts, modelPlatformProvider, timeoutMillis, useLongNames)
     logger.info(s"Schema after model inference:\n${dfWithInferenceResults.schema.catalogString}")
 
     val dfWithOutputMappings = applyAllMappings(dfWithInferenceResults,
-                                                models,
-                                                getMappingFn = _.outputMapping,
-                                                getPrefixFn = model => model.metaData.cleanName)
+                                                modelParts,
+                                                getMappingFn = _.model.outputMapping,
+                                                getPrefixFn = _ => "")
     logger.info(s"Schema after output mappings:\n${dfWithOutputMappings.schema.catalogString}")
 
-    // Select only the fields we want to keep: passthrough fields + final model output fields
-    val fieldsToKeep = computeFinalFieldsToKeep(models, passthroughFields)
+    // Apply custom prefixes from ModelPart (only when useLongNames=false)
+    val dfWithPrefixes = if (useLongNames) {
+      dfWithOutputMappings
+    } else {
+      applyCustomPrefixes(dfWithOutputMappings, modelParts)
+    }
+    logger.info(s"Schema after applying prefixes:\n${dfWithPrefixes.schema.catalogString}")
 
-    val finalDf = dfWithOutputMappings.select(fieldsToKeep.map(col): _*)
+    // Select only the fields we want to keep: passthrough fields + final model output fields
+    val fieldsToKeep = computeFinalFieldsToKeep(modelParts, passthroughFields, useLongNames)
+
+    val finalDf = dfWithPrefixes.select(fieldsToKeep.map(col): _*)
     logger.info(s"Final schema after selecting fields:\n${finalDf.schema.catalogString}")
 
     finalDf
@@ -234,46 +253,84 @@ object ModelTransformsJob {
   // Used to apply input or output mappings for all models
   private def applyAllMappings(
       df: DataFrame,
-      models: Seq[api.Model],
-      getMappingFn: api.Model => java.util.Map[String, String],
-      getPrefixFn: api.Model => String
+      modelParts: Seq[api.ModelPart],
+      getMappingFn: api.ModelPart => java.util.Map[String, String],
+      getPrefixFn: api.ModelPart => String
   ): DataFrame = {
-    def applyMapping(df: DataFrame, model: api.Model): DataFrame = {
-      val mapping = Option(getMappingFn(model)).map(_.asScala.toMap).getOrElse(Map.empty)
+    def applyMapping(df: DataFrame, modelPart: api.ModelPart): DataFrame = {
+      val mapping = Option(getMappingFn(modelPart)).map(_.asScala.toMap).getOrElse(Map.empty)
 
       if (mapping.isEmpty) {
         return df
       }
 
-      val fieldPrefix = getPrefixFn(model)
-      // Add new columns with SQL expressions, prefixed appropriately
+      val fieldPrefix = getPrefixFn(modelPart)
+      // Add new columns with SQL expressions, prefixed appropriately (or not, depending on prefix)
       mapping.foldLeft(df) { case (accDf, (outputField, sqlExpr)) =>
-        val prefixedFieldName = s"${fieldPrefix}__$outputField"
+        val prefixedFieldName = if (fieldPrefix.isEmpty) outputField else s"${fieldPrefix}__$outputField"
         accDf.withColumn(prefixedFieldName, expr(sqlExpr))
       }
     }
 
-    models.foldLeft(df) { (accDf, model) =>
-      applyMapping(accDf, model)
+    modelParts.foldLeft(df) { (accDf, modelPart) =>
+      applyMapping(accDf, modelPart)
+    }
+  }
+
+  // Get the field names after output mapping is applied
+  // If model has output mappings, returns the mapped field names
+  // Otherwise, returns the raw model output field names from valueSchema
+  private def getFieldsAfterOutputMapping(model: api.Model): Seq[String] = {
+    if (Option(model.outputMapping).exists(!_.isEmpty)) {
+      model.outputMapping.asScala.keys.toSeq
+    } else {
+      getModelOutputFields(model).map(_.name).toSeq
+    }
+  }
+
+  // Apply custom prefixes from ModelPart to the final output fields
+  private def applyCustomPrefixes(df: DataFrame, modelParts: Seq[api.ModelPart]): DataFrame = {
+    modelParts.foldLeft(df) { (accDf, modelPart) =>
+      val model = modelPart.model
+      val customPrefix = Option(modelPart.prefix).getOrElse("")
+
+      if (customPrefix.isEmpty) {
+        // No prefix needed
+        accDf
+      } else {
+        // Determine which fields to prefix
+        val fieldsToPrefix = getFieldsAfterOutputMapping(model)
+
+        // Rename fields by adding prefix
+        fieldsToPrefix.foldLeft(accDf) { case (tmpDf, fieldName) =>
+          if (tmpDf.columns.contains(fieldName)) {
+            tmpDf.withColumnRenamed(fieldName, s"${customPrefix}__$fieldName")
+          } else {
+            tmpDf
+          }
+        }
+      }
     }
   }
 
   // Kick off model inference for all the models.
   // We process the Dataframe in batches and for each batch make a bulk call to each of the models
-  // This is stitched together to produce the final Dataframe with inference results
+  // When useLongNames=true, inference results are prefixed with model name
+  // When useLongNames=false, inference results remain unprefixed
   private def batchedModelInference(
       dfWithInputMappings: DataFrame,
-      models: Seq[api.Model],
+      modelParts: Seq[api.ModelPart],
       modelPlatformProvider: ModelPlatformProvider,
-      timeoutMillis: Long
+      timeoutMillis: Long,
+      useLongNames: Boolean
   ): DataFrame = {
     val schema = dfWithInputMappings.schema
 
     // Pre-compute model metadata
-    val modelMetadataSeq = buildModelMetadata(schema, models, modelPlatformProvider)
+    val modelMetadataSeq = buildModelMetadata(schema, modelParts, modelPlatformProvider)
 
-    // Determine output schema (original schema + inference result fields)
-    val outputSchema = determineInferenceOutputSchema(schema, models)
+    // Determine output schema (prefixed or unprefixed based on useLongNames)
+    val outputSchema = determineInferenceOutputSchema(schema, modelParts, useLongNames)
 
     // Process in batches via mapPartitions
     dfWithInputMappings.mapPartitions { rows =>
@@ -281,7 +338,8 @@ object ModelTransformsJob {
         processBatch(
           batch,
           modelMetadataSeq,
-          timeoutMillis
+          timeoutMillis,
+          useLongNames
         )
       }
     }(Encoders.row(outputSchema))
@@ -289,9 +347,10 @@ object ModelTransformsJob {
 
   // Build metadata for all models once to avoid redundant computation per batch
   private def buildModelMetadata(schema: StructType,
-                                 models: Seq[api.Model],
+                                 modelParts: Seq[api.ModelPart],
                                  modelPlatformProvider: ModelPlatformProvider): Seq[ModelMetadata] = {
-    models.map { model =>
+    modelParts.map { modelPart =>
+      val model = modelPart.model
       val modelName = model.metaData.cleanName
       val inputPrefix = s"${modelName}__input"
       val inputFieldIndices = extractInputFieldIndices(schema, inputPrefix)
@@ -325,7 +384,8 @@ object ModelTransformsJob {
   private def processBatch(
       batch: Seq[Row],
       modelMetadataSeq: Seq[ModelMetadata],
-      timeoutMillis: Long
+      timeoutMillis: Long,
+      useLongNames: Boolean
   ): Seq[Row] = {
     // For each model, extract inputs, call inference, and collect results
     val modelResults = modelMetadataSeq.map { metadata =>
@@ -348,16 +408,18 @@ object ModelTransformsJob {
 
       val inferenceResults = callModelInference(metadata.model, modelInputs, metadata.modelPlatform, timeoutMillis)
 
-      (inferenceResults, metadata.expectedOutputFields)
+      (inferenceResults, metadata.expectedOutputFields, metadata.modelName)
     }
 
     // Combine original rows with model results
     batch.zipWithIndex.map { case (row, idx) =>
       val originalValues = row.toSeq
-      val inferenceValues = modelResults.zip(modelMetadataSeq).flatMap {
-        case ((results: Seq[Map[String, AnyRef]], expectedFields: Seq[String]), metadata) =>
+      val inferenceValues = modelResults.flatMap {
+        case (results: Seq[Map[String, AnyRef]], expectedFields: Seq[String], modelName: String) =>
           val resultMap = results.lift(idx).getOrElse(Map.empty)
+
           // Extract values in the order of expectedFields, converting to Spark types using SparkConversions
+          val metadata = modelMetadataSeq.find(_.modelName == modelName).get
           expectedFields.map { fieldName =>
             val value = resultMap.getOrElse(fieldName, null)
             // Convert value to Spark type if we have a value schema
@@ -422,12 +484,28 @@ object ModelTransformsJob {
   }
 
   // Determine the post-model inference schema based on the valueSchema defined on the model
-  // object. We prefix these fields with '<modelName>__<field_name>' directly.
-  private def determineInferenceOutputSchema(inputSchema: StructType, models: Seq[api.Model]): StructType = {
-    val inferenceFields = models.flatMap { model =>
-      val modelName = model.metaData.cleanName
-      getModelOutputFields(model).map { field =>
-        StructField(s"${modelName}__${field.name}", field.dataType, field.nullable)
+  // When useLongNames=true, returns model output fields prefixed with model name
+  // Else, returns model output fields as-is
+  private def determineInferenceOutputSchema(
+      inputSchema: StructType,
+      modelParts: Seq[api.ModelPart],
+      useLongNames: Boolean
+  ): StructType = {
+    val inferenceFields = modelParts.flatMap { modelPart =>
+      val model = modelPart.model
+      val fields = getModelOutputFields(model)
+
+      if (useLongNames) {
+        // Prefix with model name
+        val modelName = model.metaData.cleanName
+        fields.map { field =>
+          StructField(s"${modelName}__${field.name}", field.dataType, field.nullable)
+        }
+      } else {
+        // Keep unprefixed
+        fields.map { field =>
+          StructField(field.name, field.dataType, field.nullable)
+        }
       }
     }
 
@@ -438,8 +516,9 @@ object ModelTransformsJob {
     require(modelTransformsConf != null, "ModelTransforms configuration cannot be null")
 
     // require the models listed in the ModelTransforms to have valueSchema defined
-    val models = Option(modelTransformsConf.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
-    models.zipWithIndex.foreach { case (model, idx) =>
+    val modelParts = Option(modelTransformsConf.modelParts).map(_.asScala.toSeq).getOrElse(Seq.empty)
+    modelParts.zipWithIndex.foreach { case (modelPart, idx) =>
+      val model = modelPart.model
       require(model.valueSchema != null,
               s"Model at index $idx must have valueSchema defined for ModelTransforms backfill")
       require(model.metaData != null, s"Model at index $idx must have metaData defined for ModelTransforms backfill")
@@ -452,16 +531,29 @@ object ModelTransformsJob {
   }
 
   // Compute the final list of fields to keep in the output: passthrough fields + model output fields
-  private def computeFinalFieldsToKeep(models: Seq[api.Model], passthroughFields: Set[String]): Seq[String] = {
-    val modelOutputFields = models.flatMap { model =>
+  private def computeFinalFieldsToKeep(
+      modelParts: Seq[api.ModelPart],
+      passthroughFields: Set[String],
+      useLongNames: Boolean
+  ): Seq[String] = {
+    val modelOutputFields = modelParts.flatMap { modelPart =>
+      val model = modelPart.model
       val modelName = model.metaData.cleanName
+      val customPrefix = Option(modelPart.prefix).getOrElse("")
 
-      // If output mappings exist, keep only those fields
-      // Otherwise, keep all raw model output fields
-      if (Option(model.outputMapping).exists(!_.isEmpty)) {
-        model.outputMapping.asScala.keys.map(k => s"${modelName}__$k")
+      // Get field names after output mapping
+      val fieldsAfterMapping = getFieldsAfterOutputMapping(model)
+
+      if (useLongNames) {
+        // When useLongNames=true, fields are prefixed with model name
+        fieldsAfterMapping.map(k => s"${modelName}__$k")
       } else {
-        getModelOutputFields(model).map(f => s"${modelName}__${f.name}")
+        // When useLongNames=false, apply custom prefix if it exists
+        if (customPrefix.nonEmpty) {
+          fieldsAfterMapping.map(k => s"${customPrefix}__$k")
+        } else {
+          fieldsAfterMapping
+        }
       }
     }
 
