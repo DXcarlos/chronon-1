@@ -102,7 +102,7 @@ label_source_v2 = EventSource(table=ctr_labels.v2_predemo1.table, query = Query(
 
 
 
-ctr_model_v2predemo = Model(
+ctr_model_v2predemox = Model(
     version="1.0",
     inference_spec=InferenceSpec(
         model_backend=ModelBackend.VERTEXAI,
@@ -116,7 +116,7 @@ ctr_model_v2predemo = Model(
         "'price_log', price_log, 'price_bucket', price_bucket)",
     },
     output_mapping={
-        "ctr": "gcp_click_through_rate_ctr_model__1_0__score"
+        "ctr": "gcp_click_through_rate_ctr_model_v2predemox__1_0__score"
     },
     # captures the schema of the model output
     value_fields=[

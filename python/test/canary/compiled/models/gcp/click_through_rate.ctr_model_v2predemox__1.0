@@ -91,7 +91,7 @@
         }
       }
     },
-    "name": "gcp.click_through_rate.ctr_model_v2predemo__1.0",
+    "name": "gcp.click_through_rate.ctr_model_v2predemox__1.0",
     "outputNamespace": "data",
     "sourceFile": "models/gcp/click_through_rate.py",
     "team": "gcp",
@@ -99,7 +99,7 @@
   },
   "modelArtifactBaseUri": "gs://zipline-warehouse-models",
   "outputMapping": {
-    "ctr": "gcp_click_through_rate_ctr_model__1_0__score"
+    "ctr": "gcp_click_through_rate_ctr_model_v2predemox__1_0__score"
   },
   "trainingConf": {
     "image": "us-docker.pkg.dev/vertex-ai/training/xgboost-cpu.2-1:latest",

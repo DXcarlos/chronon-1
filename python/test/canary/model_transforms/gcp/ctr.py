@@ -9,7 +9,7 @@ from ai.chronon.data_types import DataType
 
 source = JoinSource(join=demo.ctr_features_v1)
 
-# [{"user_id": "user_1"}]
+# [{"user_id": "user_1", "listing_id": 1}]
 v1 = ModelTransforms(
     sources=[source], # noticed that this source is used in both ModelTransform and Models
     models=[click_through_rate.ctr_model],
@@ -28,9 +28,9 @@ v1 = ModelTransforms(
 
 source2 = JoinSource(join=demo.ctr_features_v2_predemo1)
 
-v2 = ModelTransforms(
+v2x = ModelTransforms(
     sources=[source2], # noticed that this source is used in both ModelTransform and Models
-    models=[click_through_rate.ctr_model_v2predemo],
+    models=[click_through_rate.ctr_model_v2predemox],
     # include relevant pass through fields from the source / join lookup
     passthrough_fields=["user_id", "listing_id", "user_id_click_event_average_7d", "listing_id_price_cents", "price_log", "price_bucket"],
     version=1,
