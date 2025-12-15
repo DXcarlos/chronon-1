@@ -314,6 +314,7 @@ def ModelTransforms(
     sources: List[ANY_SOURCE_TYPE],
     model_parts: List[ModelPart],
     version: int,
+    use_long_names: bool = False,
     passthrough_fields: Optional[List[str]] = None,
     key_fields: Optional[FieldsType] = None,
     output_namespace: Optional[str] = None,
@@ -331,6 +332,8 @@ def ModelTransforms(
      - sources: List of existing sources (Event/Entity/Join sources) to be enriched with model outputs
      - model_parts: List of ModelPart objects (model + prefix) for custom prefixing of model outputs
      - version: Version number for the ModelTransforms configuration
+     - use_long_names: When True, model outputs are prefixed with model name during inference.
+        When False (default), model outputs remain unprefixed and ModelPart.prefix is used.
      - passthrough_fields: Fields from the source that we want to passthrough alongside the model outputs
      - key_fields: List of tuples of (field_name, DataType) defining the schema of the key fields.
         If provided, creates a STRUCT schema that will be set as the ModelTransforms' keySchema.
@@ -374,6 +377,7 @@ def ModelTransforms(
         passthroughFields=passthrough_fields,
         metaData=meta_data,
         keySchema=key_schema,
+        useLongNames=use_long_names,
     )
 
     # Add the table property for output table name generation

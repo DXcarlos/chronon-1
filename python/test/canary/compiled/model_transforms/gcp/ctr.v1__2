@@ -134,7 +134,7 @@
         },
         "modelArtifactBaseUri": "gs://zipline-warehouse-models",
         "outputMapping": {
-          "ctr": "gcp_click_through_rate_ctr_model__1_0__score"
+          "ctr": "score"
         },
         "trainingConf": {
           "image": "us-docker.pkg.dev/vertex-ai/training/xgboost-cpu.2-1:latest",
@@ -675,5 +675,6 @@
         }
       }
     }
-  ]
+  ],
+  "useLongNames": 0
 }

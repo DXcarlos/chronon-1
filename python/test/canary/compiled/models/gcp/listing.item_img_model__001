@@ -81,7 +81,7 @@
     "version": "001"
   },
   "outputMapping": {
-    "image_embedding": "gcp_listing_item_img_model__001__imageEmbedding"
+    "image_embedding": "imageEmbedding"
   },
   "valueSchema": {
     "kind": 13,

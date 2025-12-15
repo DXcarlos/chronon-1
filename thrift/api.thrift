@@ -606,6 +606,10 @@ struct ModelTransforms {
     // Schema of the keys fields in the source that are fed into the models
     // If the source is a JoinSource, this can be skipped as we look it up from the join metadata
     5: optional TDataType keySchema
+
+    // When true, model outputs are prefixed with model name during inference
+    // When false, model outputs are prefixed with ModelPart.prefix if present
+    7: optional bool useLongNames = false
 }
 
 struct TrainingSpec {

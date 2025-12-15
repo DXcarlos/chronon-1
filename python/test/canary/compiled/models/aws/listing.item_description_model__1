@@ -63,7 +63,7 @@
     "version": "1"
   },
   "outputMapping": {
-    "item_embedding": "aws_listing_item_description_model__1__embeddings.values"
+    "item_embedding": "embeddings.values"
   },
   "valueSchema": {
     "kind": 13,
