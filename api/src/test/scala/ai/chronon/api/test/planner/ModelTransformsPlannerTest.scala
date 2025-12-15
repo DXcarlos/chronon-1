@@ -27,7 +27,7 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
         namespace = "test_namespace"
       ),
       sources = Seq(source),
-      models = Seq(testModel)
+      modelParts = Seq(B.ModelPart(testModel, s"${name}_model"))
     )
   }
 
@@ -273,7 +273,7 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
         namespace = "test_namespace"
       ),
       sources = Seq(source1, source2),
-      models = Seq(testModel)
+      modelParts = Seq(B.ModelPart(testModel, "test_model"))
     )
 
     val planner = new ModelTransformsPlanner(modelTransforms)
@@ -327,7 +327,10 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
         namespace = "test_namespace"
       ),
       sources = Seq(source),
-      models = Seq(modelWithTraining, modelWithoutTraining)
+      modelParts = Seq(
+        B.ModelPart(modelWithTraining, "model_with_training"),
+        B.ModelPart(modelWithoutTraining, "model_without_training")
+      )
     )
 
     val planner = new ModelTransformsPlanner(modelTransforms)

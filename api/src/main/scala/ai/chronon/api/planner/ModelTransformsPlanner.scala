@@ -41,10 +41,11 @@ class ModelTransformsPlanner(modelTransforms: ModelTransforms)(implicit outputPa
         }
 
     // add model dependencies - we depend on the deployed model endpoint for models that are custom and trained by us
-    val modelDeps = Option(modelTransforms.models)
+    val modelDeps = Option(modelTransforms.modelParts)
       .map(_.toScala.toSeq)
       .getOrElse(Seq.empty)
-      .flatMap { model =>
+      .flatMap { modelPart =>
+        val model = modelPart.model
         if (model.isSetTrainingConf) {
           val deployNodeName = model.metaData.outputTable + "__model_deploy"
           val deployNodeTableDep = new TableDependency()
