@@ -383,6 +383,11 @@ struct ExternalPart {
     3: optional string prefix
 }
 
+struct ModelPart {
+    1: optional Model model
+    2: optional string prefix
+}
+
 struct Derivation {
     1: optional string name
     2: optional string expression
@@ -589,7 +594,10 @@ struct ResourceConfig {
 **/
 struct ModelTransforms {
     1: optional list<Source> sources
+    // todo - drop the models field in favor of modelParts
     2: optional list<Model> models
+    // List of model parts with custom prefixes
+    6: optional list<ModelPart> modelParts
 
     // fields from the source that we want to passthrough alongside the model outputs
     3: optional list<string> passthroughFields

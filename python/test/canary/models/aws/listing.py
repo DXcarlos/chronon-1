@@ -27,7 +27,7 @@ item_description_model = Model(
         "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))",
     },
     output_mapping={
-        "item_embedding": "aws_listing_item_description_model__1__embeddings.values"
+        "item_embedding": "embeddings.values"
     },
     # captures the schema of the model output
     value_fields=[
@@ -50,7 +50,7 @@ item_img_model = Model(
         "instance": "named_struct('image', named_struct('s3Uri', listing_id_main_image_path), 'text','')",
     },
     output_mapping={
-         "image_embedding": "aws_listing_item_img_model__001__imageEmbedding"
+         "image_embedding": "imageEmbedding"
     },
     # captures the schema of the model output
     value_fields=[

@@ -187,6 +187,18 @@ class DeploymentSpec:
         )
 
 
+@dataclass
+class ModelPart:
+    model: ttypes.Model
+    prefix: Optional[str] = None
+
+    def to_thrift(self):
+        return ttypes.ModelPart(
+            model=self.model,
+            prefix=self.prefix,
+        )
+
+
 def Model(
     version: str,
     inference_spec: Optional[InferenceSpec] = None,
@@ -300,7 +312,7 @@ def _get_model_transforms_output_table_name(model_transforms: ttypes.ModelTransf
 
 def ModelTransforms(
     sources: List[ANY_SOURCE_TYPE],
-    models: List[ttypes.Model],
+    model_parts: List[ModelPart],
     version: int,
     passthrough_fields: Optional[List[str]] = None,
     key_fields: Optional[FieldsType] = None,
@@ -317,9 +329,10 @@ def ModelTransforms(
 
     Attributes:
      - sources: List of existing sources (Event/Entity/Join sources) to be enriched with model outputs
-     - models: List of Model objects that will be used for inference on the source data
+     - model_parts: List of ModelPart objects (model + prefix) for custom prefixing of model outputs
+     - version: Version number for the ModelTransforms configuration
      - passthrough_fields: Fields from the source that we want to passthrough alongside the model outputs
-    - key_fields: List of tuples of (field_name, DataType) defining the schema of the key fields.
+     - key_fields: List of tuples of (field_name, DataType) defining the schema of the key fields.
         If provided, creates a STRUCT schema that will be set as the ModelTransforms' keySchema.
         Example: [('user_id', DataType.STRING), ('session_id', DataType.STRING)]
      - output_namespace: Namespace for the model output
@@ -329,11 +342,13 @@ def ModelTransforms(
     # Get caller's filename to assign team
     team = inspect.stack()[1].filename.split("/")[-2]
 
-    # Set names for Model objects if they don't have names yet
-    if models:
-        for model in models:
-            if not model.metaData.name:
-                utils.__set_name(model, ttypes.Model, "models")
+    # Convert model_parts to thrift and set names for models if needed
+    model_parts_thrift = []
+    for model_part in model_parts:
+        # Set name for the model if it doesn't have one
+        if not model_part.model.metaData.name:
+            utils.__set_name(model_part.model, ttypes.Model, "models")
+        model_parts_thrift.append(model_part.to_thrift())
 
     # Normalize all sources to ensure they are properly wrapped
     normalized_sources = [normalize_source(source) for source in sources]
@@ -355,7 +370,7 @@ def ModelTransforms(
 
     model_transforms = ttypes.ModelTransforms(
         sources=normalized_sources,
-        models=models,
+        modelParts=model_parts_thrift,
         passthroughFields=passthrough_fields,
         metaData=meta_data,
         keySchema=key_schema,

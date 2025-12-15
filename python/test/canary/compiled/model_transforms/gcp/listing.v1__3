@@ -5,35 +5,25 @@
     "params": [
       {
         "dataType": {
-          "kind": 6
+          "kind": 7
         },
-        "name": "user_id_click_event_average_7d"
+        "name": "listing_id_headline"
       },
       {
         "dataType": {
-          "kind": 4
+          "kind": 7
         },
-        "name": "listing_id_price_cents"
-      },
-      {
-        "dataType": {
-          "kind": 6
-        },
-        "name": "price_log"
-      },
-      {
-        "dataType": {
-          "kind": 3
-        },
-        "name": "price_bucket"
+        "name": "listing_id_long_description"
       }
     ]
   },
   "metaData": {
     "executionInfo": {
       "clusterConf": {
-        "common": {
-          "emr.config": "{\"releaseLabel\": \"emr-7.12.0\", \"instanceType\": \"m5.xlarge\", \"instanceCount\": 3, \"autoTerminationPolicy\": {\"idleTimeout\": 300}, \"subnetName\": \"zipline-canary-subnet-main\", \"securityGroupName\": \"zipline-canary-sg\"}"
+        "modeClusterConfigs": {
+          "upload": {
+            "dataproc.config": "{\"gceClusterConfig\": {\"subnetworkUri\": \"default\", \"serviceAccount\": \"dataproc@canary-443022.iam.gserviceaccount.com\", \"serviceAccountScopes\": [\"https://www.googleapis.com/auth/cloud-platform\", \"https://www.googleapis.com/auth/monitoring\", \"https://www.googleapis.com/auth/cloud.useraccounts.readonly\", \"https://www.googleapis.com/auth/devstorage.read_write\", \"https://www.googleapis.com/auth/logging.write\"], \"metadata\": {\"hive-version\": \"3.1.2\", \"SPARK_BQ_CONNECTOR_URL\": \"gs://spark-lib/bigquery/spark-3.5-bigquery-0.42.1.jar\", \"artifact_prefix\": \"gs://zipline-artifacts-canary\"}, \"tags\": []}, \"masterConfig\": {\"numInstances\": 1, \"machineTypeUri\": \"n2-highmem-8\", \"diskConfig\": {\"bootDiskType\": \"pd-standard\", \"bootDiskSizeGb\": 1024}}, \"workerConfig\": {\"numInstances\": 2, \"machineTypeUri\": \"n2-highmem-4\", \"diskConfig\": {\"bootDiskType\": \"pd-standard\", \"bootDiskSizeGb\": 64, \"numLocalSsds\": 2}}, \"softwareConfig\": {\"imageVersion\": \"2.2.66-debian12\", \"optionalComponents\": [\"FLINK\", \"JUPYTER\"], \"properties\": {\"dataproc:dataproc.logging.stackdriver.enable\": \"true\", \"dataproc:jobs.file-backed-output.enable\": \"true\", \"dataproc:dataproc.logging.stackdriver.job.driver.enable\": \"true\", \"dataproc:dataproc.logging.stackdriver.job.yarn.container.enable\": \"true\"}}, \"initializationActions\": [{\"executable_file\": \"gs://zipline-artifacts-canary/scripts/copy_java_security.sh\"}], \"endpointConfig\": {\"enableHttpPortAccess\": true}, \"lifecycleConfig\": {\"idleDeleteTtl\": \"300s\"}}"
+          }
         }
       },
       "conf": {
@@ -41,33 +31,47 @@
           "spark.chronon.coalesce.factor": "10",
           "spark.chronon.partition.column": "ds",
           "spark.chronon.partition.format": "yyyy-MM-dd",
+          "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
+          "spark.chronon.table.gcs.connector_output_dataset": "data",
+          "spark.chronon.table.gcs.connector_output_project": "canary-443022",
+          "spark.chronon.table.gcs.temporary_gcs_bucket": "zipline-warehouse-canary",
           "spark.chronon.table_write.format": "iceberg",
-          "spark.chronon.table_write.prefix": "s3://zipline-warehouse-dev/data/tables/",
+          "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
           "spark.default.parallelism": "10",
           "spark.driver.cores": "1",
           "spark.driver.memory": "1g",
           "spark.executor.cores": "1",
           "spark.executor.memory": "1g",
-          "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
-          "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
-          "spark.sql.catalog.default_iceberg.warehouse": "s3://zipline-warehouse-dev/data/tables/",
-          "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
-          "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
-          "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-dev/data/tables/",
+          "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
+          "spark.sql.catalog.default_iceberg": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+          "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+          "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
+          "spark.sql.catalog.default_iceberg.gcp.bigquery.project-id": "canary-443022",
+          "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+          "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+          "spark.sql.catalog.spark_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+          "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+          "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
+          "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
+          "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+          "spark.sql.catalog.spark_catalog.warehouse": "gs://zipline-warehouse-canary/data/tables/",
           "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
           "spark.sql.shuffle.partitions": "10"
         }
       },
       "env": {
         "common": {
-          "ARTIFACT_PREFIX": "s3://zipline-artifacts-dev",
-          "AWS_REGION": "us-west-2",
+          "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
           "CHRONON_ONLINE_ARGS": " -Ztasks=4",
-          "CLOUD_PROVIDER": "aws",
+          "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "dev",
-          "EMR_CLUSTER_NAME": "zipline-canary-emr",
-          "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
+          "ENABLE_PUBSUB": "true",
+          "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
           "FRONTEND_URL": "http://localhost:3000",
+          "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
           "HUB_URL": "http://localhost:3903",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
@@ -76,226 +80,97 @@
         }
       }
     },
-    "name": "aws.ctr.v1__1",
+    "name": "gcp.listing.v1__3",
     "outputNamespace": "data",
-    "sourceFile": "model_transforms/aws/ctr.py",
-    "team": "aws",
-    "version": "1"
+    "sourceFile": "model_transforms/gcp/listing.py",
+    "team": "gcp",
+    "version": "3"
   },
-  "models": [
+  "modelParts": [
     {
-      "deploymentConf": {
-        "containerConfig": {
-          "image": "763104351884.dkr.ecr.us-east-1.amazonaws.com/xgboost-inference:latest"
-        },
-        "endpointConfig": {
-          "endpointName": "test_ctr_model"
-        },
-        "resourceConfig": {
-          "machineType": "ml.m5.xlarge",
-          "maxReplicaCount": 10,
-          "minReplicaCount": 3
-        },
-        "rolloutStrategy": {
-          "rolloutType": 2
-        }
-      },
-      "inferenceSpec": {
-        "modelBackend": 1,
-        "modelBackendParams": {
-          "model_name": "test_ctr_model",
-          "model_type": "custom"
-        }
-      },
-      "inputMapping": {
-        "instance": "named_struct('user_id_click_event_average_7d', user_id_click_event_average_7d, 'listing_price_cents', listing_id_price_cents, 'price_log', price_log, 'price_bucket', price_bucket)"
-      },
-      "metaData": {
-        "executionInfo": {
-          "clusterConf": {
-            "common": {
-              "emr.config": "{\"releaseLabel\": \"emr-7.12.0\", \"instanceType\": \"m5.xlarge\", \"instanceCount\": 3, \"autoTerminationPolicy\": {\"idleTimeout\": 300}, \"subnetName\": \"zipline-canary-subnet-main\", \"securityGroupName\": \"zipline-canary-sg\"}"
-            }
-          },
-          "conf": {
-            "common": {
-              "spark.chronon.coalesce.factor": "10",
-              "spark.chronon.partition.column": "ds",
-              "spark.chronon.partition.format": "yyyy-MM-dd",
-              "spark.chronon.table_write.format": "iceberg",
-              "spark.chronon.table_write.prefix": "s3://zipline-warehouse-dev/data/tables/",
-              "spark.default.parallelism": "10",
-              "spark.driver.cores": "1",
-              "spark.driver.memory": "1g",
-              "spark.executor.cores": "1",
-              "spark.executor.memory": "1g",
-              "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
-              "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
-              "spark.sql.catalog.default_iceberg.warehouse": "s3://zipline-warehouse-dev/data/tables/",
-              "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
-              "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
-              "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-dev/data/tables/",
-              "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
-              "spark.sql.shuffle.partitions": "10"
-            }
-          },
-          "env": {
-            "common": {
-              "ARTIFACT_PREFIX": "s3://zipline-artifacts-dev",
-              "AWS_REGION": "us-west-2",
-              "CHRONON_ONLINE_ARGS": " -Ztasks=4",
-              "CLOUD_PROVIDER": "aws",
-              "CUSTOMER_ID": "dev",
-              "EMR_CLUSTER_NAME": "zipline-canary-emr",
-              "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
-              "FRONTEND_URL": "http://localhost:3000",
-              "HUB_URL": "http://localhost:3903",
-              "JOB_MODE": "local[*]",
-              "PARTITION_COLUMN": "ds",
-              "PARTITION_FORMAT": "yyyy-MM-dd",
-              "VERSION": "latest"
-            }
+      "model": {
+        "inferenceSpec": {
+          "modelBackend": 0,
+          "modelBackendParams": {
+            "model_name": "gemini-embedding-001",
+            "model_type": "publisher"
           }
         },
-        "name": "aws.click_through_rate.ctr_model__1.0",
-        "outputNamespace": "data",
-        "team": "aws",
-        "version": "1.0"
-      },
-      "modelArtifactBaseUri": "s3://zipline-warehouse-models",
-      "outputMapping": {
-        "ctr": "score"
-      },
-      "trainingConf": {
-        "image": "763104351884.dkr.ecr.us-east-1.amazonaws.com/xgboost-training:latest",
-        "jobConfigs": {
-          "eta": "0.1",
-          "max-depth": "4",
-          "n-samples": "1000",
-          "num-boost-round": "50"
+        "inputMapping": {
+          "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))"
         },
-        "pythonModule": "trainer.train",
-        "resourceConfig": {
-          "machineType": "ml.m5.xlarge",
-          "maxReplicaCount": 1,
-          "minReplicaCount": 1
+        "metaData": {
+          "name": "gcp.listing.item_description_model__1",
+          "team": "gcp",
+          "version": "1"
         },
-        "schedule": "@daily",
-        "trainingDataSource": {
-          "events": {
-            "query": {
-              "selects": {
-                "ds": "ds",
-                "label": "label",
-                "listing_price_cents": "listing_id_price_cents",
-                "price_bucket": "price_bucket",
-                "price_log": "price_log",
-                "user_id_click_event_average_7d": "user_id_click_event_average_7d"
+        "outputMapping": {
+          "item_embedding": "gcp_listing_item_description_model__1__embeddings.values"
+        },
+        "valueSchema": {
+          "kind": 13,
+          "name": "model_value_schema",
+          "params": [
+            {
+              "dataType": {
+                "kind": 13,
+                "name": "embeddings",
+                "params": [
+                  {
+                    "dataType": {
+                      "kind": 13,
+                      "name": "statistics",
+                      "params": [
+                        {
+                          "dataType": {
+                            "kind": 0
+                          },
+                          "name": "truncated"
+                        },
+                        {
+                          "dataType": {
+                            "kind": 3
+                          },
+                          "name": "token_count"
+                        }
+                      ]
+                    },
+                    "name": "statistics"
+                  },
+                  {
+                    "dataType": {
+                      "kind": 12,
+                      "params": [
+                        {
+                          "dataType": {
+                            "kind": 6
+                          },
+                          "name": "elem"
+                        }
+                      ]
+                    },
+                    "name": "values"
+                  }
+                ]
               },
-              "startPartition": "2025-07-01"
-            },
-            "table": "data.aws_ctr_labels_v1__0"
-          }
-        },
-        "trainingDataWindow": {
-          "length": 1,
-          "timeUnit": 1
+              "name": "embeddings"
+            }
+          ]
         }
       },
-      "valueSchema": {
-        "kind": 13,
-        "name": "model_value_schema",
-        "params": [
-          {
-            "dataType": {
-              "kind": 6
-            },
-            "name": "score"
-          }
-        ]
-      }
+      "prefix": "listing"
     }
   ],
   "passthroughFields": [
     "user_id",
     "listing_id",
-    "user_id_click_event_average_7d",
-    "listing_id_price_cents",
-    "price_log",
-    "price_bucket"
+    "listing_id_is_active"
   ],
   "sources": [
     {
       "joinSource": {
         "join": {
-          "derivations": [
-            {
-              "expression": "IF(listing_id_weight_grams > 1000, 1, 0)",
-              "name": "is_listing_heavy"
-            },
-            {
-              "expression": "array_contains(split(listing_id_tags, ','), 'handmade')",
-              "name": "is_item_handmade"
-            },
-            {
-              "expression": "log1p(listing_id_price_cents)",
-              "name": "price_log"
-            },
-            {
-              "expression": "\n                CASE\n                    WHEN listing_id_price_cents < 1000 THEN 0\n                    WHEN listing_id_price_cents < 5000 THEN 1\n                    WHEN listing_id_price_cents < 10000 THEN 2\n                    WHEN listing_id_price_cents < 50000 THEN 3\n                    ELSE 4\n                END\n            ",
-              "name": "price_bucket"
-            },
-            {
-              "expression": "*",
-              "name": "*"
-            }
-          ],
           "joinParts": [
-            {
-              "groupBy": {
-                "keyColumns": [
-                  "listing_id"
-                ],
-                "metaData": {
-                  "executionInfo": {
-                    "historicalBackfill": 0,
-                    "scheduleCron": "@daily"
-                  },
-                  "name": "aws.dim_listings.v1__0",
-                  "online": 1,
-                  "team": "aws",
-                  "version": "0"
-                },
-                "sources": [
-                  {
-                    "entities": {
-                      "query": {
-                        "selects": {
-                          "brief_description": "brief_description",
-                          "currency": "currency",
-                          "headline": "headline",
-                          "inventory_count": "inventory_count",
-                          "is_active": "is_active",
-                          "is_expensive": "IF(price_cents > 10000, 1, 0)",
-                          "is_in_stock": "IF(inventory_count > 0, 1, 0)",
-                          "listing_id": "listing_id",
-                          "long_description": "long_description",
-                          "main_image_path": "main_image_path",
-                          "merchant_id": "merchant_id",
-                          "price_cents": "price_cents",
-                          "primary_category": "primary_category",
-                          "secondary_image_paths": "secondary_image_paths",
-                          "tags": "tags",
-                          "weight_grams": "weight_grams"
-                        },
-                        "startPartition": "2025-01-01"
-                      },
-                      "snapshotTable": "data.aws_exports_dim_listings__0"
-                    }
-                  }
-                ]
-              }
-            },
             {
               "groupBy": {
                 "aggregations": [
@@ -638,9 +513,9 @@
                     "scheduleCron": "@daily",
                     "stepDays": 4
                   },
-                  "name": "aws.user_activities.v1__1",
+                  "name": "gcp.user_activities.v1__1",
                   "online": 1,
-                  "team": "aws",
+                  "team": "gcp",
                   "version": "1"
                 },
                 "sources": [
@@ -662,12 +537,89 @@
                         },
                         "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
                       },
-                      "table": "data.aws_exports_user_activities__0",
-                      "topic": "kafka://user-activities-v2/serde=custom/provider_class=ai.chronon.flink.deser.MockCustomSchemaProvider/schema_name=user-activities"
+                      "table": "data.gcp_exports_user_activities__0",
+                      "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
                     }
                   }
                 ]
               }
+            },
+            {
+              "groupBy": {
+                "keyColumns": [
+                  "listing_id"
+                ],
+                "metaData": {
+                  "executionInfo": {
+                    "historicalBackfill": 0,
+                    "scheduleCron": "@daily"
+                  },
+                  "name": "gcp.dim_listings.v1__0",
+                  "online": 1,
+                  "team": "gcp",
+                  "version": "0"
+                },
+                "sources": [
+                  {
+                    "entities": {
+                      "query": {
+                        "selects": {
+                          "brief_description": "brief_description",
+                          "currency": "currency",
+                          "headline": "headline",
+                          "inventory_count": "inventory_count",
+                          "is_active": "is_active",
+                          "is_expensive": "IF(price_cents > 10000, 1, 0)",
+                          "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+                          "listing_id": "listing_id",
+                          "long_description": "long_description",
+                          "main_image_path": "main_image_path",
+                          "merchant_id": "merchant_id",
+                          "price_cents": "price_cents",
+                          "primary_category": "primary_category",
+                          "secondary_image_paths": "secondary_image_paths",
+                          "tags": "tags",
+                          "weight_grams": "weight_grams"
+                        },
+                        "startPartition": "2025-01-01"
+                      },
+                      "snapshotTable": "data.gcp_exports_dim_listings__0"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "groupBy": {
+                "keyColumns": [
+                  "listing_id"
+                ],
+                "metaData": {
+                  "executionInfo": {
+                    "historicalBackfill": 0,
+                    "scheduleCron": "@daily"
+                  },
+                  "name": "gcp.dim_merchants.v1__0",
+                  "online": 1,
+                  "team": "gcp",
+                  "version": "0"
+                },
+                "sources": [
+                  {
+                    "entities": {
+                      "query": {
+                        "selects": {
+                          "listing_id": "merchant_id",
+                          "primary_category": "primary_category"
+                        },
+                        "startPartition": "2025-01-01"
+                      },
+                      "snapshotTable": "data.gcp_exports_dim_merchants__0"
+                    }
+                  }
+                ]
+              },
+              "prefix": "merchant_"
             }
           ],
           "left": {
@@ -681,26 +633,32 @@
                 },
                 "timeColumn": "event_time_ms"
               },
-              "table": "data.aws_exports_user_activities__0"
+              "table": "data.gcp_exports_user_activities__0"
             }
           },
           "metaData": {
             "executionInfo": {
+              "enableStatsCompute": 1,
               "scheduleCron": "@daily",
               "stepDays": 2
             },
-            "name": "aws.demo.derivations_v1__2",
+            "name": "gcp.demo.v1__1",
             "online": 1,
             "outputNamespace": "data",
             "production": 0,
             "samplePercent": 100.0,
-            "team": "aws",
-            "version": "2"
+            "team": "gcp",
+            "version": "1"
           },
           "rowIds": [
             "event_id"
           ],
           "useLongNames": 0
+        },
+        "query": {
+          "wheres": [
+            "(listing_id_headline IS NOT NULL AND listing_id_headline != '') OR (listing_id_long_description IS NOT NULL AND listing_id_long_description != '')"
+          ]
         }
       }
     }

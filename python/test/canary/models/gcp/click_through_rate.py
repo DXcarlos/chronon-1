@@ -38,7 +38,7 @@ ctr_model = Model(
         "'price_log', price_log, 'price_bucket', price_bucket)",
     },
     output_mapping={
-        "ctr": "gcp_click_through_rate_ctr_model__1_0__score"
+        "ctr": "score"
     },
     # captures the schema of the model output
     value_fields=[

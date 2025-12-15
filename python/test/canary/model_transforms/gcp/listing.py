@@ -2,7 +2,7 @@ from joins.gcp import demo
 from models.gcp import listing
 
 # Create a listing_model transforms
-from ai.chronon.model import ModelTransforms
+from ai.chronon.model import ModelTransforms, ModelPart
 from ai.chronon.query import Query
 from ai.chronon.source import JoinSource
 
@@ -18,10 +18,12 @@ source = JoinSource(
 
 v1 = ModelTransforms(
     sources=[source],
-    models=[listing.item_description_model],
+    model_parts=[
+        ModelPart(listing.item_description_model, "listing")
+    ],
     # include a couple of pass through fields from the source / join lookup
     passthrough_fields=["user_id", "listing_id", "listing_id_is_active"],
-    version=2,
+    version=3,
     output_namespace="data",
     key_fields=[
         ("listing_id_headline", DataType.STRING),
