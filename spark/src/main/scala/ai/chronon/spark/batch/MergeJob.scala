@@ -136,7 +136,15 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       val tableProps = createTableProperties
 
       joinedDfTry.get.save(outputTable, tableProps, autoExpand = true)
+      createView
     }
+  }
+
+  def createView = {
+    tableUtils.sql(
+      s"""
+        | CREATE OR REPLACE VIEW ${outputTable}_SOME_SUFFIX_test as SELECT * FROM $outputTable
+        |""".stripMargin)
   }
 
   private def createTableProperties: Map[String, String] = {

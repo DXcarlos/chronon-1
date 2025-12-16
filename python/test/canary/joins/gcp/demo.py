@@ -57,6 +57,27 @@ v1 = Join(
     enable_stats_compute=True,
 )
 
+
+vz_view_test_v100 = Join(
+    left=source,
+    row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
+    right_parts=[
+        # User behavioral features (aggregated over time windows)
+        JoinPart(
+            group_by=user_activities.v1,
+        ),
+        JoinPart(
+            group_by=user_activities.v1,
+            prefix="testest"
+        ),
+    ],
+    version=1,
+    online=True,
+    output_namespace="data",
+    step_days=2,
+    enable_stats_compute=True,
+)
+
 # Example join with some derivations
 derivations_v1 = Join(
     left=source,

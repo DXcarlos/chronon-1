@@ -15,7 +15,7 @@ default = Team(
     ),
     env=EnvironmentVariables(
         common={
-            "VERSION": "latest",
+            "VERSION": "0.1.0+dev.varantzanoyan",
             "JOB_MODE": "local[*]",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
