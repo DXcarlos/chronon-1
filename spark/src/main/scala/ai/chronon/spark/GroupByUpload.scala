@@ -51,7 +51,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 import scala.annotation.tailrec
-
+import scala.collection.mutable
 import scala.util.Try
 
 class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable {
@@ -61,7 +61,33 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
   implicit private val partitionSpec: PartitionSpec = tableUtils.partitionSpec
 
   private def fromBase(rdd: RDD[(Array[Any], Array[Any])]): KvRdd = {
-    KvRdd(rdd.map { case (keyAndDs, values) => keyAndDs.init -> values }, groupBy.keySchema, groupBy.postAggSchema)
+
+    rdd.cache()
+
+    val nullCounts = rdd
+      .treeAggregate (mutable.HashMap.empty[String, Long])(
+        seqOp = { case (counterMap, (_, values)) =>
+          if (values != null) {
+            groupBy.postAggSchema.foreach { field =>
+              val key = field.name
+              counterMap.update(key, counterMap.getOrElse(key, 0L) + 1L)
+            }
+          }
+          counterMap
+        },
+        combOp = {
+          (map1, map2) =>
+            map2.foreach { case (key, count) =>
+              map1.update(key, map1.getOrElse(key, 0L) + count)
+            }
+            map1
+        }
+      )
+
+    val pairRdd = rdd.map { case (keyAndDs, values) => keyAndDs.init -> values }
+
+
+    KvRdd(pairRdd, groupBy.keySchema, groupBy.postAggSchema, nullCounts.toMap)
   }
 
   def snapshotEntities: KvRdd = {
@@ -78,6 +104,26 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
           keyBuilder(row).data -> valuesIndices.map(row.get)
         }
 
+      val nullCounts = rdd
+        .treeAggregate (mutable.HashMap.empty[String, Long])(
+          seqOp = { case (counterMap, (_, values)) =>
+            if (values != null) {
+              groupBy.postAggSchema.foreach { field =>
+                val key = field.name
+                counterMap.update(key, counterMap.getOrElse(key, 0L) + 1L)
+              }
+            }
+            counterMap
+          },
+          combOp = {
+            (map1, map2) =>
+              map2.foreach { case (key, count) =>
+                map1.update(key, map1.getOrElse(key, 0L) + count)
+              }
+              map1
+          }
+        )
+
       logger.info(s"""
            |pre-agg upload:
            |  input schema: ${groupBy.inputDf.schema.catalogString}
@@ -85,7 +131,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
            |  value schema: ${groupBy.preAggSchema.catalogString}
            |""".stripMargin)
 
-      KvRdd(rdd, groupBy.keySchema, groupBy.preAggSchema)
+      KvRdd(rdd, groupBy.keySchema, groupBy.preAggSchema, nullCounts.toMap)
 
     } else {
       fromBase(groupBy.snapshotEntitiesBase)
@@ -99,11 +145,13 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
   def temporalEvents(resolution: Resolution = FiveMinuteResolution): KvRdd = {
     val endTs = tableUtils.partitionSpec.epochMillis(endPartition)
     logger.info(s"TemporalEvents upload end ts: $endTs")
+
     val sawtoothOnlineAggregator = new SawtoothOnlineAggregator(
       endTs,
       groupBy.aggregations,
       SparkConversions.toChrononSchema(groupBy.inputDf.schema),
       resolution)
+
     val irSchema = SparkConversions.fromChrononSchema(sawtoothOnlineAggregator.batchIrSchema)
     val keyBuilder = FastHashing.generateKeyBuilder(groupBy.keyColumns.toArray, groupBy.inputDf.schema)
 
@@ -116,7 +164,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
         |BatchIR Element Size: $batchIrElementSize
         |""".stripMargin)
 
-    val outputRdd = groupBy.inputDf.rdd
+    val outputRddIntermediate = groupBy.inputDf.rdd
       .keyBy(keyBuilder)
       .aggregateByKey(sawtoothOnlineAggregator.init)( // shuffle point
         seqOp = { case (batchIr, row) =>
@@ -125,13 +173,33 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
         combOp = sawtoothOnlineAggregator.merge
       )
       .mapValues(sawtoothOnlineAggregator.normalizeBatchIr)
+
+    outputRddIntermediate.cache()
+
+    val nullCounts = outputRddIntermediate
+      .treeAggregate (mutable.HashMap.empty[String, Long])(
+        seqOp = { case (counterMap, (_, batchIr)) =>
+          sawtoothOnlineAggregator.updateNullCounts(batchIr, counterMap)
+          counterMap
+        },
+        combOp = {
+          (map1, map2) =>
+            map2.foreach { case (key, count) =>
+              map1.update(key, map1.getOrElse(key, 0L) + count)
+            }
+            map1
+        }
+      )
+
+    val outputRdd = outputRddIntermediate
       .map { case (keyWithHash: KeyWithHash, finalBatchIr: FinalBatchIr) =>
         val irArray = new Array[Any](2)
         irArray.update(0, finalBatchIr.collapsed)
         irArray.update(1, finalBatchIr.tailHops)
         keyWithHash.data -> irArray
       }
-    KvRdd(outputRdd, groupBy.keySchema, irSchema)
+
+    KvRdd(outputRdd, groupBy.keySchema, irSchema, nullCounts.toMap)
   }
 
 }

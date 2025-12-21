@@ -77,7 +77,7 @@ sealed trait BaseKvRdd {
   def toFlatDf: DataFrame
 }
 
-case class KvRdd(data: RDD[(Array[Any], Array[Any])], keySchema: StructType, valueSchema: StructType)(implicit
+case class KvRdd(data: RDD[(Array[Any], Array[Any])], keySchema: StructType, valueSchema: StructType, nullCounts: Map[String, Long])(implicit
     sparkSession: SparkSession)
     extends BaseKvRdd {
 
