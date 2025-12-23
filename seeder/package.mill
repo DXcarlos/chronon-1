@@ -1,0 +1,65 @@
+package build.seeder
+import mill.api._
+import mill.scalalib._
+
+// Seeder module - for generating test data on cloud infrastructure
+object `package` extends Cross[SeederModule](build.Constants.scalaVersions) with SeederModule {
+  // Provide default scala version for bracket-free access
+  override val crossValue = build.Constants.defaultScalaVersion
+}
+
+trait SeederModule extends Cross.Module[String] with build.BaseModule {
+  // Depend on cloud_aws and spark
+  def moduleDeps = Seq(
+    build.cloud_aws(crossValue),
+    build.spark(crossValue)
+  )
+
+  // Add spark.test and aggregator.test classes to both compile and runtime classpath
+  // This allows us to use DataFrameGen (from spark.test) and Column (from aggregator.test)
+  def compileClasspath = Task {
+    super.compileClasspath() ++
+      build.spark(crossValue).test.localClasspath() ++
+      build.aggregator(crossValue).test.localClasspath()
+  }
+
+  def runClasspath = Task {
+    super.runClasspath() ++
+      build.spark(crossValue).test.localClasspath() ++
+      build.aggregator(crossValue).test.localClasspath()
+  }
+
+  // Include test classes in local classpath so they're included in the assembly JAR
+  override def localClasspath = Task {
+    super.localClasspath() ++
+      build.spark(crossValue).test.localClasspath() ++
+      build.aggregator(crossValue).test.localClasspath()
+  }
+
+  def mvnDeps = build.Constants.commonDeps ++
+    build.Constants.loggingDeps ++
+    build.Constants.utilityDeps ++
+    build.Constants.sparkDeps
+
+  object test extends build.BaseTestModule {
+    def scalaVersion = crossValue
+
+    def moduleDeps = Seq(
+      build.seeder(crossValue),
+      build.spark(crossValue).test
+    )
+
+    def mvnDeps = super.mvnDeps() ++ build.Constants.testDeps
+
+    override def testFramework = "org.scalatest.tools.Framework"
+
+    def forkArgs = build.Constants.commonTestForkArgs ++ Seq(
+      "-Dspark.sql.adaptive.enabled=false",
+      "-Dspark.sql.adaptive.coalescePartitions.enabled=false",
+      "-Dspark.serializer=org.apache.spark.serializer.KryoSerializer",
+      "-Dspark.sql.hive.convertMetastoreParquet=false"
+    )
+  }
+
+  def prependShellScript = ""
+}
