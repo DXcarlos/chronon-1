@@ -58,7 +58,8 @@ object ModelTransformsJob {
     val dfWithInputMappings = applyAllMappings(sourceDf,
                                                modelParts,
                                                getMappingFn = _.model.inputMapping,
-                                               getPrefixFn = modelPart => s"${modelPart.model.metaData.cleanName}__input")
+                                               getPrefixFn =
+                                                 modelPart => s"${modelPart.model.metaData.cleanName}__input")
 
     // Add model inference output fields
     val schemaAfterInference = determineInferenceOutputSchema(dfWithInputMappings.schema, modelParts, useLongNames)
@@ -74,7 +75,8 @@ object ModelTransformsJob {
     val dfWithOutputMappings = applyAllMappings(emptyDfAfterInference,
                                                 modelParts,
                                                 getMappingFn = _.model.outputMapping,
-                                                getPrefixFn = _ => "") // No additional prefix for output mappings
+                                                getPrefixFn = _ => ""
+    ) // No additional prefix for output mappings
 
     // Apply custom prefixes from ModelPart (only when useLongNames=false)
     val dfWithPrefixes = if (useLongNames) {
@@ -220,17 +222,16 @@ object ModelTransformsJob {
     val dfWithInputMappings = applyAllMappings(sourceDf,
                                                modelParts,
                                                getMappingFn = _.model.inputMapping,
-                                               getPrefixFn = modelPart => s"${modelPart.model.metaData.cleanName}__input")
+                                               getPrefixFn =
+                                                 modelPart => s"${modelPart.model.metaData.cleanName}__input")
     logger.info(s"Schema after input mappings:\n${dfWithInputMappings.schema.catalogString}")
 
     val dfWithInferenceResults =
       batchedModelInference(dfWithInputMappings, modelParts, modelPlatformProvider, timeoutMillis, useLongNames)
     logger.info(s"Schema after model inference:\n${dfWithInferenceResults.schema.catalogString}")
 
-    val dfWithOutputMappings = applyAllMappings(dfWithInferenceResults,
-                                                modelParts,
-                                                getMappingFn = _.model.outputMapping,
-                                                getPrefixFn = _ => "")
+    val dfWithOutputMappings =
+      applyAllMappings(dfWithInferenceResults, modelParts, getMappingFn = _.model.outputMapping, getPrefixFn = _ => "")
     logger.info(s"Schema after output mappings:\n${dfWithOutputMappings.schema.catalogString}")
 
     // Apply custom prefixes from ModelPart (only when useLongNames=false)

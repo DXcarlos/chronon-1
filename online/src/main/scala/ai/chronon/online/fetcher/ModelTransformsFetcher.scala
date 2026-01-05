@@ -264,10 +264,8 @@ class ModelTransformsFetcher(modelPlatformProvider: ModelPlatformProvider, debug
     val valueSchema = computePrefixedValueSchema(model, modelName)
 
     // Apply output mapping to prefixed fields
-    val mappedResults = applyMapping(model.outputMapping,
-                                     prefixedOutput,
-                                     valueSchema,
-                                     s"output_mapping_${model.metaData.name}")
+    val mappedResults =
+      applyMapping(model.outputMapping, prefixedOutput, valueSchema, s"output_mapping_${model.metaData.name}")
 
     // Output mapping keys also get prefixed when useLongNames=true
     if (Option(model.outputMapping).exists(!_.isEmpty)) {
@@ -286,10 +284,8 @@ class ModelTransformsFetcher(modelPlatformProvider: ModelPlatformProvider, debug
     val valueSchema = Option(model.valueSchema).map(api.DataType.fromTDataType)
 
     // Apply output mapping to unprefixed fields
-    val mappedResults = applyMapping(model.outputMapping,
-                                     predictionOutput,
-                                     valueSchema,
-                                     s"output_mapping_${model.metaData.name}")
+    val mappedResults =
+      applyMapping(model.outputMapping, predictionOutput, valueSchema, s"output_mapping_${model.metaData.name}")
 
     // Apply custom prefix to final output fields
     if (customPrefix.nonEmpty) {
