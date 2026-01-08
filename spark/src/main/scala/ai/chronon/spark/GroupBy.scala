@@ -388,7 +388,8 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
   protected[spark] def toDf(aggregateRdd: RDD[(Array[Any], Array[Any])],
                             additionalFields: Seq[(String, DataType)]): DataFrame = {
     val finalKeySchema = StructType(keySchema ++ additionalFields.map { case (name, typ) => StructField(name, typ) })
-    KvRdd(aggregateRdd, finalKeySchema, postAggSchema).toFlatDf
+    val nullCountsMap = Map[String, Long]()
+    KvRdd(aggregateRdd, finalKeySchema, postAggSchema, nullCountsMap).toFlatDf
   }
 
   private def normalizeOrFinalize(ir: Array[Any]): Array[Any] =
