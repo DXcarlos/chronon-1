@@ -287,7 +287,6 @@ def BootstrapPart(
 def Join(
     left: api.Source,
     right_parts: List[api.JoinPart],
-    version: int,
     row_ids: Union[str, List[str]],
     online_external_parts: List[api.ExternalPart] = None,
     bootstrap_parts: List[api.BootstrapPart] = None,
@@ -311,6 +310,7 @@ def Join(
     cluster_conf: common.ClusterConfigProperties = None,
     step_days: int = None,
     enable_stats_compute: bool = None,
+    version: int = None,
 ) -> api.Join:
     """
     Construct a join object. A join can pull together data from various GroupBy's both offline and online. This is also
@@ -417,9 +417,10 @@ def Join(
     if isinstance(row_ids, str):
         row_ids = [row_ids]
 
-    assert isinstance(version, int), (
-        f"Version must be an integer, but found {type(version).__name__}"
-    )
+    if version is not None:
+        assert isinstance(version, int), (
+            f"Version must be an integer, but found {type(version).__name__}"
+        )
 
     # create a deep copy for case: multiple LeftOuterJoin use the same left,
     # validation will fail after the first iteration
@@ -488,7 +489,7 @@ def Join(
         consistencyCheck=check_consistency,
         consistencySamplePercent=consistency_sample_percent,
         executionInfo=exec_info,
-        version=str(version),
+        version=str(version) if version is not None else None,
     )
 
     join = api.Join(

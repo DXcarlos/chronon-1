@@ -417,7 +417,6 @@ def get_output_col_names(aggregation):
 
 
 def GroupBy(
-    version: int,
     sources: Union[List[utils.ANY_SOURCE_TYPE], utils.ANY_SOURCE_TYPE],
     keys: List[str],
     aggregations: Optional[List[ttypes.Aggregation]],
@@ -437,6 +436,7 @@ def GroupBy(
     cluster_conf: common.ClusterConfigProperties = None,
     step_days: int = None,
     disable_historical_backfill: bool = False,
+    version: Optional[int] = None,
 ) -> ttypes.GroupBy:
     """
 
@@ -582,9 +582,10 @@ def GroupBy(
     """
     assert sources, "Sources are not specified"
 
-    assert isinstance(version, int), (
-        f"Version must be an integer, but found {type(version).__name__}"
-    )
+    if version is not None:
+        assert isinstance(version, int), (
+            f"Version must be an integer, but found {type(version).__name__}"
+        )
 
     agg_inputs = []
     if aggregations is not None:
@@ -661,7 +662,7 @@ def GroupBy(
         executionInfo=exec_info,
         tags=tags if tags else None,
         columnTags=column_tags if column_tags else None,
-        version=str(version),
+        version=str(version) if version is not None else None,
     )
 
     group_by = ttypes.GroupBy(

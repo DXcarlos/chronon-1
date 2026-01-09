@@ -51,8 +51,8 @@ class TableDependency:
 
 def Import(
     query: str,
-    version: int,
     output_namespace: Optional[str] = None,
+    version: Optional[int] = None,
     engine_type: Optional[EngineType] = None,
     dependencies: Optional[List[Union[TableDependency, Dict]]] = None,
     conf: Optional[common.ConfigProperties] = None,
@@ -80,8 +80,8 @@ def Import(
 
 def StagingQuery(
     query: str,
-    version: int,
     output_namespace: Optional[str] = None,
+    version: Optional[int] = None,
     table_properties: Optional[Dict[str, str]] = None,
     setups: Optional[List[str]] = None,
     engine_type: Optional[EngineType] = None,
@@ -156,9 +156,10 @@ def StagingQuery(
     # Get caller's filename to assign team
     team = inspect.stack()[1].filename.split("/")[-2]
 
-    assert isinstance(version, int), (
-        f"Version must be an integer, but found {type(version).__name__}"
-    )
+    if version is not None:
+        assert isinstance(version, int), (
+            f"Version must be an integer, but found {type(version).__name__}"
+        )
     tables_in_query = [query_utils.normalize_table_name(t) for t in query_utils.tables_in_query(query, dialect=ttypes.EngineType._VALUES_TO_NAMES[engine_type].lower() if engine_type else "spark")]
     if tables_in_query:
         assert dependencies is not None, "Dependencies must be specified if tables are in the query"
@@ -219,7 +220,7 @@ def StagingQuery(
         tags=tags,
         customJson=custom_json,
         tableProperties=table_properties,
-        version=str(version),
+        version=str(version) if version is not None else None,
         additionalOutputPartitionColumns=additional_partitions,
     )
 
