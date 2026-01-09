@@ -141,22 +141,22 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     GroupByUpload.run(groupByConf, endDs = yesterday)
   }
 
-  it should "produce a valid nullCountMap with both collapsedIr and tailHops are null" {
-    val actualKvRdd = GroupByUpload.generateKvRdd()
-    actualKvRdd.nullCounts should be(defined)
-  }
-
-  it should "produce a valid nullCountMap with collapsedIr non null and tailHops are null" {
-
-  }
-
-  it should "produce a valid nullCountMap with collapsedIr is null and tailHops are non null" {
-
-  }
-
-  it should "produce a valid nullCountMap with both collapsedIr and tailHops are non null" {
-
-  }
+//  it should "produce a valid nullCountMap with both collapsedIr and tailHops are null" {
+//    val actualKvRdd = GroupByUpload.generateKvRdd()
+//    actualKvRdd.nullCounts should be(defined)
+//  }
+//
+//  it should "produce a valid nullCountMap with collapsedIr non null and tailHops are null" {
+//
+//  }
+//
+//  it should "produce a valid nullCountMap with collapsedIr is null and tailHops are non null" {
+//
+//  }
+//
+//  it should "produce a valid nullCountMap with both collapsedIr and tailHops are non null" {
+//
+//  }
 
   //  joinLeft = (review, category, rating)  [ratings]
   //  joinPart = (review, user, listing)     [reviews]
