@@ -174,6 +174,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
       )
       .mapValues(sawtoothOnlineAggregator.normalizeBatchIr)
 
+    // Going to produce nullCounts and also later .save
     outputRddIntermediate.cache()
 
     val nullCounts = outputRddIntermediate

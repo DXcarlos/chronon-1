@@ -331,6 +331,7 @@ object Extensions {
       aggregations.foreach { agg =>
         val buckets = Option(agg.buckets)
           .map(_.toScala)
+          // TODO: why doesn't this just return empty seq?
           .getOrElse(Seq(null))
         val windows = Option(agg.windows)
           .map(_.toScala)

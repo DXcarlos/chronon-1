@@ -190,15 +190,15 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
     // windowed agg will unpack [7d, 1d, 1h, None] into separate aggregationParts,
     // it will have one part per output col
     while (i < windowedAggregator.length) {
-
-      val windowMillis = windowMappings(i).millis
       val window = windowMappings(i).aggregationPart.window
-      val colName = windowMappings(i).aggregationPart.outputColumnName
-      val hasNonNullCollapsed = batchIr.collapsed(i) != null
 
+      val hasNonNullCollapsed = batchIr.collapsed(i) != null
       val hasNonNull = if (window != null) { // no hops for unwindowed
+        val windowMillis = windowMappings(i).millis
         val hopIndex = tailHopIndices(i)
         val queryTail = TsUtils.round(batchEndTs - windowMillis, hopSizes(hopIndex))
+
+        // TODO: what is this structure? Array of Irs across all windowmappings or single windowmapping?
         val hopIrs = batchIr.tailHops(hopIndex)
         var idx: Int = 0
 
@@ -206,9 +206,14 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
 
           // check if any of the relevant tail hops for this window has a non-null value
           var hasNonNullTailHop_ = false
-          while (idx < hopIrs.length || hasNonNullTailHop_) {
+
+          while (idx < hopIrs.length && !hasNonNullTailHop_) {
+            // TODO: reminder Hopir is array[any].
             val hopIr = hopIrs(idx)
+            // TODO: why not first? Check with debugger
             val hopStart = hopIr.last.asInstanceOf[Long]
+
+            // TODO: don't understand why this if condition
             if ((batchEndTs - windowMillis) + tailBufferMillis > hopStart && hopStart >= queryTail) {
               val tailHop = hopIr(baseIrIndices(i))
               if (tailHop != null) {
@@ -229,6 +234,7 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
 
       }
 
+      val colName = windowMappings(i).aggregationPart.outputColumnName
       if(!hasNonNull) {
         val currentCount = nullCounts.getOrElse(colName, 0L)
         nullCounts.update(colName, currentCount + 1L)
