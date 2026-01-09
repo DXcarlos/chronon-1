@@ -27,8 +27,6 @@ import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.utils.{DataFrameGen, MockApi, OnlineUtils, SparkTestBase}
 import com.google.gson.Gson
 import org.junit.Assert.assertEquals
-import org.scalatest.Resources.should
-import org.scalatest.matchers.must.Matchers.defined
 import org.scalatest.matchers.should.Matchers
 import org.slf4j.{Logger, LoggerFactory}
 
