@@ -107,6 +107,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
         .treeAggregate(mutable.HashMap.empty[String, Long])(
           seqOp = { case (counterMap, (_, values)) =>
             if (values != null) {
+              // TODO: we need to handle NPE when groupby has no aggregations
               groupBy.postAggSchema.foreach { field =>
                 val key = field.name
                 counterMap.update(key, counterMap.getOrElse(key, 0L) + 1L)
