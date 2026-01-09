@@ -235,7 +235,7 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
       }
 
       val colName = windowMappings(i).aggregationPart.outputColumnName
-      if(!hasNonNull) {
+      if (!hasNonNull) {
         val currentCount = nullCounts.getOrElse(colName, 0L)
         nullCounts.update(colName, currentCount + 1L)
       }
@@ -243,7 +243,5 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
       i += 1
     }
   }
-
-
 
 }

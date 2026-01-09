@@ -27,12 +27,15 @@ import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.utils.{DataFrameGen, MockApi, OnlineUtils, SparkTestBase}
 import com.google.gson.Gson
 import org.junit.Assert.assertEquals
+import org.scalatest.Resources.should
+import org.scalatest.matchers.must.Matchers.defined
+import org.scalatest.matchers.should.Matchers
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 
-class GroupByUploadTest extends SparkTestBase {
+class GroupByUploadTest extends SparkTestBase with Matchers {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   private val namespace = "group_by_upload_test"
@@ -136,6 +139,23 @@ class GroupByUploadTest extends SparkTestBase {
         accuracy = Accuracy.TEMPORAL
       )
     GroupByUpload.run(groupByConf, endDs = yesterday)
+  }
+
+  it should "produce a valid nullCountMap with both collapsedIr and tailHops are null" {
+    val actualKvRdd = GroupByUpload.generateKvRdd()
+    actualKvRdd.nullCounts should be(defined)
+  }
+
+  it should "produce a valid nullCountMap with collapsedIr non null and tailHops are null" {
+
+  }
+
+  it should "produce a valid nullCountMap with collapsedIr is null and tailHops are non null" {
+
+  }
+
+  it should "produce a valid nullCountMap with both collapsedIr and tailHops are non null" {
+
   }
 
   //  joinLeft = (review, category, rating)  [ratings]

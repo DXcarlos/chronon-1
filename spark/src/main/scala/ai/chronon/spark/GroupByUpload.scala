@@ -39,6 +39,7 @@ import ai.chronon.api.PartitionRange
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.online.metrics.Metrics
 import ai.chronon.spark.Extensions._
+import ai.chronon.spark.submission.SparkSessionBuilder
 import org.apache.spark.SparkEnv
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -65,7 +66,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
     rdd.cache()
 
     val nullCounts = rdd
-      .treeAggregate (mutable.HashMap.empty[String, Long])(
+      .treeAggregate(mutable.HashMap.empty[String, Long])(
         seqOp = { case (counterMap, (_, values)) =>
           if (values != null) {
             groupBy.postAggSchema.foreach { field =>
@@ -75,17 +76,15 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
           }
           counterMap
         },
-        combOp = {
-          (map1, map2) =>
-            map2.foreach { case (key, count) =>
-              map1.update(key, map1.getOrElse(key, 0L) + count)
-            }
-            map1
+        combOp = { (map1, map2) =>
+          map2.foreach { case (key, count) =>
+            map1.update(key, map1.getOrElse(key, 0L) + count)
+          }
+          map1
         }
       )
 
     val pairRdd = rdd.map { case (keyAndDs, values) => keyAndDs.init -> values }
-
 
     KvRdd(pairRdd, groupBy.keySchema, groupBy.postAggSchema, nullCounts.toMap)
   }
@@ -105,7 +104,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
         }
 
       val nullCounts = rdd
-        .treeAggregate (mutable.HashMap.empty[String, Long])(
+        .treeAggregate(mutable.HashMap.empty[String, Long])(
           seqOp = { case (counterMap, (_, values)) =>
             if (values != null) {
               groupBy.postAggSchema.foreach { field =>
@@ -115,12 +114,11 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
             }
             counterMap
           },
-          combOp = {
-            (map1, map2) =>
-              map2.foreach { case (key, count) =>
-                map1.update(key, map1.getOrElse(key, 0L) + count)
-              }
-              map1
+          combOp = { (map1, map2) =>
+            map2.foreach { case (key, count) =>
+              map1.update(key, map1.getOrElse(key, 0L) + count)
+            }
+            map1
           }
         )
 
@@ -178,17 +176,16 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
     outputRddIntermediate.cache()
 
     val nullCounts = outputRddIntermediate
-      .treeAggregate (mutable.HashMap.empty[String, Long])(
+      .treeAggregate(mutable.HashMap.empty[String, Long])(
         seqOp = { case (counterMap, (_, batchIr)) =>
           sawtoothOnlineAggregator.updateNullCounts(batchIr, counterMap)
           counterMap
         },
-        combOp = {
-          (map1, map2) =>
-            map2.foreach { case (key, count) =>
-              map1.update(key, map1.getOrElse(key, 0L) + count)
-            }
-            map1
+        combOp = { (map1, map2) =>
+          map2.foreach { case (key, count) =>
+            map1.update(key, map1.getOrElse(key, 0L) + count)
+          }
+          map1
         }
       )
 
@@ -278,19 +275,11 @@ object GroupByUpload {
     result
   }
 
-  def run(groupByConf: api.GroupBy,
-          endDs: String,
-          tableUtilsOpt: Option[TableUtils] = None,
-          showDf: Boolean = false,
-          jsonPercent: Int = 1): Unit = {
-    import ai.chronon.spark.submission.SparkSessionBuilder
-    val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
-    val startTs = System.currentTimeMillis()
-    val tableUtils: TableUtils =
-      tableUtilsOpt.getOrElse(
-        TableUtils(
-          SparkSessionBuilder
-            .build(s"groupBy_${groupByConf.metaData.name}_upload")))
+  private[spark] def generateKvRdd(groupByConf: api.GroupBy,
+                                   endDs: String,
+                                   tableUtilsOpt: Option[TableUtils] = None,
+                                   showDf: Boolean = false,
+                                   tableUtils: TableUtils) = {
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
     Option(groupByConf.setups).foreach(_.foreach(tableUtils.sql))
     // add 1 day to the batch end time to reflect data [ds 00:00:00.000, ds + 1 00:00:00.000)
@@ -313,17 +302,37 @@ object GroupByUpload {
     lazy val otherGroupByUpload = new GroupByUpload(batchEndDate, groupBy)
 
     logger.info(s"""
-         |GroupBy upload for: ${groupByConf.metaData.team}.${groupByConf.metaData.name}
-         |Accuracy: ${groupByConf.inferredAccuracy}
-         |Data Model: ${groupByConf.dataModel}
-         |""".stripMargin)
+                   |GroupBy upload for: ${groupByConf.metaData.team}.${groupByConf.metaData.name}
+                   |Accuracy: ${groupByConf.inferredAccuracy}
+                   |Data Model: ${groupByConf.dataModel}
+                   |""".stripMargin)
 
-    val kvRdd = (groupByConf.inferredAccuracy, groupByConf.dataModel) match {
+    (groupByConf.inferredAccuracy, groupByConf.dataModel) match {
       case (Accuracy.SNAPSHOT, DataModel.EVENTS)   => groupByUpload.snapshotEvents
       case (Accuracy.SNAPSHOT, DataModel.ENTITIES) => groupByUpload.snapshotEntities
       case (Accuracy.TEMPORAL, DataModel.EVENTS)   => shiftedGroupByUpload.temporalEvents()
       case (Accuracy.TEMPORAL, DataModel.ENTITIES) => otherGroupByUpload.temporalEvents()
     }
+  }
+
+  def run(groupByConf: api.GroupBy,
+          endDs: String,
+          tableUtilsOpt: Option[TableUtils] = None,
+          showDf: Boolean = false,
+          jsonPercent: Int = 1): Unit = {
+    import ai.chronon.spark.submission.SparkSessionBuilder
+    val tableUtils: TableUtils =
+      tableUtilsOpt.getOrElse(
+        TableUtils(
+          SparkSessionBuilder
+            .build(s"groupBy_${groupByConf.metaData.name}_upload")))
+    val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
+    val startTs = System.currentTimeMillis()
+    val kvRdd = generateKvRdd(groupByConf = groupByConf,
+                              endDs = endDs,
+                              tableUtilsOpt = tableUtilsOpt,
+                              showDf = showDf,
+                              tableUtils = tableUtils)
 
     val kvDf = kvRdd.toAvroDf(jsonPercent = jsonPercent)
 
