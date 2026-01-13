@@ -1,13 +1,6 @@
 name: Test Spark module
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'python/**'
-      - '**/*.md'
-      - 'scripts/**'
   pull_request:
     branches:
       - main

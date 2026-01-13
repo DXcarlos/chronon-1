@@ -55,8 +55,7 @@
           }
         }
       },
-      "historicalBackfill": 0,
-      "scheduleCron": "@daily"
+      "historicalBackfill": 0
     },
     "name": "risk.merchant_data.merchant_group_by__0",
     "outputNamespace": "risk",

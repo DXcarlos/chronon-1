@@ -310,9 +310,7 @@ class GroupByTest extends SparkTestBase {
       sources = Seq(source),
       keyColumns = Seq("item"),
       aggregations = null,
-      metaData = Builders.MetaData(name = testName, namespace = namespace, team = "chronon"),
-      backfillStartDate = tableUtils.partitionSpec.minus(tableUtils.partitionSpec.at(System.currentTimeMillis()),
-                                                         new Window(60, TimeUnit.DAYS))
+      metaData = Builders.MetaData(name = testName, namespace = namespace, team = "chronon")
     )
     val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
     val (aggregationsMetadata, _) =
@@ -411,9 +409,11 @@ class GroupByTest extends SparkTestBase {
                additionalAgg: Seq[Aggregation] = Seq.empty): String = {
     createDatabase(namespace)
     val groupBy = getSampleGroupBy(name, source, namespace, additionalAgg)
-
+    val startPartition = tableUtils.partitionSpec.minus(tableUtils.partitionSpec.at(System.currentTimeMillis()),
+                                                         new Window(60, TimeUnit.DAYS))
     GroupBy.computeBackfill(
       groupBy,
+      startPartition = startPartition,
       endPartition = endPartition,
       tableUtils = tableUtils,
       stepDays = stepDays
@@ -439,9 +439,7 @@ class GroupByTest extends SparkTestBase {
                              )),
         Builders.Aggregation(operation = Operation.MAX, inputColumn = "ts")
       ) ++ additionalAgg,
-      metaData = Builders.MetaData(name = name, namespace = namespace, team = "chronon"),
-      backfillStartDate = tableUtils.partitionSpec.minus(tableUtils.partitionSpec.at(System.currentTimeMillis()),
-                                                         new Window(60, TimeUnit.DAYS))
+      metaData = Builders.MetaData(name = name, namespace = namespace, team = "chronon")
     )
   }
 

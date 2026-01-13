@@ -22,6 +22,5 @@ v1 = GroupBy(
     sources=logging_schema_source,
     aggregations=[Aggregation(input_column="schema_value", operation=Operation.LAST)],
     online=False,
-    backfill_start_date="2023-04-09",
     version=0,
 )

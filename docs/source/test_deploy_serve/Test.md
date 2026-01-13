@@ -80,7 +80,13 @@ This runs a spark job which will compute the data.
 
 Most of the time, backfilling a `Join` is what you want because this backfills any `GroupBy`s used in the join as well.
 
-If you want to produce a snapshot accurate table for the aggregations in a group by you can add `backfill_start_date`. Backfilling `GroupBy` is usually an analytics use-case, as online uploads have their own flow (see [Serve](#serve) below).
+To backfill a `GroupBy` directly, you must specify the `--start-partition` flag to control where the backfill starts:
+
+```sh
+zipline run --mode=backfill --conf=compiled/group_bys/team/group_by.v1 --start-partition=2022-07-02 --end-ds=2022-07-10
+```
+
+Backfilling `GroupBy` is usually an analytics use-case, as online uploads have their own flow (see [Serve](#serve) below).
 
 ## Serve
 

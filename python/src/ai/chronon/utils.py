@@ -368,11 +368,14 @@ def has_topic(group_by: api.GroupBy) -> bool:
     )
 
 
-def get_offline_schedule(conf: ChrononJobTypes) -> Optional[str]:
-    schedule_interval = conf.metaData.executionInfo.scheduleCron or "@daily"
-    if schedule_interval == "@never":
+def get_offline_schedule(conf: ChrononJobTypes, default: Optional[str] = "@daily") -> Optional[str]:
+    offline_schedule = conf.metaData.executionInfo.offlineSchedule
+    if offline_schedule is None:
+        offline_schedule = default
+    # "@never" explicitly disables backfill
+    if offline_schedule == "@never":
         return None
-    return schedule_interval
+    return offline_schedule
 
 
 def requires_log_flattening_task(conf: ChrononJobTypes) -> bool:
@@ -385,7 +388,8 @@ def get_applicable_modes(conf: ChrononJobTypes) -> List[str]:
 
     if isinstance(conf, api.GroupBy):
         group_by = cast(api.GroupBy, conf)
-        if group_by.backfillStartDate is not None:
+        # For GroupBys, offline_schedule=None means no backfill (no default)
+        if get_offline_schedule(conf, default=None) is not None:
             modes.append("backfill")
 
         online = group_by.metaData.online or False
@@ -401,7 +405,8 @@ def get_applicable_modes(conf: ChrononJobTypes) -> List[str]:
     elif isinstance(conf, api.Join):
         join = cast(api.Join, conf)
 
-        if get_offline_schedule(conf) is not None:
+        # For Joins, offline_schedule=None defaults to "@daily"
+        if get_offline_schedule(conf, default="@daily") is not None:
             modes.append("backfill")
             modes.append("stats-summary")
 

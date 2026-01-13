@@ -94,6 +94,8 @@ CHRONON_ROOT_DIR=$(dirname "$(dirname "$SCRIPT_DIRECTORY")")
 echo "Working in $CHRONON_ROOT_DIR"
 cd $CHRONON_ROOT_DIR
 
+export CHRONON_VERSION="0.1.0+dev.$USER"
+
 if [ "$SKIP_WHEEL" = false ]; then
     echo "Building wheel"
     #Check python version >= 3.9
@@ -114,7 +116,6 @@ if [ "$SKIP_WHEEL" = false ]; then
     fi
 
     ./mill clean
-    export CHRONON_VERSION="0.1.0+dev.$USER"
     ./mill python.wheel # we need CHRONON_VERSION set to build the wheel with specific version here
 
     EXPECTED_ZIPLINE_WHEEL="./out/python/wheel.dest//dist/zipline_ai-$CHRONON_VERSION-py3-none-any.whl"
@@ -124,7 +125,6 @@ if [ "$SKIP_WHEEL" = false ]; then
     fi
 else
     echo "Skipping wheel build"
-    export CHRONON_VERSION="0.1.0+dev.$USER"
 fi
 
 

@@ -10,7 +10,8 @@ import ai.chronon.online.KVStore
 import ai.chronon.online.stats.DriftStore
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.stats.drift.scripts.PrepareData
-import ai.chronon.spark.utils.{InMemoryKvStore, MockApi, SparkTestBase}
+import ai.chronon.online.InMemoryKvStore
+import ai.chronon.spark.utils.{MockApi, SparkTestBase}
 import org.scalatest.matchers.should.Matchers
 import org.slf4j.LoggerFactory
 
@@ -51,7 +52,7 @@ class DriftTest extends SparkTestBase with Matchers {
     // mock api impl for online fetching and uploading
     val kvStoreFunc: () => KVStore = () => {
       // cannot reuse the variable - or serialization error
-      val result = InMemoryKvStore.build("drift_test", () => null)
+      val result = InMemoryKvStore.build("drift_test")
       result
     }
     val api = new MockApi(kvStoreFunc, namespace)

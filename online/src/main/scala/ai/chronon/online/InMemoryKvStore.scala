@@ -14,14 +14,12 @@
  *    limitations under the License.
  */
 
-package ai.chronon.spark.utils
+package ai.chronon.online
 
-import ai.chronon.api.Constants
-import ai.chronon.online.KVStore
+import ai.chronon.api.{Constants, PartitionSpec}
 import ai.chronon.online.KVStore.PutRequest
 import ai.chronon.online.KVStore.TimedValue
-import ai.chronon.spark.catalog.TableUtils
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Row, SparkSession}
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -32,7 +30,7 @@ import scala.collection.mutable
 import scala.concurrent.Future
 import scala.util.Try
 
-class InMemoryKvStore(tableUtils: () => TableUtils, hardFailureOnInvalidDataset: Boolean = false)
+class InMemoryKvStore(spark: () => SparkSession, hardFailureOnInvalidDataset: Boolean = false)
     extends KVStore
     with Serializable {
   // type aliases for readability
@@ -43,7 +41,7 @@ class InMemoryKvStore(tableUtils: () => TableUtils, hardFailureOnInvalidDataset:
   // this linear scans on multiGet TODO: use a better data structure (TreeSet?)
   type VersionedData = mutable.Buffer[(Version, Data)]
   type Table = ConcurrentHashMap[Key, VersionedData]
-  protected[spark] val database = new ConcurrentHashMap[DataSet, Table]
+  protected[online] val database = new ConcurrentHashMap[DataSet, Table]
 
   @transient lazy val encoder: Base64.Encoder = Base64.getEncoder
   def encode(bytes: Array[Byte]): String = encoder.encodeToString(bytes)
@@ -103,15 +101,16 @@ class InMemoryKvStore(tableUtils: () => TableUtils, hardFailureOnInvalidDataset:
   // the table is assumed to be encoded with two columns - `key` and `value` as Array[Bytes]
   // one of the keys should be "group_by_serving_info" as bytes with value as TSimpleJsonEncoded String
   override def bulkPut(sourceOfflineTable: String, destinationOnlineDataSet: String, partition: String): Unit = {
-    val tableUtilInst = tableUtils()
+    val sparkSession = spark()
+    val partitionColumn = PartitionSpec.daily.column
     val partitionFilter =
-      Option(partition).map { part => s"WHERE ${tableUtilInst.partitionColumn} = '$part'" }.getOrElse("")
-    val offlineDf = tableUtilInst.sql(s"SELECT * FROM $sourceOfflineTable")
+      Option(partition).map { part => s"WHERE $partitionColumn = '$part'" }.getOrElse("")
+    val offlineDf = sparkSession.sql(s"SELECT * FROM $sourceOfflineTable")
     val tsColumn =
       if (offlineDf.columns.contains(Constants.TimeColumn)) Constants.TimeColumn
-      else s"(unix_timestamp(ds, 'yyyy-MM-dd') * 1000 + ${tableUtilInst.partitionSpec.spanMillis})"
+      else s"(unix_timestamp(ds, 'yyyy-MM-dd') * 1000 + ${PartitionSpec.daily.spanMillis})"
     val df =
-      tableUtilInst.sql(s"""SELECT key_bytes, value_bytes, $tsColumn as ts
+      sparkSession.sql(s"""SELECT key_bytes, value_bytes, $tsColumn as ts
          |FROM $sourceOfflineTable
          |$partitionFilter""".stripMargin)
     val requests = df.rdd
@@ -154,17 +153,16 @@ object InMemoryKvStore {
   val stores: ConcurrentHashMap[String, InMemoryKvStore] = new ConcurrentHashMap[String, InMemoryKvStore]
 
   // We would like to create one instance of InMemoryKVStore per executors, but share SparkContext
-  // across them. Since SparkContext is not serializable,  we wrap TableUtils that has SparkContext
-  // in a closure and pass it around.
+  // across them. Since SparkContext is not serializable, we wrap SparkSession in a closure and pass it around.
   def build(testName: String,
-            tableUtils: () => TableUtils,
+            spark: () => SparkSession = () => null,
             hardFailureOnInvalidDataset: Boolean = false): InMemoryKvStore = {
     stores.computeIfAbsent(
       testName,
       new function.Function[String, InMemoryKvStore] {
         override def apply(name: String): InMemoryKvStore = {
           logger.info(s"Missing in-memory store for name: $name. Creating one")
-          new InMemoryKvStore(tableUtils, hardFailureOnInvalidDataset)
+          new InMemoryKvStore(spark, hardFailureOnInvalidDataset)
         }
       }
     )

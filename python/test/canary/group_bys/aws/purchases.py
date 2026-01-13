@@ -21,7 +21,6 @@ source = Source(
 window_sizes = [Window(length=day, time_unit=TimeUnit.DAYS) for day in [1, 3, 7]] # Define some window sizes to use below
 
 v1_dev = GroupBy(
-    backfill_start_date="2023-11-01",
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,
@@ -49,7 +48,6 @@ v1_dev = GroupBy(
 )
 
 v1_test = GroupBy(
-    backfill_start_date="2023-11-01",
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,

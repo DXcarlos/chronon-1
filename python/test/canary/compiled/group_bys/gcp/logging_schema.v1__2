@@ -7,7 +7,6 @@
       "operation": 3
     }
   ],
-  "backfillStartDate": "2025-09-23",
   "keyColumns": [
     "schema_hash"
   ],
@@ -78,8 +77,7 @@
           "VERSION": "latest"
         }
       },
-      "historicalBackfill": 0,
-      "scheduleCron": "@daily"
+      "historicalBackfill": 0
     },
     "name": "gcp.logging_schema.v1__2",
     "outputNamespace": "data",

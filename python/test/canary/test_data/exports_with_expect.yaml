@@ -14,7 +14,7 @@ data.gcp_exports_dim_listings__0:
   - [1, 1, !epoch 2024-12-31T01:01:00Z, !epoch 2025-01-02T01:03:00Z, true, "listing", "first listing update", "mega listing", 100, "USD", 1, "bed", "someimgage", "second_image", "slug", 100, "tag", "2025-01-02 00:00:00"] 
   - [1, 1, !epoch 2024-12-31T01:01:00Z, !epoch 2025-01-03T01:05:00Z, true, "listing", "second listing update", "mega listing", 1000, "USD", 1, "bed", "someimgage", "second_image", "slug", 100, "tag", "2025-01-03 00:00:00"]
 
-__expected__.data.gcp_demo_derivations_v1__1:
+__expected__.data.gcp_demo_derivations_v1__2:
   - - 1            #bigint  : listing_id
     - !epoch 2025-01-01T01:01:00Z #bigint  : ts
     - user_1       #string  : user_id

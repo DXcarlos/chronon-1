@@ -36,14 +36,14 @@ def decode_avro_data(schema_json: str, base64_data: str) -> Dict[str, Any]:
     return decoded_data
 
 if __name__ == "__main__":
-    # Get the value schema by:  curl 'http://localhost:9000/v1/join/gcp.demo.derivations_v1__1/schema'  -H 'Content-Type: application/json'
-    schema_response = requests.get('http://localhost:9000/v1/join/gcp.demo.derivations_v1__1/schema', headers={'Content-Type': 'application/json'})
+    # Get the value schema by:  curl 'http://localhost:9000/v1/join/gcp.demo.derivations_v1__2/schema'  -H 'Content-Type: application/json'
+    schema_response = requests.get('http://localhost:9000/v1/join/gcp.demo.derivations_v1__2/schema', headers={'Content-Type': 'application/json'})
     if schema_response.status_code != 200:
         raise Exception(f"Failed to fetch schema: {schema_response.text}")
     avro_value_schema = schema_response.json()['valueSchema']
 
-    # Fetch the features:  curl -X POST   'http://localhost:9000/v2/fetch/join/gcp.demo.derivations_v1__1'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]'
-    features_response = requests.post('http://localhost:9000/v2/fetch/join/gcp.demo.derivations_v1__1',
+    # Fetch the features:  curl -X POST   'http://localhost:9000/v2/fetch/join/gcp.demo.derivations_v1__2'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]'
+    features_response = requests.post('http://localhost:9000/v2/fetch/join/gcp.demo.derivations_v1__2',
                                       headers={'Content-Type': 'application/json'},
                                       json=[{"listing_id": "1", "user_id": "user_7"}])
     if features_response.status_code != 200:

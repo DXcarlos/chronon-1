@@ -23,7 +23,8 @@ import ai.chronon.api._
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.utils.{DataFrameGen, InMemoryKvStore, OnlineUtils, SparkTestBase}
+import ai.chronon.online.InMemoryKvStore
+import ai.chronon.spark.utils.{DataFrameGen, OnlineUtils, SparkTestBase}
 import ai.chronon.spark.{Join => _, _}
 
 import java.util.TimeZone
@@ -34,7 +35,7 @@ object StreamingTest {
     InMemoryKvStore.build("StreamingTest",
                           { () =>
                             import ai.chronon.spark.submission
-                            TableUtils(submission.SparkSessionBuilder.build("StreamingTest", local = true))
+                            submission.SparkSessionBuilder.build("StreamingTest", local = true)
                           })
   }
 }

@@ -16,15 +16,19 @@ trait ServiceModule extends Cross.Module[String] with build.BaseModule {
       mvn"io.vertx:vertx-web:4.5.22",
       mvn"io.micrometer:micrometer-registry-otlp:1.13.6".exclude("com.google.protobuf" -> "protobuf-java"),
       mvn"io.micrometer:micrometer-registry-prometheus:1.10.13".exclude("com.google.protobuf" -> "protobuf-java"),
-      mvn"io.netty:netty-all:4.1.128.Final",
+      mvn"io.netty:netty-all:4.1.129.Final",
       mvn"org.scala-lang:scala-reflect:${scalaVersion()}",
       mvn"org.scala-lang:scala-compiler:${scalaVersion()}",
       // add the version of protobuf that is compatible with our cloud deps 
       mvn"com.google.protobuf:protobuf-java:${build.Constants.protobufVersion}",
       // Spark CU deps for derivations - we exclude hadoop-client runtime as it transitively brings in an older protobuf 
       // that we don't want (we use the version defined in Constants)
-      mvn"org.apache.spark::spark-catalyst:${build.Constants.sparkVersion}".exclude("org.apache.hadoop" -> "hadoop-client-runtime"),
-      mvn"org.apache.spark::spark-sql:${build.Constants.sparkVersion}".exclude("org.apache.hadoop" -> "hadoop-client-runtime"),
+      mvn"org.apache.spark::spark-catalyst:${build.Constants.sparkVersion}"
+        .exclude("org.apache.hadoop" -> "hadoop-client-runtime")
+        .exclude("org.apache.logging.log4j" -> "log4j-core"),
+      mvn"org.apache.spark::spark-sql:${build.Constants.sparkVersion}"
+        .exclude("org.apache.hadoop" -> "hadoop-client-runtime")
+        .exclude("org.apache.logging.log4j" -> "log4j-core"),
       ) ++ Seq(
         // Force specific versions to get around security vulnerabilities in older versions
         mvn"com.fasterxml.woodstox:woodstox-core:5.4.0",

@@ -65,7 +65,6 @@
       "operation": 13
     }
   ],
-  "backfillStartDate": "2023-11-01",
   "keyColumns": [
     "user_id"
   ],
@@ -130,7 +129,7 @@
         }
       },
       "historicalBackfill": 0,
-      "scheduleCron": "@daily"
+      "onlineSchedule": "@daily"
     },
     "name": "aws.purchases.v1_dev__0",
     "online": 1,

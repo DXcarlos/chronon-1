@@ -255,12 +255,12 @@ class JoinUtilsTest extends BaseJoinTest {
       .events(spark, itemQueries, 1000, partitions = 50)
       .save(itemQueriesTable)
 
-    val startPartition = "2023-04-15"
-    val startPartitionOverride = "2023-08-01"
+    val configStartPartition = "2023-04-15"
+    val overrideStartPartition = "2023-08-01"
     val endPartition = "2023-08-08"
-    val leftSource = Builders.Source.events(Builders.Query(startPartition = startPartition), table = itemQueriesTable)
-    val range = JoinUtils.getRangeToFill(leftSource, tableUtils, endPartition, Some(startPartitionOverride))
-    assertEquals(range, PartitionRange(startPartitionOverride, endPartition))
+    val leftSource = Builders.Source.events(Builders.Query(startPartition = configStartPartition), table = itemQueriesTable)
+    val range = JoinUtils.getRangeToFill(leftSource, tableUtils, endPartition, Some(overrideStartPartition))
+    assertEquals(range, PartitionRange(overrideStartPartition, endPartition))
   }
 
   import ai.chronon.api.{LongType, StringType, StructField, StructType}

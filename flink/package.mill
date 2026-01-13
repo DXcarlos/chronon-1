@@ -33,7 +33,7 @@ trait FlinkModule extends Cross.Module[String] with build.BaseModule {
     mvn"com.google.protobuf:protobuf-java-util:3.25.1",
     mvn"com.google.protobuf:protobuf-java:3.25.1",
     mvn"org.apache.flink:flink-connector-kafka:3.0.2-1.18",
-    mvn"io.netty:netty-codec-http2:4.1.125.Final",
+    mvn"io.netty:netty-codec-http2:4.1.129.Final",
   )
 
   def mainClass = Some("ai.chronon.flink.FlinkJob")

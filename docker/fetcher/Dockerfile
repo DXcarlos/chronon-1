@@ -1,19 +1,21 @@
 FROM debian:trixie-slim
 
-# Install Amazon Corretto 17 and curl for healthcheck
+# Install Amazon Corretto 21 and curl for healthcheck
+# We can't use newer JDKs as we need to have HADOOP-19212 fixed (and Spark pick it up) to not break
+# Catalyst util
 RUN apt-get update && \
     apt-get install -y curl gnupg ca-certificates procps && \
     curl -fsSL https://apt.corretto.aws/corretto.key | gpg --dearmor -o /usr/share/keyrings/corretto-keyring.gpg && \
     echo "deb [signed-by=/usr/share/keyrings/corretto-keyring.gpg] https://apt.corretto.aws stable main" > /etc/apt/sources.list.d/corretto.list && \
     apt-get update && \
-    apt-get install -y java-17-amazon-corretto-jdk && \
+    apt-get install -y java-21-amazon-corretto-jdk && \
     apt-get remove --purge --autoremove -y gnupg && \
     apt-get install -y --only-upgrade libpcre2-8-0 liblz4-1 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Set Java environment and encoding
-ENV JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto
+ENV JAVA_HOME=/usr/lib/jvm/java-21-amazon-corretto
 ENV PATH=$PATH:$JAVA_HOME/bin
 ENV LANG=C.UTF-8
 

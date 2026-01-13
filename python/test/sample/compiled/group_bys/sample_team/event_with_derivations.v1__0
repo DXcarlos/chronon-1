@@ -75,7 +75,7 @@
         }
       },
       "historicalBackfill": 0,
-      "scheduleCron": "@daily"
+      "onlineSchedule": "@daily"
     },
     "name": "sample_team.event_with_derivations.v1__0",
     "online": 1,

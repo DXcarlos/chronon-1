@@ -54,6 +54,15 @@ if [ "$ENABLE_GCLOUD_PROFILER" = true ]; then
   JVM_OPTS="$JVM_OPTS -agentpath:/opt/cprof/profiler_java_agent.so=-cprof_service=chronon-fetcher,-logtostderr,-minloglevel=1,-cprof_enable_heap_sampling"
 fi
 
+# Configure garbage collector based on USE_ZGC environment variable
+if [ "$USE_ZGC" = true ]; then
+  echo "Enabling ZGC garbage collector in generational mode"
+  GC_OPTS="-XX:+UseZGC -XX:+ZGenerational"
+else
+  echo "Using default garbage collector (G1)"
+  GC_OPTS=""
+fi
+
 ADD_OPENS_OPTS="
 --add-opens=java.base/java.lang=ALL-UNNAMED
 --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
@@ -71,7 +80,7 @@ ADD_OPENS_OPTS="
 --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED
 "
 
-JVM_OPTS="$JVM_OPTS $ADD_OPENS_OPTS -XX:MaxMetaspaceSize=1g -XX:MaxRAMPercentage=70.0 -XX:MinRAMPercentage=70.0 -XX:InitialRAMPercentage=70.0 -XX:MaxHeapFreeRatio=100 -XX:MinHeapFreeRatio=0"
+JVM_OPTS="$JVM_OPTS $GC_OPTS $ADD_OPENS_OPTS -XX:MaxMetaspaceSize=1g -XX:MaxRAMPercentage=70.0 -XX:MinRAMPercentage=70.0 -XX:InitialRAMPercentage=70.0 -XX:MaxHeapFreeRatio=100 -XX:MinHeapFreeRatio=0"
 
 echo "Starting Fetcher service with online jar $ONLINE_JAR and online class $ONLINE_CLASS"
 if ! java $JVM_OPTS -cp $FETCHER_JAR:$ONLINE_JAR ai.chronon.service.ChrononServiceLauncher \

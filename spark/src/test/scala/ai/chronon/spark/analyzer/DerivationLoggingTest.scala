@@ -301,14 +301,13 @@ class DerivationLoggingTest extends SparkTestBase {
     val namespace = "test_group_by_derivations"
     createDatabase(namespace)
     val groupBy = BootstrapUtils.buildGroupBy(namespace, spark)
-    groupBy.setBackfillStartDate(today)
     groupBy.setDerivations(
       Seq(Builders.Derivation(name = "*"),
           Builders.Derivation(
             name = "amount_dollars_avg_15d",
             expression = "amount_dollars_sum_15d / 15"
           )).toJava)
-    ai.chronon.spark.GroupBy.computeBackfill(groupBy, today, tableUtils)
+    ai.chronon.spark.GroupBy.computeBackfill(groupBy, today, today, tableUtils)
     val actualDf = tableUtils.sql(s"""
          |select * from $namespace.${groupBy.metaData.cleanName}
          |""".stripMargin)

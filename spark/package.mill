@@ -17,7 +17,7 @@ trait SparkModule extends Cross.Module[String] with build.BaseModule {
     build.Constants.loggingDeps ++
     build.Constants.utilityDeps ++
     Seq(
-      mvn"io.netty:netty-all:4.1.128.Final",
+      mvn"io.netty:netty-all:4.1.129.Final",
       mvn"org.rogach::scallop:5.1.0",
       mvn"org.apache.avro:avro:1.11.4",
       mvn"io.delta::delta-spark:3.2.0",

@@ -451,7 +451,7 @@
         }
       },
       "historicalBackfill": 0,
-      "scheduleCron": "@daily",
+      "onlineSchedule": "@daily",
       "stepDays": 4
     },
     "name": "gcp.user_activities.v1__1",

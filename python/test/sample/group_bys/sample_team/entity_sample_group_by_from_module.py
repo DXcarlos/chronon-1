@@ -28,5 +28,6 @@ v1 = GroupBy(
         Aggregation(input_column="entity", operation=Operation.LAST, windows=["7d"]),
     ],
     online=True,
+    offline_schedule=None,  # This GroupBy is streaming-only, no backfill needed
     version=0,
 )

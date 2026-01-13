@@ -144,8 +144,7 @@ object Builders {
         keyColumns: Seq[String] = null,
         aggregations: Seq[Aggregation] = null,
         accuracy: Accuracy = null,
-        derivations: Seq[Derivation] = null,
-        backfillStartDate: String = null
+        derivations: Seq[Derivation] = null
     ): GroupBy = {
       val result = new GroupBy()
       result.setMetaData(metaData)
@@ -157,8 +156,6 @@ object Builders {
         result.setAggregations(aggregations.toJava)
       if (accuracy != null)
         result.setAccuracy(accuracy)
-      if (backfillStartDate != null)
-        result.setBackfillStartDate(backfillStartDate)
       if (derivations != null)
         result.setDerivations(derivations.toJava)
       result

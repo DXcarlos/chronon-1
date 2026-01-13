@@ -23,7 +23,8 @@ import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.stats.{EnhancedStatsCompute, EnhancedStatsStore}
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.utils.{InMemoryKvStore, MockApi}
+import ai.chronon.online.InMemoryKvStore
+import ai.chronon.spark.utils.MockApi
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.LongType

@@ -22,7 +22,7 @@ trait FlinkConnectorsModule extends Cross.Module[String] with build.BaseModule {
       .exclude("com.fasterxml.jackson.core" -> "jackson-core")
       .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
       .exclude("com.fasterxml.jackson.core" -> "jackson-annotations"),
-    mvn"io.netty:netty-codec-http2:4.1.124.Final",
+    mvn"io.netty:netty-codec-http2:4.1.129.Final",
   )
 
   object test extends build.BaseTestModule {

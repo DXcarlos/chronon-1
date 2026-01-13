@@ -7,8 +7,8 @@ import requests
 from typing import Dict, Any
 
 if __name__ == "__main__":
-    # Fetch the features:  curl -X POST   'http://localhost:9000/v1/fetch/join/gcp.demo.derivations_v1__1'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]'
-    features_response = requests.post('http://localhost:9000/v1/fetch/join/gcp.demo.derivations_v1__1',
+    # Fetch the features:  curl -X POST   'http://localhost:9000/v1/fetch/join/gcp.demo.derivations_v1__2'   -H 'Content-Type: application/json'   -d '[{"listing_id":"1","user_id":"user_7"}]'
+    features_response = requests.post('http://localhost:9000/v1/fetch/join/gcp.demo.derivations_v1__2',
                                       headers={'Content-Type': 'application/json'},
                                       json=[{"listing_id": "1", "user_id": "user_7"}])
 

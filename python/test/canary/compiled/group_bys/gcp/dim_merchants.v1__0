@@ -70,7 +70,7 @@
         }
       },
       "historicalBackfill": 0,
-      "scheduleCron": "@daily"
+      "onlineSchedule": "@daily"
     },
     "name": "gcp.dim_merchants.v1__0",
     "online": 1,

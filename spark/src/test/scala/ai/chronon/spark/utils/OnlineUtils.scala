@@ -26,7 +26,8 @@ import ai.chronon.spark.{GenericRowHandler, GroupByUpload}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.streaming.{GroupBy, JoinSourceRunner}
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.utils.{InMemoryKvStore, InMemoryStream, MockApi}
+import ai.chronon.online.InMemoryKvStore
+import ai.chronon.spark.utils.{InMemoryStream, MockApi}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.Trigger
 
@@ -195,7 +196,7 @@ object OnlineUtils {
 
   def buildInMemoryKVStore(sessionName: String, hardFailureOnInvalidDataset: Boolean = false): InMemoryKvStore = {
     InMemoryKvStore.build(sessionName,
-                          { () => TableUtils(SparkSessionBuilder.build(sessionName, local = true)) },
+                          { () => SparkSessionBuilder.build(sessionName, local = true) },
                           hardFailureOnInvalidDataset)
   }
 }

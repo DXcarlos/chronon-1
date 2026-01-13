@@ -16,6 +16,7 @@ from ai.chronon.repo import hub_uploader, utils
 from ai.chronon.repo.constants import RunMode
 from ai.chronon.repo.utils import print_possible_confs
 from ai.chronon.repo.zipline_hub import ZiplineHub
+from ai.chronon.schedule_validation import validate_at_most_daily_schedule
 
 ALLOWED_DATE_FORMATS = ["%Y-%m-%d"]
 
@@ -34,8 +35,8 @@ class HubConfig:
 
 @dataclass
 class ScheduleModes:
-    online: str
     offline_schedule: str
+    online_schedule: str
 
 @click.group()
 def hub():
@@ -179,10 +180,10 @@ def submit_schedule(repo, conf, hub_url=None, use_auth=True, format: Format = Fo
     # get conf name
     conf_name = utils.get_metadata_name_from_conf(repo, conf)
     schedule_modes = get_schedule_modes(os.path.join(repo, conf))
-    # create a dict for RunMode.BACKFILL.value and RunMode.DEPLOY.value to schedule_modes.offline_schedule and schedule_modes.online
+    # create a dict for RunMode.BACKFILL.value and RunMode.DEPLOY.value to schedule_modes.offline_schedule and schedule_modes.online_schedule
     modes = {
         RunMode.BACKFILL.value.upper(): schedule_modes.offline_schedule,
-        RunMode.DEPLOY.value.upper(): schedule_modes.online,
+        RunMode.DEPLOY.value.upper(): schedule_modes.online_schedule,
     }
     response_json = zipline_hub.call_schedule_api(
         modes=modes,
@@ -458,18 +459,26 @@ def get_hub_conf_from_metadata_conf(metadata_path, root_dir="."):
 
 def get_schedule_modes(conf_path):
     metadata_map = get_metadata_map(conf_path)
-    online_value = metadata_map.get("online", False)
-    online = "true" if bool(online_value) else "false"
-    offline_schedule = metadata_map["executionInfo"].get("scheduleCron", None)
+    # Get the online and offline schedules from executionInfo
+    online_schedule = metadata_map["executionInfo"].get("onlineSchedule", None)
+    offline_schedule = metadata_map["executionInfo"].get("offlineSchedule", None)
 
-    # check if offline_schedule is null or 'None' or '@daily' else throw an error
-    valid_schedules = {None, "None", "@daily"}
-    if offline_schedule not in valid_schedules:
-        raise ValueError(
-            f"Unsupported offline_schedule: {offline_schedule}. Only null, 'None', or '@daily' are supported."
-        )
+    # Validate schedule expressions using croniter-based validation
+    if offline_schedule:
+        validation_error = validate_at_most_daily_schedule(offline_schedule)
+        if validation_error:
+            raise ValueError(f"Invalid offline_schedule: {validation_error}")
+
+    if online_schedule:
+        validation_error = validate_at_most_daily_schedule(online_schedule)
+        if validation_error:
+            raise ValueError(f"Invalid online_schedule: {validation_error}")
+
+    # Default to "None" string if schedules are not set
+    # This is used by the schedule API to determine if a schedule is active
+    online_schedule = online_schedule or "None"
     offline_schedule = offline_schedule or "None"
-    return ScheduleModes(online=online, offline_schedule=offline_schedule)
+    return ScheduleModes(offline_schedule=offline_schedule, online_schedule=online_schedule)
 
 
 def print_wf_url(conf, conf_name, mode, workflow_id, repo=".", format: Format = Format.TEXT):

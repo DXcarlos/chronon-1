@@ -52,7 +52,7 @@
         }
       },
       "historicalBackfill": 0,
-      "scheduleCron": "@daily"
+      "onlineSchedule": "@daily"
     },
     "name": "quickstart.users.v1__0",
     "online": 1,

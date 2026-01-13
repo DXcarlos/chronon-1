@@ -20,9 +20,8 @@ import ai.chronon.online.JavaFetcher;
 import ai.chronon.online.JavaRequest;
 import ai.chronon.online.JavaResponse;
 import ai.chronon.online.fetcher.Fetcher;
-import ai.chronon.spark.catalog.TableUtils;
 import ai.chronon.spark.submission.SparkSessionBuilder;
-import ai.chronon.spark.utils.InMemoryKvStore;
+import ai.chronon.online.InMemoryKvStore;
 import ai.chronon.spark.utils.MockApi;
 import ai.chronon.spark.utils.SparkTestBase;
 import com.google.gson.Gson;
@@ -41,8 +40,7 @@ import static org.junit.Assert.assertTrue;
 import static scala.compat.java8.JFunction.func;
 
 public class JavaFetchTypesTest extends SparkTestBase {
-    TableUtils tu = new TableUtils(super.spark());
-    InMemoryKvStore kvStore = new InMemoryKvStore(func(() -> tu), false);
+    InMemoryKvStore kvStore = new InMemoryKvStore(func(() -> super.spark()), false);
     MockApi mockApi = new MockApi(func(() -> kvStore), "java_fetcher_test");
     JavaFetcher fetcher = mockApi.buildJavaFetcher();
 

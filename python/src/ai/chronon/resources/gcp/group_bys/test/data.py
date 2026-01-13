@@ -7,7 +7,6 @@ window_sizes = [
 ]  # Define some window sizes to use below
 
 group_by_v1 = GroupBy(
-    backfill_start_date="2023-11-01",
     sources=[source_v1],
     keys=["user_id"],  # We are aggregating by user
     online=True,

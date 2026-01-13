@@ -43,7 +43,10 @@ object KVStore {
                         endTsMillis: Option[Long] = None)
   case class TimedValue(bytes: Array[Byte], millis: Long)
   case class GetResponse(request: GetRequest, values: Try[Seq[TimedValue]]) {
-    def latest: Try[TimedValue] = values.map(_.maxBy(_.millis))
+    def latest: Try[TimedValue] = values.flatMap { vals =>
+      if (vals.isEmpty) Failure(new NoSuchElementException(s"No values found for key in dataset ${request.dataset}"))
+      else Success(vals.maxBy(_.millis))
+    }
   }
   case class PutRequest(keyBytes: Array[Byte], valueBytes: Array[Byte], dataset: String, tsMillis: Option[Long] = None)
 

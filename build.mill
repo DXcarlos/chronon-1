@@ -305,6 +305,12 @@ trait BaseModule extends CrossScalaModule with ScalafmtModule with GcsPublishMod
     Assembly.Rule.AppendPattern("META-INF/services/*", "\n")
   )
 
+  // Add Multi-Release manifest attribute for Java 18+ multi-release JAR support
+  // Needed for jars like dnsjava that include multi-release classes (see: https://github.com/dnsjava/dnsjava/issues/329)
+  override def manifest = Task {
+    super.manifest().add("Multi-Release" -> "true")
+  }
+
   // Include both Scala and Java sources, exclude test sources from main compilation
   override def sources = Task.Sources(
     moduleDir / "src" / "main" / "scala",

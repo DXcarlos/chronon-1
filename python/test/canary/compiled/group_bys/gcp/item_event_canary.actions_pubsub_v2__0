@@ -119,7 +119,7 @@
         }
       },
       "historicalBackfill": 0,
-      "scheduleCron": "@daily"
+      "onlineSchedule": "@daily"
     },
     "name": "gcp.item_event_canary.actions_pubsub_v2__0",
     "online": 1,

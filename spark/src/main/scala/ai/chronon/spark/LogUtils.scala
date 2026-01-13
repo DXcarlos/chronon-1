@@ -24,8 +24,7 @@ object LogUtils {
   def buildLogSchemaGroupBy(logTable: String,
                             name: Option[String] = Some("logging_schema.v1"),
                             namespace: Option[String] = None,
-                            team: Option[String] = Some("chronon"),
-                            backfillStartDate: Option[String] = None): ai.chronon.api.GroupBy = {
+                            team: Option[String] = Some("chronon")): ai.chronon.api.GroupBy = {
     val groupBy = Builders.GroupBy(
       keyColumns = Seq(s"${Constants.SchemaHash}"),
       sources = Seq(
@@ -54,7 +53,6 @@ object LogUtils {
     name.foreach(name => groupBy.metaData.setName(name))
     namespace.foreach(namespace => groupBy.metaData.setOutputNamespace(namespace))
     team.foreach(team => groupBy.metaData.setTeam(team))
-    backfillStartDate.foreach(backfillStartDate => groupBy.setBackfillStartDate(backfillStartDate))
 
     groupBy
   }

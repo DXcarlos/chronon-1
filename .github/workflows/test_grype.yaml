@@ -1,15 +1,6 @@
 name: Grype Security Scan
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '*.mill'
-      - '**/*.mill'
-      - 'docker/fetcher/Dockerfile'
-      - '.github/workflows/test_grype.yaml'
-      - '.grype.yaml'
   pull_request:
     branches:
       - main
@@ -29,7 +20,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu_32_core_128gb
     container:
       image: ghcr.io/${{ github.repository }}-ci:latest
       credentials:

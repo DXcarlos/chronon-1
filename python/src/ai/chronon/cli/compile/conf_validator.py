@@ -76,7 +76,7 @@ def _filter_skipped_fields_from_join(json_obj: Dict, skipped_fields):
 
 
 def _is_batch_upload_needed(group_by: GroupBy) -> bool:
-    if group_by.metaData.online or group_by.backfillStartDate:
+    if group_by.metaData.online:
         return True
     else:
         return False

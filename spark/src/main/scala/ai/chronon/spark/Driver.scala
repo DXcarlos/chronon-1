@@ -101,10 +101,8 @@ object Driver {
                descr = "Runs offline backfill in steps, step-days at a time. Default is 30 days",
                default = Option(30))
 
-    val startPartitionOverride: ScallopOption[String] =
-      opt[String](required = false,
-                  descr = "Start date to compute offline backfill, " +
-                    "this start date will override start partition specified in conf.")
+    val startPartition: ScallopOption[String] =
+      opt[String](required = false, descr = "Start date to compute offline backfill.")
 
     val localTableMapping: Map[String, String] = propsLong[String](
       name = "local-table-mapping",
@@ -273,7 +271,7 @@ object Driver {
 
       if (tableUtils.sparkSession.conf.get("spark.chronon.join.backfill.mode.skewFree", "false").toBoolean) {
         logger.info(s" >>> Running join backfill in skew free mode <<< ")
-        val startPartition = args.startPartitionOverride.toOption.getOrElse(args.joinConf.left.query.startPartition)
+        val startPartition = args.startPartition.toOption.getOrElse(args.joinConf.left.query.startPartition)
         val endPartition = args.endDate()
 
         val joinName = args.joinConf.metaData.name
@@ -303,9 +301,8 @@ object Driver {
       )
 
       if (args.selectedJoinParts.isDefined) {
-        val result = join.computeJoinOpt(args.stepDays.toOption,
-                                         args.startPartitionOverride.toOption,
-                                         args.useCachedLeft.getOrElse(false))
+        val result =
+          join.computeJoinOpt(args.stepDays.toOption, args.startPartition.toOption, args.useCachedLeft.getOrElse(false))
         if (result.isDefined) {
           logger.info(
             s"Backfilling selected join parts: ${args.selectedJoinParts()} is complete. Skipping the final join. Exiting."
@@ -314,7 +311,7 @@ object Driver {
         return
       }
 
-      val df = join.computeJoin(args.stepDays.toOption, args.startPartitionOverride.toOption)
+      val df = join.computeJoin(args.stepDays.toOption, args.startPartition.toOption)
 
       if (args.shouldExport()) {
         args.exportTableToLocal(args.joinConf.metaData.outputTable, tableUtils)
@@ -350,7 +347,7 @@ object Driver {
         args.buildTableUtils(),
         !args.runFirstHole()
       )
-      join.computeLeft(args.startPartitionOverride.toOption)
+      join.computeLeft(args.startPartition.toOption)
     }
   }
 
@@ -373,7 +370,7 @@ object Driver {
         args.buildTableUtils(),
         !args.runFirstHole()
       )
-      join.computeFinal(args.startPartitionOverride.toOption)
+      join.computeFinal(args.startPartition.toOption)
     }
   }
 
@@ -390,12 +387,15 @@ object Driver {
 
     def run(args: Args): Unit = {
       val tableUtils = args.buildTableUtils()
+      val startPartition = args.startPartition.toOption.getOrElse(
+        throw new IllegalArgumentException("--start-partition is required for group-by-backfill")
+      )
       GroupBy.computeBackfill(
         args.groupByConf,
+        startPartition,
         args.endDate(),
         tableUtils,
         args.stepDays.toOption,
-        args.startPartitionOverride.toOption,
         !args.runFirstHole()
       )
 
@@ -489,7 +489,7 @@ object Driver {
       val stagingQueryJob = StagingQuery.from(args.stagingQueryConf, args.endDate(), tableUtils)
       stagingQueryJob.computeStagingQuery(args.stepDays.toOption,
                                           args.enableAutoExpand.toOption,
-                                          args.startPartitionOverride.toOption,
+                                          args.startPartition.toOption,
                                           !args.runFirstHole(),
                                           args.forceOverwrite())
 
@@ -725,7 +725,7 @@ object Driver {
         args.schemaTable(),
         Some(args.stepDays())
       )
-      logFlattenerJob.buildLogTable(args.startPartitionOverride.toOption)
+      logFlattenerJob.buildLogTable(args.startPartition.toOption)
     }
   }
 
@@ -872,7 +872,7 @@ object Driver {
 
       // Calculate the date range
       val endDate = args.endDate()
-      val startDate: String = args.startPartitionOverride.getOrElse(args.endDate())
+      val startDate: String = args.startPartition.getOrElse(args.endDate())
       val dateRange = new DateRange()
         .setStartDate(startDate)
         .setEndDate(endDate)
@@ -934,7 +934,7 @@ object Driver {
 
       // Calculate the date range
       val endDate = args.endDate()
-      val startDate = args.startPartitionOverride.getOrElse(args.endDate())
+      val startDate = args.startPartition.getOrElse(args.endDate())
       val dateRange = new DateRange()
         .setStartDate(startDate)
         .setEndDate(endDate)
@@ -971,7 +971,7 @@ object Driver {
       val allJoinParts = joinConf.joinParts.asScala.toSeq
 
       val endDate = args.endDate()
-      val startDate = args.startPartitionOverride.getOrElse(endDate)
+      val startDate = args.startPartition.getOrElse(endDate)
       val dateRange = new DateRange()
         .setStartDate(startDate)
         .setEndDate(endDate)

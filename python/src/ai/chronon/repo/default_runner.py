@@ -251,7 +251,7 @@ class Runner:
             submitter_args.append(" --local-conf-path={conf}".format(conf=self.local_abs_conf_path))
             submitter_args.append(" --original-mode={mode}".format(mode=self.mode))
 
-        override_start_partition_arg = "--start-partition-override=" + start_ds if start_ds else ""
+        start_partition_arg = "--start-partition=" + start_ds if start_ds else ""
 
         additional_args = " ".join(
             f"--{key.replace('_', '-')}={value}" for key, value in kwargs.items() if value
@@ -261,7 +261,7 @@ class Runner:
             [
                 base_args,
                 str(self.args),
-                override_start_partition_arg,
+                start_partition_arg,
                 " ".join(submitter_args),
                 additional_args,
             ]

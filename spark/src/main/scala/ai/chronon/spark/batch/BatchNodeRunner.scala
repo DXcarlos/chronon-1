@@ -5,7 +5,7 @@ import ai.chronon.api._
 import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
 import ai.chronon.observability.{TileStats, TileStatsType}
 import ai.chronon.online.KVStore.PutRequest
-import ai.chronon.online.{Api, KVStore}
+import ai.chronon.online.{Api, KVStore, KvPartitions, KvPartitionsStore}
 import ai.chronon.planner.{JoinStatsComputeNode, JoinStatsUploadToKVNode, _}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.batch.iceberg.IcebergPartitionStatsExtractor
@@ -19,7 +19,7 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.concurrent.Await
+import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -417,9 +417,9 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
         logger.info(s"Running groupBy backfill for '${metadata.name}' for range: [${range.start}, ${range.end}]")
         GroupBy.computeBackfill(
           conf.getGroupByBackfill.groupBy,
+          range.start,
           range.end,
-          tableUtils,
-          overrideStartPartition = Option(range.start)
+          tableUtils
         )
         logger.info(s"Successfully completed groupBy backfill for '${metadata.name}'")
 
@@ -490,10 +490,16 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       )
     }
 
-    val putRequest = PutRequest(metadata.executionInfo.outputTableInfo.table.getBytes,
-                                outputTablePartitionsJson.getBytes,
-                                tablePartitionsDataset)
-    val kvStoreUpdates = kvStore.put(putRequest)
+    val outputTable = metadata.executionInfo.outputTableInfo.table
+
+    // Use KvPartitionsStore to store partitions with semantic hash
+    implicit val ec: ExecutionContext = ExecutionContext.global
+    val kvPartitionsStore = new KvPartitionsStore(kvStore, tablePartitionsDataset)
+    val kvPartitions = KvPartitions(
+      partitions = allOutputTablePartitions,
+      semanticHash = Option(node.semanticHash)
+    )
+    val kvStoreUpdates = kvPartitionsStore.put(outputTable, kvPartitions)(range.partitionSpec)
     Await.result(kvStoreUpdates, Duration.Inf)
     logger.info(s"Successfully completed batch node runner for '${metadata.name}'")
 

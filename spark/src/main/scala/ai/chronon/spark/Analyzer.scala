@@ -175,7 +175,7 @@ class Analyzer(tableUtils: TableUtils,
                 groupByConf.keyColumns.toScala.toArray,
                 groupByConf.sources.toScala.map(_.table).mkString(","))
       else ""
-    val schema = if (groupByConf.isSetBackfillStartDate && groupByConf.hasDerivations) {
+    val schema = if (groupByConf.hasDerivations) {
       // handle group by backfill mode for derivations
       // todo: add the similar logic to join derivations
       val keyAndPartitionFields =

@@ -46,6 +46,15 @@ struct Query {
     **/
     24: optional list<string> subPartitionsToWaitFor
 
+    /**
+    * Indicates whether the source table uses clustering (e.g., Delta Lake) instead of
+    * traditional Hive-style partitioning. This affects sensor logic:
+    * - For partitioned tables: sensor checks max(partition_col) >= sensor_date
+    * - For clustered tables: sensor checks max(timestamp_col) >= next(sensor_date)
+    *   to ensure all data for that date has landed.
+    **/
+    25: optional bool clustered
+
 }
  
 /**
@@ -361,8 +370,6 @@ struct GroupBy {
     // we assume the source is already grouped by keys
     4: optional list<Aggregation> aggregations
     5: optional Accuracy accuracy
-    // Optional start date for a group by backfill, if it's unset then no historical partitions will be generate
-    6: optional string backfillStartDate
     // support for offline only for now
     7: optional list<Derivation> derivations
 }

@@ -27,7 +27,6 @@ source = EventSource(
 v1 = GroupBy(
     sources=[source],
     keys=["schema_hash"],
-    backfill_start_date="2025-09-23",
     aggregations=[Aggregation(input_column="schema_value", operation=Operation.LAST)],
     accuracy=Accuracy.SNAPSHOT,
     version=2,

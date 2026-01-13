@@ -6,7 +6,6 @@
       "operation": 3
     }
   ],
-  "backfillStartDate": "2022-01-01",
   "keyColumns": [
     "s2CellId",
     "place_id"
@@ -60,8 +59,7 @@
           }
         }
       },
-      "historicalBackfill": 0,
-      "scheduleCron": "@daily"
+      "historicalBackfill": 0
     },
     "name": "sample_team.sample_group_by_group_by.v1__0",
     "outputNamespace": "sample_namespace",

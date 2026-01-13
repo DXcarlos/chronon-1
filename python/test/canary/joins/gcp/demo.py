@@ -105,4 +105,6 @@ derivations_v1 = Join(
     online=True,
     output_namespace="data",
     step_days=2,
+    offline_schedule="0 3 * * *",
+    online_schedule="0 3 * * *"
 )

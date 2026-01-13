@@ -10,7 +10,7 @@ import ai.chronon.spark.stats.drift.Summarizer
 import ai.chronon.spark.stats.drift.SummaryUploader
 import ai.chronon.spark.stats.drift.scripts.PrepareData
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.utils.InMemoryKvStore
+import ai.chronon.online.InMemoryKvStore
 import ai.chronon.spark.utils.MockApi
 import org.rogach.scallop.ScallopConf
 import org.rogach.scallop.ScallopOption
@@ -80,7 +80,7 @@ object ObservabilityDemoDataLoader {
     // mock api impl for online fetching and uploading
     val inMemKvStoreFunc: () => KVStore = () => {
       // cannot reuse the variable - or serialization error
-      val result = InMemoryKvStore.build(namespace, () => null)
+      val result = InMemoryKvStore.build(namespace)
       result
     }
     val inMemoryApi = new MockApi(inMemKvStoreFunc, namespace)

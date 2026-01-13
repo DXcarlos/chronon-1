@@ -8,7 +8,7 @@ Once merged into production, `GroupBy`s will get the following tasks and dags:
 
 1. (if online=True) A task in the `{team_name}_chronon_batch` DAG for daily batch uploads to the KV store.
 2. (if online=True and streaming) A task in the `{team_name}_chronon_realtime` DAG for a streaming job that writes to the KV store.
-3. (if backfill_start_date is set) A task in the `{team_name}_chronon_batch` DAG to front-fill the `GroupBy` snapshot table.
+3. (if offline_schedule is set) A task in the `{team_name}_chronon_batch` DAG to front-fill the `GroupBy` snapshot table.
 
 ## Join
 

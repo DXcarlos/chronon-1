@@ -363,17 +363,13 @@ Keys {unselected_keys}, are unselected in source
             if agg.windows:
                 assert not (
                     # Snapshot accuracy.
-                    (
-                        (group_by.accuracy and group_by.accuracy == Accuracy.SNAPSHOT)
-                        or group_by.backfillStartDate
-                    )
+                    (group_by.accuracy and group_by.accuracy == Accuracy.SNAPSHOT)
                     and
                     # Hourly aggregation.
                     any([window.timeUnit == TimeUnit.HOURS for window in agg.windows])
                 ), (
                     "Detected a snapshot accuracy group by with an hourly aggregation. Resolution with snapshot "
-                    "accuracy is not fine enough to allow hourly group bys. Consider removing the `backfill start "
-                    "date` param if set or adjusting the aggregation window. "
+                    "accuracy is not fine enough to allow hourly group bys. Consider adjusting the aggregation window. "
                     f"input_column: {agg.inputColumn}, windows: {agg.windows}"
                 )
 
@@ -417,20 +413,20 @@ def get_output_col_names(aggregation):
 
 
 def GroupBy(
-    version: int,
     sources: Union[List[utils.ANY_SOURCE_TYPE], utils.ANY_SOURCE_TYPE],
     keys: List[str],
     aggregations: Optional[List[ttypes.Aggregation]],
+    version: Optional[int] = None,
     derivations: List[ttypes.Derivation] = None,
     accuracy: ttypes.Accuracy = None,
-    backfill_start_date: str = None,
     output_namespace: str = None,
     table_properties: Dict[str, str] = None,
     tags: Dict[str, str] = None,
     online: bool = DEFAULT_ONLINE,
     production: bool = DEFAULT_PRODUCTION,
     # execution params
-    offline_schedule: str = "@daily",
+    offline_schedule: str = None,
+    online_schedule: Optional[str] = None,
     conf: common.ConfigProperties = None,
     env_vars: common.EnvironmentVariables = None,
     cluster_conf: common.ClusterConfigProperties = None,
@@ -487,10 +483,6 @@ def GroupBy(
         This when set can be integrated to trigger alerts. You will have to integrate this flag into your alerting
         system yourself.
     :type production: bool
-    :param backfill_start_date:
-        Start date from which GroupBy data should be computed. This will determine how back of a time that Chronon would
-        goto to compute the resultant table and its aggregations.
-    :type backfill_start_date: str
     :param env:
         This is a dictionary of "mode name" to dictionary of "env var name" to "env var value"::
 
@@ -526,15 +518,24 @@ def GroupBy(
         This is used by airflow integration to pick an older hive partition to wait on.
     :type lag: int
     :param offline_schedule:
-        the offline schedule interval for batch jobs. Below is the equivalent of the cron tab commands::
+        The offline schedule interval for batch jobs. Supports standard cron expressions
+        that run at most once per day. Examples::
 
-            '@hourly': '0 * * * *',
-            '@daily': '0 0 * * *',
-            '@weekly': '0 0 * * 0',
-            '@monthly': '0 0 1 * *',
-            '@yearly': '0 0 1 1 *',
+            '@daily': Legacy format for midnight daily execution
+            '0 2 * * *': Daily at 2:00 AM
+            '30 14 * * MON-FRI': Weekdays at 2:30 PM
+            '0 9 * * 1': Mondays at 9:00 AM
+            '15 23 * * SUN': Sundays at 11:15 PM
+
+        Note: Hourly, sub-hourly, or multi-daily schedules are not supported.
 
     :type offline_schedule: str
+    :param online_schedule:
+        The online schedule interval for real-time serving jobs. Supports standard cron expressions
+        that run at most once per day. When online=True and online_schedule is not specified,
+        defaults to "@daily". Set to None to explicitly disable online scheduling even when online=True.
+        Examples follow the same format as offline_schedule.
+    :type online_schedule: Optional[str]
     :param tags:
         Additional metadata that does not directly affect feature computation, but is useful to
         track for management purposes.
@@ -572,8 +573,8 @@ def GroupBy(
     """
     assert sources, "Sources are not specified"
 
-    assert isinstance(version, int), (
-        f"Version must be an integer, but found {type(version).__name__}"
+    assert version is None or isinstance(version, int), (
+        f"Version must be an integer or None, but found {type(version).__name__}"
     )
 
     agg_inputs = []
@@ -614,8 +615,20 @@ def GroupBy(
     # get caller's filename to assign team
     team = inspect.stack()[1].filename.split("/")[-2]
 
+    # Validate online_schedule based on online flag
+    if not online and online_schedule is not None:
+        raise ValueError(
+            "online_schedule cannot be set when online=False. "
+            "Either set online=True or remove the online_schedule parameter."
+        )
+
+    # Set default online_schedule if online is True and online_schedule is not specified
+    if online and online_schedule is None:
+        online_schedule = "@daily"
+
     exec_info = common.ExecutionInfo(
-        scheduleCron=offline_schedule,
+        offlineSchedule=offline_schedule,
+        onlineSchedule=online_schedule,
         conf=conf,
         env=env_vars,
         stepDays=step_days,
@@ -639,7 +652,7 @@ def GroupBy(
         executionInfo=exec_info,
         tags=tags if tags else None,
         columnTags=column_tags if column_tags else None,
-        version=str(version),
+        version=str(version) if version is not None else None,
     )
 
     group_by = ttypes.GroupBy(
@@ -647,7 +660,6 @@ def GroupBy(
         keyColumns=keys,
         aggregations=aggregations,
         metaData=metadata,
-        backfillStartDate=backfill_start_date,
         accuracy=accuracy,
         derivations=derivations,
     )

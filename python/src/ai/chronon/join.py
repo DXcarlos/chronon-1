@@ -17,7 +17,7 @@ import gc
 import importlib
 import logging
 from collections import Counter
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import gen_thrift.api.ttypes as api
 import gen_thrift.common.ttypes as common
@@ -287,8 +287,8 @@ def BootstrapPart(
 def Join(
     left: api.Source,
     right_parts: List[api.JoinPart],
-    version: int,
     row_ids: Union[str, List[str]],
+    version: Optional[int] = None,
     online_external_parts: List[api.ExternalPart] = None,
     bootstrap_parts: List[api.BootstrapPart] = None,
     bootstrap_from_log: bool = False,
@@ -304,6 +304,7 @@ def Join(
     use_long_names: bool = False,
     # execution params
     offline_schedule: str = "@daily",
+    online_schedule: str = None,
     historical_backfill: bool = None,
     conf: common.ConfigProperties = None,
     env_vars: common.EnvironmentVariables = None,
@@ -366,7 +367,14 @@ def Join(
         users can register external sources into Api implementation. Chronon fetcher can invoke the implementation.
         This is applicable only for online fetching. Offline this will not be produce any values.
     :param offline_schedule:
-        Cron expression for Airflow to schedule a DAG for offline join compute tasks
+        Schedule expression for offline join compute tasks. Supports standard cron expressions
+        that run at most once per day. Examples: '@daily' (midnight), '0 2 * * *' (2am daily),
+        '30 14 * * MON-FRI' (weekdays at 2:30pm), '0 9 * * 1' (Mondays at 9am).
+        Note: Hourly, sub-hourly, or multi-daily schedules are not supported.
+    :param online_schedule:
+        Schedule expression for online/deploy tasks. When online=True and online_schedule is not specified,
+        defaults to "@daily". Set to None to explicitly disable online scheduling even when online=True.
+        Supports the same format as offline_schedule.
     :param row_ids:
         Columns of the left table that uniquely define a training record. Used as default keys during bootstrap
     :param bootstrap_parts:
@@ -409,8 +417,8 @@ def Join(
     if isinstance(row_ids, str):
         row_ids = [row_ids]
 
-    assert isinstance(version, int), (
-        f"Version must be an integer, but found {type(version).__name__}"
+    assert version is None or isinstance(version, int), (
+        f"Version must be an integer or None, but found {type(version).__name__}"
     )
 
     # create a deep copy for case: multiple LeftOuterJoin use the same left,
@@ -449,8 +457,20 @@ def Join(
             )
         ]
 
+    # Validate online_schedule based on online flag
+    if not online and online_schedule is not None:
+        raise ValueError(
+            "online_schedule cannot be set when online=False. "
+            "Either set online=True or remove the online_schedule parameter."
+        )
+
+    # Set default online_schedule if online is True and online_schedule is not specified
+    if online and online_schedule is None:
+        online_schedule = "@daily"
+
     exec_info = common.ExecutionInfo(
-        scheduleCron=offline_schedule,
+        offlineSchedule=offline_schedule,
+        onlineSchedule=online_schedule,
         conf=conf,
         env=env_vars,
         stepDays=step_days,
@@ -468,7 +488,7 @@ def Join(
         consistencyCheck=check_consistency,
         consistencySamplePercent=consistency_sample_percent,
         executionInfo=exec_info,
-        version=str(version),
+        version=str(version) if version is not None else None,
     )
 
     join = api.Join(

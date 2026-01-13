@@ -63,7 +63,7 @@ jobs:
       - name: Send Failure Notification
         uses: slackapi/slack-github-action@v1
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_TESTS_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GENERAL_WEBHOOK_URL }}
         with:
           payload: |
             {

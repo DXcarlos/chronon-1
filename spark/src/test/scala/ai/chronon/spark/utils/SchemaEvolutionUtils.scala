@@ -22,16 +22,16 @@ import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.utils.MockApi
 
 object SchemaEvolutionUtils {
-  def runLogSchemaGroupBy(mockApi: MockApi, ds: String, backfillStartDate: String): Unit = {
+  def runLogSchemaGroupBy(mockApi: MockApi, ds: String, startPartition: String): Unit = {
     val schemaGroupByConf = LogUtils.buildLogSchemaGroupBy(
       mockApi.logTable,
       Some("mock/schema_table"),
       Some(mockApi.namespace),
-      Some("chronon"),
-      Some(backfillStartDate)
+      Some("chronon")
     )
     ai.chronon.spark.GroupBy.computeBackfill(
       schemaGroupByConf,
+      startPartition,
       ds,
       TableUtils(SparkSessionBuilder.build(s"groupBy_${schemaGroupByConf.metaData.name}_backfill"))
     )

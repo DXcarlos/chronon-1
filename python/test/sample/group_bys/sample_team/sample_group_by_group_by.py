@@ -26,7 +26,6 @@ v1 = GroupBy(
         Aggregation(input_column="impressed_unique_count_1d_sum", operation=Operation.LAST),
     ],
     production=False,
-    backfill_start_date="2022-01-01",
     table_properties={
         "sample_config_json": """{"sample_key": "sample_value"}""",
         "description": "sample description"
