@@ -195,7 +195,6 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
         keyWithHash.data -> irArray
       }
 
-
     KvRdd(outputRdd, groupBy.keySchema, irSchema, nullCounts.toMap)
   }
 
@@ -326,10 +325,7 @@ object GroupByUpload {
             .build(s"groupBy_${groupByConf.metaData.name}_upload")))
     val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
     val startTs = System.currentTimeMillis()
-    val kvRdd = generateKvRdd(groupByConf = groupByConf,
-                              endDs = endDs,
-                              showDf = showDf,
-                              tableUtils = tableUtils)
+    val kvRdd = generateKvRdd(groupByConf = groupByConf, endDs = endDs, showDf = showDf, tableUtils = tableUtils)
 
     val kvDf = kvRdd.toAvroDf(jsonPercent = jsonPercent)
 

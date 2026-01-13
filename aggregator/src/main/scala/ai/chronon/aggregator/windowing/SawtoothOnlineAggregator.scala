@@ -225,7 +225,7 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
 
         hasNonNullCollapsed || hasNonNullTailHop
 
-        } else {
+      } else {
         hasNonNullCollapsed
       }
 

@@ -144,7 +144,7 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     val yesterday = tableUtils.partitionSpec.before(today)
     createDatabase(namespace)
     tableUtils.sql(s"USE $namespace")
-    val eventsTable = "my_events"
+    val eventsTable = "my_events_always_null"
     val eventSchema = List(
       Column("user", StringType, 10),
       Column("list_event", StringType, 100, nullRate = 1.0), // always null
@@ -177,55 +177,13 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     }
   }
 
-
-  it should "produce a valid nullCountMap with collapsedIr non null and tailHops are null" in {
-    createDatabase(namespace)
-    tableUtils.sql(s"USE $namespace")
-
-    val eventsTable = "my_events"
-    def ts(arg: String) = TsUtils.datetimeToTs(s"2023-$arg:00")
-
-    val batchEndDs = "2023-08-14"
-
-    val viewsColumns = Seq("user", "list_event", "views", "ts", "ds")
-    val ratingsData = Seq(
-      ("user1", "some-list_event", 5, ts("08-14 11:00"), "2023-08-14"),
-      ("user1", "some-list_event", 10, ts("08-14 12:00"), "2023-08-14"),
-    )
-
-    val viewsRdd = spark.sparkContext.parallelize(ratingsData)
-    val viewsDf = spark.createDataFrame(viewsRdd).toDF(viewsColumns: _*)
-    viewsDf.save(eventsTable)
-
-    val aggregations: Seq[Aggregation] = Seq(
-//      Builders.Aggregation(Operation.LAST_K, "list_event", Seq(new Window(18, TimeUnit.DAYS)), argMap = Map("k" -> "30")),
-//      Builders.Aggregation(Operation.AVERAGE, "views", Seq(new Window(18, TimeUnit.DAYS), new Window(1, TimeUnit.DAYS)))
-      Builders.Aggregation(Operation.AVERAGE, "views", Seq(new Window(1, TimeUnit.DAYS)))
-    )
-    val keys = Seq("user").toArray
-    val groupByConf =
-      Builders.GroupBy(
-        sources = Seq(Builders.Source.events(Builders.Query(), table = eventsTable)),
-        keyColumns = keys,
-        aggregations = aggregations,
-        metaData = Builders.MetaData(namespace = namespace, name = "test_multiple_avg_upload"),
-        accuracy = Accuracy.TEMPORAL
-      )
-    val result = GroupByUpload.generateKvRdd(groupByConf, endDs = batchEndDs, tableUtils = tableUtils).nullCounts
-    result
-  }
-
-  it should "produce a valid nullCountMap with collapsedIr is null and tailHops are non null" in {
-
-  }
-
   it should "produce a valid nullCountMap with both collapsedIr and tailHops are non null" in {
 
     val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
     val yesterday = tableUtils.partitionSpec.before(today)
     createDatabase(namespace)
     tableUtils.sql(s"USE $namespace")
-    val eventsTable = "my_events"
+    val eventsTable = "my_events_non_null"
     val eventSchema = List(
       Column("user", StringType, 10),
       Column("list_event", StringType, 100, nullRate = 0.0), // never null
