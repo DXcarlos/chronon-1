@@ -411,28 +411,6 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     val reviewsTable = s"${namespace}.reviews"
     setupReviewsTable(reviewsTable)
 
-//    val reviewsTable = s"${namespace}.reviews"
-//    val reviewsColumns = Seq("review", "listing", "ts", "ds")
-//    val reviewsData = Seq(
-//      ("review1", "listing1", ts("07-13 10:00"), "2023-08-14"),
-//      ("review2", "listing1", ts("07-13 11:00"), "2023-08-14"), // delete (next day)
-//      ("review3", "listing2", ts("08-15 08:00"), "2023-08-15") // insert
-//    )
-//    val reviewsRdd = spark.sparkContext.parallelize(reviewsData)
-//    val reviewsDf = spark.createDataFrame(reviewsRdd).toDF(reviewsColumns: _*)
-//    reviewsDf.save(reviewsTable)
-//    reviewsDf.show()
-//
-//    val reviewsMutationsColumns = Seq("is_before", "mutation_ts", "review", "listing", "ts", "ds")
-//    val reviewsMutations = Seq(
-//      (true, ts("08-15 06:00"), "review2", "listing1", ts("07-13 11:00"), "2023-08-15"), // delete
-//      (false, ts("08-15 08:00"), "review3", "listing2", ts("08-15 08:00"), "2023-08-15") // insert
-//    )
-//    val reviewsMutationsRdd = spark.sparkContext.parallelize(reviewsMutations)
-//    val reviewsMutationsDf = spark.createDataFrame(reviewsMutationsRdd).toDF(reviewsMutationsColumns: _*)
-//    reviewsMutationsDf.save(s"${reviewsTable}_mutations")
-//    reviewsMutationsDf.show()
-
     val leftRatings =
       Builders.Source.entities(
         Builders.Query(selects = Builders.Selects("review", "rating", "category_ratings", "ts")),
@@ -441,22 +419,6 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
         mutationTable = s"${ratingsTable}_mutations"
       )
     val reviewGroupBy = sampleEntitiesGroupBy(reviewsTable)
-//    val reviewGroupBy = Builders.GroupBy(
-//      metaData = Builders.MetaData(namespace = namespace, name = "review_attrs"),
-//      sources = Seq(
-//        Builders.Source.entities(
-//          Builders.Query(selects = Builders.Selects("review", "listing", "ts")),
-//          snapshotTable = reviewsTable,
-//          mutationTopic = s"${reviewsTable}_mutations",
-//          mutationTable = s"${reviewsTable}_mutations"
-//        )),
-//      keyColumns = scala.Seq("review"),
-//      aggregations = Seq(
-//        Builders.Aggregation(
-//          operation = Operation.LAST,
-//          inputColumn = "listing"
-//        ))
-//    )
 
     val joinConf = Builders.Join(
       metaData = Builders.MetaData(namespace = namespace, name = "review_enrichment"),
