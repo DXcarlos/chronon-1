@@ -279,7 +279,7 @@ object GroupByUpload {
                                    endDs: String,
                                    showDf: Boolean = false,
                                    tableUtils: TableUtils,
-                                   context: Metrics.Context) = {
+                                   maybeContext: Option[Metrics.Context] = None) = {
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
     Option(groupByConf.setups).foreach(_.foreach(tableUtils.sql))
     // add 1 day to the batch end time to reflect data [ds 00:00:00.000, ds + 1 00:00:00.000)
@@ -315,9 +315,11 @@ object GroupByUpload {
     }
 
     // Emit null count map metrics
-    result.nullCounts.foreach({ case (field, count) =>
-      context.gauge(s"NullCount.$field.$endDs", count)
-    })
+    if (maybeContext.isDefined) {
+      result.nullCounts.foreach({ case (field, count) =>
+        maybeContext.get.gauge(s"NullCount.$field.$endDs", count)
+      })
+    }
 
     result
   }
@@ -335,7 +337,11 @@ object GroupByUpload {
             .build(s"groupBy_${groupByConf.metaData.name}_upload")))
     val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
     val startTs = System.currentTimeMillis()
-    val kvRdd = generateKvRdd(groupByConf = groupByConf, endDs = endDs, showDf = showDf, tableUtils = tableUtils, context = context)
+    val kvRdd = generateKvRdd(groupByConf = groupByConf,
+                              endDs = endDs,
+                              showDf = showDf,
+                              tableUtils = tableUtils,
+                              maybeContext = Option(context))
 
     val kvDf = kvRdd.toAvroDf(jsonPercent = jsonPercent)
 
