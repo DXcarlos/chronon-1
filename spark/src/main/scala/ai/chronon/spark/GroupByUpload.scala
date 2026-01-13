@@ -16,10 +16,7 @@
 
 package ai.chronon.spark
 
-import ai.chronon.aggregator.windowing.FinalBatchIr
-import ai.chronon.aggregator.windowing.FiveMinuteResolution
-import ai.chronon.aggregator.windowing.Resolution
-import ai.chronon.aggregator.windowing.SawtoothOnlineAggregator
+import ai.chronon.aggregator.windowing.{FinalBatchIr, FiveMinuteResolution, Resolution, SawtoothOnlineAggregator}
 import ai.chronon.api
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.api.Accuracy
@@ -198,6 +195,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
         keyWithHash.data -> irArray
       }
 
+
     KvRdd(outputRdd, groupBy.keySchema, irSchema, nullCounts.toMap)
   }
 
@@ -278,7 +276,6 @@ object GroupByUpload {
 
   private[spark] def generateKvRdd(groupByConf: api.GroupBy,
                                    endDs: String,
-                                   tableUtilsOpt: Option[TableUtils] = None,
                                    showDf: Boolean = false,
                                    tableUtils: TableUtils) = {
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
@@ -331,7 +328,6 @@ object GroupByUpload {
     val startTs = System.currentTimeMillis()
     val kvRdd = generateKvRdd(groupByConf = groupByConf,
                               endDs = endDs,
-                              tableUtilsOpt = tableUtilsOpt,
                               showDf = showDf,
                               tableUtils = tableUtils)
 

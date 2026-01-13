@@ -198,23 +198,21 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
         val hopIndex = tailHopIndices(i)
         val queryTail = TsUtils.round(batchEndTs - windowMillis, hopSizes(hopIndex))
 
-        // TODO: what is this structure? Array of Irs across all windowmappings or single windowmapping?
         val hopIrs = batchIr.tailHops(hopIndex)
         var idx: Int = 0
 
         lazy val hasNonNullTailHop = {
-
           // check if any of the relevant tail hops for this window has a non-null value
           var hasNonNullTailHop_ = false
 
           while (idx < hopIrs.length && !hasNonNullTailHop_) {
-            // TODO: reminder Hopir is array[any].
-            val hopIr = hopIrs(idx)
-            // TODO: why not first? Check with debugger
-            val hopStart = hopIr.last.asInstanceOf[Long]
+            val hopIr: HopsAggregator.HopIr = hopIrs(idx)
 
-            // TODO: don't understand why this if condition
-            if ((batchEndTs - windowMillis) + tailBufferMillis > hopStart && hopStart >= queryTail) {
+            import ai.chronon.aggregator.windowing.HopsAggregator.HopIrOps
+            val hopStartTimeStamp = hopIr.getTs
+
+            // Only want to inspect tail hops that fall within the tailBuffer (default 2d), and after the queryTail
+            if ((batchEndTs - windowMillis) + tailBufferMillis > hopStartTimeStamp && hopStartTimeStamp >= queryTail) {
               val tailHop = hopIr(baseIrIndices(i))
               if (tailHop != null) {
                 hasNonNullTailHop_ = true
@@ -223,15 +221,12 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
             idx += 1
           }
           hasNonNullTailHop_
-
         }
 
         hasNonNullCollapsed || hasNonNullTailHop
 
-      } else {
-
+        } else {
         hasNonNullCollapsed
-
       }
 
       val colName = windowMappings(i).aggregationPart.outputColumnName

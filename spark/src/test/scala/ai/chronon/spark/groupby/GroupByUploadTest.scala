@@ -19,7 +19,7 @@ package ai.chronon.spark.groupby
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
-import ai.chronon.api._
+import ai.chronon.api.{Window, _}
 import ai.chronon.online.fetcher.Fetcher
 import ai.chronon.spark.Extensions.DataframeOps
 import ai.chronon.spark.GroupByUpload
@@ -139,22 +139,118 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     GroupByUpload.run(groupByConf, endDs = yesterday)
   }
 
-//  it should "produce a valid nullCountMap with both collapsedIr and tailHops are null" {
-//    val actualKvRdd = GroupByUpload.generateKvRdd()
-//    actualKvRdd.nullCounts should be(defined)
-//  }
-//
-//  it should "produce a valid nullCountMap with collapsedIr non null and tailHops are null" {
-//
-//  }
-//
-//  it should "produce a valid nullCountMap with collapsedIr is null and tailHops are non null" {
-//
-//  }
-//
-//  it should "produce a valid nullCountMap with both collapsedIr and tailHops are non null" {
-//
-//  }
+  it should "produce a valid nullCountMap where both collapsedIr and tailHops are null" in {
+    val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
+    val yesterday = tableUtils.partitionSpec.before(today)
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val eventsTable = "my_events"
+    val eventSchema = List(
+      Column("user", StringType, 10),
+      Column("list_event", StringType, 100, nullRate = 1.0), // always null
+      Column("views", IntType, 10,  nullRate = 1.0), // always null
+    )
+    val eventDf = DataFrameGen.events(spark, eventSchema, count = 1000, partitions = 18)
+    eventDf.save(s"$namespace.$eventsTable")
+
+    // Count how many "user" keys there are in the eventDf
+    val numUsers = spark.sql(s"SELECT COUNT(DISTINCT user) as user_count FROM $namespace.$eventsTable").collect().head.getAs[Long]("user_count")
+
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.LAST_K, "list_event", Seq(new Window(18, TimeUnit.DAYS)), argMap = Map("k" -> "30")),
+      Builders.Aggregation(Operation.AVERAGE, "views", Seq(new Window(18, TimeUnit.DAYS), new Window(1, TimeUnit.DAYS)))
+    )
+    val keys = Seq("user").toArray
+    val groupByConf =
+      Builders.GroupBy(
+        sources = Seq(Builders.Source.events(Builders.Query(), table = eventsTable)),
+        keyColumns = keys,
+        aggregations = aggregations,
+        metaData = Builders.MetaData(namespace = namespace, name = "test_multiple_avg_upload"),
+        accuracy = Accuracy.TEMPORAL
+      )
+    val result = GroupByUpload.generateKvRdd(groupByConf, endDs = yesterday, tableUtils = tableUtils).nullCounts
+
+    result.keys.size shouldBe 3 // 3 output columns. 1 agg with 1 window, 1 agg with 2 windows = 3 output columns
+    result.values.foreach { count =>
+      count shouldBe numUsers
+    }
+  }
+
+
+  it should "produce a valid nullCountMap with collapsedIr non null and tailHops are null" in {
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+
+    val eventsTable = "my_events"
+    def ts(arg: String) = TsUtils.datetimeToTs(s"2023-$arg:00")
+
+    val batchEndDs = "2023-08-14"
+
+    val viewsColumns = Seq("user", "list_event", "views", "ts", "ds")
+    val ratingsData = Seq(
+      ("user1", "some-list_event", 5, ts("08-14 11:00"), "2023-08-14"),
+      ("user1", "some-list_event", 10, ts("08-14 12:00"), "2023-08-14"),
+    )
+
+    val viewsRdd = spark.sparkContext.parallelize(ratingsData)
+    val viewsDf = spark.createDataFrame(viewsRdd).toDF(viewsColumns: _*)
+    viewsDf.save(eventsTable)
+
+    val aggregations: Seq[Aggregation] = Seq(
+//      Builders.Aggregation(Operation.LAST_K, "list_event", Seq(new Window(18, TimeUnit.DAYS)), argMap = Map("k" -> "30")),
+//      Builders.Aggregation(Operation.AVERAGE, "views", Seq(new Window(18, TimeUnit.DAYS), new Window(1, TimeUnit.DAYS)))
+      Builders.Aggregation(Operation.AVERAGE, "views", Seq(new Window(1, TimeUnit.DAYS)))
+    )
+    val keys = Seq("user").toArray
+    val groupByConf =
+      Builders.GroupBy(
+        sources = Seq(Builders.Source.events(Builders.Query(), table = eventsTable)),
+        keyColumns = keys,
+        aggregations = aggregations,
+        metaData = Builders.MetaData(namespace = namespace, name = "test_multiple_avg_upload"),
+        accuracy = Accuracy.TEMPORAL
+      )
+    val result = GroupByUpload.generateKvRdd(groupByConf, endDs = batchEndDs, tableUtils = tableUtils).nullCounts
+    result
+  }
+
+  it should "produce a valid nullCountMap with collapsedIr is null and tailHops are non null" in {
+
+  }
+
+  it should "produce a valid nullCountMap with both collapsedIr and tailHops are non null" in {
+
+    val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
+    val yesterday = tableUtils.partitionSpec.before(today)
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val eventsTable = "my_events"
+    val eventSchema = List(
+      Column("user", StringType, 10),
+      Column("list_event", StringType, 100, nullRate = 0.0), // never null
+      Column("views", IntType, 10,  nullRate = 0.0), // never null
+    )
+    val eventDf = DataFrameGen.events(spark, eventSchema, count = 1000, partitions = 18)
+    eventDf.save(s"$namespace.$eventsTable")
+
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.LAST_K, "list_event", Seq(new Window(18, TimeUnit.DAYS)), argMap = Map("k" -> "30")),
+      Builders.Aggregation(Operation.AVERAGE, "views", Seq(new Window(18, TimeUnit.DAYS), new Window(1, TimeUnit.DAYS)))
+    )
+    val keys = Seq("user").toArray
+    val groupByConf =
+      Builders.GroupBy(
+        sources = Seq(Builders.Source.events(Builders.Query(), table = eventsTable)),
+        keyColumns = keys,
+        aggregations = aggregations,
+        metaData = Builders.MetaData(namespace = namespace, name = "test_multiple_avg_upload"),
+        accuracy = Accuracy.TEMPORAL
+      )
+    val result = GroupByUpload.generateKvRdd(groupByConf, endDs = yesterday, tableUtils = tableUtils).nullCounts
+
+    result.isEmpty shouldBe true // empty null count map
+  }
 
   //  joinLeft = (review, category, rating)  [ratings]
   //  joinPart = (review, user, listing)     [reviews]
