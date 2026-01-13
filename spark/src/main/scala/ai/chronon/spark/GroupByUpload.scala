@@ -104,7 +104,6 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
       val nullCounts = rdd
         .treeAggregate(mutable.HashMap.empty[String, Long])(
           seqOp = { case (counterMap, (_, values)) =>
-            // TODO: revisit this logic for null counting
             for (i <- values.indices) {
               if (values(i) == null) {
                 val field = groupBy.preAggSchema.fields(i)
