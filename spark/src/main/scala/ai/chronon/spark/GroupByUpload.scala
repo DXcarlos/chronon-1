@@ -278,7 +278,8 @@ object GroupByUpload {
   private[spark] def generateKvRdd(groupByConf: api.GroupBy,
                                    endDs: String,
                                    showDf: Boolean = false,
-                                   tableUtils: TableUtils) = {
+                                   tableUtils: TableUtils,
+                                   context: Metrics.Context) = {
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
     Option(groupByConf.setups).foreach(_.foreach(tableUtils.sql))
     // add 1 day to the batch end time to reflect data [ds 00:00:00.000, ds + 1 00:00:00.000)
@@ -306,12 +307,19 @@ object GroupByUpload {
                    |Data Model: ${groupByConf.dataModel}
                    |""".stripMargin)
 
-    (groupByConf.inferredAccuracy, groupByConf.dataModel) match {
+    val result = (groupByConf.inferredAccuracy, groupByConf.dataModel) match {
       case (Accuracy.SNAPSHOT, DataModel.EVENTS)   => groupByUpload.snapshotEvents
       case (Accuracy.SNAPSHOT, DataModel.ENTITIES) => groupByUpload.snapshotEntities
       case (Accuracy.TEMPORAL, DataModel.EVENTS)   => shiftedGroupByUpload.temporalEvents()
       case (Accuracy.TEMPORAL, DataModel.ENTITIES) => otherGroupByUpload.temporalEvents()
     }
+
+    // Emit null count map metrics
+    result.nullCounts.foreach({ case (field, count) =>
+      context.gauge(s"NullCount.$field.$endDs", count)
+    })
+
+    result
   }
 
   def run(groupByConf: api.GroupBy,
@@ -327,7 +335,7 @@ object GroupByUpload {
             .build(s"groupBy_${groupByConf.metaData.name}_upload")))
     val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
     val startTs = System.currentTimeMillis()
-    val kvRdd = generateKvRdd(groupByConf = groupByConf, endDs = endDs, showDf = showDf, tableUtils = tableUtils)
+    val kvRdd = generateKvRdd(groupByConf = groupByConf, endDs = endDs, showDf = showDf, tableUtils = tableUtils, context = context)
 
     val kvDf = kvRdd.toAvroDf(jsonPercent = jsonPercent)
 
