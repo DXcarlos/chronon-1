@@ -243,7 +243,7 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     result shouldBe empty
   }
 
-  it should "produce a valid non-empty null nullCountMap for snapshot events case" in {
+  it should "produce a valid non-empty nullCountMap for snapshot events case" in {
     val batchEndDs = "2024-08-01"
     createDatabase(namespace)
     tableUtils.sql(s"USE $namespace")
