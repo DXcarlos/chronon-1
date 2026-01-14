@@ -208,10 +208,16 @@ class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
       ("ts_col", StringType)
     ), FiveMinuteResolution)
 
+    // subtract numDays from endTs to get the start of the window
+    val windowStartTs = endTs - WindowUtils.Day.millis * numDays
+
+    // add two days to get a timestamp that is within the window but after the batch end ts
+    val eligibleTailHopTs = windowStartTs + WindowUtils.Day.millis * 2
+
     val sampleBatchIr = FinalBatchIr(
       collapsed = Array(Array((461.0, 87L))),
       tailHops = Array(
-        Array(),
+        Array(Array(null, eligibleTailHopTs)),
         Array(),
         Array()
       )
@@ -301,7 +307,7 @@ class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
     val sampleBatchIr = FinalBatchIr(
       collapsed = Array(Array((461.0, 87L))),
       tailHops = Array(
-        Array(Array(null, eligibleTailHopTs)),
+        Array(Array(Array(1.0, 1), eligibleTailHopTs)),
         Array(),
         Array()
       )
