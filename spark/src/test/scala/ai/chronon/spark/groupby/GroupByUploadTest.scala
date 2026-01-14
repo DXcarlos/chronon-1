@@ -281,7 +281,7 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     }
   }
 
-  it should "produce a valid non-empty nullCountMap for snapshot entities case" in {
+  it should "produce a valid empty nullCountMap for snapshot entities case" in {
     createDatabase(namespace)
     tableUtils.sql(s"USE $namespace")
     val reviewsTable = s"${namespace}.reviews_entity_non_empty_null"
@@ -296,7 +296,7 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     result shouldBe empty
   }
 
-  it should "produce a valid empty nullCountMap for snapshot entities case" in {
+  it should "produce a valid non-empty nullCountMap for snapshot entities case" in {
     createDatabase(namespace)
     tableUtils.sql(s"USE $namespace")
     val reviewsTable = s"${namespace}.reviews_entity_empty_null"
