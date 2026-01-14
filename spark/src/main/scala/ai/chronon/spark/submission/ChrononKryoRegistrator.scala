@@ -165,6 +165,7 @@ class ChrononKryoRegistrator extends KryoRegistrator {
       "org.apache.hadoop.fs.permission.FsPermission",
       "org.apache.spark.internal.io.FileCommitProtocol$TaskCommitMessage",
       "org.apache.spark.sql.Row",
+      "org.apache.spark.sql.types.ArrayType",
       "org.apache.spark.sql.catalyst.InternalRow",
       "org.apache.spark.sql.catalyst.InternalRow$$anonfun$getAccessor$5",
       "org.apache.spark.sql.catalyst.InternalRow$$anonfun$getAccessor$8",

@@ -75,6 +75,7 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
     update(batchEndTs: Long, batchIr: BatchIr, row: Row, batchTails)
   }
 
+  // downstream assumption: this needs to mutate batchIr in place.
   def update(batchEndTs: Long, batchIr: BatchIr, row: Row, batchTails: Array[Option[Long]]): BatchIr = {
     val rowTs = row.ts
     // To track if a tail value for a particular (hopIndex, baseIrIndex) is updated

@@ -88,4 +88,6 @@ object Constants {
   val ListEntityType: String = "entity_type"
 
   val DefaultPercentiles: Seq[String] = Seq("p5", "p50", "p95")
+
+  val archiveReuseTableSuffix: String = "_archive_reuse"
 }

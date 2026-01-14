@@ -16,6 +16,13 @@
 
 package ai.chronon.spark
 
+import ai.chronon.aggregator.windowing.{
+  BatchIr,
+  FinalBatchIr,
+  FiveMinuteResolution,
+  Resolution,
+  SawtoothOnlineAggregator
+}
 import ai.chronon.aggregator.windowing.{FinalBatchIr, FiveMinuteResolution, Resolution, SawtoothOnlineAggregator}
 import ai.chronon.api
 import ai.chronon.spark.catalog.TableUtils
@@ -161,20 +168,57 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
         |BatchIR Element Size: $batchIrElementSize
         |""".stripMargin)
 
-    val outputRddIntermediate = groupBy.inputDf.rdd
+    val shouldCombine = tableUtils.sparkSession.conf.get("spark.chronon.group_by.upload.combine", "true").toBoolean
+
+    val outputRddKeyed = groupBy.inputDf.rdd
       .keyBy(keyBuilder)
-      .aggregateByKey(sawtoothOnlineAggregator.init)( // shuffle point
+
+    val outputRddAggregated = if (!shouldCombine) {
+      outputRddKeyed
+        .mapValues { row =>
+          val result: Either[Row, BatchIr] = Left(row)
+          result
+        }
+        .reduceByKey { (value1: Either[Row, BatchIr], value2: Either[Row, BatchIr]) =>
+          val resultIr: BatchIr = (value1, value2) match {
+            case (Left(row1), Left(row2)) =>
+              val batchIr = sawtoothOnlineAggregator.init
+              val batchIr1 =
+                sawtoothOnlineAggregator.update(batchIr, SparkConversions.toChrononRow(row1, groupBy.tsIndex))
+              sawtoothOnlineAggregator.update(batchIr1, SparkConversions.toChrononRow(row2, groupBy.tsIndex))
+            case (Right(ir1), Left(row2)) =>
+              sawtoothOnlineAggregator.update(ir1, SparkConversions.toChrononRow(row2, groupBy.tsIndex))
+            case (Left(row1), Right(ir2)) =>
+              sawtoothOnlineAggregator.update(ir2, SparkConversions.toChrononRow(row1, groupBy.tsIndex))
+            case (Right(ir1), Right(ir2)) =>
+              sawtoothOnlineAggregator.merge(ir1, ir2)
+          }
+          Right(resultIr)
+        }
+        .mapValues { resultIr: Either[Row, BatchIr] =>
+          resultIr match {
+            case Left(row1) =>
+              val batchIr = sawtoothOnlineAggregator.init
+              sawtoothOnlineAggregator.update(batchIr, SparkConversions.toChrononRow(row1, groupBy.tsIndex))
+            case Right(batchIr) => batchIr
+          }
+        }
+    } else {
+      outputRddKeyed.aggregateByKey(sawtoothOnlineAggregator.init)( // shuffle point
         seqOp = { case (batchIr, row) =>
           sawtoothOnlineAggregator.update(batchIr, SparkConversions.toChrononRow(row, groupBy.tsIndex))
         },
         combOp = sawtoothOnlineAggregator.merge
       )
+    }
+
+    val outputAggregatedNormalized = outputRddAggregated
       .mapValues(sawtoothOnlineAggregator.normalizeBatchIr)
 
     // Going to produce nullCounts and also later .save
-    outputRddIntermediate.cache()
+    outputAggregatedNormalized.cache()
 
-    val nullCounts = outputRddIntermediate
+    val nullCounts = outputAggregatedNormalized
       .treeAggregate(mutable.HashMap.empty[String, Long])(
         seqOp = { case (counterMap, (_, batchIr)) =>
           sawtoothOnlineAggregator.updateNullCounts(batchIr, counterMap)
@@ -188,7 +232,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
         }
       )
 
-    val outputRdd = outputRddIntermediate
+    val outputRdd = outputAggregatedNormalized
       .map { case (keyWithHash: KeyWithHash, finalBatchIr: FinalBatchIr) =>
         val irArray = new Array[Any](2)
         irArray.update(0, finalBatchIr.collapsed)
@@ -364,6 +408,9 @@ object GroupByUpload {
       .union(metaDf)
       .withColumn("ds", lit(endDs))
       .save(groupByConf.metaData.uploadTable, groupByConf.metaData.tableProps, partitionColumns = List("ds"))
+
+    // unpersist RDD
+    kvRdd.data.unpersist()
 
     val kvDfReloaded = tableUtils
       .loadTable(groupByConf.metaData.uploadTable)

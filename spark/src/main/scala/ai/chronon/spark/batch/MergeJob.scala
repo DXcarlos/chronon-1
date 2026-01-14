@@ -59,7 +59,6 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
   private val processingColumns = Set(Constants.MatchedHashes, Constants.TimePartitionColumn)
   private val hashExclusionColumn: Set[String] = processingColumns ++ Set(tableUtils.partitionColumn)
 
-  private val archiveReuseTableSuffix = "_archive_reuse"
   private val colHashTablePropsKey = "column_hashes"
 
   private val join = node.join
@@ -76,7 +75,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
   // We only use productionJoinTableOpt below currently, but additional metadata might be useful eventually
   private val productionJoinTableOpt = Option(productionJoin).map(_.metaData.outputTable)
 
-  val archiveReuseTable = outputTable + archiveReuseTableSuffix
+  val archiveReuseTable = outputTable + Constants.archiveReuseTableSuffix
 
   def run(): Unit = {
 
@@ -308,7 +307,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     * Returns JoinPartReuseAnalysis containing reuse table, columns to reuse, and join parts to compute
     */
   def analyzeJoinPartsForReuse(dayStep: PartitionRange, currentLeftDf: DataFrame): JoinPartReuseAnalysis = {
-    val archiveReuseTable = join.metaData.outputTable + archiveReuseTableSuffix
+    val archiveReuseTable = join.metaData.outputTable + Constants.archiveReuseTableSuffix
 
     // First we check if archiveReuseTable covers the range
     // Else we check if the production table covers the range
@@ -317,6 +316,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       logger.info(s"Archive reuse table $archiveReuseTable covers range, analyzing join parts for reuse")
       archiveReuseTable
     } else if (productionJoinTableOpt.isDefined && tableUtils.tableCoversRange(productionJoinTableOpt.get, dayStep)) {
+      // TODO - modify this to be a table instead of the full join
       logger.info(s"Production table $productionJoinTableOpt.get covers range, analyzing join parts for reuse")
       productionJoinTableOpt.get
     } else {

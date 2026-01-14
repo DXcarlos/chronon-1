@@ -451,25 +451,31 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     sql(command)
   }
 
-  def archiveOrDropTableIfExists(tableName: String, timestamp: Option[Instant]): Unit = {
+  def archiveOrDropTableIfExists(tableName: String, timestamp: Option[Instant]): Option[String] = {
     val archiveTry = Try(archiveTableIfExists(tableName, timestamp))
-    archiveTry.failed.foreach { e =>
-      logger.info(s"""Fail to archive table $tableName
+    archiveTry match {
+      case Success(archivedTableOpt) => archivedTableOpt
+      case Failure(e) =>
+        logger.info(s"""Fail to archive table $tableName
            |${e.getMessage}
            |Proceed to dropping the table instead.
            |""".stripMargin)
-      dropTableIfExists(tableName)
+        dropTableIfExists(tableName)
+        None
     }
   }
 
   // Needs provider
-  private def archiveTableIfExists(tableName: String, timestamp: Option[Instant]): Unit = {
+  private def archiveTableIfExists(tableName: String, timestamp: Option[Instant]): Option[String] = {
     if (tableReachable(tableName)) {
       val humanReadableTimestamp = archiveTimestampFormatter.format(timestamp.getOrElse(Instant.now()))
       val finalArchiveTableName = s"${tableName}_$humanReadableTimestamp"
       val command = s"ALTER TABLE $tableName RENAME TO $finalArchiveTableName"
       logger.info(s"Archiving table with command: $command")
       sql(command)
+      Some(finalArchiveTableName)
+    } else {
+      None
     }
   }
 

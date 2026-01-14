@@ -6,6 +6,16 @@ object CreationUtils {
 
   private val ALLOWED_TABLE_TYPES = List("iceberg", "delta", "hive", "parquet", "hudi")
 
+  /** Escapes a string value for use in SQL by doubling single quotes.
+    * This follows the SQL standard for escaping string literals.
+    *
+    * @param value The string value to escape
+    * @return The escaped string safe for SQL string literals
+    */
+  def escapeSqlStringValue(value: String): String = {
+    value.replace("'", "''")
+  }
+
   def createTableSql(tableName: String,
                      schema: StructType,
                      partitionColumns: List[String],
@@ -46,7 +56,7 @@ object CreationUtils {
     val propertiesFragment = if (tableProperties != null && tableProperties.nonEmpty) {
       s"""TBLPROPERTIES (
          |    ${(tableProperties + ("file_format" -> fileFormatString) + ("table_type" -> tableTypeString))
-          .transform((k, v) => s"'$k'='$v'")
+          .transform((k, v) => s"'${escapeSqlStringValue(k)}'='${escapeSqlStringValue(v)}'")
           .values
           .mkString(",\n   ")}
          |)""".stripMargin
@@ -63,7 +73,7 @@ object CreationUtils {
     // Only SQL api exists for setting TBLPROPERTIES
     val propertiesString = properties
       .map { case (key, value) =>
-        s"'$key' = '$value'"
+        s"'${escapeSqlStringValue(key)}' = '${escapeSqlStringValue(value)}'"
       }
       .mkString(", ")
     s"ALTER TABLE $tableName SET TBLPROPERTIES ($propertiesString)"

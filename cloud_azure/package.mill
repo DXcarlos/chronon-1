@@ -1,0 +1,54 @@
+package build.cloud_azure
+import mill.api._
+import mill.scalalib._
+
+// Cloud Azure module - supports both cloud_azure.test AND cloud_azure[2.13.17].test
+object `package` extends Cross[CloudAzureModule](build.Constants.scalaVersions) with CloudAzureModule {
+  // Provide default scala version for bracket-free access
+  override val crossValue = build.Constants.defaultScalaVersion
+}
+
+trait CloudAzureModule extends Cross.Module[String] with build.BaseModule {
+  def moduleDeps = Seq(build.spark(crossValue), build.aggregator(crossValue), build.api(crossValue), build.online(crossValue), build.redis(crossValue))
+
+
+  def excludeJackson(dep: mill.scalalib.Dep): mill.scalalib.Dep = {
+    dep
+      .exclude("com.fasterxml.jackson.core" -> "jackson-core")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-annotations")
+      .exclude("com.fasterxml.jackson.datatype" -> "jackson-datatype-jsr310")
+  }
+
+  def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingApiDeps ++ build.Constants.utilityDeps ++ build.Constants.sparkDeps ++ Seq(
+    // Azure Blob Storage SDK
+    mvn"com.azure:azure-storage-blob:12.29.0",
+    // Azure Identity for authentication
+    mvn"com.azure:azure-identity:1.14.2",
+  ).map(excludeJackson) ++ Seq(
+    mvn"com.fasterxml.jackson.core:jackson-core:2.15.2",
+    mvn"com.fasterxml.jackson.core:jackson-databind:2.15.2",
+    mvn"com.fasterxml.jackson.core:jackson-annotations:2.15.2",
+    mvn"com.fasterxml.jackson.module::jackson-module-scala:2.15.2",
+    mvn"com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2",
+  ).map(_.forceVersion())
+
+  object test extends build.BaseTestModule {
+    def scalaVersion = crossValue
+
+    def moduleDeps = Seq(build.cloud_azure(crossValue), build.spark(crossValue).test, build.redis(crossValue).test)
+    def mvnDeps = super.mvnDeps() ++ Seq(
+      mvn"org.testcontainers:testcontainers:1.19.3",
+      mvn"org.testcontainers:junit-jupiter:1.19.3"
+    )
+    override def testFramework = "org.scalatest.tools.Framework"
+    def forkArgs = build.Constants.commonTestForkArgs ++ Seq(
+      "-Dspark.sql.adaptive.enabled=false",
+      "-Dspark.sql.adaptive.coalescePartitions.enabled=false",
+      "-Dspark.serializer=org.apache.spark.serializer.KryoSerializer",
+      "-Dspark.sql.hive.convertMetastoreParquet=false"
+    )
+  }
+
+  def prependShellScript = ""
+}

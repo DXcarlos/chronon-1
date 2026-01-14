@@ -13,7 +13,9 @@ import ai.chronon.spark.batch.{StagingQuery => StagingQueryUtil}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.submission.SparkSessionBuilder
+import ai.chronon.spark.utils.SemanticUtils
 import ai.chronon.spark.{GroupBy, GroupByUpload, Join, ModelTransformsJob}
+
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -570,6 +572,14 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 
       Await.result(kvStoreUpdates, Duration.Inf)
 
+      // drop table if semantic hash doesn't match
+
+      val outputTable = node.metaData.outputTable
+      val incomingSemanticHash = node.semanticHash
+
+      val su = new SemanticUtils(tableUtils)
+      su.checkSemanticHashAndArchive(outputTable, incomingSemanticHash)
+
       val missingPartitions = maybeMissingPartitions.collect {
         case (tableName, Some(missing)) if missing.nonEmpty =>
           tableName -> missing
@@ -591,6 +601,8 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
                          tablePartitionsDataset = tablePartitionsDataset,
                          kvStore = kvStore,
                          tableStatsDataset = tableStatsDataset)
+
+          su.setSemanticHash(outputTable, incomingSemanticHash)
         } catch {
           case e: Exception =>
             // Don't fail the job if post-job actions fail
