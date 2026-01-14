@@ -248,11 +248,7 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     createDatabase(namespace)
     tableUtils.sql(s"USE $namespace")
     val eventsTable = "my_snapshot_events_non_empty_null"
-    val eventSchema = List(
-      Column("user", StringType, 10),
-      Column("list_event", StringType, 100, nullRate = 1.0), // always null
-      Column("views", IntType, 10,  nullRate = 1.0), // always null
-    )
+
     def ts(arg: String) = TsUtils.datetimeToTs(s"2023-$arg:00")
     val viewColumns = Seq("user", "list_event", "views", "ts", "ds")
     val viewsData = Seq(
