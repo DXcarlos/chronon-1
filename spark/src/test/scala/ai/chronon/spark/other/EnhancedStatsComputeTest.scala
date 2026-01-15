@@ -131,8 +131,7 @@ class EnhancedStatsComputeTest extends AnyFlatSpec {
     assert(ratingOperations.contains(Operation.MIN), "Should have MIN for numeric column")
     assert(ratingOperations.contains(Operation.AVERAGE), "Should have AVERAGE for numeric column")
     assert(ratingOperations.contains(Operation.VARIANCE), "Should have VARIANCE for numeric column")
-    assert(ratingOperations.contains(Operation.APPROX_UNIQUE_COUNT), "Should have APPROX_UNIQUE_COUNT")
-    assert(ratingOperations.contains(Operation.APPROX_PERCENTILE), "Should have APPROX_PERCENTILE for median")
+    assert(ratingOperations.contains(Operation.HISTOGRAM), "Should have HISTOGRAM since it's low cardinality")
 
     logger.info(s"\n✓ Rating column has ${ratingMetrics.size} metrics: ${ratingOperations.mkString(", ")}")
   }

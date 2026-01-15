@@ -37,6 +37,7 @@ object StatsGenerator {
   val nullSuffix = "__null"
   val nullRateSuffix = "__null_rate"
   val zeroSuffix = "__zero"
+  val strSuffix = "__str"
   val totalColumn = "total"
   // Leveraged to build a CDF. Consider using native KLLSketch CDF/PMF methods.
   val finalizedPercentilesMerged: Array[Double] = Array(0.01) ++ (5 until 100 by 5).map(_.toDouble / 100) ++ Array(0.99)
@@ -56,7 +57,7 @@ object StatsGenerator {
     */
   object InputTransform extends Enumeration {
     type InputTransform = Value
-    val IsNull, IsZero, Raw, One = Value
+    val IsNull, IsZero, Raw, RawToString, One = Value
   }
   import InputTransform._
 
@@ -103,12 +104,12 @@ object StatsGenerator {
   /** Stats applied to numeric columns */
   def numericTransforms(column: String): Seq[MetricTransform] =
     anyTransforms(column) ++ Seq(
-      MetricTransform(
-        column,
-        InputTransform.Raw,
-        operation = api.Operation.APPROX_PERCENTILE,
-        argMap = Map("percentiles" -> s"[${finalizedPercentilesMerged.mkString(", ")}]").toJava
-      ))
+      MetricTransform(column, InputTransform.IsZero, operation = api.Operation.SUM, suffix = zeroSuffix),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.MAX),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.MIN),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.AVERAGE),
+      MetricTransform(column, InputTransform.Raw, operation = api.Operation.VARIANCE)
+    )
 
   /** For the schema of the data define metrics to be aggregated */
   def buildMetrics(fields: Seq[(String, api.DataType)]): Seq[MetricTransform] = {
@@ -128,43 +129,6 @@ object StatsGenerator {
     metrics :+ MetricTransform(totalColumn, InputTransform.One, api.Operation.COUNT)
   }
 
-  /** Enhanced stats for high-cardinality numeric columns (approx cardinality, max, min, nulls, zeros, mean, std dev, median, histogram) */
-  def highCardinalityNumericTransforms(column: String): Seq[MetricTransform] =
-    anyTransforms(column) ++ Seq(
-      MetricTransform(column, InputTransform.IsZero, operation = api.Operation.SUM, suffix = zeroSuffix),
-      MetricTransform(column, InputTransform.Raw, operation = api.Operation.MAX),
-      MetricTransform(column, InputTransform.Raw, operation = api.Operation.MIN),
-      MetricTransform(column, InputTransform.Raw, operation = api.Operation.AVERAGE),
-      MetricTransform(column, InputTransform.Raw, operation = api.Operation.VARIANCE),
-      MetricTransform(column, InputTransform.Raw, operation = api.Operation.APPROX_UNIQUE_COUNT),
-      MetricTransform(
-        column,
-        InputTransform.Raw,
-        operation = api.Operation.APPROX_PERCENTILE,
-        argMap = Map("percentiles" -> s"[${finalizedPercentilesMerged.mkString(", ")}]").toJava
-      )
-    )
-
-  /** Enhanced stats for boolean columns (null count, true count)
-    * For booleans we track:
-    * - Null count (from anyTransforms)
-    * - True count (by summing the boolean column where true=1, false=0)
-    * - False count can be derived as: total_count - true_count - null_count
-    * - Total count is added globally
-    */
-  def booleanTransforms(column: String): Seq[MetricTransform] =
-    anyTransforms(column) ++ Seq(
-      // Count true values by summing the raw boolean column (true=1, false=0)
-      MetricTransform(column, InputTransform.Raw, operation = api.Operation.SUM, suffix = "_true")
-    )
-
-  /** Enhanced stats for low-cardinality categorical columns (count, nulls, unique, top value, histogram) */
-  def lowCardinalityCategoricalTransforms(column: String): Seq[MetricTransform] =
-    anyTransforms(column) ++ Seq(
-      MetricTransform(column, InputTransform.Raw, operation = api.Operation.UNIQUE_COUNT),
-      MetricTransform(column, InputTransform.Raw, operation = api.Operation.HISTOGRAM)
-    )
-
   /** Build enhanced metrics with cardinality awareness.
     * @param fields Schema fields as (name, dataType) pairs
     * @param cardinalityMap Map of column names to their approximate unique counts
@@ -172,7 +136,7 @@ object StatsGenerator {
     */
   def buildEnhancedMetrics(fields: Seq[(String, api.DataType)],
                            cardinalityMap: Map[String, Long],
-                           cardinalityThreshold: Int = 100): Seq[MetricTransform] = {
+                           cardinalityThreshold: Int = 20): Seq[MetricTransform] = {
     val metrics = fields
       .flatMap { case (name, dataType) =>
         if (ignoreColumns.contains(name)) {
@@ -185,16 +149,43 @@ object StatsGenerator {
             case _ =>
               val cardinality = cardinalityMap.getOrElse(name, 0L)
               val isLowCardinality = cardinality <= cardinalityThreshold
+              val isNumeric = api.DataType.isNumeric(dataType) && dataType != api.ByteType
 
               // Special handling for boolean columns
               if (dataType == api.BooleanType) {
-                booleanTransforms(name)
-              } else if (api.DataType.isNumeric(dataType) && dataType != api.ByteType) {
-                // Numeric columns: always use high-cardinality transforms
-                highCardinalityNumericTransforms(name)
+                anyTransforms(name) ++ Seq(
+                  // Count true values by summing the raw boolean column (true=1, false=0)
+                  MetricTransform(name, InputTransform.Raw, operation = api.Operation.SUM, suffix = "_true")
+                )
+              } else if (isLowCardinality && isNumeric) {
+                // Low-cardinality numeric: get full numeric stats PLUS histogram (as categorical)
+                numericTransforms(name) ++ Seq(
+                  MetricTransform(name,
+                                  InputTransform.RawToString,
+                                  operation = api.Operation.UNIQUE_COUNT,
+                                  suffix = strSuffix),
+                  MetricTransform(name,
+                                  InputTransform.RawToString,
+                                  operation = api.Operation.HISTOGRAM,
+                                  suffix = strSuffix)
+                )
               } else if (isLowCardinality) {
-                // Non-numeric low-cardinality: treat as categorical
-                lowCardinalityCategoricalTransforms(name)
+                // Low-cardinality string: use histogram with categorical transforms
+                anyTransforms(name) ++ Seq(
+                  MetricTransform(name, InputTransform.Raw, operation = api.Operation.UNIQUE_COUNT),
+                  MetricTransform(name, InputTransform.Raw, operation = api.Operation.HISTOGRAM)
+                )
+              } else if (isNumeric) {
+                // High-cardinality numeric: use percentiles, no histogram
+                numericTransforms(name) ++ Seq(
+                  MetricTransform(name, InputTransform.Raw, operation = api.Operation.APPROX_UNIQUE_COUNT),
+                  MetricTransform(
+                    name,
+                    InputTransform.Raw,
+                    operation = api.Operation.APPROX_PERCENTILE,
+                    argMap = Map("percentiles" -> s"[${finalizedPercentilesMerged.mkString(", ")}]").toJava
+                  )
+                )
               } else {
                 // Non-numeric high-cardinality: basic transforms only
                 anyTransforms(name) ++ Seq(
