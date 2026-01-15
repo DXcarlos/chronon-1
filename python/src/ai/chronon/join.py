@@ -515,8 +515,7 @@ def Join(
             for _entity_name, entity in Entity._global_register.entity_registrations.items():
                 if left_table in entity.select_registrations:
                     entity.register_feature_query(join, left_table)
-        except Exception:
-            # Silently ignore errors in entity registration
-            pass
+        except Exception as e:
+            logging.error(f"Error registering join {join.metaData.name} with entities: {e}")
 
     return join

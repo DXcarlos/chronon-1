@@ -420,7 +420,7 @@ def final_key_columns(key, source):
 
 def GroupBy(
     sources: Union[List[utils.ANY_SOURCE_TYPE], utils.ANY_SOURCE_TYPE],
-    keys: List[str],
+    keys: List[Union[str, Entity]],
     aggregations: Optional[List[ttypes.Aggregation]],
     version: Optional[int] = None,
     derivations: List[ttypes.Derivation] = None,
