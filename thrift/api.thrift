@@ -276,7 +276,8 @@ enum Accuracy {
 
 enum EngineType {
     SPARK = 0,
-    BIGQUERY = 1
+    BIGQUERY = 1,
+    SNOWFLAKE = 2,
 
 }
 

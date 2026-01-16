@@ -28,7 +28,7 @@ class KyuubiClient(
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   private val apiBasePath = "/api/v1"
-  private val timeoutSeconds = 5L // 5 minute timeout for operations
+  private val timeoutSeconds = 300L
 
   /** Submit a batch job to Kyuubi.
     *
@@ -333,5 +333,4 @@ object KyuubiClient {
   def apply(baseUrl: String, auth: KyuubiAuth, client: WebClient): KyuubiClient = {
     new KyuubiClient(baseUrl, auth, client)
   }
-
 }

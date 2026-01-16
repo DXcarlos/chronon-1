@@ -11,7 +11,6 @@ object `package` extends Cross[CloudAzureModule](build.Constants.scalaVersions) 
 trait CloudAzureModule extends Cross.Module[String] with build.BaseModule {
   def moduleDeps = Seq(build.spark(crossValue), build.aggregator(crossValue), build.api(crossValue), build.online(crossValue), build.redis(crossValue))
 
-
   def excludeJackson(dep: mill.scalalib.Dep): mill.scalalib.Dep = {
     dep
       .exclude("com.fasterxml.jackson.core" -> "jackson-core")

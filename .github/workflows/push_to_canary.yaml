@@ -84,6 +84,7 @@ jobs:
           ./mill flink\[${{ env.SCALA_VERSION }}\].assembly
           ./mill cloud_gcp\[${{ env.SCALA_VERSION }}\].assembly
           ./mill cloud_aws\[${{ env.SCALA_VERSION }}\].assembly
+           ./mill cloud_azure\[${{ env.SCALA_VERSION }}\].assembly
           ./mill service\[${{ env.SCALA_VERSION }}\].assembly
           ./mill flink_connectors\[${{ env.SCALA_VERSION }}\].assembly
 
@@ -104,6 +105,13 @@ jobs:
         with:
           name: cloud-gcp-jar
           path: out/cloud_gcp/${{ env.SCALA_VERSION }}/assembly.dest/out.jar
+
+      # TODO: uncomment when we hook up azure blob storage
+      #      - name: Upload Cloud Azure Jar
+      #        uses: actions/upload-artifact@v4
+      #        with:
+      #          name: cloud-azure-jar
+      #          path: out/cloud_azure/${{ env.SCALA_VERSION }}/assembly.dest/out.jar
 
       - name: Upload Service Assembly Jar
         uses: actions/upload-artifact@v4

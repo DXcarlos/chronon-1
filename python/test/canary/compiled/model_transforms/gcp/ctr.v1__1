@@ -717,8 +717,8 @@
           },
           "metaData": {
             "executionInfo": {
-              "offlineSchedule": "@daily",
-              "onlineSchedule": "@daily",
+              "offlineSchedule": "0 3 * * *",
+              "onlineSchedule": "0 3 * * *",
               "stepDays": 2
             },
             "name": "gcp.demo.derivations_v1__2",

@@ -51,10 +51,11 @@ class StatsCompute(inputDf: DataFrame, keys: Seq[String], name: String) extends 
       timeColumns.map(col).toSeq ++ metrics
         .map(m =>
           m.expression match {
-            case StatsGenerator.InputTransform.IsNull => functions.col(m.name).isNull
-            case StatsGenerator.InputTransform.IsZero => functions.col(m.name) === 0
-            case StatsGenerator.InputTransform.Raw    => functions.col(m.name)
-            case StatsGenerator.InputTransform.One    => functions.lit(true)
+            case StatsGenerator.InputTransform.IsNull      => functions.col(m.name).isNull
+            case StatsGenerator.InputTransform.IsZero      => functions.col(m.name) === 0
+            case StatsGenerator.InputTransform.Raw         => functions.col(m.name)
+            case StatsGenerator.InputTransform.RawToString => functions.col(m.name).cast("string")
+            case StatsGenerator.InputTransform.One         => functions.lit(true)
           })
         .toSeq: _*)
     .toDF(timeColumns.toSeq ++ metrics.map(m => s"${m.name}${m.suffix}").toSeq: _*)
@@ -166,10 +167,11 @@ class EnhancedStatsCompute(inputDf: DataFrame, keys: Seq[String], name: String, 
       .groupBy(m => (m.name, m.suffix, m.expression))
       .map { case ((name, suffix, expression), _) =>
         val colExpr = expression match {
-          case StatsGenerator.InputTransform.IsNull => functions.col(name).isNull
-          case StatsGenerator.InputTransform.IsZero => functions.col(name) === 0
-          case StatsGenerator.InputTransform.Raw    => functions.col(name)
-          case StatsGenerator.InputTransform.One    => functions.lit(true)
+          case StatsGenerator.InputTransform.IsNull      => functions.col(name).isNull
+          case StatsGenerator.InputTransform.IsZero      => functions.col(name) === 0
+          case StatsGenerator.InputTransform.Raw         => functions.col(name)
+          case StatsGenerator.InputTransform.RawToString => functions.col(name).cast("string")
+          case StatsGenerator.InputTransform.One         => functions.lit(true)
         }
         (s"$name$suffix", colExpr)
       }

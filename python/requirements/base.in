@@ -14,3 +14,4 @@ google-api-core==2.27.0
 sqlglot
 # Schedule validation
 croniter
+urllib3==2.6.3

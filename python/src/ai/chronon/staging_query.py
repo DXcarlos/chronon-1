@@ -21,6 +21,7 @@ def _get_output_table_name(staging_query: ttypes.StagingQuery, full_name: bool =
 class EngineType:
     SPARK = ttypes.EngineType.SPARK
     BIGQUERY = ttypes.EngineType.BIGQUERY
+    SNOWFLAKE = ttypes.EngineType.SNOWFLAKE
 
 
 @dataclass

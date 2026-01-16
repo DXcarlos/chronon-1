@@ -180,3 +180,42 @@ aws = Team(
         }
     ),
 )
+
+azure = Team(
+    outputNamespace="data",
+    env=EnvironmentVariables(
+        common={
+            "CLOUD_PROVIDER": "azure",
+            "CUSTOMER_ID": "dev",
+            "VERSION": "latest",
+            "JOB_MODE": "local[*]",
+            "PARTITION_COLUMN": "ds",
+            "PARTITION_FORMAT": "yyyy-MM-dd",
+            "ARTIFACT_PREFIX": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+            "FRONTEND_URL": "http://localhost:3000",
+            "HUB_URL": "http://localhost:3903",
+        },
+    ),
+    conf=ConfigProperties(
+        common={
+            "spark.chronon.partition.format": "yyyy-MM-dd",
+            "spark.chronon.partition.column": "ds",
+            "spark.chronon.table_write.format": "iceberg",
+            "spark.sql.catalog.spark_catalog.warehouse": "abfss://warehouse@ziplineai2.dfs.core.windows.net/data/",
+            "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
+            'spark.sql.catalog.spark_catalog.type': 'rest',
+            "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+            "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
+            "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "vended-credentials",
+            "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-opencatalog.snowflakecomputing.com/polaris/api/catalog",
+            "spark.chronon.coalesce.factor": "10",
+            "spark.default.parallelism": "10",
+            "spark.sql.shuffle.partitions": "10",
+            "spark.driver.memory": "1g",
+            "spark.driver.cores": "1",
+            "spark.executor.memory": "1g",
+            "spark.executor.cores": "1",
+        },
+    ),
+)

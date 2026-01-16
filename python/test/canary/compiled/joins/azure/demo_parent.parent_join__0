@@ -1,0 +1,195 @@
+{
+  "joinParts": [
+    {
+      "groupBy": {
+        "keyColumns": [
+          "listing_id"
+        ],
+        "metaData": {
+          "columnHashes": {
+            "brief_description": "b900f9b57ad4c553c4094443eac3e0d7",
+            "currency": "ef50086295a4c91cbb021cce1eec4444",
+            "headline": "b1900a9afed178b26f0770cf36d1716a",
+            "inventory_count": "2d4f942651d4c5d3a2d5b49be5654a08",
+            "is_active": "d642b5c9578cfbac89e30e37aa822b20",
+            "is_expensive": "bdfb719ab8fb56d53895e7412842a512",
+            "is_in_stock": "bb7bc5d619e4cd7260e8be1dbe662a8d",
+            "listing_id": "b6a3bf841f9bd741ffe77bae3d2baf5a",
+            "long_description": "411a6a39e4be519052efcd92c9ef90be",
+            "main_image_path": "a8646b0b51452e7a5ebe90f6e8fa8590",
+            "merchant_id": "1adcc7839d4bb99eb4dac23599c034cb",
+            "price_cents": "d62ef63b8d362ba8f7e23476ac069029",
+            "primary_category": "ac1a216a8de38f944b3d57e2f3742f3d",
+            "secondary_image_paths": "a4d68e78e1ed7ccb21d741caa13c17be",
+            "tags": "1a5b5053bdc71cecb0924e9c67a86797",
+            "weight_grams": "a0618339da6e970ca986ac9e2825a96e"
+          },
+          "executionInfo": {
+            "conf": {
+              "common": {
+                "spark.chronon.coalesce.factor": "10",
+                "spark.chronon.partition.column": "ds",
+                "spark.chronon.partition.format": "yyyy-MM-dd",
+                "spark.chronon.table_write.format": "iceberg",
+                "spark.default.parallelism": "10",
+                "spark.driver.cores": "1",
+                "spark.driver.memory": "1g",
+                "spark.executor.cores": "1",
+                "spark.executor.memory": "1g",
+                "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
+                "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
+                "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "vended-credentials",
+                "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+                "spark.sql.catalog.spark_catalog.type": "rest",
+                "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-opencatalog.snowflakecomputing.com/polaris/api/catalog",
+                "spark.sql.catalog.spark_catalog.warehouse": "abfss://warehouse@ziplineai2.dfs.core.windows.net/data/",
+                "spark.sql.shuffle.partitions": "10"
+              }
+            },
+            "env": {
+              "common": {
+                "ARTIFACT_PREFIX": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net",
+                "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+                "CLOUD_PROVIDER": "azure",
+                "CUSTOMER_ID": "dev",
+                "FRONTEND_URL": "http://localhost:3000",
+                "HUB_URL": "http://localhost:3903",
+                "JOB_MODE": "local[*]",
+                "PARTITION_COLUMN": "ds",
+                "PARTITION_FORMAT": "yyyy-MM-dd",
+                "VERSION": "latest"
+              }
+            },
+            "historicalBackfill": 0,
+            "onlineSchedule": "@daily"
+          },
+          "name": "azure.dim_listings.v1__0",
+          "online": 1,
+          "outputNamespace": "data",
+          "team": "azure",
+          "version": "0"
+        },
+        "sources": [
+          {
+            "entities": {
+              "query": {
+                "selects": {
+                  "brief_description": "brief_description",
+                  "currency": "currency",
+                  "headline": "headline",
+                  "inventory_count": "inventory_count",
+                  "is_active": "is_active",
+                  "is_expensive": "IF(price_cents > 10000, 1, 0)",
+                  "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+                  "listing_id": "listing_id",
+                  "long_description": "long_description",
+                  "main_image_path": "main_image_path",
+                  "merchant_id": "merchant_id",
+                  "price_cents": "price_cents",
+                  "primary_category": "primary_category",
+                  "secondary_image_paths": "secondary_image_paths",
+                  "tags": "tags",
+                  "weight_grams": "weight_grams"
+                },
+                "startPartition": "2025-01-01"
+              },
+              "snapshotTable": "data.azure_exports_dim_listings__0"
+            }
+          }
+        ]
+      },
+      "useLongNames": 0
+    }
+  ],
+  "left": {
+    "events": {
+      "query": {
+        "selects": {
+          "listing_id": "listing_id",
+          "row_id": "event_id",
+          "ts": "unix_millis(TIMESTAMP(event_time_ms))",
+          "user_id": "user_id"
+        },
+        "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
+      },
+      "table": "data.azure_exports_user_activities__0",
+      "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
+    }
+  },
+  "metaData": {
+    "columnHashes": {
+      "listing_id": "a781ec55d64e705d8ce51d0c587b40e2",
+      "listing_id_brief_description": "f4b707955223ec1cc22596ec8a4816b7",
+      "listing_id_currency": "050bc0a49f2a854fcd90d7cad926e8c8",
+      "listing_id_headline": "2607fd101a0f0e3be0bd5abdd016eb14",
+      "listing_id_inventory_count": "aa82258b1287e987efb933af255fffe6",
+      "listing_id_is_active": "de215779354c3ffac934be13e6476ca9",
+      "listing_id_is_expensive": "86c01606a33d9dced8f26e121c98f6a1",
+      "listing_id_is_in_stock": "4d7b86472c9a4431d653977399c9f5c1",
+      "listing_id_listing_id": "0b1f185dc104b9f737163491baa0d6ba",
+      "listing_id_long_description": "09500f3c561264e7615d7101b19518aa",
+      "listing_id_main_image_path": "3d1fc3cd67bc694d5968c5b8e7b657d8",
+      "listing_id_merchant_id": "a92b6cfb3be35da95616fb107bc92801",
+      "listing_id_price_cents": "4c9a3cf705a5a6fbb2288a71fecc4707",
+      "listing_id_primary_category": "425f0dbb0d9c9f0cffc7b79d4dfc5927",
+      "listing_id_secondary_image_paths": "ae5e6b027c6a87260512503c24f6bd8f",
+      "listing_id_tags": "e2f280c36cd8b8ca7518a3a16c94cc69",
+      "listing_id_weight_grams": "59d9e8f074fb1b8cb83ebc956aab85da",
+      "row_id": "a815aba076a56303f2c896256f1ba0ff",
+      "ts": "32cfb4df811008307e03612be49442ec",
+      "user_id": "275e18a643e12228f787cd9a9b03eaed"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_user_activities__0_with_offset_0\", \"spec\": \"data.azure_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_azure_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.azure_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.coalesce.factor": "10",
+          "spark.chronon.partition.column": "ds",
+          "spark.chronon.partition.format": "yyyy-MM-dd",
+          "spark.chronon.table_write.format": "iceberg",
+          "spark.default.parallelism": "10",
+          "spark.driver.cores": "1",
+          "spark.driver.memory": "1g",
+          "spark.executor.cores": "1",
+          "spark.executor.memory": "1g",
+          "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
+          "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
+          "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "vended-credentials",
+          "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+          "spark.sql.catalog.spark_catalog.type": "rest",
+          "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-opencatalog.snowflakecomputing.com/polaris/api/catalog",
+          "spark.sql.catalog.spark_catalog.warehouse": "abfss://warehouse@ziplineai2.dfs.core.windows.net/data/",
+          "spark.sql.shuffle.partitions": "10"
+        }
+      },
+      "env": {
+        "common": {
+          "ARTIFACT_PREFIX": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net",
+          "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+          "CLOUD_PROVIDER": "azure",
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "JOB_MODE": "local[*]",
+          "PARTITION_COLUMN": "ds",
+          "PARTITION_FORMAT": "yyyy-MM-dd",
+          "VERSION": "latest"
+        }
+      },
+      "offlineSchedule": "17 0 * * *",
+      "onlineSchedule": "@daily"
+    },
+    "name": "azure.demo_parent.parent_join__0",
+    "online": 1,
+    "outputNamespace": "data",
+    "production": 0,
+    "samplePercent": 100.0,
+    "sourceFile": "joins/azure/demo_parent.py",
+    "team": "azure",
+    "version": "0"
+  },
+  "rowIds": [
+    "event_id"
+  ],
+  "useLongNames": 0
+}
