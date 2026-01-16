@@ -30,6 +30,7 @@ import org.junit.Assert.{assertEquals, assertNull, assertTrue}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.util.Try
+import java.sql.Date
 
 case class TestRecord(ds: String, id: String)
 
@@ -548,6 +549,88 @@ class TableUtilsTest extends AnyFlatSpec {
     val range = PartitionRange("2024-01-01", null)
     val clauses = tableUtils.whereClauses(range)
     assertEquals(Seq("ds >= '2024-01-01'"), clauses)
+  }
+
+  it should "scan a table with DateType partition column" in {
+    // This test verifies that scanDfBase correctly handles tables where the partition column
+    // is a DateType instead of StringType.
+    //
+    // Key behaviors tested:
+    // 1. whereClauses generates string comparisons like: ds >= '2024-01-01' AND ds < '2024-01-11'
+    // 2. Spark's implicit type coercion allows these string comparisons to work with DateType columns
+    // 3. scanDfBase converts the DateType partition column to StringType via date_format()
+    //    (see TableUtils.scala lines 648-654: "temporary fix to handle the case where the
+    //    partition column is not a string")
+
+    val tableName = "db.test_date_type_partition"
+    spark.sql("CREATE DATABASE IF NOT EXISTS db")
+
+    // Create a DataFrame with DateType for the ds column (instead of StringType)
+    val schema = StructType(
+      tableName,
+      Array(
+        StructField("id", LongType),
+        StructField("value", StringType),
+        StructField("ds", DateType)  // DateType instead of StringType
+      )
+    )
+
+    val rows = List(
+      Row(1L, "a", Date.valueOf("2024-01-01")),
+      Row(2L, "b", Date.valueOf("2024-01-02")),
+      Row(3L, "c", Date.valueOf("2024-01-03")),
+      Row(4L, "d", Date.valueOf("2024-01-10")),
+      Row(5L, "e", Date.valueOf("2024-01-15"))
+    )
+
+    val df = makeDf(spark, schema, rows)
+
+    try {
+      // Insert the data with DateType partition column
+      tableUtils.insertPartitions(df, tableName, partitionColumns = List("ds"))
+
+      // Verify data was inserted and the ds column is DateType in the table
+      val loadedData = tableUtils.loadTable(tableName)
+      assertEquals(5, loadedData.count())
+
+      // Verify the ds column is DateType in the loaded table (before scanDf conversion)
+      val loadedDsType = loadedData.schema.fields.find(_.name == "ds").map(_.dataType)
+      assertEquals("ds column should be DateType in the loaded table",
+        Some(org.apache.spark.sql.types.DateType), loadedDsType)
+
+      // Now test scanDf with a PartitionRange
+      val range = PartitionRange("2024-01-01", "2024-01-10")
+
+      // Use scanDf to filter data with the date range
+      // This tests that string comparisons work with DateType columns
+      val scannedDf = tableUtils.scanDf(
+        query = null,
+        table = tableName,
+        range = Some(range)
+      )
+
+      // Verify the ds column is converted to StringType after scanDf
+      // (due to date_format conversion in scanDfBase)
+      val scannedDsType = scannedDf.schema.fields.find(_.name == "ds").map(_.dataType)
+      assertEquals("ds column should be converted to StringType by scanDfBase",
+        Some(org.apache.spark.sql.types.StringType), scannedDsType)
+
+      // Verify correct filtering: rows with ds from 2024-01-01 to 2024-01-10 inclusive
+      // The range uses >= start and < next(end), so 2024-01-01 to 2024-01-10 means < 2024-01-11
+      val rowCount = scannedDf.count()
+      assertEquals(4L, rowCount)
+
+      // Verify the correct rows are returned
+      val ids = scannedDf.select("id").collect().map(_.getLong(0)).sorted
+      assertEquals(Seq(1L, 2L, 3L, 4L), ids.toSeq)
+
+      // Verify the ds values are formatted as strings in yyyy-MM-dd format
+      val dsValues = scannedDf.select("ds").collect().map(_.getString(0)).sorted
+      assertEquals(Seq("2024-01-01", "2024-01-02", "2024-01-03", "2024-01-10"), dsValues.toSeq)
+
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
   }
 
 }
