@@ -17,8 +17,10 @@
 package ai.chronon.spark.groupby
 
 import ai.chronon.spark.catalog.TableUtils
+import ai.chronon.spark.utils.SparkTestBase
+import org.scalatest.matchers.should.Matchers
 
-class DisableCombineGroupByUploadTest extends GroupByUploadTest {
+class DisableCombineGroupByUploadTest extends SparkTestBase with Matchers {
 
   override def sparkConfs: Map[String, String] = Map(
     "spark.chronon.group_by.upload.combine" -> "false",
@@ -27,6 +29,8 @@ class DisableCombineGroupByUploadTest extends GroupByUploadTest {
 
   it should "produce valid batch data for temporal events case with spark.chronon.group_by.upload.combine disabled" in {
     val eventsTable = "my_events_check_temporal_combine_disabled"
-    runAndValidateActualTemporalBatchData(sparkSession = spark, tableUtils = tableUtils, eventsTable = eventsTable)
+    val namespace = this.getClass.getSimpleName
+    createDatabase(namespace)
+    GroupByUploadTest.runAndValidateActualTemporalBatchData(namespace=namespace, sparkSession = spark, tableUtils = tableUtils, eventsTable = eventsTable)
   }
 }

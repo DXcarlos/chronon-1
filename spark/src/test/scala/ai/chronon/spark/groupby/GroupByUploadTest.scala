@@ -610,10 +610,16 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
       )
     )
 
-
-  protected def runAndValidateActualTemporalBatchData(sparkSession: SparkSession, tableUtils: TableUtils, eventsTable: String): Array[Array[Any]] = {
-    // Setup data
+  it should "produce valid batch data for temporal events case" in {
     createDatabase(namespace)
+    val eventsTable = "my_events_check_temporal"
+    GroupByUploadTest.runAndValidateActualTemporalBatchData(namespace=namespace, sparkSession = spark, tableUtils = tableUtils, eventsTable = eventsTable)
+  }
+}
+
+object GroupByUploadTest {
+  def runAndValidateActualTemporalBatchData(namespace: String, sparkSession: SparkSession, tableUtils: TableUtils, eventsTable: String): Array[Array[Any]] = {
+    // Setup data
     tableUtils.sql(s"USE $namespace")
     val eventColumns = Seq("user", "views", "ts", "ds")
     val eventData =
@@ -688,10 +694,4 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     tailHops
   }
 
-  it should "produce valid batch data for temporal events case" in {
-    createDatabase(namespace)
-    tableUtils.sql(s"USE $namespace")
-    val eventsTable = "my_events_check_temporal"
-    runAndValidateActualTemporalBatchData(sparkSession = spark, tableUtils = tableUtils, eventsTable = eventsTable)
-  }
 }
