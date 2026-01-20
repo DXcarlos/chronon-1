@@ -24,9 +24,12 @@ import ai.chronon.online.fetcher.Fetcher
 import ai.chronon.spark.Extensions.DataframeOps
 import ai.chronon.spark.GroupByUpload
 import ai.chronon.spark.catalog.TableUtils
+import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.utils.{DataFrameGen, MockApi, OnlineUtils, SparkTestBase}
 import com.google.gson.Gson
+import org.apache.spark.sql.SparkSession
 import org.junit.Assert.assertEquals
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.concurrent.Await
@@ -415,4 +418,89 @@ class GroupByUploadTest extends SparkTestBase {
         )
       )
     )
+
+
+  protected def runAndValidateActualTemporalBatchData(sparkSession: SparkSession, tableUtils: TableUtils, eventsTable: String): Array[Array[Any]] = {
+    // Setup data
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val eventColumns = Seq("user", "views", "ts", "ds")
+    val eventData =
+      Seq(
+        ("user1", 10, TsUtils.datetimeToTs(s"2023-08-13 11:00:00"), "2023-08-13"),
+        ("user1", 10, TsUtils.datetimeToTs(s"2023-08-13 10:00:00"), "2023-08-13"),
+
+        // purposely 7 -2 = 5 days before 08-14 to test 7 day window tail hop. first tail hop
+        ("user1", 10, TsUtils.datetimeToTs(s"2023-08-09 11:00:00"), "2023-08-09"),
+
+        // second tail hop for 7 day window
+        ("user1", 10, TsUtils.datetimeToTs(s"2023-08-09 10:00:00"), "2023-08-09"),
+        ("user1", 10, TsUtils.datetimeToTs(s"2023-08-09 10:15:00"), "2023-08-09"),
+
+        // purposely 30 -2 = 28 days before 08-14 to test 30 day window tail hop. expect only 1 tail hop.
+        ("user1", 10, TsUtils.datetimeToTs(s"2023-07-17 10:00:00"), "2023-07-17"),
+        ("user1", 10, TsUtils.datetimeToTs(s"2023-07-17 11:00:00"), "2023-07-17"),
+      )
+
+    val eventRdd = sparkSession.sparkContext.parallelize(eventData)
+    val eventDf = sparkSession.createDataFrame(eventRdd).toDF(eventColumns: _*)
+    eventDf.save(eventsTable)
+    eventDf.show()
+
+    // Define the GroupBy
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.SUM, "views", Seq(new Window(30, TimeUnit.DAYS),new Window(7, TimeUnit.DAYS)))
+    )
+    val keys = Seq("user").toArray
+    val groupByConf =
+      Builders.GroupBy(
+        sources = Seq(Builders.Source.events(Builders.Query(), table = eventsTable)),
+        keyColumns = keys,
+        aggregations = aggregations,
+        metaData = Builders.MetaData(namespace = namespace, name = "test_multiple_avg_upload"),
+        accuracy = Accuracy.TEMPORAL
+      )
+    val result = GroupByUpload.generateKvRdd(groupByConf, endDs = "2023-08-14", tableUtils = tableUtils)
+
+    // Check the data
+    val actualData = result.data.collect()
+    actualData.length shouldBe 1 // only one user
+
+    val actualValue = actualData(0)._2
+    val collapsed = actualValue(0).asInstanceOf[Array[Any]]
+    collapsed(0) shouldBe 50 // collapsedIr for 30 day window
+    collapsed(1) shouldBe 20 // collapsedIr for 7 day window
+
+    val tailHops = actualValue(1).asInstanceOf[Array[Array[Any]]]
+    tailHops.length shouldBe 3
+
+    // inspect the first index - daily
+    val dailyResolution = tailHops(0)
+    dailyResolution.length shouldBe 1 // only 30day window
+    val dailyElement = dailyResolution(0).asInstanceOf[Array[Any]]
+    dailyElement(0).asInstanceOf[Long] shouldBe 20L
+    dailyElement(1).asInstanceOf[Long] shouldBe 1689552000000L // 07-17 2023 12:00:00 AM UTC
+
+    // inspect the second index - hourly
+    val hourlyResolution = tailHops(1)
+    hourlyResolution.length shouldBe 2 // 2 hourly tail hops for 7 day window
+    val firstHourlyElement = hourlyResolution(0).asInstanceOf[Array[Any]]
+    firstHourlyElement(0).asInstanceOf[Long] shouldBe 20L // added 10 + 10
+    firstHourlyElement(1).asInstanceOf[Long] shouldBe 1691575200000L // August 9, 2023 10:00:00 AM
+
+    val secondHourlyElement = hourlyResolution(1).asInstanceOf[Array[Any]]
+    secondHourlyElement(0).asInstanceOf[Long] shouldBe 10L // single 10
+    secondHourlyElement(1).asInstanceOf[Long] shouldBe 1691578800000L // August 9, 2023 11:00:00 AM
+
+    // inspect the third index - five minute
+    tailHops(2).length shouldBe 0
+    tailHops
+  }
+
+  it should "produce valid batch data for temporal events case" in {
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val eventsTable = "my_events_check_temporal"
+    runAndValidateActualTemporalBatchData(sparkSession = spark, tableUtils = tableUtils, eventsTable = eventsTable)
+  }
 }

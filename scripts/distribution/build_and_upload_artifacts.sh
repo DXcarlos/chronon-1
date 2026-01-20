@@ -3,9 +3,10 @@
 function print_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo "Options:"
-    echo "  --all       Build and upload all artifacts (GCP and AWS)"
+    echo "  --all       Build and upload all artifacts (GCP, AWS, and Azure)"
     echo "  --gcp       Build and upload only GCP artifacts"
     echo "  --aws       Build and upload only AWS artifacts"
+    echo "  --azure     Build and upload only Azure artifacts"
     echo "  --customer_ids <customer_id>  Specify customer IDs to upload artifacts to."
     echo "  -h, --help  Show this help message"
     echo "  --skip-checks  Skip git checks (not recommended)"
@@ -20,6 +21,7 @@ fi
 
 BUILD_AWS=false
 BUILD_GCP=false
+BUILD_AZURE=false
 SKIP_GIT_CHECKS=false
 SKIP_WHEEL=false
 
@@ -28,6 +30,7 @@ while [[ $# -gt 0 ]]; do
         --all)
             BUILD_GCP=true
             BUILD_AWS=true
+            BUILD_AZURE=true
             shift
             ;;
         --gcp)
@@ -36,6 +39,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --aws)
             BUILD_AWS=true
+            shift
+            ;;
+        --azure)
+            BUILD_AZURE=true
             shift
             ;;
         -h|--help)
@@ -174,6 +181,16 @@ if [ "$BUILD_GCP" = true ]; then
         exit 1
     fi
 fi
+if [ "$BUILD_AZURE" = true ]; then
+    ./mill cloud_azure.assembly
+
+    SRC_CLOUD_AZURE_JAR="$CHRONON_ROOT_DIR/out/cloud_azure/assembly.dest/out.jar"
+
+    if [ ! -f "$SRC_CLOUD_AZURE_JAR" ]; then
+        echo "$SRC_CLOUD_AZURE_JAR not found"
+        exit 1
+    fi
+fi
 
 # all customer ids
 GCP_CUSTOMER_IDS=("canary")
@@ -183,6 +200,7 @@ FLINK_PUBSUB_JAR="connectors_pubsub_deploy.jar"
 SERVICE_JAR="service_assembly_deploy.jar"
 CLOUD_AWS_JAR="cloud_aws_lib_deploy.jar"
 CLOUD_GCP_JAR="cloud_gcp_lib_deploy.jar"
+CLOUD_AZURE_JAR="cloud_azure_lib_deploy.jar"
 
 # Takes in array of customer ids
 function upload_to_gcp() {
@@ -242,9 +260,35 @@ function upload_to_aws() {
   done
 }
 
+AZURE_STORAGE_ACCOUNT="ziplineai2"
+AZURE_CONTAINER="dev-zipline-artifacts"
 
-if [ "$BUILD_AWS" = false ] && [ "$BUILD_GCP" = false ]; then
-  echo "Please select an upload option (--all, --gcp, --aws). Exiting"
+# Uploads to Azure Data Lake Storage Gen2
+function upload_to_azure() {
+  echo "Are you sure you want to upload to Azure (${AZURE_STORAGE_ACCOUNT}/${AZURE_CONTAINER})?"
+  select yn in "Yes" "No"; do
+      case $yn in
+          Yes )
+              set -euxo pipefail
+              AZURE_JAR_PATH="release/$CHRONON_VERSION/jars"
+              AZURE_WHEEL_PATH="release/$CHRONON_VERSION/wheels"
+
+              az storage fs file upload --source "$SRC_CLOUD_AZURE_JAR" --path "$AZURE_JAR_PATH/$CLOUD_AZURE_JAR" --file-system "$AZURE_CONTAINER" --account-name "$AZURE_STORAGE_ACCOUNT" --overwrite --auth-mode login
+              az storage fs file upload --source "$SRC_SERVICE_JAR" --path "$AZURE_JAR_PATH/$SERVICE_JAR" --file-system "$AZURE_CONTAINER" --account-name "$AZURE_STORAGE_ACCOUNT" --overwrite --auth-mode login
+              if [ "$SKIP_WHEEL" = false ]; then
+                az storage fs file upload --source "$EXPECTED_ZIPLINE_WHEEL" --path "$AZURE_WHEEL_PATH/$(basename $EXPECTED_ZIPLINE_WHEEL)" --file-system "$AZURE_CONTAINER" --account-name "$AZURE_STORAGE_ACCOUNT" --overwrite --auth-mode login
+              fi
+              az storage fs file upload --source "$SRC_FLINK_JAR" --path "$AZURE_JAR_PATH/$FLINK_JAR" --file-system "$AZURE_CONTAINER" --account-name "$AZURE_STORAGE_ACCOUNT" --overwrite --auth-mode login
+              echo "Succeeded"
+              break;;
+          No ) break;;
+      esac
+  done
+}
+
+
+if [ "$BUILD_AWS" = false ] && [ "$BUILD_GCP" = false ] && [ "$BUILD_AZURE" = false ]; then
+  echo "Please select an upload option (--all, --gcp, --aws, --azure). Exiting"
   exit 1
 fi
 
@@ -263,6 +307,9 @@ if [ "$BUILD_GCP" = true ]; then
     GCP_CUSTOMER_IDS=("${INPUT_CUSTOMER_IDS[@]}")
   fi
   upload_to_gcp "${GCP_CUSTOMER_IDS[@]}"
+fi
+if [ "$BUILD_AZURE" = true ]; then
+  upload_to_azure
 fi
 
 # Cleanup wheel stuff

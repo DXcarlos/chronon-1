@@ -558,4 +558,34 @@ object KyuubiSubmitter {
     }
   }
 
+  /** Main entry point for KyuubiSubmitter.
+    *
+    * Reads the Kyuubi server URL from SPARK_CLUSTER_NAME environment variable.
+    * The SPARK_CLUSTER_NAME should be in the format "host:port" (e.g., "kyuubi-server:10099").
+    *
+    * @param args Command-line arguments
+    */
+  def main(args: Array[String]): Unit = {
+    // Read the Kyuubi server URL from SPARK_CLUSTER_NAME env var
+    val clusterName = sys.env
+      .getOrElse(
+        SparkClusterNameEnvVar,
+        throw new Exception(
+          s"$SparkClusterNameEnvVar is not set. " +
+            s"Please set $SparkClusterNameEnvVar to the Kyuubi server address (e.g., 'kyuubi-server:10099').")
+      )
+
+    val baseUrl = if (clusterName.startsWith("http://") || clusterName.startsWith("https://")) {
+      clusterName
+    } else {
+      s"https://$clusterName"
+    }
+
+    logger.info(s"Connecting to Kyuubi server at: $baseUrl")
+
+    val submitter = KyuubiSubmitter(baseUrl)
+    val jobId = submitter.run(args)
+    logger.info(s"KyuubiSubmitter job id: $jobId")
+  }
+
 }

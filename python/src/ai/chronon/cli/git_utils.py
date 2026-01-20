@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -6,6 +7,23 @@ from typing import List, Optional
 from ai.chronon.cli.logger import get_logger
 
 logger = get_logger()
+
+
+def get_git_user_email() -> str:
+    """Get the email of the current git user, falling back to USER env var."""
+    try:
+        result = subprocess.run(
+            ["git", "config", "user.email"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        email = result.stdout.strip()
+        if email:
+            return email
+    except Exception:
+        pass
+    return os.environ.get("USER", "")
 
 
 def get_current_branch() -> str:

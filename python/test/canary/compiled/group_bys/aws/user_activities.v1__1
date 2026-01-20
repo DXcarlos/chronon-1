@@ -424,13 +424,13 @@
           "CHRONON_ONLINE_ARGS": "-Ztasks=1",
           "CLOUD_PROVIDER": "aws",
           "CUSTOMER_ID": "dev",
-          "EMR_CLUSTER_NAME": "zipline-canary-emr",
           "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
           "FRONTEND_URL": "http://localhost:3000",
           "HUB_URL": "http://localhost:3903",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
+          "SPARK_CLUSTER_NAME": "zipline-canary-emr",
           "VERSION": "latest"
         }
       },

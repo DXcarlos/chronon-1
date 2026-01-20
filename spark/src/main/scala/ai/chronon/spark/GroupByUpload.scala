@@ -248,19 +248,11 @@ object GroupByUpload {
     result
   }
 
-  def run(groupByConf: api.GroupBy,
-          endDs: String,
-          tableUtilsOpt: Option[TableUtils] = None,
-          showDf: Boolean = false,
-          jsonPercent: Int = 1): Unit = {
-    import ai.chronon.spark.submission.SparkSessionBuilder
-    val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
-    val startTs = System.currentTimeMillis()
-    val tableUtils: TableUtils =
-      tableUtilsOpt.getOrElse(
-        TableUtils(
-          SparkSessionBuilder
-            .build(s"groupBy_${groupByConf.metaData.name}_upload")))
+  private[spark] def generateKvRdd(groupByConf: api.GroupBy,
+                                   endDs: String,
+                                   showDf: Boolean = false,
+                                   tableUtils: TableUtils,
+                                   maybeContext: Option[Metrics.Context] = None) = {
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
     Option(groupByConf.setups).foreach(_.foreach(tableUtils.sql))
     // add 1 day to the batch end time to reflect data [ds 00:00:00.000, ds + 1 00:00:00.000)
@@ -283,18 +275,39 @@ object GroupByUpload {
     lazy val otherGroupByUpload = new GroupByUpload(batchEndDate, groupBy)
 
     logger.info(s"""
-         |GroupBy upload for: ${groupByConf.metaData.team}.${groupByConf.metaData.name}
-         |Accuracy: ${groupByConf.inferredAccuracy}
-         |Data Model: ${groupByConf.dataModel}
-         |""".stripMargin)
+                   |GroupBy upload for: ${groupByConf.metaData.team}.${groupByConf.metaData.name}
+                   |Accuracy: ${groupByConf.inferredAccuracy}
+                   |Data Model: ${groupByConf.dataModel}
+                   |""".stripMargin)
 
-    val kvRdd = (groupByConf.inferredAccuracy, groupByConf.dataModel) match {
+    val result = (groupByConf.inferredAccuracy, groupByConf.dataModel) match {
       case (Accuracy.SNAPSHOT, DataModel.EVENTS)   => groupByUpload.snapshotEvents
       case (Accuracy.SNAPSHOT, DataModel.ENTITIES) => groupByUpload.snapshotEntities
       case (Accuracy.TEMPORAL, DataModel.EVENTS)   => shiftedGroupByUpload.temporalEvents()
       case (Accuracy.TEMPORAL, DataModel.ENTITIES) => otherGroupByUpload.temporalEvents()
     }
 
+    result
+  }
+
+  def run(groupByConf: api.GroupBy,
+          endDs: String,
+          tableUtilsOpt: Option[TableUtils] = None,
+          showDf: Boolean = false,
+          jsonPercent: Int = 1): Unit = {
+    import ai.chronon.spark.submission.SparkSessionBuilder
+    val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
+    val startTs = System.currentTimeMillis()
+    val tableUtils: TableUtils =
+      tableUtilsOpt.getOrElse(
+        TableUtils(
+          SparkSessionBuilder
+            .build(s"groupBy_${groupByConf.metaData.name}_upload")))
+    val kvRdd = generateKvRdd(groupByConf = groupByConf,
+                              endDs = endDs,
+                              showDf = showDf,
+                              tableUtils = tableUtils,
+                              maybeContext = Option(context))
     val kvDf = kvRdd.toAvroDf(jsonPercent = jsonPercent)
 
     if (showDf) {
