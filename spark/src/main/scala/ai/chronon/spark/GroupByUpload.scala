@@ -52,6 +52,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.functions.not
 import org.apache.spark.sql.types
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
@@ -65,8 +66,8 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
   private val tableUtils: TableUtils = TableUtils(sparkSession)
   implicit private val partitionSpec: PartitionSpec = tableUtils.partitionSpec
 
-  private def fromBase(rdd: RDD[(Array[Any], Array[Any])]): KvRdd = {
-
+  private def snapshotAccuracyNullCountCheck(rdd: RDD[(Array[Any], Array[Any])],
+                                             fields: Array[StructField]): mutable.Map[String, Long] = {
     rdd.cache()
 
     val nullCounts = rdd
@@ -74,7 +75,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
         seqOp = { case (counterMap, (_, values)) =>
           for (i <- values.indices) {
             if (values(i) == null) {
-              val field = groupBy.postAggSchema.fields(i)
+              val field = fields(i)
               val key = field.name
               counterMap.update(key, counterMap.getOrElse(key, 0L) + 1L)
             }
@@ -88,6 +89,13 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
           map1
         }
       )
+
+    nullCounts
+  }
+
+  private def fromBase(rdd: RDD[(Array[Any], Array[Any])]): KvRdd = {
+
+    val nullCounts = snapshotAccuracyNullCountCheck(rdd, groupBy.postAggSchema.fields)
 
     val pairRdd = rdd.map { case (keyAndDs, values) => keyAndDs.init -> values }
 
@@ -108,25 +116,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
           keyBuilder(row).data -> valuesIndices.map(row.get)
         }
 
-      val nullCounts = rdd
-        .treeAggregate(mutable.HashMap.empty[String, Long])(
-          seqOp = { case (counterMap, (_, values)) =>
-            for (i <- values.indices) {
-              if (values(i) == null) {
-                val field = groupBy.preAggSchema.fields(i)
-                val key = field.name
-                counterMap.update(key, counterMap.getOrElse(key, 0L) + 1L)
-              }
-            }
-            counterMap
-          },
-          combOp = { (map1, map2) =>
-            map2.foreach { case (key, count) =>
-              map1.update(key, map1.getOrElse(key, 0L) + count)
-            }
-            map1
-          }
-        )
+      val nullCounts = snapshotAccuracyNullCountCheck(rdd, groupBy.preAggSchema.fields)
 
       logger.info(s"""
            |pre-agg upload:
