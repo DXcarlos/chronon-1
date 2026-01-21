@@ -24,6 +24,10 @@ trait CloudAzureModule extends Cross.Module[String] with build.BaseModule {
     mvn"com.azure:azure-storage-blob:12.29.0",
     // Azure Identity for authentication
     mvn"com.azure:azure-identity:1.14.2",
+    // Hadoop Azure FileSystem connector (for abfss:// support)
+    mvn"org.apache.hadoop:hadoop-azure:3.3.6",
+    mvn"com.microsoft.azure:azure-storage:7.0.1",
+    mvn"org.apache.iceberg:iceberg-azure-bundle:1.10.0",
   ).map(excludeJackson) ++ Seq(
     mvn"com.fasterxml.jackson.core:jackson-core:2.15.2",
     mvn"com.fasterxml.jackson.core:jackson-databind:2.15.2",

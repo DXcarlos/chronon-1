@@ -10,7 +10,7 @@ import requests
 from gen_thrift.planner.ttypes import Mode
 
 from ai.chronon.cli.formatter import Format, format_print, jsonify_exceptions_if_json_format
-from ai.chronon.cli.git_utils import get_current_branch
+from ai.chronon.cli.git_utils import get_current_branch, get_git_user_email
 from ai.chronon.click_helpers import handle_compile, handle_conf_not_found
 from ai.chronon.repo import hub_uploader, utils
 from ai.chronon.repo.constants import RunMode
@@ -145,7 +145,7 @@ def submit_workflow(repo, conf, mode, start_ds, end_ds, hub_url=None, use_auth=T
         conf_name=conf_name,
         mode=mode,
         branch=branch,  # Get the current branch
-        user=os.environ.get("USER"),
+        user=get_git_user_email(),
         start=start_ds,
         end=end_ds,
         conf_hash=conf_name_to_hash_dict[conf_name].hash,

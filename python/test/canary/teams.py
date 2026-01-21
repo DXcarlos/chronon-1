@@ -53,7 +53,7 @@ gcp = Team(
             "PARTITION_FORMAT": "yyyy-MM-dd",
             "GCP_PROJECT_ID": "canary-443022",
             "GCP_REGION": "us-central1",
-            "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
+            "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
             "ENABLE_PUBSUB": "true",
             "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
@@ -64,7 +64,7 @@ gcp = Team(
         },
         modeEnvironments={
             RunMode.UPLOAD: {
-                "GCP_DATAPROC_CLUSTER_NAME": "zipline-transient-upload-cluster"
+                "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster"
             }
         }
     ),
@@ -101,9 +101,6 @@ gcp = Team(
             "spark.executor.cores": "1",
         },
         modeConfigs={
-            RunMode.BACKFILL: {
-                "spark.chronon.backfill_cloud_provider": "gcp",  # dummy test config
-            }
         }
     ),
     clusterConf=ClusterConfigProperties(
@@ -129,7 +126,7 @@ aws = Team(
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
             "AWS_REGION": "us-west-2",
-            "EMR_CLUSTER_NAME": "zipline-canary-emr",
+            "SPARK_CLUSTER_NAME": "zipline-canary-emr",
             "ARTIFACT_PREFIX": "s3://zipline-artifacts-dev",
             "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
@@ -191,6 +188,7 @@ azure = Team(
             "JOB_MODE": "local[*]",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
+            "SPARK_CLUSTER_NAME": "kyuubi-dev.westus2.cloudapp.azure.com:10099",
             "ARTIFACT_PREFIX": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net",
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
             "FRONTEND_URL": "http://localhost:3000",
@@ -208,6 +206,7 @@ azure = Team(
             "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
             "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
             "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "vended-credentials",
+            "spark.sql.catalog.spark_catalog.token": "XXXXXX",
             "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-opencatalog.snowflakecomputing.com/polaris/api/catalog",
             "spark.chronon.coalesce.factor": "10",
             "spark.default.parallelism": "10",

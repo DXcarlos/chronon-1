@@ -623,8 +623,8 @@ object DataprocSubmitter {
                             maybeClusterConfig.get.getOrElse("dataproc.config", ""))
     } else {
       throw new Exception(
-        s"$GcpDataprocClusterNameEnvVar is not set and no cluster config was provided. " +
-          s"Please set $GcpDataprocClusterNameEnvVar or provide a cluster config in teams.py.")
+        s"$SparkClusterNameEnvVar (or $GcpDataprocClusterNameEnvVar) is not set and no cluster config was provided. " +
+          s"Please set $SparkClusterNameEnvVar or provide a cluster config in teams.py.")
     }
   }
 
@@ -756,8 +756,11 @@ object DataprocSubmitter {
   }
 
   def main(args: Array[String]): Unit = {
+    // Use generic CLUSTER_NAME env var first, fallback to GCP-specific one for backwards compatibility
     val clusterName = sys.env
-      .getOrElse(GcpDataprocClusterNameEnvVar, "")
+      .get(SparkClusterNameEnvVar)
+      .orElse(sys.env.get(GcpDataprocClusterNameEnvVar))
+      .getOrElse("")
     val maybeClusterConfig = JobSubmitter.getClusterConfig(args)
 
     val projectId = sys.env.getOrElse(GcpProjectIdEnvVar, throw new Exception(s"$GcpProjectIdEnvVar not set"))

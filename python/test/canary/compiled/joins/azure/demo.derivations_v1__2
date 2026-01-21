@@ -62,6 +62,7 @@
                 "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
                 "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "vended-credentials",
                 "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+                "spark.sql.catalog.spark_catalog.token": "XXXXXX",
                 "spark.sql.catalog.spark_catalog.type": "rest",
                 "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-opencatalog.snowflakecomputing.com/polaris/api/catalog",
                 "spark.sql.catalog.spark_catalog.warehouse": "abfss://warehouse@ziplineai2.dfs.core.windows.net/data/",
@@ -79,6 +80,7 @@
                 "JOB_MODE": "local[*]",
                 "PARTITION_COLUMN": "ds",
                 "PARTITION_FORMAT": "yyyy-MM-dd",
+                "SPARK_CLUSTER_NAME": "kyuubi-dev.westus2.cloudapp.azure.com:10099",
                 "VERSION": "latest"
               }
             },
@@ -529,6 +531,7 @@
                 "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
                 "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "vended-credentials",
                 "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+                "spark.sql.catalog.spark_catalog.token": "XXXXXX",
                 "spark.sql.catalog.spark_catalog.type": "rest",
                 "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-opencatalog.snowflakecomputing.com/polaris/api/catalog",
                 "spark.sql.catalog.spark_catalog.warehouse": "abfss://warehouse@ziplineai2.dfs.core.windows.net/data/",
@@ -546,6 +549,7 @@
                 "JOB_MODE": "local[*]",
                 "PARTITION_COLUMN": "ds",
                 "PARTITION_FORMAT": "yyyy-MM-dd",
+                "SPARK_CLUSTER_NAME": "kyuubi-dev.westus2.cloudapp.azure.com:10099",
                 "VERSION": "latest"
               }
             },
@@ -701,6 +705,7 @@
           "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
           "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "vended-credentials",
           "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+          "spark.sql.catalog.spark_catalog.token": "XXXXXX",
           "spark.sql.catalog.spark_catalog.type": "rest",
           "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-opencatalog.snowflakecomputing.com/polaris/api/catalog",
           "spark.sql.catalog.spark_catalog.warehouse": "abfss://warehouse@ziplineai2.dfs.core.windows.net/data/",
@@ -718,6 +723,7 @@
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
+          "SPARK_CLUSTER_NAME": "kyuubi-dev.westus2.cloudapp.azure.com:10099",
           "VERSION": "latest"
         }
       },

@@ -483,9 +483,14 @@ object EmrSubmitter {
       .getArgValue(args, ClusterIdleTimeoutArgKeyword)
       .getOrElse(DefaultClusterIdleTimeout.toString)
 
-    val clusterId = sys.env.get("EMR_CLUSTER_ID")
+    // Use generic CLUSTER_NAME env var first, fallback to EMR_CLUSTER_NAME for backwards compatibility
+    val clusterName = sys.env
+      .get(SparkClusterNameEnvVar)
+      .orElse(sys.env.get(EmrClusterNameEnvVar))
+      .getOrElse(throw new Exception(s"$SparkClusterNameEnvVar (or $EmrClusterNameEnvVar) is not set. " +
+        s"Please set $SparkClusterNameEnvVar or provide a cluster config in teams.py."))
 
-    // search args array for prefix `--gcs_files`
+    // search args array for prefix `--files`
     val filesArgs = args.filter(_.startsWith(FilesArgKeyword))
     assert(filesArgs.length == 0 || filesArgs.length == 1)
 
@@ -494,6 +499,12 @@ object EmrSubmitter {
     } else {
       filesArgs(0).split("=")(1).split(",")
     }
+
+    val emrSubmitter = EmrSubmitter()
+
+    // Get or create the EMR cluster
+    val maybeClusterConfig = JobSubmitter.getClusterConfig(args)
+    val clusterId = emrSubmitter.getOrCreateCluster(clusterName, maybeClusterConfig)
 
     val (jobType, submissionProps) = jobTypeValue.toLowerCase match {
       case "spark" => {
@@ -505,7 +516,7 @@ object EmrSubmitter {
           ClusterIdleTimeout -> clusterIdleTimeout
         )
 
-        (TypeSparkJob, baseProps + (ClusterId -> clusterId.get))
+        (TypeSparkJob, baseProps + (ClusterId -> clusterId))
       }
       // TODO: add flink
       case _ => throw new Exception("Invalid job type")
@@ -514,7 +525,6 @@ object EmrSubmitter {
     val finalArgs = userArgs.toSeq
     val modeConfigProperties = JobSubmitter.getModeConfigProperties(args)
 
-    val emrSubmitter = EmrSubmitter()
     emrSubmitter.submit(
       jobType = jobType,
       submissionProperties = submissionProps,

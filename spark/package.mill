@@ -24,7 +24,7 @@ trait SparkModule extends Cross.Module[String] with build.BaseModule {
 //        .exclude("org.apache.parquet" -> "parquet-avro"), // Avoid version conflict with Spark's Parquet,
 //      mvn"org.apache.parquet:parquet-avro:1.15.2".forceVersion(),
       // Vertx web client for KyuubiSubmitter HTTP calls
-      mvn"io.vertx:vertx-web-client:4.5.22",
+      mvn"io.vertx:vertx-web-client:4.5.24",
     )
   
   // Single test module for all Spark tests
