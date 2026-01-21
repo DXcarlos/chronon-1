@@ -112,6 +112,8 @@ struct TableDependency {
     // indicates a soft dependency at the node level that doesn't warrant a table presence check
     6: optional bool isSoftNodeDependency
 
+    7: optional string semanticHash
+
     /**
     * JoinParts could use data from batch backfill-s or upload tables when available
     * When not available they shouldn't force computation of the backfills and upload tables.

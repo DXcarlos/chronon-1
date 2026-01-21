@@ -30,14 +30,13 @@ import scala.util.{Failure, Success}
 /** BigTable based KV store implementation. We store a few kinds of data in our KV store:
   * 1) Entity data - An example is thrift serialized Groupby / Join configs. If entities are updated / rewritten, we
   * serve the latest version.
-  * 2) Timeseries data - This is either our batch IRs or streaming tiles for feature fetching. It also
-  * includes drift / skew time summaries.
+  * 2) Timeseries data - This is either our batch IRs or streaming tiles for feature fetching.
   *
   * We have multi use-case tables for the _BATCH and _STREAMING time series tile data.
   * To ensure that data from different groupBys are isolated from each other, we prefix the key with the dataset name:
   * Row key: dataset#key
   *
-  * In case of time series data that is likely to see many data points per day (e.g. tile_summaries, streaming tiles), we
+  * In case of time series data that is likely to see many data points per day (e.g. streaming tiles), we
   * bucket the data by day to ensure that we don't need to filter a Row with thousands of cells (and also worry about the per Row size / cell count limits).
   * This also helps as GC in BigTable can take ~1 week. Without this day based bucketing we might have cells spanning a week.
   *
@@ -113,7 +112,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
     val requestGroups = requests.groupBy { req =>
       val tableType = getTableType(req.dataset)
       tableType match {
-        case TileSummaries | StreamingTable =>
+        case StreamingTable =>
           // Group by dataset and time range for time-series data
           (req.dataset, req.startTsMillis, req.endTsMillis)
         case _ =>
@@ -175,9 +174,6 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
     // Generate row keys for all requests
     val requestsWithRowKeys = requests.map { request =>
       val rowKeys: Seq[ByteString] = (request.startTsMillis, tableType) match {
-        case (Some(startTs), TileSummaries) =>
-          generateTimeSeriesRowKeys(startTs, endTime, request.keyBytes, dataset, None)
-
         case (Some(startTs), StreamingTable) =>
           val tileKey = TilingUtils.deserializeTileKey(request.keyBytes)
           val tileSizeMs = tileKey.tileSizeMillis
@@ -352,8 +348,6 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
         val timestampInPutRequest = request.tsMillis.getOrElse(System.currentTimeMillis())
 
         val (rowKey, timestamp) = (request.tsMillis, tableType) match {
-          case (Some(ts), TileSummaries) =>
-            (buildRowKey(request.keyBytes, request.dataset, Some(ts)), timestampInPutRequest)
           case (Some(ts), StreamingTable) =>
             val tileKey = TilingUtils.deserializeTileKey(request.keyBytes)
             val baseKeyBytes = tileKey.keyBytes.asScala.map(_.toByte).toSeq
@@ -625,7 +619,6 @@ object BigTableKVStore {
   sealed trait TableType
   case object BatchTable extends TableType
   case object StreamingTable extends TableType
-  case object TileSummaries extends TableType
 
   /** row key (with tiling) convention:
     * <dataset>#<entity-key>#<start_date>#<tile_size>
@@ -666,7 +659,6 @@ object BigTableKVStore {
     dataset match {
       case d if d.endsWith("_BATCH")     => BatchTable
       case d if d.endsWith("_STREAMING") => StreamingTable
-      case d if d.endsWith("SUMMARIES")  => TileSummaries
       case _                             => BatchTable // default to batch table for tables like chronon_metadata
     }
   }

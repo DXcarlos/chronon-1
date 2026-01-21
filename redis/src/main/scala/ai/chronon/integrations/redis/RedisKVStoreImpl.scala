@@ -93,7 +93,7 @@ class RedisKVStoreImpl(jedisCluster: JedisCluster, conf: Map[String, String] = M
     val requestGroups = requests.groupBy { req =>
       val tableType = getTableType(req.dataset)
       tableType match {
-        case TileSummaries | StreamingTable =>
+        case StreamingTable =>
           (req.dataset, req.startTsMillis, req.endTsMillis)
         case _ =>
           (req.dataset, None, None)
@@ -148,15 +148,6 @@ class RedisKVStoreImpl(jedisCluster: JedisCluster, conf: Map[String, String] = M
                   Seq.empty
                 }
               }
-              GetResponse(request, timedValues)
-            }
-
-          case TileSummaries if startTsMillis.isDefined =>
-            val reqStartTs = startTsMillis.get
-            val endTs = endTsMillis.getOrElse(System.currentTimeMillis())
-            requests.map { request =>
-              val timedValues =
-                Try(getTimeSeriesData(jedisCluster, request.keyBytes, dataset, reqStartTs, endTs, None, keyPrefix))
               GetResponse(request, timedValues)
             }
 
@@ -351,8 +342,6 @@ class RedisKVStoreImpl(jedisCluster: JedisCluster, conf: Map[String, String] = M
         try {
           val startTs = System.currentTimeMillis()
           val (redisKey, timestamp) = (request.tsMillis, tableType) match {
-            case (Some(ts), TileSummaries) =>
-              (buildRedisKey(request.keyBytes, request.dataset, Some(ts), keyPrefix), timestampInPutRequest)
             case (Some(ts), StreamingTable) =>
               val tileKey = TilingUtils.deserializeTileKey(request.keyBytes)
               val baseKeyBytes = tileKey.keyBytes.asScala.map(_.toByte).toSeq
@@ -363,7 +352,7 @@ class RedisKVStoreImpl(jedisCluster: JedisCluster, conf: Map[String, String] = M
           }
 
           tableType match {
-            case TileSummaries | StreamingTable =>
+            case StreamingTable =>
               // Use sorted set for time-series data with Last-Write-Wins semantics (matching BigTable)
               val keyBytes = redisKey.getBytes(StandardCharsets.UTF_8)
               // Remove any existing value at this exact timestamp (Last-Write-Wins)
@@ -481,7 +470,6 @@ object RedisKVStore {
   sealed trait TableType
   case object BatchTable extends TableType
   case object StreamingTable extends TableType
-  case object TileSummaries extends TableType
 
   /** Build a Redis key with optional timestamp for time-series data.
     *
@@ -540,7 +528,6 @@ object RedisKVStore {
     dataset match {
       case d if d.endsWith("_BATCH")     => BatchTable
       case d if d.endsWith("_STREAMING") => StreamingTable
-      case d if d.endsWith("SUMMARIES")  => TileSummaries
       case _                             => BatchTable
     }
   }

@@ -279,109 +279,29 @@ class RedisKVStoreTest extends AnyFlatSpec with BeforeAndAfterAll with Matchers 
     }
   }
 
-  // Test write and query of time series dataset
-  it should "time series query multiple days" in {
-    val dataset = "TILE_SUMMARIES"
-    val kvStore = new RedisKVStoreImpl(jedisCluster)
-    kvStore.create(dataset)
-
-    // generate some hourly timestamps from 10/04/24 00:00 to 10/16
-    val fakePayload = """{"name": "my_key", "my_feature_ir": "123"}"""
-    val tsRange = 1728000000000L until 1729036800000L by 1.hour.toMillis
-    writeGeneratedTimeSeriesData(kvStore, dataset, "my_key".getBytes, tsRange, fakePayload)
-
-    // query in time range: 10/05/24 00:00 to 10/10/24
-    val queryStartTs = 1728086400000L
-    val queryEndTs = 1728518400000L
-    val getRequest1 = GetRequest("my_key".getBytes, dataset, Some(queryStartTs), Some(queryEndTs))
-    val getResult1 = Await.result(kvStore.multiGet(Seq(getRequest1)), 10.seconds)
-    getResult1.size shouldBe 1
-    val expectedTimeSeriesPoints = (queryStartTs to queryEndTs by 1.hour.toMillis).toSeq
-    validateTimeSeriesValueExpectedPayload(getResult1.head, expectedTimeSeriesPoints, fakePayload)
-  }
-
-  it should "time series query one day" in {
-    val dataset = "TILE_SUMMARIES"
-    val kvStore = new RedisKVStoreImpl(jedisCluster)
-    kvStore.create(dataset)
-
-    // generate some hourly timestamps from 10/04/24 00:00 to 10/16
-    val fakePayload = """{"name": "my_key", "my_feature": "123"}"""
-    val tsRange = 1728000000000L until 1729036800000L by 1.hour.toMillis
-    writeGeneratedTimeSeriesData(kvStore, dataset, "my_key".getBytes, tsRange, fakePayload)
-
-    // query in time range: 10/05/24 00:00 to 10/06/24 00:00
-    val queryStartTs = 1728086400000L
-    val queryEndTs = 1728172800000L
-    val getRequest1 = GetRequest("my_key".getBytes, dataset, Some(queryStartTs), Some(queryEndTs))
-    val getResult1 = Await.result(kvStore.multiGet(Seq(getRequest1)), 10.seconds)
-    getResult1.size shouldBe 1
-    val expectedTimeSeriesPoints = (queryStartTs to queryEndTs by 1.hour.toMillis).toSeq
-    validateTimeSeriesValueExpectedPayload(getResult1.head, expectedTimeSeriesPoints, fakePayload)
-  }
-
-  it should "time series query same day" in {
-    val dataset = "TILE_SUMMARIES"
-    val kvStore = new RedisKVStoreImpl(jedisCluster)
-    kvStore.create(dataset)
-
-    // generate some hourly timestamps from 10/04/24 00:00 to 10/16
-    val fakePayload = """{"name": "my_key", "my_feature": "123"}"""
-    val tsRange = 1728000000000L until 1729036800000L by 1.hour.toMillis
-    writeGeneratedTimeSeriesData(kvStore, dataset, "my_key".getBytes, tsRange, fakePayload)
-
-    // query in time range: 10/05/24 00:00 to 10/05/24 22:00
-    val queryStartTs = 1728086400000L
-    val queryEndTs = 1728166800000L
-    val getRequest1 = GetRequest("my_key".getBytes, dataset, Some(queryStartTs), Some(queryEndTs))
-    val getResult1 = Await.result(kvStore.multiGet(Seq(getRequest1)), 10.seconds)
-    getResult1.size shouldBe 1
-    val expectedTimeSeriesPoints = (queryStartTs to queryEndTs by 1.hour.toMillis).toSeq
-    validateTimeSeriesValueExpectedPayload(getResult1.head, expectedTimeSeriesPoints, fakePayload)
-  }
-
-  it should "time series query days without data" in {
-    val dataset = "TILE_SUMMARIES"
-    val kvStore = new RedisKVStoreImpl(jedisCluster)
-    kvStore.create(dataset)
-
-    // generate some hourly timestamps from 10/04/24 00:00 to 10/16
-    val fakePayload = """{"name": "my_key", "my_feature_ir": "123"}"""
-    val dataStartTs = 1728000000000L
-    val dataEndTs = 1729036800000L
-    val tsRange = dataStartTs until dataEndTs by 1.hour.toMillis
-    writeGeneratedTimeSeriesData(kvStore, dataset, "my_key".getBytes, tsRange, fakePayload)
-
-    // query in time range: 10/15/24 00:00 to 10/30/24 00:00
-    val queryStartTs = 1728950400000L
-    val queryEndTs = 1730246400000L
-    val getRequest1 = GetRequest("my_key".getBytes, dataset, Some(queryStartTs), Some(queryEndTs))
-    val getResult1 = Await.result(kvStore.multiGet(Seq(getRequest1)), 10.seconds)
-    getResult1.size shouldBe 1
-    // we expect results to only cover the time range where we have data
-    val expectedTimeSeriesPoints = (queryStartTs until dataEndTs by 1.hour.toMillis).toSeq
-    validateTimeSeriesValueExpectedPayload(getResult1.head, expectedTimeSeriesPoints, fakePayload)
-  }
-
   it should "handle multiple key time series query" in {
-    val dataset = "TILE_SUMMARIES"
+    val dataset = "GROUPBY_STREAMING"
     val kvStore = new RedisKVStoreImpl(jedisCluster)
     kvStore.create(dataset)
 
     // generate some hourly timestamps from 10/04/24 00:00 to 10/16 and write out payloads for key1
     val fakePayload1 = """{"name": "my_key1", "my_feature": "123"}"""
     val tsRange = 1728000000000L until 1729036800000L by 1.hour.toMillis
-    writeGeneratedTimeSeriesData(kvStore, dataset, "my_key1".getBytes, tsRange, fakePayload1)
+    generateAndWriteTimeSeriesData(kvStore, dataset, tsRange, fakePayload1, "my_key1")
 
     // generate some hourly timestamps from 10/04/24 00:00 to 10/16 and write out payloads for key2
     val fakePayload2 = """{"name": "my_key2", "my_feature": "456"}"""
-    writeGeneratedTimeSeriesData(kvStore, dataset, "my_key2".getBytes, tsRange, fakePayload2)
+    generateAndWriteTimeSeriesData(kvStore, dataset, tsRange, fakePayload2, "my_key2")
 
     // query in time range: 10/05/24 00:00 to 10/10/24
     val queryStartTs = 1728086400000L
     val queryEndTs = 1728518400000L
-    val getRequest1 = GetRequest("my_key1".getBytes, dataset, Some(queryStartTs), Some(queryEndTs))
-    val getRequest2 = GetRequest("my_key2".getBytes, dataset, Some(queryStartTs), Some(queryEndTs))
+    val readTileKey1 = TilingUtils.buildTileKey(dataset, "my_key1".getBytes, Some(1.hour.toMillis), None)
+    val readKeyBytes1 = TilingUtils.serializeTileKey(readTileKey1)
+    val readTileKey2 = TilingUtils.buildTileKey(dataset, "my_key2".getBytes, Some(1.hour.toMillis), None)
+    val readKeyBytes2 = TilingUtils.serializeTileKey(readTileKey2)
+    val getRequest1 = GetRequest(readKeyBytes1, dataset, Some(queryStartTs), Some(queryEndTs))
+    val getRequest2 = GetRequest(readKeyBytes2, dataset, Some(queryStartTs), Some(queryEndTs))
     val getResult = Await.result(kvStore.multiGet(Seq(getRequest1, getRequest2)), 10.seconds)
     getResult.size shouldBe 2
     val expectedTimeSeriesPoints = (queryStartTs to queryEndTs by 1.hour.toMillis).toSeq
@@ -421,26 +341,32 @@ class RedisKVStoreTest extends AnyFlatSpec with BeforeAndAfterAll with Matchers 
 
   // Test Last-Write-Wins semantics: duplicate timestamps should overwrite
   it should "last write wins for duplicate timestamps" in {
-    val dataset = "TILE_SUMMARIES"
+    val dataset = "GROUPBY_STREAMING"
     val kvStore = new RedisKVStoreImpl(jedisCluster)
     kvStore.create(dataset)
-    val key = "test_key".getBytes
+    val key = "test_key"
     val timestamp = 1728000000000L
+
+    // Build tiled key for STREAMING dataset
+    val tileKey = TilingUtils.buildTileKey(dataset, key.getBytes, Some(1.hour.toMillis), Some(timestamp))
+    val tileKeyBytes = TilingUtils.serializeTileKey(tileKey)
 
     // Write value1 at timestamp T
     val value1 = """{"value": 1}"""
-    val putReq1 = PutRequest(key, value1.getBytes, dataset, Some(timestamp))
+    val putReq1 = PutRequest(tileKeyBytes, value1.getBytes, dataset, Some(timestamp))
     Await.result(kvStore.multiPut(Seq(putReq1)), 10.seconds)
 
     // Read and verify value1
-    val getReq = GetRequest(key, dataset, Some(timestamp), Some(timestamp))
+    val readTileKey = TilingUtils.buildTileKey(dataset, key.getBytes, Some(1.hour.toMillis), None)
+    val readKeyBytes = TilingUtils.serializeTileKey(readTileKey)
+    val getReq = GetRequest(readKeyBytes, dataset, Some(timestamp), Some(timestamp))
     val getResult1 = Await.result(kvStore.multiGet(Seq(getReq)), 10.seconds)
     getResult1.head.values.get.size shouldBe 1
     new String(getResult1.head.values.get.head.bytes) shouldBe value1
 
     // Write value2 at the SAME timestamp T (should overwrite value1)
     val value2 = """{"value": 2}"""
-    val putReq2 = PutRequest(key, value2.getBytes, dataset, Some(timestamp))
+    val putReq2 = PutRequest(tileKeyBytes, value2.getBytes, dataset, Some(timestamp))
     Await.result(kvStore.multiPut(Seq(putReq2)), 10.seconds)
 
     // Read and verify value2 (not value1)
@@ -682,7 +608,7 @@ class RedisKVStoreTest extends AnyFlatSpec with BeforeAndAfterAll with Matchers 
   }
 
   it should "handle multiple entities with different time ranges in single query" in {
-    val dataset = "TILE_SUMMARIES"
+    val dataset = "GROUPBY_STREAMING"
     val kvStore = new RedisKVStoreImpl(jedisCluster)
     kvStore.create(dataset)
 
@@ -695,9 +621,9 @@ class RedisKVStoreTest extends AnyFlatSpec with BeforeAndAfterAll with Matchers 
     // Generate hourly data from 10/01/24 00:00 to 10/10/24 00:00
     val tsRange = 1727740800000L until 1728518400000L by 1.hour.toMillis
 
-    // Write data for both entities
-    writeGeneratedTimeSeriesData(kvStore, dataset, entity1Key.getBytes, tsRange, fakePayload1)
-    writeGeneratedTimeSeriesData(kvStore, dataset, entity2Key.getBytes, tsRange, fakePayload2)
+    // Write data for both entities using tiled keys
+    generateAndWriteTimeSeriesData(kvStore, dataset, tsRange, fakePayload1, entity1Key)
+    generateAndWriteTimeSeriesData(kvStore, dataset, tsRange, fakePayload2, entity2Key)
 
     // Query with different time ranges
     // Entity 1: 10/02/24 00:00 to 10/04/24 00:00
@@ -707,33 +633,43 @@ class RedisKVStoreTest extends AnyFlatSpec with BeforeAndAfterAll with Matchers 
     val queryStartTs2 = 1728086400000L
     val queryEndTs2 = 1728259200000L
 
-    val getRequest1 = GetRequest(entity1Key.getBytes, dataset, Some(queryStartTs1), Some(queryEndTs1))
-    val getRequest2 = GetRequest(entity2Key.getBytes, dataset, Some(queryStartTs2), Some(queryEndTs2))
+    val readTileKey1 = TilingUtils.buildTileKey(dataset, entity1Key.getBytes, Some(1.hour.toMillis), None)
+    val readKeyBytes1 = TilingUtils.serializeTileKey(readTileKey1)
+    val readTileKey2 = TilingUtils.buildTileKey(dataset, entity2Key.getBytes, Some(1.hour.toMillis), None)
+    val readKeyBytes2 = TilingUtils.serializeTileKey(readTileKey2)
+
+    val getRequest1 = GetRequest(readKeyBytes1, dataset, Some(queryStartTs1), Some(queryEndTs1))
+    val getRequest2 = GetRequest(readKeyBytes2, dataset, Some(queryStartTs2), Some(queryEndTs2))
 
     // Fetch both entities in a single multiGet call
     val getResults = Await.result(kvStore.multiGet(Seq(getRequest1, getRequest2)), 10.seconds)
 
     // Verify we get results for both entities
     getResults.size shouldBe 2
+
+    // Find responses by matching the request (order may vary due to grouping)
+    val result1 = getResults.find(_.request == getRequest1).get
+    val result2 = getResults.find(_.request == getRequest2).get
+
     // Each should have data for their respective time ranges
     val expectedTimestamps1 = (queryStartTs1 to queryEndTs1 by 1.hour.toMillis).toSeq
     val expectedTimestamps2 = (queryStartTs2 to queryEndTs2 by 1.hour.toMillis).toSeq
-    validateTimeSeriesValueExpectedPayload(getResults.head, expectedTimestamps1, fakePayload1)
-    validateTimeSeriesValueExpectedPayload(getResults.last, expectedTimestamps2, fakePayload2)
+    validateTimeSeriesValueExpectedPayload(result1, expectedTimestamps1, fakePayload1)
+    validateTimeSeriesValueExpectedPayload(result2, expectedTimestamps2, fakePayload2)
   }
 
   it should "handle mixed request types - time series and non-time series" in {
-    val timeSeriesDataset = "TILE_SUMMARIES"
+    val timeSeriesDataset = "GROUPBY_STREAMING"
     val blobDataset = "CHRONON_METADATA"
     val kvStore = new RedisKVStoreImpl(jedisCluster)
     kvStore.create(timeSeriesDataset)
     kvStore.create(blobDataset)
 
-    // Write time series data
+    // Write time series data (using tiled keys for STREAMING dataset)
     val tsKey = "ts_key"
     val tsPayload = """{"name": "ts_key", "feature": "timeseries"}"""
     val tsRange = 1728000000000L until 1728172800000L by 1.hour.toMillis
-    writeGeneratedTimeSeriesData(kvStore, timeSeriesDataset, tsKey.getBytes, tsRange, tsPayload)
+    generateAndWriteTimeSeriesData(kvStore, timeSeriesDataset, tsRange, tsPayload, tsKey)
 
     // Write blob data
     val blobKey = "blob_key"
@@ -744,7 +680,9 @@ class RedisKVStoreTest extends AnyFlatSpec with BeforeAndAfterAll with Matchers 
     // Query both types
     val queryStartTs = 1728043200000L
     val queryEndTs = 1728129600000L
-    val tsGetRequest = GetRequest(tsKey.getBytes, timeSeriesDataset, Some(queryStartTs), Some(queryEndTs))
+    val readTileKey = TilingUtils.buildTileKey(timeSeriesDataset, tsKey.getBytes, Some(1.hour.toMillis), None)
+    val readKeyBytes = TilingUtils.serializeTileKey(readTileKey)
+    val tsGetRequest = GetRequest(readKeyBytes, timeSeriesDataset, Some(queryStartTs), Some(queryEndTs))
     val blobGetRequest = GetRequest(blobKey.getBytes, blobDataset, None, None)
 
     // Note: These would go to different datasets, so they'd be in separate multiGet calls in practice
@@ -896,39 +834,6 @@ class RedisKVStoreTest extends AnyFlatSpec with BeforeAndAfterAll with Matchers 
     // This prevents hotkey amplification when popular entities appear in multiple datasets
     batchKey should include(s"{$batchDataset:$base64Key}")
     streamKey should include(s"{$streamingDataset:$base64Key}")
-  }
-
-  it should "support multi-day queries with hash tags for same entity" in {
-    val dataset = "TILE_SUMMARIES"
-    val kvStore = new RedisKVStoreImpl(jedisCluster)
-    kvStore.create(dataset)
-
-    val entityKey = "user_multiday"
-    // Write data across 3 days
-    val day1 = 1728000000000L // Oct 4
-    val day2 = 1728086400000L // Oct 5
-    val day3 = 1728172800000L // Oct 6
-    val timestamps = Seq(day1, day1 + 3600000, day2, day2 + 3600000, day3, day3 + 3600000)
-    val payload = """{"feature": "value"}"""
-    writeGeneratedTimeSeriesData(kvStore, dataset, entityKey.getBytes, timestamps, payload)
-
-    // Query across all 3 days
-    val getRequest = GetRequest(entityKey.getBytes, dataset, Some(day1), Some(day3 + 7200000))
-    val getResult = Await.result(kvStore.multiGet(Seq(getRequest)), 10.seconds)
-
-    getResult.size shouldBe 1
-    getResult.head.values.isSuccess shouldBe true
-    val timedValues = getResult.head.values.get
-    timedValues.length shouldBe timestamps.length
-
-    // Verify all day keys use same hash tag
-    val base64Key = java.util.Base64.getEncoder.encodeToString(entityKey.getBytes)
-    val allKeysHaveSameHashTag = Seq(day1, day2, day3).forall { day =>
-      val dayStart = day - (day % (24 * 3600 * 1000))
-      val key = s"chronon:{$dataset:$base64Key}:$dayStart"
-      jedisCluster.exists(key.getBytes(StandardCharsets.UTF_8))
-    }
-    allKeysHaveSameHashTag shouldBe true
   }
 
   it should "bulk put batch IR data from Spark" in {

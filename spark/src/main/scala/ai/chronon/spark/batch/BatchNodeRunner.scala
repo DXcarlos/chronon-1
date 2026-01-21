@@ -15,13 +15,12 @@ import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.utils.SemanticUtils
 import ai.chronon.spark.{GroupBy, GroupByUpload, Join, ModelTransformsJob}
-
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
@@ -62,6 +61,8 @@ class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
 class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends NodeRunner {
   @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
+  // in ad-hoc flows, the jobs downstream of external tables will simply fail (albeit, with retries)
+  // in scheduled flow, the jobs downstream of external sensors will be stalled by the sensor
   def checkPartitions(conf: ExternalSourceSensorNode, range: PartitionRange): Try[Unit] = {
     val tableName = Option(conf.sourceTableDependency)
       .map(_.tableInfo)
@@ -522,6 +523,72 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     }
   }
 
+  case class TablePartitionStatus(name: String,
+                                  existingPartitions: Seq[String],
+                                  missingPartitions: Set[String],
+                                  semanticHash: Option[String])
+
+  /** Computes partition statuses for input tables, handling cases where the same input table
+    * is used multiple times (e.g., for both labels and groupBy in a join).
+    */
+  private[batch] def computeInputTablePartitionStatuses(
+      metadata: MetaData,
+      range: PartitionRange,
+      tableUtils: TableUtils
+  ): Iterable[TablePartitionStatus] = {
+    val inputTableDependencies: Map[String, Array[TableDependency]] =
+      Option(metadata.executionInfo.getTableDependencies)
+        .map(_.asScala.toArray)
+        .getOrElse(Array.empty)
+        .map(td => td.tableInfo.table -> td)
+        .groupBy(_._1)
+        .mapValues(_.map(_._2))
+        .toMap
+
+    inputTableDependencies
+      .filterNot(_._2.forall(td => td.isSetIsSoftNodeDependency && td.isSoftNodeDependency))
+      .map { case (table, deps) =>
+        val inputPartitionSpec = deps.head.tableInfo.partitionSpec(tableUtils.partitionSpec)
+        val existingPartitions = tableUtils.partitions(table, tablePartitionSpec = Some(inputPartitionSpec))
+
+        val missingPartitionsAcrossDeps = deps.flatMap { td =>
+          val inputPartSpec = Option(td.getTableInfo)
+            .map(_.partitionSpec(tableUtils.partitionSpec))
+            .getOrElse(tableUtils.partitionSpec)
+
+          val requiredInputPartitions = DependencyResolver
+            .computeInputRange(range, td)
+            .map(_.translate(inputPartSpec))
+            .toSeq
+            .flatMap(_.partitions)
+            .toSet
+
+          val missingPartitions = requiredInputPartitions -- existingPartitions.toSet
+          missingPartitions
+        }.toSet
+
+        val existingTranslated = existingPartitions.map(p => inputPartitionSpec.translate(p, range.partitionSpec))
+
+        // Collect semanticHash values from all dependencies for this table
+        val semanticHashes = deps.flatMap { td =>
+          if (td.isSetSemanticHash && td.semanticHash.nonEmpty) {
+            Some(td.semanticHash)
+          } else {
+            None
+          }
+        }.toSet
+
+        val semanticHash = if (semanticHashes.size > 1) {
+          logger.error(s"Table $table has inconsistent semanticHash values across dependencies: $semanticHashes")
+          None
+        } else {
+          semanticHashes.headOption
+        }
+
+        TablePartitionStatus(table, existingTranslated, missingPartitionsAcrossDeps, semanticHash)
+      }
+  }
+
   def runFromArgs(
       startDs: String,
       endDs: String,
@@ -533,69 +600,49 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
       val kvStore = api.genKvStore
 
+      val inputTablePartitionStatuses = computeInputTablePartitionStatuses(metadata, range, tableUtils)
+
       logger.info(s"Starting batch node runner for '${metadata.name}'")
-      val inputTablesToRange = Option(metadata.executionInfo.getTableDependencies)
-        .map(_.asScala.toArray)
-        .getOrElse(Array.empty)
-        .filterNot(_.isSoftNodeDependency) // Skip table checks on soft dependencies
-        .map((td) => {
-          val inputPartSpec =
-            Option(td.getTableInfo).map(_.partitionSpec(tableUtils.partitionSpec)).getOrElse(tableUtils.partitionSpec)
-          td.getTableInfo.table -> DependencyResolver.computeInputRange(range, td).map(_.translate(inputPartSpec))
-        })
-        .toMap
-      val allInputTablePartitions = inputTablesToRange.map {
-        case (tableName, maybePartitionRange) => {
-          // The partitions returned here are going to follow the tableUtils.partitionSpec default spec.
-          tableName -> tableUtils.partitions(tableName, tablePartitionSpec = maybePartitionRange.map(_.partitionSpec))
-        }
-      }
 
-      val maybeMissingPartitions = inputTablesToRange.map {
-        case (tableName, maybePartitionRange) => {
-          tableName -> maybePartitionRange.map((requestedPR) => {
-            // Need to normalize back again to the default spec before diffing against the existing partitions.
-            try {
-              requestedPR.translate(tableUtils.partitionSpec).partitions.diff(allInputTablePartitions(tableName))
-            } catch {
-              case e: Exception =>
-                logger.error(s"Error computing missing partitions for table $tableName.")
-                throw e
-            }
-          })
-        }
-      }
-      val kvStoreUpdates = kvStore.multiPut(allInputTablePartitions.map { case (tableName, allPartitions) =>
-        val partitionsJson = PartitionRange.collapsedPrint(allPartitions)(range.partitionSpec)
-        PutRequest(tableName.getBytes, partitionsJson.getBytes, tablePartitionsDataset)
-      }.toSeq)
+      implicit val ec: ExecutionContext = ExecutionContext.global
+      val kvPartitionsStore = new KvPartitionsStore(kvStore = kvStore, dataset = tablePartitionsDataset)
 
-      Await.result(kvStoreUpdates, Duration.Inf)
+      val kvStoreUpdates =
+        inputTablePartitionStatuses
+          .map { tps =>
+            kvPartitionsStore.put(
+              tps.name,
+              KvPartitions(tps.existingPartitions, System.currentTimeMillis(), tps.semanticHash))(range.partitionSpec)
+          }
+
+      Await.result(Future.sequence(kvStoreUpdates), Duration.Inf)
 
       // drop table if semantic hash doesn't match
-
       val outputTable = node.metaData.outputTable
       val incomingSemanticHash = node.semanticHash
 
       val su = new SemanticUtils(tableUtils)
       su.checkSemanticHashAndArchive(outputTable, incomingSemanticHash)
 
-      val missingPartitions = maybeMissingPartitions.collect {
-        case (tableName, Some(missing)) if missing.nonEmpty =>
-          tableName -> missing
-      }
-      if (missingPartitions.nonEmpty) {
+      val inputTableToMissingPartitions = inputTablePartitionStatuses
+        .filter(_.missingPartitions.nonEmpty)
+        .map { tps => tps.name -> tps.missingPartitions }
+
+      if (inputTableToMissingPartitions.nonEmpty) {
         throw new RuntimeException(
           "The following input tables are missing partitions for the requested range:\n" +
-            missingPartitions
+            inputTableToMissingPartitions
               .map { case (tableName, missing) =>
                 s"Table: $tableName, Missing Partitions: ${missing.mkString(", ")}"
               }
               .mkString("\n")
         )
       } else {
+
         run(metadata, node.content, Option(range))
+
         try {
+
           postJobActions(metadata = metadata,
                          range = range,
                          tablePartitionsDataset = tablePartitionsDataset,

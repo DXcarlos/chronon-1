@@ -14,6 +14,8 @@ trait ApiModule extends Cross.Module[String] with build.BaseModule {
   object thriftBase extends JavaModule with mill.scalalib.PublishModule {
     def jvmId = build.Constants.jvmId
 
+    def javacOptions = Seq("--release", "11")
+
     def sources = Task.Sources(moduleDir / os.up / "src" / "main" / "java" / "ai" / "chronon" / "api" / "thrift")
     def repositoriesTask = Task.Anon { super.repositoriesTask() ++ build.Constants.repositories }
     def mvnDeps = Seq(
@@ -32,6 +34,8 @@ trait ApiModule extends Cross.Module[String] with build.BaseModule {
   // Generated Thrift Java classes module
   object thriftJava extends JavaModule with mill.scalalib.PublishModule {
     def jvmId = build.Constants.jvmId
+
+    def javacOptions = Seq("--release", "11")
 
     def moduleDeps = Seq(thriftBase)
     def repositoriesTask = Task.Anon { super.repositoriesTask() ++ build.Constants.repositories }

@@ -107,11 +107,18 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
   def createTestMetadata(inputTable: String,
                          outputTable: String,
                          partitionColumn: String = "ds",
-                         partitionFormat: String = "yyyy-MM-dd"): MetaData = {
+                         partitionFormat: String = "yyyy-MM-dd",
+                         semanticHash: Option[String] = None,
+                         isSoftDependency: Boolean = false): MetaData = {
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
 
     val query = new Query().setPartitionColumn(partitionColumn).setPartitionFormat(partitionFormat)
     val tableDependency = TableDependencies.fromTable(inputTable, query)
+
+    semanticHash.foreach(tableDependency.setSemanticHash)
+    if (isSoftDependency) {
+      tableDependency.setIsSoftNodeDependency(true)
+    }
 
     val baseMetadata = new MetaData()
       .setOutputNamespace("test_db")
@@ -125,6 +132,34 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
       stepDays = Some(1),
       outputTableOverride = Some(outputTable)
     )
+  }
+
+  def createTestMetadataWithMultipleDeps(inputTable: String,
+                                         outputTable: String,
+                                         semanticHashes: Seq[Option[String]],
+                                         partitionColumn: String = "ds",
+                                         partitionFormat: String = "yyyy-MM-dd"): MetaData = {
+    implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+
+    val query = new Query().setPartitionColumn(partitionColumn).setPartitionFormat(partitionFormat)
+    val tableDependencies = semanticHashes.map { hashOpt =>
+      val dep = TableDependencies.fromTable(inputTable, query)
+      hashOpt.foreach(dep.setSemanticHash)
+      dep
+    }
+
+    val baseMetadata = new MetaData()
+      .setOutputNamespace("test_db")
+      .setTeam("test_team")
+
+    MetaDataUtils.layer(
+      baseMetadata = baseMetadata,
+      modeName = "test_mode",
+      nodeName = "test_batch_node",
+      tableDependencies = tableDependencies,
+      stepDays = Some(1),
+      outputTableOverride = Some(outputTable)
+    )(partitionSpec)
   }
 
   def createTestNodeContent(inputTable: String = "test_db.input_table",
@@ -557,6 +592,210 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
             exception.getMessage.toLowerCase.contains("not found") ||
             exception.getMessage.toLowerCase.contains("table")
         )
+    }
+  }
+
+  "BatchNodeRunner.computeInputTablePartitionStatuses" should "correctly compute partitions for a single table" in {
+    val configPath = createTestConfigFile(twoDaysAgo, yesterday)
+    val node = ThriftJsonCodec.fromJsonFile[Node](configPath, check = true)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val metadata = node.metaData
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    assertTrue("Should have statuses for input tables", statuses.nonEmpty)
+
+    val inputTableStatus = statuses.find(_.name == "test_db.input_table")
+    assertTrue("Should have status for input_table", inputTableStatus.isDefined)
+
+    inputTableStatus.foreach { status =>
+      assertEquals("Should have existing partitions", 2, status.existingPartitions.size)
+      assertTrue("Should contain yesterday partition", status.existingPartitions.contains(yesterday))
+      assertTrue("Should contain twoDaysAgo partition", status.existingPartitions.contains(twoDaysAgo))
+      assertEquals("Should have no missing partitions", 0, status.missingPartitions.size)
+    }
+  }
+
+  it should "identify missing partitions correctly" in {
+    val configPath = createTestConfigFile(twoDaysAgo, today)
+    val node = ThriftJsonCodec.fromJsonFile[Node](configPath, check = true)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val metadata = node.metaData
+    val range = PartitionRange(twoDaysAgo, today)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    val inputTableStatus = statuses.find(_.name == "test_db.input_table")
+    assertTrue("Should have status for input_table", inputTableStatus.isDefined)
+
+    inputTableStatus.foreach { status =>
+      assertTrue("Should have missing partitions", status.missingPartitions.nonEmpty)
+      assertTrue("Should identify today as missing", status.missingPartitions.contains(today))
+    }
+  }
+
+  it should "handle same table used for multiple dependencies (labels and groupBy)" in {
+    // Create a join that uses the same table for both labels and features
+    val groupBySource = new Source()
+    groupBySource.setEvents(
+      new EventSource()
+        .setTable("test_db.input_table")
+        .setQuery(new Query().setPartitionColumn("ds").setPartitionFormat("yyyy-MM-dd")))
+
+    val join = new Join()
+      .setMetaData(createTestMetadata("test_db.input_table", "test_db.output_table"))
+      .setLeft({
+        val src = new Source()
+        src.setEvents(
+          new EventSource()
+            .setTable("test_db.input_table")
+            .setQuery(new Query().setPartitionColumn("ds").setPartitionFormat("yyyy-MM-dd")))
+        src
+      })
+      .setJoinParts(Seq(
+        new JoinPart()
+          .setGroupBy(
+            new GroupBy()
+              .setSources(Seq(groupBySource).asJava)
+          )
+      ).asJava)
+
+    val monolithJoin = new MonolithJoinNode()
+    monolithJoin.setJoin(join)
+
+    val nodeContent = new NodeContent()
+    nodeContent.setMonolithJoin(monolithJoin)
+
+    val metadata = MetaDataUtils.layer(
+      baseMetadata = new MetaData().setOutputNamespace("test_db").setTeam("test_team"),
+      modeName = "test_mode",
+      nodeName = "test_batch_node",
+      tableDependencies = Seq(
+        TableDependencies.fromTable("test_db.input_table", new Query().setPartitionColumn("ds").setPartitionFormat("yyyy-MM-dd")),
+        TableDependencies.fromTable("test_db.input_table", new Query().setPartitionColumn("ds").setPartitionFormat("yyyy-MM-dd"))
+      ),
+      stepDays = Some(1),
+      outputTableOverride = Some("test_db.output_table")
+    )(tableUtils.partitionSpec)
+
+    val node = new Node()
+    node.setMetaData(metadata)
+    node.setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    // Should have only one status for the table despite it being used twice
+    val inputTableStatuses = statuses.filter(_.name == "test_db.input_table")
+    assertEquals("Should have exactly one status for input_table", 1, inputTableStatuses.size)
+
+    inputTableStatuses.head match {
+      case status =>
+        assertTrue("Should have existing partitions", status.existingPartitions.nonEmpty)
+        assertEquals("Should have no missing partitions", 0, status.missingPartitions.size)
+    }
+  }
+
+  it should "filter out soft dependencies" in {
+    val metadata = createTestMetadata("test_db.input_table", "test_db.output_table", isSoftDependency = true)
+    val nodeContent = createTestNodeContent()
+    val node = new Node()
+    node.setMetaData(metadata)
+    node.setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    val inputTableStatus = statuses.find(_.name == "test_db.input_table")
+    assertTrue("Should not have status for soft dependency", inputTableStatus.isEmpty)
+  }
+
+  it should "capture semantic hash when set on table dependency" in {
+    val metadata = createTestMetadata("test_db.input_table", "test_db.output_table", semanticHash = Some("test_hash_123"))
+    val nodeContent = createTestNodeContent()
+    val node = new Node()
+    node.setMetaData(metadata)
+    node.setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    val inputTableStatus = statuses.find(_.name == "test_db.input_table")
+    assertTrue("Should have status for input_table", inputTableStatus.isDefined)
+
+    inputTableStatus.foreach { status =>
+      assertTrue("Should have semantic hash", status.semanticHash.isDefined)
+      assertEquals("Semantic hash should match", "test_hash_123", status.semanticHash.get)
+    }
+  }
+
+  it should "return None for semantic hash when not set" in {
+    val metadata = createTestMetadata("test_db.input_table", "test_db.output_table")
+    val nodeContent = createTestNodeContent()
+    val node = new Node()
+    node.setMetaData(metadata)
+    node.setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    val inputTableStatus = statuses.find(_.name == "test_db.input_table")
+    assertTrue("Should have status for input_table", inputTableStatus.isDefined)
+
+    inputTableStatus.foreach { status =>
+      assertTrue("Semantic hash should be None", status.semanticHash.isEmpty)
+    }
+  }
+
+  it should "use consistent semantic hash when same table used multiple times with same hash" in {
+    val metadata = createTestMetadataWithMultipleDeps(
+      "test_db.input_table",
+      "test_db.output_table",
+      Seq(Some("consistent_hash"), Some("consistent_hash"))
+    )
+    val nodeContent = createTestNodeContent()
+    val node = new Node()
+    node.setMetaData(metadata)
+    node.setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    val inputTableStatus = statuses.find(_.name == "test_db.input_table")
+    assertTrue("Should have status for input_table", inputTableStatus.isDefined)
+
+    inputTableStatus.foreach { status =>
+      assertTrue("Should have semantic hash", status.semanticHash.isDefined)
+      assertEquals("Semantic hash should match", "consistent_hash", status.semanticHash.get)
+    }
+  }
+
+  it should "return None when same table has inconsistent semantic hashes across dependencies" in {
+    val metadata = createTestMetadataWithMultipleDeps(
+      "test_db.input_table",
+      "test_db.output_table",
+      Seq(Some("hash_1"), Some("hash_2"))
+    )
+    val nodeContent = createTestNodeContent()
+    val node = new Node()
+    node.setMetaData(metadata)
+    node.setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    val inputTableStatus = statuses.find(_.name == "test_db.input_table")
+    assertTrue("Should have status for input_table", inputTableStatus.isDefined)
+
+    inputTableStatus.foreach { status =>
+      assertTrue("Semantic hash should be None due to inconsistency", status.semanticHash.isEmpty)
     }
   }
 
