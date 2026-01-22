@@ -114,13 +114,13 @@
                 "CHRONON_ONLINE_ARGS": " -Ztasks=4",
                 "CLOUD_PROVIDER": "azure",
                 "CUSTOMER_ID": "dev",
-                "FRONTEND_URL": "http://localhost:3000",
-                "HUB_URL": "http://localhost:3903",
+                "FRONTEND_URL": "https://canary.zipline.ai",
+                "HUB_URL": "https://canary-orch.zipline.ai",
                 "JOB_MODE": "local[*]",
                 "PARTITION_COLUMN": "ds",
                 "PARTITION_FORMAT": "yyyy-MM-dd",
                 "SPARK_CLUSTER_NAME": "kyuubi-dev.westus2.cloudapp.azure.com:10099",
-                "VERSION": "latest"
+                "VERSION": "0.1.0+dev.davidhan"
               }
             },
             "historicalBackfill": 0,
@@ -210,13 +210,13 @@
           "CHRONON_ONLINE_ARGS": " -Ztasks=4",
           "CLOUD_PROVIDER": "azure",
           "CUSTOMER_ID": "dev",
-          "FRONTEND_URL": "http://localhost:3000",
-          "HUB_URL": "http://localhost:3903",
+          "FRONTEND_URL": "https://canary.zipline.ai",
+          "HUB_URL": "https://canary-orch.zipline.ai",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
           "SPARK_CLUSTER_NAME": "kyuubi-dev.westus2.cloudapp.azure.com:10099",
-          "VERSION": "latest"
+          "VERSION": "0.1.0+dev.davidhan"
         }
       },
       "offlineSchedule": "@daily",

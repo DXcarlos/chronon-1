@@ -9,7 +9,7 @@ from ai.chronon.source import JoinSource
 from ai.chronon.data_types import DataType
 
 source = JoinSource(
-    join=demo.v1,
+    join=demo.v2,
     # filter rows where the headline / long_description is null as Vertex doesn't like empty content strings
     query=Query(
         wheres=["(listing_id_headline IS NOT NULL AND listing_id_headline != '') OR (listing_id_long_description IS NOT NULL AND listing_id_long_description != '')"]

@@ -8,13 +8,13 @@
     "env": {
       "common": {
         "CUSTOMER_ID": "dev",
-        "FRONTEND_URL": "http://localhost:3000",
+        "FRONTEND_URL": "https://canary.zipline.ai",
         "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
-        "HUB_URL": "http://localhost:3903",
+        "HUB_URL": "https://canary-orch.zipline.ai",
         "JOB_MODE": "local[*]",
         "PARTITION_COLUMN": "ds",
         "PARTITION_FORMAT": "yyyy-MM-dd",
-        "VERSION": "latest"
+        "VERSION": "0.1.0+dev.davidhan"
       }
     }
   }

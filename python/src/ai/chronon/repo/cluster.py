@@ -100,6 +100,7 @@ def generate_dataproc_cluster_config(
                 for initialization_action in (
                     (initialization_actions or [])
                     + [artifact_prefix.rstrip("/") + "/scripts/copy_java_security.sh"]
+                    + [artifact_prefix.rstrip("/") + "/scripts/opsagent_install.sh"]
                 )
             ],
             "endpointConfig": {

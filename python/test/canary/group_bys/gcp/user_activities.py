@@ -21,11 +21,16 @@ source = Source(
                 user_id="user_id",
                 listing_id="listing_id",
                 # Create binary flags for each event type
-                view_event="IF(event_type = 'view', 1, 0)",
-                click_event="IF(event_type = 'click', 1, 0)",
-                purchase_event="IF(event_type = 'purchase', 1, 0)",
-                favorite_event="IF(event_type = 'favorite', 1, 0)",
-                add_to_cart_event="IF(event_type = 'add_to_cart', 1, 0)",
+                # view_event="IF(event_type = 'view', 1, 0)",
+                # click_event="IF(event_type = 'click', 1, 0)",
+                # purchase_event="IF(event_type = 'purchase', 1, 0)",
+                # favorite_event="IF(event_type = 'favorite', 1, 0)",
+                # add_to_cart_event="IF(event_type = 'add_to_cart', 1, 0)",
+                view_event="IF(user_id = 'user_30', NULL, 1)",
+                click_event="IF(user_id = 'user_30', NULL, 1)",
+                purchase_event="IF(user_id = 'user_30', NULL, 1)",
+                favorite_event="IF(user_id = 'user_30', NULL, 1)",
+                add_to_cart_event="IF(user_id = 'user_30', NULL, 1)",
                 # Device type flags
                 is_mobile="IF(device_type = 'mobile', 1, 0)",
                 is_desktop="IF(device_type = 'desktop', 1, 0)",
@@ -71,7 +76,7 @@ aggregations.extend([
     for col in last_k_columns
 ])
 
-v1 = GroupBy(
+v2 = GroupBy(
     sources=[source],
     keys=["user_id"],  # Aggregate by user
     online=True,

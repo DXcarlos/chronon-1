@@ -15,13 +15,13 @@ default = Team(
     ),
     env=EnvironmentVariables(
         common={
-            "VERSION": "latest",
+            "VERSION": "0.1.0+dev.davidhan",
             "JOB_MODE": "local[*]",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
             "CUSTOMER_ID": "dev",
-            "FRONTEND_URL": "http://localhost:3000",
-            "HUB_URL": "http://localhost:3903",
+            "FRONTEND_URL": "https://canary.zipline.ai",
+            "HUB_URL": "https://canary-orch.zipline.ai",
         },
     ),
 )
@@ -47,20 +47,20 @@ gcp = Team(
         common={
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "dev",
-            "VERSION": "latest",
+            "VERSION": "0.1.0+dev.davidhan",
             "JOB_MODE": "local[*]",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
             "GCP_PROJECT_ID": "canary-443022",
             "GCP_REGION": "us-central1",
-            "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
+            "SPARK_CLUSTER_NAME": "my-dataproc-cluster2",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
             "ENABLE_PUBSUB": "true",
             "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
-            "FRONTEND_URL": "http://localhost:3000",
-            "HUB_URL": "http://localhost:3903",
+            "FRONTEND_URL": "https://canary.zipline.ai",
+            "HUB_URL": "https://canary-orch.zipline.ai",
         },
         modeEnvironments={
             RunMode.UPLOAD: {
@@ -110,7 +110,7 @@ gcp = Team(
                                                                     idle_timeout="300s",
                                                                     worker_host_type="n2-highmem-4",
                                                                     master_host_type="n2-highmem-8")
-            }
+            },
         }
     ),
 )
@@ -121,7 +121,7 @@ aws = Team(
         common={
             "CLOUD_PROVIDER": "aws",
             "CUSTOMER_ID": "dev",
-            "VERSION": "latest",
+            "VERSION": "0.1.0+dev.davidhan",
             "JOB_MODE": "local[*]",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
@@ -130,8 +130,8 @@ aws = Team(
             "ARTIFACT_PREFIX": "s3://zipline-artifacts-dev",
             "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
-            "FRONTEND_URL": "http://localhost:3000",
-            "HUB_URL": "http://localhost:3903",
+            "FRONTEND_URL": "https://canary.zipline.ai",
+            "HUB_URL": "https://canary-orch.zipline.ai",
         },
         modeEnvironments={
             RunMode.UPLOAD: {
@@ -184,15 +184,15 @@ azure = Team(
         common={
             "CLOUD_PROVIDER": "azure",
             "CUSTOMER_ID": "dev",
-            "VERSION": "latest",
+            "VERSION": "0.1.0+dev.davidhan",
             "JOB_MODE": "local[*]",
             "PARTITION_COLUMN": "ds",
             "PARTITION_FORMAT": "yyyy-MM-dd",
             "SPARK_CLUSTER_NAME": "kyuubi-dev.westus2.cloudapp.azure.com:10099",
             "ARTIFACT_PREFIX": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net",
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
-            "FRONTEND_URL": "http://localhost:3000",
-            "HUB_URL": "http://localhost:3903",
+            "FRONTEND_URL": "https://canary.zipline.ai",
+            "HUB_URL": "https://canary-orch.zipline.ai",
         },
     ),
     conf=ConfigProperties(

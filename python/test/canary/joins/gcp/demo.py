@@ -32,13 +32,13 @@ source = EventSource(
 )
 
 # Join with user behavioral features and listing attributes
-v1 = Join(
+v2 = Join(
     left=source,
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
         # User behavioral features (aggregated over time windows)
         JoinPart(
-            group_by=user_activities.v1,
+            group_by=user_activities.v2,
         ),
         # Listing dimension attributes (point-in-time lookup)
         JoinPart(
@@ -66,7 +66,7 @@ derivations_v1 = Join(
             group_by=dim_listings.v1,
         ),
         JoinPart(
-            group_by=user_activities.v1,
+            group_by=user_activities.v2,
         ),
     ],
     derivations=[

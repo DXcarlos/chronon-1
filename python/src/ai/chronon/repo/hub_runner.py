@@ -259,13 +259,13 @@ def schedule(repo, conf, hub_url, use_auth, format, force, skip_compile):
 @use_auth_option
 @workflow_id_option
 @jsonify_exceptions_if_json_format
-def cancel(repo, hub_url, use_auth, format, force, workflow_id):
-    zipline_hub = _get_zipline_hub(hub_url, get_hub_conf_from_metadata_conf(DEFAULT_TEAM_METADATA_CONF, root_dir=repo), use_auth, format)
-    response_json = zipline_hub.call_cancel_api(workflow_id, format=format)
+def cancel(repo, hub_url, use_auth, workflow_id):
+    zipline_hub = _get_zipline_hub(hub_url, get_hub_conf_from_metadata_conf(DEFAULT_TEAM_METADATA_CONF, root_dir=repo), use_auth=True)
+    response_json = zipline_hub.call_cancel_api(workflow_id)
     if format == Format.JSON:
         print(json.dumps(response_json, indent=4))
         sys.exit(0)
-    format_print(f" 🟢 Workflow cancelled: {workflow_id}", format=format)
+    format_print(f" 🟢 Workflow cancelled: {workflow_id}")
 
 def load_json(file_path):
     with open(file_path, "r") as f:
