@@ -76,17 +76,17 @@
                 "CUSTOMER_ID": "dev",
                 "ENABLE_PUBSUB": "true",
                 "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-                "FRONTEND_URL": "http://localhost:3000",
+                "FRONTEND_URL": "https://canary.zipline.ai",
                 "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
                 "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
                 "GCP_PROJECT_ID": "canary-443022",
                 "GCP_REGION": "us-central1",
                 "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-                "HUB_URL": "http://localhost:3903",
+                "HUB_URL": "https://canary-orch.zipline.ai",
                 "JOB_MODE": "local[*]",
                 "PARTITION_COLUMN": "ds",
                 "PARTITION_FORMAT": "yyyy-MM-dd",
-                "VERSION": "0.1.0+dev.varantzanoyan"
+                "VERSION": "latest"
               }
             },
             "historicalBackfill": 0,
@@ -143,7 +143,7 @@
                               },
                               "startPartition": "2025-01-01"
                             },
-                            "snapshotTable": "data.gcp_exports_dim_listings__51"
+                            "snapshotTable": "data.gcp_exports_dim_listings__100"
                           }
                         }
                       ]
@@ -161,7 +161,7 @@
                       },
                       "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
                     },
-                    "table": "data.gcp_exports_user_activities__51",
+                    "table": "data.gcp_exports_user_activities__100",
                     "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
                   }
                 },
@@ -208,19 +208,19 @@
         },
         "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
       },
-      "table": "data.gcp_exports_user_activities__51",
+      "table": "data.gcp_exports_user_activities__100",
       "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
     }
   },
   "metaData": {
     "columnHashes": {
-      "listing_id": "9ddea06f51c7ffe5ceedee9e77b200ec",
-      "row_id": "e40e5907da5ad6c798715b9cbd8df543",
-      "ts": "3f6d1d44672216ea47fc0217b6c0f40c",
-      "user_id": "291aa433e85c75e6da8c76772e093bc1",
-      "user_id_price_cents_last100_7d": "70c7904384239efb46814a0cfd7baccf"
+      "listing_id": "6de1c5f9beb9ab502ce961378700a3fe",
+      "row_id": "780598418a9da07d033b69fb8aa62d68",
+      "ts": "7c7d232c7010210301e25f3fed03c330",
+      "user_id": "2deab79be4feb544b1d9bea155186c08",
+      "user_id_price_cents_last100_7d": "2f6387d23eeabb4a9bd604adbbde4c16"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__51_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__100_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__100/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -272,17 +272,17 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "http://localhost:3000",
+          "FRONTEND_URL": "https://canary.zipline.ai",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-          "HUB_URL": "http://localhost:3903",
+          "HUB_URL": "https://canary-orch.zipline.ai",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
-          "VERSION": "0.1.0+dev.varantzanoyan"
+          "VERSION": "latest"
         }
       },
       "scheduleCron": "@daily"

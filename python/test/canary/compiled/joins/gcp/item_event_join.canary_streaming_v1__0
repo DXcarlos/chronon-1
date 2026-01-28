@@ -110,17 +110,17 @@
                 "CUSTOMER_ID": "dev",
                 "ENABLE_PUBSUB": "true",
                 "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-                "FRONTEND_URL": "http://localhost:3000",
+                "FRONTEND_URL": "https://canary.zipline.ai",
                 "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
                 "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
                 "GCP_PROJECT_ID": "canary-443022",
                 "GCP_REGION": "us-central1",
                 "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-                "HUB_URL": "http://localhost:3903",
+                "HUB_URL": "https://canary-orch.zipline.ai",
                 "JOB_MODE": "local[*]",
                 "PARTITION_COLUMN": "ds",
                 "PARTITION_FORMAT": "yyyy-MM-dd",
-                "VERSION": "0.1.0+dev.varantzanoyan"
+                "VERSION": "latest"
               }
             },
             "historicalBackfill": 0,
@@ -232,17 +232,17 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "http://localhost:3000",
+          "FRONTEND_URL": "https://canary.zipline.ai",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-          "HUB_URL": "http://localhost:3903",
+          "HUB_URL": "https://canary-orch.zipline.ai",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
-          "VERSION": "0.1.0+dev.varantzanoyan"
+          "VERSION": "latest"
         }
       },
       "scheduleCron": "@daily"

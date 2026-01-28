@@ -1,6 +1,6 @@
 from ai.chronon.staging_query import EngineType, StagingQuery, TableDependency
 
-VERSION=51
+VERSION=100
 
 def get_select_star_export(table: str, partition_column: str = "_PARTITIONTIME"):
     bigquery_export_sql = f"""

@@ -133,7 +133,7 @@ source_v3 = Source(
                 user_id="user_id",
                 listing_id="listing_id",
                 # Create binary flags for each event type
-                view_event="IF(event_type_bad_col = 'view', 1, 0)",
+                view_event="IF(event_type = 'view', 1, 0)",
                 click_event="IF(event_type = 'click', 1, 0)", 
                 purchase_event="IF(event_type = 'purchase', 1, 0)",
                 # Activity structs for last_k tracking -- for embeddings

@@ -4,10 +4,10 @@
   ],
   "metaData": {
     "columnHashes": {
-      "sift_score": "9958fcde0c1d18dffd8d74620b43488f",
-      "user_id": "ca6d0a3838f7d0888849ff11d71cb08e"
+      "sift_score": "14d7afeb650490831f89fd05a864d0ff",
+      "user_id": "6c5ac792fea65dbedc4ba35493b01e51"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_users__51_with_offset_0\", \"spec\": \"data.gcp_exports_dim_users__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_users__100_with_offset_0\", \"spec\": \"data.gcp_exports_dim_users__100/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -59,17 +59,17 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "http://localhost:3000",
+          "FRONTEND_URL": "https://canary.zipline.ai",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-          "HUB_URL": "http://localhost:3903",
+          "HUB_URL": "https://canary-orch.zipline.ai",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
-          "VERSION": "0.1.0+dev.varantzanoyan"
+          "VERSION": "latest"
         }
       },
       "historicalBackfill": 0,
@@ -92,7 +92,7 @@
           },
           "startPartition": "2025-01-01"
         },
-        "snapshotTable": "data.gcp_exports_dim_users__51"
+        "snapshotTable": "data.gcp_exports_dim_users__100"
       }
     }
   ]

@@ -31,7 +31,7 @@ source = EventSource(
 )
 
 # Example Join
-checkout_fraud_v1 = Join(
+checkout_fraud_v2 = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[
@@ -47,6 +47,7 @@ checkout_fraud_v1 = Join(
     online=True,
     output_namespace="data",
     step_days=10,
+    enable_stats_compute=True,
 )
 
 
@@ -63,8 +64,15 @@ checkout_fraud_v2 = Join(
             group_by=dim_listings.v1,
         ),
     ],
+    derivations = [
+        Derivation(
+            name="ratio_of_purchases_to_views",
+            expression="user_id_click_event_sum_1d / user_id_view_event_sum_7d"
+        ),
+    ],
     version=1,
     online=True,
     output_namespace="data",
     step_days=10,
+    enable_stats_compute=True,
 )

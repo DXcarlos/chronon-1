@@ -87,24 +87,24 @@
   ],
   "metaData": {
     "columnHashes": {
-      "click_event_sum_1d": "86f656bac957032e6b933664c5f6261e",
-      "click_event_sum_2d": "86f656bac957032e6b933664c5f6261e",
-      "click_event_sum_3d": "86f656bac957032e6b933664c5f6261e",
-      "click_event_sum_5d": "86f656bac957032e6b933664c5f6261e",
-      "click_event_sum_7d": "86f656bac957032e6b933664c5f6261e",
-      "purchase_event_sum_1d": "80f96c1d1c598a01c04be3aeaa239d97",
-      "purchase_event_sum_2d": "80f96c1d1c598a01c04be3aeaa239d97",
-      "purchase_event_sum_3d": "80f96c1d1c598a01c04be3aeaa239d97",
-      "purchase_event_sum_5d": "80f96c1d1c598a01c04be3aeaa239d97",
-      "purchase_event_sum_7d": "80f96c1d1c598a01c04be3aeaa239d97",
-      "user_id": "1adc863d3a8ed16d062fa45c2e0ba732",
-      "view_event_sum_1d": "41a30001a955334469c52a793da52426",
-      "view_event_sum_2d": "41a30001a955334469c52a793da52426",
-      "view_event_sum_3d": "41a30001a955334469c52a793da52426",
-      "view_event_sum_5d": "41a30001a955334469c52a793da52426",
-      "view_event_sum_7d": "41a30001a955334469c52a793da52426"
+      "click_event_sum_1d": "b847d777a55ded3db64185d2bf787471",
+      "click_event_sum_2d": "b847d777a55ded3db64185d2bf787471",
+      "click_event_sum_3d": "b847d777a55ded3db64185d2bf787471",
+      "click_event_sum_5d": "b847d777a55ded3db64185d2bf787471",
+      "click_event_sum_7d": "b847d777a55ded3db64185d2bf787471",
+      "purchase_event_sum_1d": "e8ea6ae1827e30181b6caf0b799b73e6",
+      "purchase_event_sum_2d": "e8ea6ae1827e30181b6caf0b799b73e6",
+      "purchase_event_sum_3d": "e8ea6ae1827e30181b6caf0b799b73e6",
+      "purchase_event_sum_5d": "e8ea6ae1827e30181b6caf0b799b73e6",
+      "purchase_event_sum_7d": "e8ea6ae1827e30181b6caf0b799b73e6",
+      "user_id": "25be7e2b1f311029dc331535d063ce5e",
+      "view_event_sum_1d": "6a1d3c9ab97ade225b05b33d76b02fcd",
+      "view_event_sum_2d": "6a1d3c9ab97ade225b05b33d76b02fcd",
+      "view_event_sum_3d": "6a1d3c9ab97ade225b05b33d76b02fcd",
+      "view_event_sum_5d": "6a1d3c9ab97ade225b05b33d76b02fcd",
+      "view_event_sum_7d": "6a1d3c9ab97ade225b05b33d76b02fcd"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities_v2__51_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities_v2__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities_v2__100_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities_v2__100/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -156,17 +156,17 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "http://localhost:3000",
+          "FRONTEND_URL": "https://canary.zipline.ai",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-          "HUB_URL": "http://localhost:3903",
+          "HUB_URL": "https://canary-orch.zipline.ai",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
-          "VERSION": "0.1.0+dev.varantzanoyan"
+          "VERSION": "latest"
         }
       },
       "historicalBackfill": 0,
@@ -197,7 +197,7 @@
           },
           "timeColumn": "event_time_ms"
         },
-        "table": "data.gcp_exports_user_activities_v2__51",
+        "table": "data.gcp_exports_user_activities_v2__100",
         "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
       }
     }

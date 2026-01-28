@@ -4,24 +4,24 @@
   ],
   "metaData": {
     "columnHashes": {
-      "brief_description": "3d7d4f358e8da80b76e8dd16f17b6ee2",
-      "currency": "6b6ce2b82be48417076afb80b4526aa6",
-      "headline": "d13eae56365c440bcce0138a6af2ee0b",
-      "inventory_count": "e4ae86bd93c7664328c1cdb322c5cedd",
-      "is_active": "138374e79509668cf8c1f8ea21f1f000",
-      "is_expensive": "0f66882b5025cddf8e418b1526ee83ab",
-      "is_in_stock": "6b7170e2c9dde7eed67c2426b3b32ab8",
-      "listing_id": "87abed52cf94613ad331e764f466e449",
-      "long_description": "04daa9467339f2cce8fc9fcbc10fc848",
-      "main_image_path": "d022c5c4998d9374eab2bab9bc3455a6",
-      "merchant_id": "c22db7c4c3bca7c3f5644bf6bbf90192",
-      "price_cents": "853f6b804126d2500f1b05c731b247b8",
-      "primary_category": "45af4c0437c019987348155dea2835b2",
-      "secondary_image_paths": "fa89055aa1430503af5c60ec5dbc71c6",
-      "tags": "5236fcb50d63764bc2ae015e6313480c",
-      "weight_grams": "3c7d482b3b999adf2d32c64d8ef6b6c1"
+      "brief_description": "79b1c46b7aa152fb976351c97476a046",
+      "currency": "590859867af1ca930475f1c71782bb7f",
+      "headline": "0e20e9ccf431c1abf78cd464ce336f0c",
+      "inventory_count": "c151ef6073b24d64894fc8abe0f0f1c0",
+      "is_active": "50b07fd7e01f779ebc0903ef13411784",
+      "is_expensive": "61fd59d0ba2cccbdcf3032077d514369",
+      "is_in_stock": "6212c6527b8dab9aad4285539d1288c0",
+      "listing_id": "a0fe60f7ce3bf9cc368cebd406dccff8",
+      "long_description": "94ca561cdfbf9f4bfb3ba522185394cd",
+      "main_image_path": "5129f69ba57964549303b55f3f8398dd",
+      "merchant_id": "223634bdd27b4fed78d93a0a2e157991",
+      "price_cents": "acf9b5678893405b26f6eeb2b82690d3",
+      "primary_category": "e780fa7ec3549d0e84798616a88d13a1",
+      "secondary_image_paths": "c3dc0eb94aa8396d6f6d3c44294affd8",
+      "tags": "c9a44a5dbba3fceb7698850448dbc5e9",
+      "weight_grams": "ce2e3003866fce88c2708df55ce4d00b"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_listings__51_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_listings__100_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__100/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -73,17 +73,17 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "http://localhost:3000",
+          "FRONTEND_URL": "https://canary.zipline.ai",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-          "HUB_URL": "http://localhost:3903",
+          "HUB_URL": "https://canary-orch.zipline.ai",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
-          "VERSION": "0.1.0+dev.varantzanoyan"
+          "VERSION": "latest"
         }
       },
       "historicalBackfill": 0,
@@ -121,7 +121,7 @@
           },
           "startPartition": "2025-01-01"
         },
-        "snapshotTable": "data.gcp_exports_dim_listings__51"
+        "snapshotTable": "data.gcp_exports_dim_listings__100"
       }
     }
   ]

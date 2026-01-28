@@ -7,22 +7,22 @@
         ],
         "metaData": {
           "columnHashes": {
-            "brief_description": "3d7d4f358e8da80b76e8dd16f17b6ee2",
-            "currency": "6b6ce2b82be48417076afb80b4526aa6",
-            "headline": "d13eae56365c440bcce0138a6af2ee0b",
-            "inventory_count": "e4ae86bd93c7664328c1cdb322c5cedd",
-            "is_active": "138374e79509668cf8c1f8ea21f1f000",
-            "is_expensive": "0f66882b5025cddf8e418b1526ee83ab",
-            "is_in_stock": "6b7170e2c9dde7eed67c2426b3b32ab8",
-            "listing_id": "87abed52cf94613ad331e764f466e449",
-            "long_description": "04daa9467339f2cce8fc9fcbc10fc848",
-            "main_image_path": "d022c5c4998d9374eab2bab9bc3455a6",
-            "merchant_id": "c22db7c4c3bca7c3f5644bf6bbf90192",
-            "price_cents": "853f6b804126d2500f1b05c731b247b8",
-            "primary_category": "45af4c0437c019987348155dea2835b2",
-            "secondary_image_paths": "fa89055aa1430503af5c60ec5dbc71c6",
-            "tags": "5236fcb50d63764bc2ae015e6313480c",
-            "weight_grams": "3c7d482b3b999adf2d32c64d8ef6b6c1"
+            "brief_description": "79b1c46b7aa152fb976351c97476a046",
+            "currency": "590859867af1ca930475f1c71782bb7f",
+            "headline": "0e20e9ccf431c1abf78cd464ce336f0c",
+            "inventory_count": "c151ef6073b24d64894fc8abe0f0f1c0",
+            "is_active": "50b07fd7e01f779ebc0903ef13411784",
+            "is_expensive": "61fd59d0ba2cccbdcf3032077d514369",
+            "is_in_stock": "6212c6527b8dab9aad4285539d1288c0",
+            "listing_id": "a0fe60f7ce3bf9cc368cebd406dccff8",
+            "long_description": "94ca561cdfbf9f4bfb3ba522185394cd",
+            "main_image_path": "5129f69ba57964549303b55f3f8398dd",
+            "merchant_id": "223634bdd27b4fed78d93a0a2e157991",
+            "price_cents": "acf9b5678893405b26f6eeb2b82690d3",
+            "primary_category": "e780fa7ec3549d0e84798616a88d13a1",
+            "secondary_image_paths": "c3dc0eb94aa8396d6f6d3c44294affd8",
+            "tags": "c9a44a5dbba3fceb7698850448dbc5e9",
+            "weight_grams": "ce2e3003866fce88c2708df55ce4d00b"
           },
           "executionInfo": {
             "clusterConf": {
@@ -75,17 +75,17 @@
                 "CUSTOMER_ID": "dev",
                 "ENABLE_PUBSUB": "true",
                 "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-                "FRONTEND_URL": "http://localhost:3000",
+                "FRONTEND_URL": "https://canary.zipline.ai",
                 "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
                 "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
                 "GCP_PROJECT_ID": "canary-443022",
                 "GCP_REGION": "us-central1",
                 "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-                "HUB_URL": "http://localhost:3903",
+                "HUB_URL": "https://canary-orch.zipline.ai",
                 "JOB_MODE": "local[*]",
                 "PARTITION_COLUMN": "ds",
                 "PARTITION_FORMAT": "yyyy-MM-dd",
-                "VERSION": "0.1.0+dev.varantzanoyan"
+                "VERSION": "latest"
               }
             },
             "historicalBackfill": 0,
@@ -122,7 +122,7 @@
                 },
                 "startPartition": "2025-01-01"
               },
-              "snapshotTable": "data.gcp_exports_dim_listings__51"
+              "snapshotTable": "data.gcp_exports_dim_listings__100"
             }
           }
         ]
@@ -141,34 +141,34 @@
         },
         "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
       },
-      "table": "data.gcp_exports_user_activities__51",
+      "table": "data.gcp_exports_user_activities__100",
       "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
     }
   },
   "metaData": {
     "columnHashes": {
-      "listing_id": "9ddea06f51c7ffe5ceedee9e77b200ec",
-      "listing_id_brief_description": "19f21e5b42c9e7c1832cab61b9a858bf",
-      "listing_id_currency": "103b448785eb74197a6f8f0cefb55eff",
-      "listing_id_headline": "3f0ae582c35fcbf630086ad61316e40f",
-      "listing_id_inventory_count": "53230b666ec8514916d699ebea915d17",
-      "listing_id_is_active": "48f4e9b630d98c98a0e26cec99e26b98",
-      "listing_id_is_expensive": "093f50ad86476375536fd63ef8282631",
-      "listing_id_is_in_stock": "6417f281e739861c405d72069b7663c0",
-      "listing_id_listing_id": "3b14917305e4928f7ffccd539e463645",
-      "listing_id_long_description": "f6c0534fbebc2bb29d5d7b4d2a906c1b",
-      "listing_id_main_image_path": "cc392151413dfe78285b19f868e715c5",
-      "listing_id_merchant_id": "9c7519e3408e9cd8cbeb54ed85b7c14b",
-      "listing_id_price_cents": "8a0bd47a36c802b073d04fb5793921cf",
-      "listing_id_primary_category": "fed7c7d2290eab1c1b56120e643b268c",
-      "listing_id_secondary_image_paths": "0bdad712847731e3470f13d6673e831f",
-      "listing_id_tags": "ba15726f232b4ff7537cda6a673d911a",
-      "listing_id_weight_grams": "1eadd210134ec3c570bd234482d41ffa",
-      "row_id": "e40e5907da5ad6c798715b9cbd8df543",
-      "ts": "3f6d1d44672216ea47fc0217b6c0f40c",
-      "user_id": "291aa433e85c75e6da8c76772e093bc1"
+      "listing_id": "6de1c5f9beb9ab502ce961378700a3fe",
+      "listing_id_brief_description": "02b79976ac649dce272264349c70591f",
+      "listing_id_currency": "204b1f2449703d23bfc6ae50d81fc2ef",
+      "listing_id_headline": "e9ad03e597ce0eb971f7f04877cb63e6",
+      "listing_id_inventory_count": "798bbfd44d6f1e1dec0ca9f299403ee0",
+      "listing_id_is_active": "59f406908366c00474869d8c870462b8",
+      "listing_id_is_expensive": "aec5a02dffd21bebb58b2f453dd8c320",
+      "listing_id_is_in_stock": "26beb170553d579bcb213a6a72f00ddd",
+      "listing_id_listing_id": "2f688c9fa25af1a83a4d4c20a9c4010c",
+      "listing_id_long_description": "08a01943fce1ec198ddbd9d46905c925",
+      "listing_id_main_image_path": "43466549d8712dfe990189ca0c284ab7",
+      "listing_id_merchant_id": "c5c0f9caba30fb44e4aa38425923272c",
+      "listing_id_price_cents": "efb6c9f951eecf75b4826d72c844accb",
+      "listing_id_primary_category": "81585e63c6f4953b28360ad5e637ecb7",
+      "listing_id_secondary_image_paths": "6da41a4295fed7128d696e97593f693f",
+      "listing_id_tags": "2963df9d0245afe3f112137c5dd3e3f3",
+      "listing_id_weight_grams": "000a2862d8cc2bd0b72dbfc40bcd8dbd",
+      "row_id": "780598418a9da07d033b69fb8aa62d68",
+      "ts": "7c7d232c7010210301e25f3fed03c330",
+      "user_id": "2deab79be4feb544b1d9bea155186c08"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__51_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__51/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__51_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__51/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__100_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__100/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__100_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__100/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -220,17 +220,17 @@
           "CUSTOMER_ID": "dev",
           "ENABLE_PUBSUB": "true",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
-          "FRONTEND_URL": "http://localhost:3000",
+          "FRONTEND_URL": "https://canary.zipline.ai",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
           "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HADOOP_DIR": "[STREAMING-TODO]/path/to/folder/containing",
-          "HUB_URL": "http://localhost:3903",
+          "HUB_URL": "https://canary-orch.zipline.ai",
           "JOB_MODE": "local[*]",
           "PARTITION_COLUMN": "ds",
           "PARTITION_FORMAT": "yyyy-MM-dd",
-          "VERSION": "0.1.0+dev.varantzanoyan"
+          "VERSION": "latest"
         }
       },
       "scheduleCron": "@daily"
