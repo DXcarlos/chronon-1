@@ -133,20 +133,22 @@ class JavaStatsService(api: Api,
       } catch {
         case e: ClassCastException =>
           failureCount += 1
-          result.update(i, null) // Set failed column to null
+          result.update(i, null)  // Set failed column to null
           logger.error(s"✗ Column $i: $metricName - ClassCastException")
           logger.error(s"    IR Type: $irType")
           logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
-          logger.error(s"    Input Value: $inputValue")
+          if (verboseLogging)
+            logger.error(s"    Input Value: ${Option(inputValue).map(_.toString.take(256)).getOrElse("NULL")}")
           logger.error(s"    Error: ${e.getMessage}", e)
 
         case e: Exception =>
           failureCount += 1
-          result.update(i, null) // Set failed column to null
+          result.update(i, null)  // Set failed column to null
           logger.error(s"✗ Column $i: $metricName - ${e.getClass.getSimpleName}")
           logger.error(s"    IR Type: $irType")
           logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
-          logger.error(s"    Input Value: $inputValue")
+          if (verboseLogging)
+            logger.error(s"    Input Value: ${Option(inputValue).map(_.toString.take(256)).getOrElse("NULL")}")
           logger.error(s"    Error: ${e.getMessage}", e)
       }
       i += 1
