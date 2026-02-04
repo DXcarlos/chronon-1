@@ -133,7 +133,7 @@ class JavaStatsService(api: Api,
       } catch {
         case e: ClassCastException =>
           failureCount += 1
-          result.update(i, null)  // Set failed column to null
+          result.update(i, null) // Set failed column to null
           logger.error(s"✗ Column $i: $metricName - ClassCastException")
           logger.error(s"    IR Type: $irType")
           logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
@@ -142,7 +142,7 @@ class JavaStatsService(api: Api,
 
         case e: Exception =>
           failureCount += 1
-          result.update(i, null)  // Set failed column to null
+          result.update(i, null) // Set failed column to null
           logger.error(s"✗ Column $i: $metricName - ${e.getClass.getSimpleName}")
           logger.error(s"    IR Type: $irType")
           logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
@@ -266,7 +266,8 @@ class JavaStatsService(api: Api,
                 val inputColumn = s"${metric.name}${metric.suffix}"
                 val exists = selectedSchemaColumnNames.contains(inputColumn)
                 if (!exists) {
-                  logger.warn(s"⚠️  Skipping metric for non-existent column: $inputColumn (metric may be from old schema)")
+                  logger.warn(
+                    s"⚠️  Skipping metric for non-existent column: $inputColumn (metric may be from old schema)")
                 }
                 exists
               }
@@ -293,7 +294,8 @@ class JavaStatsService(api: Api,
                 } catch {
                   case e: java.io.EOFException =>
                     tilesSkipped += 1
-                    logger.error(s"⚠️  Skipping corrupted tile at timestamp ${timedValue.millis}: EOFException during Avro decode")
+                    logger.error(
+                      s"⚠️  Skipping corrupted tile at timestamp ${timedValue.millis}: EOFException during Avro decode")
                     logger.error(s"   Tile has ${timedValue.bytes.length} bytes but decoder ran out of data")
                     acc // Return accumulator unchanged, skip this tile
                   case e: Exception =>
