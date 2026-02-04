@@ -17,6 +17,8 @@ I'm working on the Enhanced Statistics feature in the Chronon codebase. This sys
 
 2. **Service Module** - REST API for querying statistics
    - `JavaStatsService`: Java-friendly wrapper for fetching stats
+     - **Hardened (Feb 2026)**: Three-layer protection against schema mismatches, corrupted tiles, and denormalization failures
+     - Supports verbose debugging mode: `-Dchronon.stats.debug.verbose=true`
    - `StatsHandler`: Vert.x HTTP handler for `/v1/stats/:tableName` endpoint
    - Locations:
      - `online/src/main/scala/ai/chronon/online/JavaStatsService.scala`
@@ -194,7 +196,18 @@ def buildEnhancedMetrics(fields: Seq[(String, DataType)],
 def fetchStats(tableName: String,
                startTimeMillis: Long,
                endTimeMillis: Long): CompletableFuture[JavaStatsResponse]
+
+// Internal hardening method for resilient denormalization
+private def debugDenormalize(aggregator: RowAggregator,
+                             normalizedIr: Array[Any],
+                             valueCodec: AvroCodec): Array[Any]
 ```
+
+**Hardening Features (Added Feb 2026)**:
+- **Schema Mismatch Protection**: Filters out metrics for non-existent columns before building aggregator
+- **Corrupted Tile Handling**: Catches and skips tiles with EOFException or other decode errors
+- **Individual Column Denormalization**: Processes each column separately to allow partial results
+- **Verbose Debug Mode**: Enable with `-Dchronon.stats.debug.verbose=true` for detailed column-level logging
 
 ### Querying via REST API
 
@@ -391,6 +404,180 @@ Contains 7 tests covering all functionality.
 ./mill clean
 ```
 
+## Stats Fetching Hardening (Added Feb 2026)
+
+The stats fetching system includes three layers of hardening to handle real-world issues like schema evolution, corrupted data, and type mismatches.
+
+### Layer 1: Schema Mismatch Protection
+
+**Location**: `JavaStatsService.scala:262-280`
+
+**Problem**: When schemas evolve between compute time and query time, metrics may reference columns that no longer exist, causing `None.get` exceptions during aggregator construction.
+
+**Solution**: Pre-filters metrics to only include those with columns that exist in the current schema.
+
+```scala
+// Filter metrics before building aggregator
+val selectedSchemaColumnNames = selectedSchema.fields.map(_.name).toSet
+val filteredMetrics = enhancedMetrics.filter { metric =>
+  val inputColumn = s"${metric.name}${metric.suffix}"
+  selectedSchemaColumnNames.contains(inputColumn)
+}
+```
+
+**Logging**:
+```
+⚠️  Skipping metric for non-existent column: old_column_name (metric may be from old schema)
+⚠️  Filtered out 5 metrics due to schema mismatch
+Building aggregator with 45 metrics
+```
+
+### Layer 2: Individual Column Denormalization
+
+**Location**: `JavaStatsService.scala:91-163`
+
+**Problem**: A single column's denormalization failure (ClassCastException, type mismatch) would fail the entire tile, losing all statistics.
+
+**Solution**: `debugDenormalize` method processes each column individually:
+- Catches exceptions per column (ClassCastException, general Exception)
+- Sets failed columns to `null` instead of propagating exception
+- Logs detailed information about failures
+- Returns partial results with successful columns
+
+```scala
+private def debugDenormalize(aggregator: RowAggregator,
+                             normalizedIr: Array[Any],
+                             valueCodec: AvroCodec): Array[Any] = {
+  // Process each column in a loop with try-catch
+  // Failed columns become null, successful columns proceed
+}
+```
+
+**Logging**:
+```
+=== Starting individual column denormalization debugging ===
+Total columns to denormalize: 50
+Normalized IR length: 50
+✓ Column 0: user_id_unique_count
+✓ Column 1: price_min
+✗ Column 2: old_metric - ClassCastException
+    IR Type: StructType
+    Input Type: java.lang.String
+    Error: Cannot cast String to StructType
+=== Denormalization complete: 48 succeeded, 2 failed ===
+⚠️  Denormalization had 2 failures - returning partial results
+```
+
+**Verbose Mode**: Enable with system property for detailed logging:
+```bash
+-Dchronon.stats.debug.verbose=true
+```
+
+This logs input/output types for every column, useful for debugging type mismatches.
+
+### Layer 3: Corrupted Tile Handling
+
+**Location**: `JavaStatsService.scala:285-302`
+
+**Problem**: Corrupted tiles (truncated Avro data, malformed bytes) would cause entire stats fetch to fail.
+
+**Solution**: Try-catch around each tile's processing:
+- Catches `EOFException` for truncated Avro data
+- Catches general exceptions for other tile issues
+- Skips problematic tile and continues with others
+- Tracks counters for processed vs skipped tiles
+
+```scala
+val mergedIr = timedValues.foldLeft(aggregator.init) { (acc, timedValue) =>
+  try {
+    val normalizedIr = valueCodec.decodeRow(irBytes)
+    val denormalizedIr = debugDenormalize(aggregator, normalizedIr, valueCodec)
+    tilesProcessed += 1
+    aggregator.merge(acc, denormalizedIr)
+  } catch {
+    case e: java.io.EOFException =>
+      tilesSkipped += 1
+      logger.error(s"⚠️  Skipping corrupted tile at timestamp ${timedValue.millis}")
+      acc // Skip this tile
+    case e: Exception =>
+      tilesSkipped += 1
+      logger.error(s"⚠️  Skipping tile: ${e.getClass.getSimpleName}")
+      acc // Skip this tile
+  }
+}
+```
+
+**Logging**:
+```
+⚠️  Skipping corrupted tile at timestamp 1738780800000: EOFException during Avro decode
+   Tile has 245 bytes but decoder ran out of data
+Tile processing complete: 89 processed, 1 skipped
+```
+
+### Hardening Benefits
+
+1. **Partial Results Over Failure**: Return statistics for available data rather than failing completely
+2. **Schema Evolution Safe**: Handles cases where compute-time schema differs from query-time schema
+3. **Data Quality Resilience**: Processes as much data as possible even when some tiles are corrupted
+4. **Detailed Diagnostics**: Comprehensive logging identifies exact failure points
+5. **Production Ready**: Designed for real-world scenarios with imperfect data
+
+### Debugging Failed Stats Queries
+
+When stats queries fail or return partial results:
+
+1. **Check logs for schema mismatches**:
+```bash
+grep "Skipping metric for non-existent column" /var/log/chronon-fetcher.log
+grep "Filtered out.*metrics" /var/log/chronon-fetcher.log
+```
+
+2. **Check for denormalization failures**:
+```bash
+grep "Denormalization complete" /var/log/chronon-fetcher.log
+grep "ClassCastException" /var/log/chronon-fetcher.log
+```
+
+3. **Check for corrupted tiles**:
+```bash
+grep "Skipping corrupted tile" /var/log/chronon-fetcher.log
+grep "EOFException" /var/log/chronon-fetcher.log
+```
+
+4. **Enable verbose debugging**:
+```bash
+# Add to JVM args
+-Dchronon.stats.debug.verbose=true
+```
+
+This provides detailed type information for every column, helping identify type mismatches.
+
+5. **Check tile processing stats**:
+```bash
+grep "Tile processing complete" /var/log/chronon-fetcher.log
+# Look for: "X processed, Y skipped"
+```
+
+### Common Hardening Scenarios
+
+**Scenario 1: Schema evolved, old metrics still in metadata**
+```
+Before hardening: None.get exception, entire query fails
+After hardening: Old metrics filtered out, statistics returned for current schema columns
+```
+
+**Scenario 2: One corrupted tile in a batch of 90**
+```
+Before hardening: Entire fetch fails with decode exception
+After hardening: 89 tiles processed successfully, 1 skipped, partial statistics returned
+```
+
+**Scenario 3: Type mismatch in one column's sketch**
+```
+Before hardening: ClassCastException, entire tile lost
+After hardening: Failed column set to null, other 49 columns processed successfully
+```
+
 ## Common Issues and Solutions
 
 ### Stats Compute Issues
@@ -416,14 +603,42 @@ spark-sql -e "DESCRIBE {join_output_table}"
 
 **Problem: ClassCastException during merge**
 
-**Cause**: IRs not denormalized before merging or schema mismatch
+**Cause**: Type mismatch in IR data, corrupted sketches, or schema incompatibility
 
-**Fix**:
+**Fix (as of Feb 2026)**: The system is now hardened to handle this automatically:
+- Individual column denormalization catches ClassCastException per column
+- Failed columns are set to null and logged
+- Partial results returned with successful columns
+- Enable verbose logging with `-Dchronon.stats.debug.verbose=true` to identify problematic columns
+
+**Legacy Fix** (if hardening not available):
 - Ensure `aggregator.denormalize(ir)` is called before `aggregator.merge()`
 - Ensure same Chronon version
 - Re-upload stats if schema changed
 
-**Location**: `EnhancedStatsStore.scala:206-214`
+**Location**: `JavaStatsService.scala:91-163` (debugDenormalize method)
+
+**Problem: None.get exception during aggregator construction**
+
+**Cause**: Metrics reference columns that don't exist in the schema (schema evolution, metadata corruption)
+
+**Error**:
+```
+java.util.NoSuchElementException: None.get
+    at ai.chronon.aggregator.row.RowAggregator.$anonfun$columnAggregators$1(RowAggregator.scala:39)
+```
+
+**Fix (as of Feb 2026)**: The system is now hardened to handle this automatically:
+- Metrics are pre-filtered before building aggregator
+- Only metrics with existing columns are used
+- Logs warnings for each filtered metric
+- Statistics returned for available columns only
+
+**Manual Fix** (if needed):
+- Re-compute and re-upload stats with current schema
+- Ensure metadata (cardinalityMap, schemas) are in sync
+
+**Location**: `JavaStatsService.scala:262-280` (metric filtering)
 
 ### Stats Upload Issues
 
@@ -514,7 +729,7 @@ println(s"Percentiles: ${percentiles.mkString(", ")}")
 
 **Problem: Statistics seem incorrect**
 
-**Cause**: Sampling or incremental updates
+**Cause**: Sampling, incremental updates, or skipped corrupted tiles
 
 **Solution**:
 ```scala
@@ -531,6 +746,50 @@ df.agg(
   approx_count_distinct("userId")
 ).show()
 ```
+
+**Check for skipped tiles** (as of Feb 2026):
+```bash
+# Check logs for tile processing stats
+grep "Tile processing complete" /var/log/chronon-fetcher.log
+# Look for: "X processed, Y skipped"
+
+# If tiles were skipped, check why
+grep "Skipping corrupted tile" /var/log/chronon-fetcher.log
+```
+
+**Problem: EOFException or decode errors during stats fetch**
+
+**Cause**: Corrupted tiles (truncated Avro data, malformed bytes)
+
+**Error**:
+```
+java.io.EOFException
+    at org.apache.avro.io.BinaryDecoder.readInt(BinaryDecoder.java:...)
+```
+
+**Fix (as of Feb 2026)**: The system is now hardened to handle this automatically:
+- Corrupted tiles are caught and skipped
+- Processing continues with remaining tiles
+- Detailed logging shows which tiles were skipped
+- Counters track processed vs skipped tiles
+
+**Logs**:
+```
+⚠️  Skipping corrupted tile at timestamp 1738780800000: EOFException during Avro decode
+   Tile has 245 bytes but decoder ran out of data
+Tile processing complete: 89 processed, 1 skipped
+```
+
+**Manual Investigation**:
+```bash
+# Identify problematic tiles
+grep "Skipping corrupted tile" /var/log/chronon-fetcher.log
+
+# Re-compute and re-upload stats for affected dates
+# (Use the timestamps from logs to identify which partitions need recomputation)
+```
+
+**Location**: `JavaStatsService.scala:285-302` (tile processing loop)
 
 ## Complete End-to-End Example
 
@@ -761,6 +1020,41 @@ historicalDates.foreach { date =>
 
 ## Important Code Patterns
 
+### Hardened Stats Fetching Pattern (Feb 2026)
+
+When fetching stats, the system uses a three-layer hardening approach:
+
+```scala
+// Layer 1: Filter metrics for existing columns
+val selectedSchemaColumnNames = selectedSchema.fields.map(_.name).toSet
+val filteredMetrics = enhancedMetrics.filter { metric =>
+  val inputColumn = s"${metric.name}${metric.suffix}"
+  selectedSchemaColumnNames.contains(inputColumn)
+}
+
+// Layer 2: Build aggregator with filtered metrics
+val aggregator = StatsGenerator.buildAggregator(filteredMetrics, selectedSchema)
+
+// Layer 3: Process tiles with error handling
+val mergedIr = timedValues.foldLeft(aggregator.init) { (acc, timedValue) =>
+  try {
+    val normalizedIr = valueCodec.decodeRow(irBytes)
+    // Individual column denormalization with error handling
+    val denormalizedIr = debugDenormalize(aggregator, normalizedIr, valueCodec)
+    aggregator.merge(acc, denormalizedIr)
+  } catch {
+    case e: java.io.EOFException => acc // Skip corrupted tile
+    case e: Exception => acc // Skip failed tile
+  }
+}
+```
+
+**Key Principles**:
+1. **Fail Gracefully**: Return partial results rather than failing completely
+2. **Log Everything**: Detailed logging for debugging production issues
+3. **Count Failures**: Track success/failure metrics for monitoring
+4. **Isolate Failures**: One bad column/tile doesn't affect others
+
 ### Scala-Java Interop
 
 The service module is Java but needs Scala classes:
@@ -921,6 +1215,9 @@ cat spark/src/main/scala/ai/chronon/spark/stats/StatsCompute.scala
 # View stats upload implementation
 cat spark/src/main/scala/ai/chronon/spark/stats/EnhancedStatsStore.scala
 
+# View stats fetching with hardening
+cat online/src/main/scala/ai/chronon/online/JavaStatsService.scala
+
 # View service endpoint
 cat service/src/main/java/ai/chronon/service/handlers/StatsHandler.java
 
@@ -932,6 +1229,13 @@ cat api/src/main/scala/ai/chronon/api/planner/MonolithJoinPlanner.scala
 
 # Check what nodes are in the plan
 grep -A 5 "def buildPlan" api/src/main/scala/ai/chronon/api/planner/MonolithJoinPlanner.scala
+
+# Debug stats fetching issues (Feb 2026+)
+grep "Skipping metric for non-existent column" /var/log/chronon-fetcher.log
+grep "Filtered out.*metrics" /var/log/chronon-fetcher.log
+grep "Denormalization complete" /var/log/chronon-fetcher.log
+grep "Skipping corrupted tile" /var/log/chronon-fetcher.log
+grep "Tile processing complete" /var/log/chronon-fetcher.log
 ```
 
 ## Metric Types Reference
@@ -1100,15 +1404,50 @@ Set up alerts for:
 - Excessive compute duration (> 30 minutes for daily partition)
 - KV Store upload errors
 
+**Hardening-related alerts** (Feb 2026+):
+- High rate of filtered metrics (may indicate schema drift)
+- High rate of skipped tiles (may indicate data quality issues)
+- High rate of denormalization failures (may indicate type incompatibilities)
+
+Example alert queries:
+```bash
+# Alert if >10% of tiles are being skipped
+awk '/Tile processing complete:/ {
+  if ($4 > 0 && $6/$4 > 0.1) print "High skip rate: " $0
+}' /var/log/chronon-fetcher.log
+
+# Alert if >20% of metrics are being filtered
+awk '/Filtered out.*metrics/ {
+  gsub(/[^0-9]/, "", $3); gsub(/[^0-9]/, "", $5);
+  if ($3 > 0 && $3/$5 > 0.2) print "High filter rate: " $0
+}' /var/log/chronon-fetcher.log
+```
+
 ## Contact/History
 
-This implementation was completed in December 2025. Key decisions:
+This implementation was completed in December 2025, with hardening added in February 2026.
+
+### Key Decisions
 
 1. **Why compute and upload in same node?**: Single atomic operation ensures consistency; metadata and data are stored together
 2. **Why store metadata in KV?**: Enables query-time aggregator reconstruction without needing the original join definition
 3. **Why normalize/denormalize?**: Sketches can't be directly serialized to Avro
 4. **Why TimedKvRdd?**: Enables time-based tiling and efficient range queries
 5. **Why separate service module?**: Lightweight service doesn't need Spark dependencies
+
+### Hardening (February 2026)
+
+Added three-layer hardening to stats fetching based on production issues:
+
+1. **Schema Mismatch Protection**: Encountered `None.get` exceptions when schemas evolved between compute and query time. Solution: Pre-filter metrics to only include those with columns that exist in current schema.
+
+2. **Individual Column Denormalization**: Single column failures (ClassCastException, type mismatches) were causing entire tiles to fail. Solution: Process each column individually, set failed columns to null, return partial results.
+
+3. **Corrupted Tile Handling**: Corrupted tiles (EOFException, malformed Avro) were failing entire fetches. Solution: Catch and skip bad tiles, continue processing remaining tiles.
+
+**Design Principle**: Prefer partial results over complete failure. In production data warehouses, some data corruption or schema evolution is inevitable. The hardening ensures statistics remain available even when some data is problematic.
+
+**Implementation Location**: `online/src/main/scala/ai/chronon/online/JavaStatsService.scala`
 
 ## Next Steps for Common Tasks
 
@@ -1130,6 +1469,13 @@ This implementation was completed in December 2025. Key decisions:
 → Enable logging in `EnhancedStatsCompute`
 → Use `.toFlatDf.show()` to inspect tiles
 → Check cardinality map with `computeCardinalityMap()`
+
+### To debug stats fetching issues:
+→ Enable verbose debugging: `-Dchronon.stats.debug.verbose=true`
+→ Check logs for schema mismatches: `grep "Skipping metric for non-existent column"`
+→ Check logs for denormalization failures: `grep "Denormalization complete"`
+→ Check logs for corrupted tiles: `grep "Skipping corrupted tile"`
+→ Check tile processing stats: `grep "Tile processing complete"` to see processed vs skipped counts
 
 ---
 

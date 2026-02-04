@@ -88,6 +88,80 @@ class JavaStatsService(api: Api,
     }
   }
 
+  /** Debug denormalize that processes each column individually to identify and skip failing columns.
+    * This hardens stats fetching by allowing partial results when some columns fail to denormalize.
+    *
+    * @param aggregator The row aggregator
+    * @param normalizedIr The normalized IR array
+    * @param valueCodec The value codec (unused but kept for consistency with the pattern)
+    * @return Denormalized IR array with failed columns set to null
+    */
+  private def debugDenormalize(aggregator: RowAggregator,
+                               normalizedIr: Array[Any],
+                               valueCodec: AvroCodec): Array[Any] = {
+    val verboseLogging = System.getProperty("chronon.stats.debug.verbose", "false").toBoolean
+
+    logger.info("=== Starting individual column denormalization debugging ===")
+    logger.info(s"Total columns to denormalize: ${aggregator.columnAggregators.length}")
+    logger.info(s"Normalized IR length: ${normalizedIr.length}")
+    if (verboseLogging) {
+      logger.info(s"IR Schema: ${aggregator.irSchema.map { case (name, dtype) => s"$name:$dtype" }.mkString(", ")}")
+    }
+
+    val result = new Array[Any](aggregator.columnAggregators.length)
+    var successCount = 0
+    var failureCount = 0
+
+    var i = 0
+    while (i < aggregator.columnAggregators.length) {
+      val (metricName, irType) = aggregator.irSchema(i)
+      val colAgg = aggregator.columnAggregators(i)
+      val inputValue = if (i < normalizedIr.length) normalizedIr(i) else null
+
+      try {
+        val denormalized = colAgg.denormalize(inputValue)
+        result.update(i, denormalized)
+        successCount += 1
+
+        if (verboseLogging) {
+          logger.info(s"✓ Column $i: $metricName")
+          logger.info(s"    IR Type: $irType")
+          logger.info(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
+          logger.info(s"    Output Type: ${if (denormalized == null) "NULL" else denormalized.getClass.getName}")
+        }
+
+      } catch {
+        case e: ClassCastException =>
+          failureCount += 1
+          result.update(i, null)  // Set failed column to null
+          logger.error(s"✗ Column $i: $metricName - ClassCastException")
+          logger.error(s"    IR Type: $irType")
+          logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
+          logger.error(s"    Input Value: $inputValue")
+          logger.error(s"    Error: ${e.getMessage}", e)
+
+        case e: Exception =>
+          failureCount += 1
+          result.update(i, null)  // Set failed column to null
+          logger.error(s"✗ Column $i: $metricName - ${e.getClass.getSimpleName}")
+          logger.error(s"    IR Type: $irType")
+          logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
+          logger.error(s"    Input Value: $inputValue")
+          logger.error(s"    Error: ${e.getMessage}", e)
+      }
+      i += 1
+    }
+
+    logger.info(s"=== Denormalization complete: $successCount succeeded, $failureCount failed ===")
+
+    if (failureCount > 0) {
+      logger.warn(s"⚠️  Denormalization had $failureCount failures - returning partial results")
+      logger.warn(s"   Failed columns will be excluded from the final statistics")
+    }
+
+    result
+  }
+
   /** Fetch and merge statistics for a given table and time range.
     *
     * @param tableName The name of the table (used as key in KV store)
@@ -184,15 +258,52 @@ class JavaStatsService(api: Api,
                 mergedCardinalityMap,
                 cardinalityThreshold = 100
               )
-              val aggregator = StatsGenerator.buildAggregator(enhancedMetrics, selectedSchema)
+
+              // Filter metrics to only include those with columns that exist in selectedSchema
+              // This hardens against schema mismatches between compute time and query time
+              val selectedSchemaColumnNames = selectedSchema.fields.map(_.name).toSet
+              val filteredMetrics = enhancedMetrics.filter { metric =>
+                val inputColumn = s"${metric.name}${metric.suffix}"
+                val exists = selectedSchemaColumnNames.contains(inputColumn)
+                if (!exists) {
+                  logger.warn(s"⚠️  Skipping metric for non-existent column: $inputColumn (metric may be from old schema)")
+                }
+                exists
+              }
+
+              if (filteredMetrics.size < enhancedMetrics.size) {
+                val skipped = enhancedMetrics.size - filteredMetrics.size
+                logger.warn(s"⚠️  Filtered out $skipped metrics due to schema mismatch")
+              }
+
+              logger.info(s"Building aggregator with ${filteredMetrics.size} metrics")
+              val aggregator = StatsGenerator.buildAggregator(filteredMetrics, selectedSchema)
 
               // Merge all IRs after denormalizing (converts bytes back to sketch objects)
+              var tilesProcessed = 0
+              var tilesSkipped = 0
               val mergedIr = timedValues.foldLeft(aggregator.init) { (acc, timedValue) =>
-                val irBytes = timedValue.bytes
-                val normalizedIr = valueCodec.decodeRow(irBytes)
-                val denormalizedIr = aggregator.denormalize(normalizedIr)
-                aggregator.merge(acc, denormalizedIr)
+                try {
+                  val irBytes = timedValue.bytes
+                  val normalizedIr = valueCodec.decodeRow(irBytes)
+                  // Use debug denormalize to identify which columns are failing
+                  val denormalizedIr = debugDenormalize(aggregator, normalizedIr, valueCodec)
+                  tilesProcessed += 1
+                  aggregator.merge(acc, denormalizedIr)
+                } catch {
+                  case e: java.io.EOFException =>
+                    tilesSkipped += 1
+                    logger.error(s"⚠️  Skipping corrupted tile at timestamp ${timedValue.millis}: EOFException during Avro decode")
+                    logger.error(s"   Tile has ${timedValue.bytes.length} bytes but decoder ran out of data")
+                    acc // Return accumulator unchanged, skip this tile
+                  case e: Exception =>
+                    tilesSkipped += 1
+                    logger.error(s"⚠️  Skipping tile at timestamp ${timedValue.millis}: ${e.getClass.getSimpleName}", e)
+                    acc // Return accumulator unchanged, skip this tile
+                }
               }
+
+              logger.info(s"Tile processing complete: $tilesProcessed processed, $tilesSkipped skipped")
 
               // Finalize to get final statistics
               val normalized = aggregator.finalize(mergedIr)
