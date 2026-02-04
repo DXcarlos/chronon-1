@@ -88,6 +88,71 @@ class JavaStatsService(api: Api,
     }
   }
 
+  /** Debug helper to denormalize each column individually with detailed logging.
+    * This helps identify which specific column/metric is causing ClassCastException.
+    *
+    * @param aggregator The row aggregator
+    * @param normalizedIr The normalized IR array from KV Store
+    * @param valueCodec The Avro codec for logging purposes
+    * @return Denormalized IR array
+    */
+  private def debugDenormalize(aggregator: RowAggregator,
+                               normalizedIr: Array[Any],
+                               valueCodec: AvroCodec): Array[Any] = {
+    logger.info("=== Starting individual column denormalization debugging ===")
+    logger.info(s"Total columns to denormalize: ${aggregator.columnAggregators.length}")
+    logger.info(s"Normalized IR length: ${normalizedIr.length}")
+    logger.info(s"IR Schema: ${aggregator.irSchema.map { case (name, dtype) => s"$name:$dtype" }.mkString(", ")}")
+
+    val result = new Array[Any](aggregator.columnAggregators.length)
+    var successCount = 0
+    var failureCount = 0
+
+    var i = 0
+    while (i < aggregator.columnAggregators.length) {
+      val (metricName, irType) = aggregator.irSchema(i)
+      val colAgg = aggregator.columnAggregators(i)
+      val inputValue = if (i < normalizedIr.length) normalizedIr(i) else null
+
+      try {
+        val denormalized = colAgg.denormalize(inputValue)
+        result.update(i, denormalized)
+        successCount += 1
+
+        logger.info(s"✓ Column $i: $metricName")
+        logger.info(s"    IR Type: $irType")
+        logger.info(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
+        logger.info(s"    Output Type: ${if (denormalized == null) "NULL" else denormalized.getClass.getName}")
+
+      } catch {
+        case e: ClassCastException =>
+          failureCount += 1
+          logger.error(s"✗ Column $i: $metricName - ClassCastException")
+          logger.error(s"    IR Type: $irType")
+          logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
+          logger.error(s"    Input Value: $inputValue")
+          logger.error(s"    Error: ${e.getMessage}", e)
+
+        case e: Exception =>
+          failureCount += 1
+          logger.error(s"✗ Column $i: $metricName - ${e.getClass.getSimpleName}")
+          logger.error(s"    IR Type: $irType")
+          logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
+          logger.error(s"    Input Value: $inputValue")
+          logger.error(s"    Error: ${e.getMessage}", e)
+      }
+      i += 1
+    }
+
+    logger.info(s"=== Denormalization complete: $successCount succeeded, $failureCount failed ===")
+
+    if (failureCount > 0) {
+      throw new RuntimeException(s"Denormalization failed for $failureCount columns. See logs above for details.")
+    }
+
+    result
+  }
+
   /** Fetch and merge statistics for a given table and time range.
     *
     * @param tableName The name of the table (used as key in KV store)
@@ -192,7 +257,8 @@ class JavaStatsService(api: Api,
               val mergedIr = timedValues.foldLeft(aggregator.init) { (acc, timedValue) =>
                 val irBytes = timedValue.bytes
                 val normalizedIr = valueCodec.decodeRow(irBytes)
-                val denormalizedIr = aggregator.denormalize(normalizedIr)
+                // Use debug denormalize to identify which columns are failing
+                val denormalizedIr = debugDenormalize(aggregator, normalizedIr, valueCodec)
                 aggregator.merge(acc, denormalizedIr)
               }
 

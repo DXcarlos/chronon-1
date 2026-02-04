@@ -1,0 +1,21 @@
+services:
+  chronon-fetcher:
+    image: ziplineai/chronon-fetcher:latest
+    restart: "no"
+    ports:
+      - "9000:9000"
+      - "8907:8905"
+      - "8908:8906"
+      - "5005:5005"  # Debug port
+    volumes:
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-~/.config/gcloud/application_default_credentials.json}:${GOOGLE_APPLICATION_CREDENTIALS:-/gcp/credentials.json}:ro
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-${GCP_PROJECT_ID}}
+      - GCP_BIGTABLE_INSTANCE_ID=${GCP_BIGTABLE_INSTANCE_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/gcp/credentials.json}
+      - JVM_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+      # Bigtable RPC timeout settings (increased from 200ms default to 1s as recommended by Google)
+      - BIGTABLE_INITIAL_RPC_TIMEOUT_DURATION=PT1S
+      - BIGTABLE_MAX_RPC_TIMEOUT_DURATION=PT2S
+      - BIGTABLE_TOTAL_TIMEOUT_DURATION=PT5S
