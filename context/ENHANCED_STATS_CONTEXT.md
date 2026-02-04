@@ -432,25 +432,23 @@ val filteredMetrics = enhancedMetrics.filter { metric =>
 Building aggregator with 45 metrics
 ```
 
-### Layer 2: Individual Column Denormalization
+### Layer 2: Individual Column Denormalization with Alignment
 
-**Location**: `JavaStatsService.scala:91-163`
+**Location**: `JavaStatsService.scala:91-163` (debugDenormalize), `283-303` (alignment)
 
-**Problem**: A single column's denormalization failure (ClassCastException, type mismatch) would fail the entire tile, losing all statistics.
+**Problem**: Column denormalization failures and metric/value schema order misalignment.
 
-**Solution**: `debugDenormalize` method processes each column individually:
+**Solution**: Align normalizedIr with filteredMetrics order via field name lookup, then process each column individually with try-catch
 - Catches exceptions per column (ClassCastException, general Exception)
 - Sets failed columns to `null` instead of propagating exception
 - Logs detailed information about failures
 - Returns partial results with successful columns
 
 ```scala
+// Align normalizedIr with filteredMetrics order, then denormalize each column
 private def debugDenormalize(aggregator: RowAggregator,
-                             normalizedIr: Array[Any],
-                             valueCodec: AvroCodec): Array[Any] = {
-  // Process each column in a loop with try-catch
-  // Failed columns become null, successful columns proceed
-}
+                             alignedIr: Array[Any],
+                             valueCodec: AvroCodec): Array[Any]
 ```
 
 **Logging**:

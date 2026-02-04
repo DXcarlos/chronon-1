@@ -282,6 +282,12 @@ class JavaStatsService(api: Api,
               logger.info(s"Building aggregator with ${filteredMetrics.size} metrics")
               val aggregator = StatsGenerator.buildAggregator(filteredMetrics, selectedSchema)
 
+              // Build a mapping from value schema field names to their positions
+              // This is critical because filteredMetrics order may not match normalizedIr order
+              val valueSchema = valueCodec.chrononSchema.asInstanceOf[StructType]
+              val valueSchemaIndex = valueSchema.fields.map(_.name).zipWithIndex.toMap
+              logger.info(s"Value schema has ${valueSchemaIndex.size} fields")
+
               // Merge all IRs after denormalizing (converts bytes back to sketch objects)
               var tilesProcessed = 0
               var tilesSkipped = 0
@@ -289,8 +295,17 @@ class JavaStatsService(api: Api,
                 try {
                   val irBytes = timedValue.bytes
                   val normalizedIr = valueCodec.decodeRow(irBytes)
+
+                  // Align normalizedIr with filteredMetrics order using field name lookup
+                  // This prevents misalignment when metrics are filtered or reordered
+                  val alignedIr = filteredMetrics.map { metric =>
+                    val inputColumn = s"${metric.name}${metric.suffix}"
+                    val idx = valueSchemaIndex.getOrElse(inputColumn, -1)
+                    if (idx >= 0 && idx < normalizedIr.length) normalizedIr(idx) else null
+                  }.toArray
+
                   // Use debug denormalize to identify which columns are failing
-                  val denormalizedIr = debugDenormalize(aggregator, normalizedIr, valueCodec)
+                  val denormalizedIr = debugDenormalize(aggregator, alignedIr, valueCodec)
                   tilesProcessed += 1
                   aggregator.merge(acc, denormalizedIr)
                 } catch {
