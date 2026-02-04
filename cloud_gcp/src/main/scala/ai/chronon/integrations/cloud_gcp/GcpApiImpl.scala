@@ -365,10 +365,10 @@ object GcpApiImpl {
   private[cloud_gcp] val FetcherOOCTopicInfo = "FETCHER_OOC_TOPIC_INFO"
   private[cloud_gcp] val SchemaRegistryId = "SCHEMA_REGISTRY_ID"
 
-  private val DefaultInitialRpcTimeoutDuration = Duration.ofMillis(200L)
+  private val DefaultInitialRpcTimeoutDuration = Duration.ofMillis(1000L)  // Increased from 200ms to 1s (Google's recommendation)
   private val DefaultRpcTimeoutMultiplier = 1.25
-  private val DefaultMaxRpcTimeoutDuration = Duration.ofMillis(400L)
-  private val DefaultTotalTimeoutDuration = Duration.ofMillis(1000L)
+  private val DefaultMaxRpcTimeoutDuration = Duration.ofMillis(2000L)      // Increased from 400ms to 2s for retries
+  private val DefaultTotalTimeoutDuration = Duration.ofMillis(5000L)       // Increased from 1s to 5s for total operation
   private val DefaultMaxAttempts = 2
 
   private val sharedKvStore = new AtomicReference[KVStore]()

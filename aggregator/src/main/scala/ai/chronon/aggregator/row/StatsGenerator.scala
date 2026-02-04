@@ -83,6 +83,7 @@ object StatsGenerator {
 
   def buildAggPart(m: MetricTransform): api.AggregationPart = {
     val aggPart = new api.AggregationPart()
+    // The input column includes the suffix - these should exist in the IR schema
     aggPart.setInputColumn(s"${m.name}${m.suffix}")
     aggPart.setOperation(m.operation)
     if (m.argMap != null)
@@ -126,7 +127,47 @@ object StatsGenerator {
         }
       }
       .sortBy(_.name)
-    metrics :+ MetricTransform(totalColumn, InputTransform.One, api.Operation.COUNT)
+    // Use the first available column for total count since InputTransform.One converts any value to 1
+    val firstColumn = fields.headOption.map(_._1).getOrElse("total")
+    metrics :+ MetricTransform(firstColumn, InputTransform.One, api.Operation.COUNT, suffix = "_total")
+  }
+
+  /** Build simple metrics without InputTransforms for direct aggregation.
+    * Use this when you don't have pre-transformed columns.
+    * NOTE: This version doesn't use suffixes to avoid column mismatch issues.
+    */
+  def buildSimpleMetrics(fields: Seq[(String, api.DataType)]): Seq[MetricTransform] = {
+    val metrics = fields
+      .flatMap { case (name, dataType) =>
+        if (ignoreColumns.contains(name)) {
+          Seq.empty
+        } else {
+          // Skip complex types
+          dataType match {
+            case _: api.ListType | _: api.MapType | _: api.StructType =>
+              Seq.empty
+            case _ if api.DataType.isNumeric(dataType) && dataType != api.ByteType =>
+              // Numeric: basic stats only (no suffixes)
+              Seq(
+                MetricTransform(name, InputTransform.Raw, operation = api.Operation.MAX),
+                MetricTransform(name, InputTransform.Raw, operation = api.Operation.MIN),
+                MetricTransform(name, InputTransform.Raw, operation = api.Operation.AVERAGE)
+              )
+            case api.BooleanType =>
+              // Boolean: count trues by summing (true=1, false=0) - no suffix
+              Seq(MetricTransform(name, InputTransform.Raw, operation = api.Operation.SUM))
+            case api.StringType =>
+              // String: cardinality only - no suffix
+              Seq(MetricTransform(name, InputTransform.Raw, operation = api.Operation.UNIQUE_COUNT))
+            case _ =>
+              Seq.empty
+          }
+        }
+      }
+      .sortBy(_.name)
+    // Use the first available column for total count - no suffix
+    val firstColumn = fields.headOption.map(_._1).getOrElse("total")
+    metrics :+ MetricTransform(firstColumn, InputTransform.One, api.Operation.COUNT)
   }
 
   /** Build enhanced metrics with cardinality awareness.
@@ -196,7 +237,9 @@ object StatsGenerator {
         }
       }
       .sortBy(_.name)
-    metrics :+ MetricTransform(totalColumn, InputTransform.One, api.Operation.COUNT)
+    // Use the first available column for total count since InputTransform.One converts any value to 1
+    val firstColumn = fields.headOption.map(_._1).getOrElse("total")
+    metrics :+ MetricTransform(firstColumn, InputTransform.One, api.Operation.COUNT, suffix = "_total")
   }
 
   def lInfKllSketch(sketch1: AnyRef, sketch2: AnyRef, bins: Int = 20): AnyRef = {

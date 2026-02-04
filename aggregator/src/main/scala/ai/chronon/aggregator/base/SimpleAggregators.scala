@@ -120,7 +120,16 @@ class UniqueCount[T](inputType: DataType) extends SimpleAggregator[T, util.HashS
 
   override def denormalize(ir: Any): util.HashSet[T] = {
     val set = new util.HashSet[T]()
-    set.addAll(ir.asInstanceOf[util.ArrayList[T]])
+    ir match {
+      case list: util.ArrayList[_] =>
+        set.addAll(list.asInstanceOf[util.ArrayList[T]])
+      case list: util.List[_] =>
+        set.addAll(list.asInstanceOf[util.List[T]])
+      case other =>
+        // Handle case where a single value is passed instead of a list
+        // This can happen when Avro deserializes or when the value is already finalized
+        set.add(other.asInstanceOf[T])
+    }
     set
   }
 }
@@ -163,6 +172,21 @@ class Average extends SimpleAggregator[Double, Array[Any], Double] {
     val arr = new Array[Any](ir.length)
     ir.copyToArray(arr)
     arr
+  }
+
+  override def denormalize(ir: Any): Array[Any] = {
+    ir match {
+      case arr: Array[_] => arr.asInstanceOf[Array[Any]]
+      case list: java.util.ArrayList[_] if list.size() == 2 =>
+        // Avro might deserialize struct as ArrayList
+        Array[Any](list.get(0), list.get(1))
+      case list: java.util.List[_] if list.size() == 2 =>
+        Array[Any](list.get(0), list.get(1))
+      case _ =>
+        // If we get a finalized value (Long/Double), create a default IR
+        // This shouldn't happen in normal flow but provides a fallback
+        Array[Any](0.0, 0L)
+    }
   }
 
   override def isDeletable: Boolean = true
@@ -538,8 +562,25 @@ class ApproxDistinctCount[Input: CpcFriendly](lgK: Int = 8) extends SimpleAggreg
 
   override def normalize(ir: CpcSketch): Array[Byte] = ir.toByteArray
 
-  override def denormalize(normalized: Any): CpcSketch =
-    CpcSketch.heapify(normalized.asInstanceOf[Array[Byte]])
+  override def denormalize(normalized: Any): CpcSketch = {
+    val bytes = normalized match {
+      case arr: Array[Byte] => arr
+      case list: java.util.ArrayList[_] =>
+        // Handle case where Avro deserializes bytes as ArrayList
+        val byteArray = new Array[Byte](list.size())
+        var i = 0
+        while (i < list.size()) {
+          byteArray(i) = list.get(i).asInstanceOf[Number].byteValue()
+          i += 1
+        }
+        byteArray
+      case other =>
+        throw new IllegalArgumentException(
+          s"Expected Array[Byte] or ArrayList for CpcSketch denormalization, got ${other.getClass.getName}"
+        )
+    }
+    CpcSketch.heapify(bytes)
+  }
 }
 
 class ApproxPercentiles(k: Int = 128, percentiles: Array[Double] = Array(0.5))

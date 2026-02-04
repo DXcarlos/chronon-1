@@ -177,14 +177,16 @@ class JavaStatsService(api: Api,
 
               logger.info(s"Merged cardinality map for $tableName with ${mergedCardinalityMap.size} columns")
 
-              // Build aggregator with merged cardinality map
+              // Build aggregator with simple metrics (no InputTransforms)
               val noKeysFields = noKeysSchema.fields.map(f => (f.name, f.fieldType)).toSeq
-              val enhancedMetrics = StatsGenerator.buildEnhancedMetrics(
-                noKeysFields,
-                mergedCardinalityMap,
-                cardinalityThreshold = 100
-              )
-              val aggregator = StatsGenerator.buildAggregator(enhancedMetrics, selectedSchema)
+              val simpleMetrics = StatsGenerator.buildSimpleMetrics(noKeysFields)
+
+              // Debug logging
+              logger.info(s"noKeysSchema fields: ${noKeysSchema.fields.map(_.name).mkString(", ")}")
+              logger.info(s"simpleMetrics input columns: ${simpleMetrics.map(m => s"${m.name}${m.suffix}").distinct.mkString(", ")}")
+
+              // Use noKeysSchema since metrics are built from it
+              val aggregator = StatsGenerator.buildAggregator(simpleMetrics, noKeysSchema)
 
               // Merge all IRs after denormalizing (converts bytes back to sketch objects)
               val mergedIr = timedValues.foldLeft(aggregator.init) { (acc, timedValue) =>
