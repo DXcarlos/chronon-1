@@ -91,6 +91,9 @@ class JavaStatsService(api: Api,
   /** Debug helper to denormalize each column individually with detailed logging.
     * This helps identify which specific column/metric is causing ClassCastException.
     *
+    * Set system property -Dchronon.stats.debug.verbose=true to see successful denormalizations.
+    * By default, only failures are logged.
+    *
     * @param aggregator The row aggregator
     * @param normalizedIr The normalized IR array from KV Store
     * @param valueCodec The Avro codec for logging purposes
@@ -99,10 +102,14 @@ class JavaStatsService(api: Api,
   private def debugDenormalize(aggregator: RowAggregator,
                                normalizedIr: Array[Any],
                                valueCodec: AvroCodec): Array[Any] = {
+    val verboseLogging = System.getProperty("chronon.stats.debug.verbose", "false").toBoolean
+
     logger.info("=== Starting individual column denormalization debugging ===")
     logger.info(s"Total columns to denormalize: ${aggregator.columnAggregators.length}")
     logger.info(s"Normalized IR length: ${normalizedIr.length}")
-    logger.info(s"IR Schema: ${aggregator.irSchema.map { case (name, dtype) => s"$name:$dtype" }.mkString(", ")}")
+    if (verboseLogging) {
+      logger.info(s"IR Schema: ${aggregator.irSchema.map { case (name, dtype) => s"$name:$dtype" }.mkString(", ")}")
+    }
 
     val result = new Array[Any](aggregator.columnAggregators.length)
     var successCount = 0
@@ -119,14 +126,17 @@ class JavaStatsService(api: Api,
         result.update(i, denormalized)
         successCount += 1
 
-        logger.info(s"✓ Column $i: $metricName")
-        logger.info(s"    IR Type: $irType")
-        logger.info(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
-        logger.info(s"    Output Type: ${if (denormalized == null) "NULL" else denormalized.getClass.getName}")
+        if (verboseLogging) {
+          logger.info(s"✓ Column $i: $metricName")
+          logger.info(s"    IR Type: $irType")
+          logger.info(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
+          logger.info(s"    Output Type: ${if (denormalized == null) "NULL" else denormalized.getClass.getName}")
+        }
 
       } catch {
         case e: ClassCastException =>
           failureCount += 1
+          result.update(i, null)  // Set failed column to null
           logger.error(s"✗ Column $i: $metricName - ClassCastException")
           logger.error(s"    IR Type: $irType")
           logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
@@ -135,6 +145,7 @@ class JavaStatsService(api: Api,
 
         case e: Exception =>
           failureCount += 1
+          result.update(i, null)  // Set failed column to null
           logger.error(s"✗ Column $i: $metricName - ${e.getClass.getSimpleName}")
           logger.error(s"    IR Type: $irType")
           logger.error(s"    Input Type: ${if (inputValue == null) "NULL" else inputValue.getClass.getName}")
@@ -147,7 +158,8 @@ class JavaStatsService(api: Api,
     logger.info(s"=== Denormalization complete: $successCount succeeded, $failureCount failed ===")
 
     if (failureCount > 0) {
-      throw new RuntimeException(s"Denormalization failed for $failureCount columns. See logs above for details.")
+      logger.warn(s"⚠️  Denormalization had $failureCount failures - returning partial results")
+      logger.warn(s"   Failed columns will be excluded from the final statistics")
     }
 
     result
@@ -254,22 +266,64 @@ class JavaStatsService(api: Api,
               val aggregator = StatsGenerator.buildAggregator(simpleMetrics, noKeysSchema)
 
               // Merge all IRs after denormalizing (converts bytes back to sketch objects)
+              var tilesProcessed = 0
+              var tilesSkipped = 0
               val mergedIr = timedValues.foldLeft(aggregator.init) { (acc, timedValue) =>
-                val irBytes = timedValue.bytes
-                val normalizedIr = valueCodec.decodeRow(irBytes)
-                // Use debug denormalize to identify which columns are failing
-                val denormalizedIr = debugDenormalize(aggregator, normalizedIr, valueCodec)
-                aggregator.merge(acc, denormalizedIr)
+                try {
+                  val irBytes = timedValue.bytes
+                  val normalizedIr = valueCodec.decodeRow(irBytes)
+                  // Use debug denormalize to identify which columns are failing
+                  val denormalizedIr = debugDenormalize(aggregator, normalizedIr, valueCodec)
+                  tilesProcessed += 1
+                  aggregator.merge(acc, denormalizedIr)
+                } catch {
+                  case e: java.io.EOFException =>
+                    tilesSkipped += 1
+                    logger.error(s"⚠️  Skipping corrupted tile at timestamp ${timedValue.millis}: EOFException during Avro decode")
+                    logger.error(s"   Tile has ${timedValue.bytes.length} bytes but decoder ran out of data")
+                    acc // Return accumulator unchanged, skip this tile
+                  case e: Exception =>
+                    tilesSkipped += 1
+                    logger.error(s"⚠️  Skipping tile at timestamp ${timedValue.millis}: ${e.getClass.getSimpleName}", e)
+                    acc // Return accumulator unchanged, skip this tile
+                }
               }
 
-              // Finalize to get final statistics
-              val normalized = aggregator.finalize(mergedIr)
+              logger.info(s"Processed ${tilesProcessed} tiles successfully, skipped ${tilesSkipped} corrupted tiles")
 
-              // Convert to Map for easy access
+              // Finalize to get final statistics, handling errors for individual columns
+              val normalized = new Array[Any](aggregator.columnAggregators.length)
+              var finalizeSuccessCount = 0
+              var finalizeFailureCount = 0
+
+              var i = 0
+              while (i < aggregator.columnAggregators.length) {
+                try {
+                  normalized.update(i, aggregator.columnAggregators(i).finalize(mergedIr(i)))
+                  finalizeSuccessCount += 1
+                } catch {
+                  case e: Exception =>
+                    finalizeFailureCount += 1
+                    normalized.update(i, null)
+                    val (metricName, _) = aggregator.outputSchema(i)
+                    logger.error(s"⚠️  Failed to finalize column $i: $metricName - ${e.getClass.getSimpleName}: ${e.getMessage}")
+                }
+                i += 1
+              }
+
+              if (finalizeFailureCount > 0) {
+                logger.warn(s"⚠️  Finalization had $finalizeFailureCount failures out of ${aggregator.columnAggregators.length} columns")
+              }
+
+              // Convert to Map for easy access, filtering out null values
               val fieldNames = aggregator.outputSchema.map(_._1)
-              val statsMap = fieldNames.zip(normalized).toMap
+              val statsMap = fieldNames.zip(normalized).filter(_._2 != null).toMap
 
-              logger.info(s"Merged ${timedValues.size} tiles into final statistics for $tableName")
+              if (tilesSkipped > 0) {
+                logger.warn(s"⚠️  Merged ${tilesProcessed} tiles into final statistics for $tableName (skipped ${tilesSkipped} corrupted)")
+              } else {
+                logger.info(s"Merged ${tilesProcessed} tiles into final statistics for $tableName")
+              }
 
               // Add derived features
               val enhancedStatsMap = addDerivedFeatures(statsMap)
