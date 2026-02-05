@@ -500,7 +500,7 @@ object KyuubiSubmitter {
     * @param kyuubiClient The Kyuubi client (can be mocked)
     * @return A new KyuubiSubmitter instance
     */
-  private[submission] def apply(kyuubiClient: KyuubiClient): KyuubiSubmitter = {
+  def apply(kyuubiClient: KyuubiClient): KyuubiSubmitter = {
     new KyuubiSubmitter(kyuubiClient.baseUrl, kyuubiClient, None)
   }
 
