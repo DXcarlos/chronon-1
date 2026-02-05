@@ -30,6 +30,7 @@ source = JoinSource(
 chained_gbx = GroupBy(
     sources=[source],
     keys=["user_id"],
+    version=0,
     aggregations=[
         # Count views by category - bucketed by primary_category
         Aggregation(
