@@ -1,8 +1,10 @@
 import json
 import os
 import sys
+from configparser import ConfigParser
 from dataclasses import dataclass
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -21,6 +23,25 @@ from ai.chronon.schedule_validation import validate_at_most_daily_schedule
 ALLOWED_DATE_FORMATS = ["%Y-%m-%d"]
 
 DEFAULT_TEAM_METADATA_CONF = "compiled/teams_metadata/default/default_team_metadata"
+
+
+def get_zipline_config():
+    """Read configuration from ~/.zipline/config.
+
+    Returns an empty dictionary if the file doesn't exist.
+    """
+    config_file = Path.home() / ".zipline" / "config"
+
+    if not config_file.exists():
+        return {}
+
+    config = ConfigParser()
+    config.read(config_file)
+
+    # Return config as a dictionary
+    if "default" in config:
+        return dict(config["default"])
+    return {}
 
 @dataclass
 class HubConfig:
@@ -60,6 +81,14 @@ def format_option(func):
 def force_option(func):
     return click.option(
         "--force", help="Force compile even if there are version changes to existing confs", is_flag=True
+    )(func)
+def cloud_provider_option(func):
+    return click.option(
+        "--cloud-provider",
+        help="Cloud provider for the hub and related services",
+        type=click.Choice(["aws", "gcp", "azure"], case_sensitive=False),
+        required=False,
+        default=None,
     )(func)
 
 
@@ -261,11 +290,22 @@ def schedule(repo, conf, hub_url, use_auth, format, force, skip_compile):
 @repo_option
 @hub_url_option
 @use_auth_option
+@format_option
 @workflow_id_option
 @jsonify_exceptions_if_json_format
-def cancel(repo, hub_url, use_auth, format, force, workflow_id):
-    zipline_hub = _get_zipline_hub(hub_url, get_hub_conf_from_metadata_conf(DEFAULT_TEAM_METADATA_CONF, root_dir=repo), use_auth, format)
-    response_json = zipline_hub.call_cancel_api(workflow_id, format=format)
+@cloud_provider_option
+def cancel(repo, hub_url, use_auth, format, workflow_id, cloud_provider):
+    # If cloud_provider is not provided via CLI, try to get it from ~/.zipline/config
+    if cloud_provider is None:
+        zipline_config = get_zipline_config()
+        cloud_provider = zipline_config.get("cloud_provider")
+        if cloud_provider is None:
+            raise click.BadParameter(
+                "Cloud provider is required. Please provide it via --cloud-provider flag or set it in ~/.zipline/config using 'zipline init'."
+            )
+
+    zipline_hub = _get_zipline_hub(hub_url, get_hub_conf_from_metadata_conf(DEFAULT_TEAM_METADATA_CONF, root_dir=repo, cloud_provider=cloud_provider), use_auth, format)
+    response_json = zipline_hub.call_cancel_api(workflow_id)
     if format == Format.JSON:
         print(json.dumps(response_json, indent=4))
         sys.exit(0)
@@ -448,7 +488,7 @@ def get_hub_conf(conf_path, root_dir="."):
     kwargs = {k: common_env_map.get(k.upper()) for k in HubConfig.__dataclass_fields__.keys()}
     return HubConfig(**kwargs)
 
-def get_hub_conf_from_metadata_conf(metadata_path, root_dir="."):
+def get_hub_conf_from_metadata_conf(metadata_path, root_dir=".", cloud_provider:Optional[str]=None):
     """
     Get the hub configuration from the config file or environment variables.
     This method is used when the args are not provided.
@@ -461,7 +501,10 @@ def get_hub_conf_from_metadata_conf(metadata_path, root_dir="."):
     frontend_url = common_env_map.get("FRONTEND_URL")
     sa_name = common_env_map.get("SA_NAME")
     eval_url = common_env_map.get("EVAL_URL")
-    return HubConfig(hub_url=hub_url, frontend_url=frontend_url, sa_name=sa_name, eval_url=eval_url)
+    hub_config = HubConfig(hub_url=hub_url, frontend_url=frontend_url, sa_name=sa_name, eval_url=eval_url)
+    if cloud_provider:
+        hub_config.cloud_provider = cloud_provider
+    return hub_config
 
 
 def get_schedule_modes(conf_path):
