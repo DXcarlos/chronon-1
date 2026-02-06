@@ -488,7 +488,7 @@ def get_hub_conf(conf_path, root_dir="."):
     kwargs = {k: common_env_map.get(k.upper()) for k in HubConfig.__dataclass_fields__.keys()}
     return HubConfig(**kwargs)
 
-def get_hub_conf_from_metadata_conf(metadata_path, root_dir=".", cloud_provider:Optional[str]=None):
+def get_hub_conf_from_metadata_conf(metadata_path, cloud_provider:str, root_dir="."):
     """
     Get the hub configuration from the config file or environment variables.
     This method is used when the args are not provided.
@@ -501,9 +501,7 @@ def get_hub_conf_from_metadata_conf(metadata_path, root_dir=".", cloud_provider:
     frontend_url = common_env_map.get("FRONTEND_URL")
     sa_name = common_env_map.get("SA_NAME")
     eval_url = common_env_map.get("EVAL_URL")
-    hub_config = HubConfig(hub_url=hub_url, frontend_url=frontend_url, sa_name=sa_name, eval_url=eval_url)
-    if cloud_provider:
-        hub_config.cloud_provider = cloud_provider
+    hub_config = HubConfig(hub_url=hub_url, frontend_url=frontend_url, sa_name=sa_name, eval_url=eval_url, cloud_provider=cloud_provider)
     return hub_config
 
 
