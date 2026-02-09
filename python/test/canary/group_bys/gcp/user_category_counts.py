@@ -1,52 +1,58 @@
 from joins.gcp import user_category_parent
 
-from ai.chronon.group_by import Accuracy, Aggregation, GroupBy, Operation
+from ai.chronon.group_by import Aggregation, GroupBy, Operation, TimeUnit, Window
 from ai.chronon.query import Query, selects
 from ai.chronon.source import JoinSource
 
 """
-Chained GroupBy that aggregates user viewing and purchasing behavior by category.
-This GroupBy uses the enriched user activity events (with primary_category)
-to count how many times each user has viewed or purchased items in each category.
+Chained GroupBy that aggregates user activity counts by primary_category.
+This uses the user_category_parent Join as a source to count how many times
+a user has "viewed" or "purchased" items in each primary_category.
+
+The aggregations are bucketed by primary_category, creating a map of
+category -> count for each user.
 """
 
-# Create JoinSource with transformations in the chained GroupBy
+# Create a JoinSource that wraps the parent join and adds transformations
 source = JoinSource(
     join=user_category_parent.parent_join,
     query=Query(
         selects=selects(
             user_id="user_id",
-            listing_id="listing_id",
             event_type="event_type",
             primary_category="listing_id_primary_category",
-            # Transformations done here in the chained GroupBy's source
-            is_view="IF(event_type = 'view', 1, 0)",
-            is_purchase="IF(event_type = 'purchase', 1, 0)"
+            # Create binary flags for view and purchase events
+            view_event="IF(event_type = 'view', 1, 0)",
+            purchase_event="IF(event_type = 'purchase', 1, 0)",
         ),
         time_column="ts"
     )
 )
 
-chained_gbx = GroupBy(
+# Define aggregations with buckets by primary_category
+window_sizes = [Window(length=days, time_unit=TimeUnit.DAYS) for days in [7, 14, 30]]
+
+aggregations = [
+    # Count views by primary_category - creates map<primary_category, count>
+    Aggregation(
+        input_column="view_event",
+        operation=Operation.SUM,
+        windows=window_sizes,
+        buckets=["primary_category"]
+    ),
+    # Count purchases by primary_category - creates map<primary_category, count>
+    Aggregation(
+        input_column="purchase_event",
+        operation=Operation.SUM,
+        windows=window_sizes,
+        buckets=["primary_category"]
+    ),
+]
+
+chained_gb = GroupBy(
     sources=[source],
     keys=["user_id"],
-    version=0,
-    aggregations=[
-        # Count views by category - bucketed by primary_category
-        Aggregation(
-            input_column="is_view",
-            operation=Operation.SUM,
-            windows=["7d", "30d"],
-            buckets=["primary_category"]  # Creates map<category, count>
-        ),
-        # Count purchases by category - bucketed by primary_category
-        Aggregation(
-            input_column="is_purchase",
-            operation=Operation.SUM,
-            windows=["7d", "30d"],
-            buckets=["primary_category"]  # Creates map<category, count>
-        )
-    ],
+    aggregations=aggregations,
     online=True,
-    accuracy=Accuracy.TEMPORAL
+    version=0
 )

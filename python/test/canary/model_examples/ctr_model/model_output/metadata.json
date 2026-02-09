@@ -1,0 +1,11 @@
+{
+  "num_features": 4,
+  "feature_names": [
+    "user_id_click_event_average_7d",
+    "listing_price_cents",
+    "price_log",
+    "price_bucket"
+  ],
+  "model_type": "xgboost",
+  "version": "1.0"
+}
