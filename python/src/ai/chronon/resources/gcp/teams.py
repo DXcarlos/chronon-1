@@ -20,6 +20,7 @@ default = Team(
             "spark.chronon.coalesce.factor": "10",
             "spark.default.parallelism": "10",
             "spark.sql.shuffle.partitions": "10",
+            "spark.driver.extraJavaOptions": "-Dai.chronon.metrics.enabled=true -Dai.chronon.metrics.reader=grpc -Dai.chronon.metrics.exporter.url=http://0.0.0.0:4317", # Enable metrics for chronon
             # TODO: Please fill in the following values
             "spark.sql.catalog.bigquery_catalog.warehouse": "gs://zipline-warehouse-<customer_id>/data/tables/",
             "spark.sql.catalog.bigquery_catalog.gcp.bigquery.location": "<region>",
