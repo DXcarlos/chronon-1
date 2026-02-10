@@ -233,7 +233,7 @@ jobs:
 
       - name: Upload GCP scripts to Artifactory
         run: |
-          jf rt upload "scripts/gcp/*" "scripts/gcp/"
+          jf rt upload "scripts/gcp/*" "scripts/gcp/" --flat=true
 
 #  promote-aws-candidate:
 #    runs-on: ubuntu-latest
