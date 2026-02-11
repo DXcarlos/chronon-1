@@ -9,9 +9,10 @@ object DataprocUtils {
 
   /** Formats a label for Dataproc by converting to lowercase and replacing invalid characters.
     * Dataproc label keys and values only allow lowercase letters, numbers, underscores, and dashes.
+    * Label values must be 63 characters or less and start/end with alphanumeric character.
     *
     * @param label The label to format
-    * @return Formatted label with invalid characters replaced by underscores
+    * @return Formatted label with invalid characters replaced by underscores, truncated to 63 chars if needed
     */
   def formatDataprocLabel(label: String): String = {
     // Replaces any character that is not:
@@ -21,7 +22,29 @@ object DataprocUtils {
     // - an underscore (_)
     // with an underscore (_)
     // And lowercase.
-    label.replaceAll("[^a-zA-Z0-9_-]", "_").toLowerCase
+    val formatted = label.replaceAll("[^a-zA-Z0-9_-]", "_").toLowerCase
+
+    // GCP label values have a max length of 63 characters
+    val truncated = if (formatted.length > 63) {
+      // Take the last 63 chars to preserve version info at the end
+      formatted.takeRight(63)
+    } else {
+      formatted
+    }
+
+    // Ensure starts with alphanumeric (required by Dataproc)
+    val withValidStart = if (truncated.nonEmpty && !truncated.head.isLetterOrDigit) {
+      truncated.dropWhile(c => !c.isLetterOrDigit)
+    } else {
+      truncated
+    }
+
+    // Ensure ends with alphanumeric (required by Dataproc)
+    if (withValidStart.nonEmpty && !withValidStart.last.isLetterOrDigit) {
+      withValidStart.reverse.dropWhile(c => !c.isLetterOrDigit).reverse
+    } else {
+      withValidStart
+    }
   }
 
   /** Creates formatted Dataproc labels from submission properties and additional labels.

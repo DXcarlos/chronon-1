@@ -179,6 +179,11 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
         additionalLabels = labels
       )
 
+      logger.info(s"Submitting Dataproc job with ID: $jobId")
+      logger.info(s"Cluster name: ${jobPlacement.getClusterName}")
+      logger.info(s"Formatted labels: $formattedDataprocLabels")
+      logger.info(s"Metadata name from submission properties: ${submissionProperties.get(MetadataName)}")
+
       val job = jobBuilder
         .setReference(jobReference(jobId))
         .setPlacement(jobPlacement)
