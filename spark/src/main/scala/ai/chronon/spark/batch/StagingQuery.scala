@@ -155,6 +155,10 @@ object StagingQuery {
         logger.info("Using BigQuery staging query")
         createBigQueryImport(stagingQueryConf, endDate, tableUtils)
       }
+      case Some(EngineType.SNOWFLAKE) => {
+        logger.info("Using Snowflake staging query")
+        createSnowflakeImport(stagingQueryConf, endDate, tableUtils)
+      }
       case Some(EngineType.SPARK) => {
         logger.info("Using Spark staging query")
         new StagingQuery(stagingQueryConf, endDate, tableUtils)
@@ -178,6 +182,24 @@ object StagingQuery {
           s"BigQuery support not available. Make sure cloud_gcp module is on the classpath.")
       case ex: Exception =>
         throw new RuntimeException(s"Failed to create BigQuery staging query: ${ex.getMessage}", ex)
+    }
+  }
+
+  private def createSnowflakeImport(stagingQueryConf: api.StagingQuery,
+                                    endDate: String,
+                                    tableUtils: TableUtils): StagingQuery = {
+    val snowflakeClass = "ai.chronon.integrations.cloud_azure.SnowflakeImport"
+    try {
+      val constructor = Class
+        .forName(snowflakeClass)
+        .getDeclaredConstructor(classOf[api.StagingQuery], classOf[String], classOf[TableUtils])
+      constructor.newInstance(stagingQueryConf, endDate, tableUtils).asInstanceOf[StagingQuery]
+    } catch {
+      case _: ClassNotFoundException =>
+        throw new UnsupportedOperationException(
+          s"Snowflake support not available. Make sure cloud_azure module is on the classpath.")
+      case ex: Exception =>
+        throw new RuntimeException(s"Failed to create Snowflake staging query: ${ex.getMessage}", ex)
     }
   }
 }

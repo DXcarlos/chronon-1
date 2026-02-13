@@ -69,13 +69,13 @@ class Compiler:
                 non_version_changes = self.compile_context.validator._non_version_changes()
                 if non_version_changes:
                     raise PromptException(prompt=f"The following configs are changing in-place (changing semantics without changing the version)."
-                    f" {', '.join([v.name for v in non_version_changes])} Do you want to proceed?", 
+                    f" {', '.join([v.name for v in non_version_changes])} Do you want to proceed?",
                     options= ["yes", "no"],
                     instructions="If 'yes' run with --force to proceed with the compilation."
                     )
 
         # Only proceed with file operations if there are no compilation errors
-        if not self._has_compilation_errors() or self.compile_context.ignore_python_errors:
+        if not self.has_compilation_errors() or self.compile_context.ignore_python_errors:
             self._compile_team_metadata()
 
             # check if staging_output_dir exists
@@ -99,7 +99,7 @@ class Compiler:
 
         return compile_results
 
-    def _has_compilation_errors(self):
+    def has_compilation_errors(self) -> bool:
         """Check if there are any compilation errors across all class trackers."""
         for tracker in self.compile_context.compile_status.cls_to_tracker.values():
             if tracker.files_to_errors:

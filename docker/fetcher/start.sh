@@ -10,12 +10,24 @@ for var in "${required_vars[@]}"; do
   fi
 done
 
-if [[ $USE_AWS == true ]]; then
+# Default to GCP if PROVIDER is not set
+PROVIDER=${PROVIDER:-GCP}
+
+# Convert to uppercase for case-insensitive comparison
+PROVIDER_UPPER=$(echo "$PROVIDER" | tr '[:lower:]' '[:upper:]')
+
+if [[ $PROVIDER_UPPER == "AWS" ]]; then
   ONLINE_JAR=$CLOUD_AWS_JAR
   ONLINE_CLASS=$AWS_ONLINE_CLASS
-else
+elif [[ $PROVIDER_UPPER == "GCP" ]]; then
   ONLINE_JAR=$CLOUD_GCP_JAR
   ONLINE_CLASS=$GCP_ONLINE_CLASS
+elif [[ $PROVIDER_UPPER == "AZURE" ]]; then
+  ONLINE_JAR=$CLOUD_AZURE_JAR
+  ONLINE_CLASS=$AZURE_ONLINE_CLASS
+else
+  echo "Error: Invalid PROVIDER value '$PROVIDER'. Must be 'AWS', 'GCP', or 'AZURE'"
+  exit 1
 fi
 
 METRICS_OPTS=""

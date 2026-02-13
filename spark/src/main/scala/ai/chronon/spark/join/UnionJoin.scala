@@ -228,10 +228,11 @@ object UnionJoin {
     !joinConf.isSetBootstrapParts
   }
 
-  def computeJoinAndSave(joinConf: api.Join, dateRange: PartitionRange)(implicit tableUtils: TableUtils): Unit = {
+  def computeJoinAndSave(joinConf: api.Join, dateRange: PartitionRange, semanticHash: Option[String] = None)(implicit
+      tableUtils: TableUtils): Unit = {
     val resultDf = computeJoin(joinConf, dateRange)
     logger.info(s"Saving output to ${joinConf.metaData.outputTable}")
-    resultDf.save(joinConf.metaData.outputTable)
+    resultDf.save(joinConf.metaData.outputTable, semanticHash = semanticHash)
   }
 
 }

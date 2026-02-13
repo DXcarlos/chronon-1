@@ -37,6 +37,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
       mainJarUri = "gs://zipline-jars/flink-assembly-0.1.0-SNAPSHOT.jar",
       flinkCheckpointUri = "gs://zl-warehouse/flink-state",
       maybeSavePointUri = Option("gs://zipline-warehouse/flink-state/groupby-name/chk-1"),
+      maybeFlinkJarsBasePath = None,
       jobProperties = Map("key" -> "value"),
       args = List("args1", "args2"): _*
     )
@@ -99,6 +100,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
       mainJarUri = "gs://zipline-jars/flink-assembly-0.1.0-SNAPSHOT.jar",
       flinkCheckpointUri = "gs://zl-warehouse/flink-state",
       maybeSavePointUri = None,
+      maybeFlinkJarsBasePath = None,
       jobProperties = Map("key" -> "value"),
       args = List("args1", "args2"): _*
     )
@@ -118,6 +120,7 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
       mainJarUri = "gs://zipline-jars/flink-assembly-0.1.0-SNAPSHOT.jar",
       flinkCheckpointUri = "gs://zl-warehouse/flink-state",
       maybeSavePointUri = None,
+      maybeFlinkJarsBasePath = None,
       jobProperties = Map("key" -> "value"),
       args = List("args1", "args2"): _*
     )
@@ -698,6 +701,63 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
   it should "test formatDataprocLabel successfully and replace invalid characters with underscore" in {
     val label = DataprocUtils.formatDataprocLabel("team.groupby_test")
     assertEquals(label, "team_groupby_test")
+  }
+
+  it should "test formatDataprocLabel truncates to 63 characters" in {
+    val longLabel = "a" * 70
+    val label = DataprocUtils.formatDataprocLabel(longLabel)
+    assertEquals(label.length, 63)
+  }
+
+  it should "test formatDataprocLabel preserves version info at end when truncating" in {
+    val longLabel = "very-long-metadata-name-that-exceeds-sixty-three-characters-v1.2.3"
+    val label = DataprocUtils.formatDataprocLabel(longLabel)
+    assertEquals(label.length, 63)
+    assert(label.endsWith("v1_2_3"))
+  }
+
+  it should "test formatDataprocLabel removes leading non-alphanumeric characters" in {
+    val label = DataprocUtils.formatDataprocLabel("___test-label")
+    assert(label.head.isLetterOrDigit)
+    assertEquals(label, "test-label")
+  }
+
+  it should "test formatDataprocLabel removes trailing non-alphanumeric characters" in {
+    val label = DataprocUtils.formatDataprocLabel("test-label___")
+    assert(label.last.isLetterOrDigit)
+    assertEquals(label, "test-label")
+  }
+
+  it should "test formatDataprocLabel removes both leading and trailing non-alphanumeric" in {
+    val label = DataprocUtils.formatDataprocLabel("___test-label___")
+    assert(label.head.isLetterOrDigit)
+    assert(label.last.isLetterOrDigit)
+    assertEquals(label, "test-label")
+  }
+
+  it should "test formatDataprocLabel handles long label with leading/trailing underscores" in {
+    val longLabel = "_" + ("a" * 65) + "_"
+    val label = DataprocUtils.formatDataprocLabel(longLabel)
+    assert(label.length <= 63)
+    assert(label.head.isLetterOrDigit)
+    assert(label.last.isLetterOrDigit)
+    assert(label.forall(c => c.isLetterOrDigit || c == '_' || c == '-'))
+  }
+
+  it should "test formatDataprocLabel with only invalid characters at start after truncation" in {
+    val longLabel = ("a" * 50) + ("_" * 20)
+    val label = DataprocUtils.formatDataprocLabel(longLabel)
+    assert(label.length <= 63)
+    assert(label.last.isLetterOrDigit)
+  }
+
+  it should "test formatDataprocLabel complex case with truncation and validation" in {
+    val complexLabel = "___team.groupby.very-long-name-that-needs-truncation-v1.2.3___"
+    val label = DataprocUtils.formatDataprocLabel(complexLabel)
+    assert(label.length <= 63)
+    assert(label.head.isLetterOrDigit)
+    assert(label.last.isLetterOrDigit)
+    assert(!label.contains("."))
   }
 
   it should "test listRunningGroupByFlinkJobs successfully" in {

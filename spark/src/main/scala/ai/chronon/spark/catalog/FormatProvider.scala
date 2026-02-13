@@ -16,9 +16,23 @@ trait FormatProvider extends Serializable {
 
   def readFormat(tableName: String): Option[Format]
 
+  def writeFormat: Format = {
+    val typeString = sparkSession.conf.get("spark.chronon.table_write.format", "").toLowerCase
+    FormatProvider.formatFromTypeString(typeString)
+  }
+
 }
 
 object FormatProvider {
+
+  def formatFromTypeString(typeString: String): Format = typeString match {
+    case "iceberg"               => Iceberg
+    case "delta"                 => DeltaLake
+    case "hive" | "parquet" | "" => Hive
+    case other =>
+      throw new IllegalArgumentException(
+        s"Unsupported table write format: '$other'. Must be one of: iceberg, delta, hive, parquet, or empty.")
+  }
 
   def from(session: SparkSession): FormatProvider =
     try {

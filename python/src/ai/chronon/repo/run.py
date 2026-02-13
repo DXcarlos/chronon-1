@@ -80,6 +80,7 @@ def set_defaults(ctx):
         "artifact_prefix": os.environ.get("ARTIFACT_PREFIX"),
         "warehouse_bucket": os.environ.get("WAREHOUSE_BUCKET"),
         "flink_state_uri": os.environ.get("FLINK_STATE_URI"),
+        "flink_jars_uri": os.environ.get("FLINK_JARS_URI"),
     }
     for key, value in defaults.items():
         if ctx.params.get(key) is None and value is not None:
@@ -188,6 +189,11 @@ def validate_additional_jars(ctx, param, value):
     callback=validate_flink_state,
 )
 @click.option(
+    "--flink-jars-uri",
+    help="Base URI path for Flink job jars (e.g. gs://bucket/libs/). If not specified, defaults to gs://zipline-spark-libs/spark-3.5.3/libs/",
+    callback=validate_flink_state,
+)
+@click.option(
     "--additional-jars",
     help="Comma separated list of additional jar URIs to be included in the Flink job classpath (e.g. gs://bucket/jar1.jar,gs://bucket/jar2.jar).",
     callback=validate_additional_jars,
@@ -251,6 +257,7 @@ def main(
     no_savepoint,
     version_check,
     flink_state_uri,
+    flink_jars_uri,
     validate,
     validate_rows,
     join_part_name,

@@ -163,6 +163,12 @@ object HopsAggregator {
   // [IR1, IR2, IR3,.... IRN, ts_millis_long]
   // hops have timestamps attached to the end
   type HopIr = Array[Any]
+
+  // Timestamp of Hop will be stored as the last element in the HopIr array
+  implicit class HopIrOps(hopIr: HopIr) {
+    def getTs: Long = hopIr.last.asInstanceOf[Long]
+  }
+
   type OutputArrayType = Array[Array[HopIr]]
   type IrMapType = Array[java.util.HashMap[Long, HopIr]]
 

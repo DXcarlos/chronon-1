@@ -11,21 +11,21 @@ providing a clean interface to listing attributes for joins and feature engineer
 """
 
 source = EntitySource(
-    # BigQuery table written directly by the batch process
+    # Snowflake table written directly by the batch process
     snapshot_table=exports.dim_listings.table,
     query=Query(
         selects=selects(
-            listing_id="listing_id",
-            merchant_id="merchant_id",
+            listing_id="CAST(listing_id AS INT)",
+            merchant_id="CAST(merchant_id AS INT)",
             headline="headline",
             brief_description="brief_description",
             long_description="long_description",
-            price_cents="price_cents",
+            price_cents="CAST(price_cents AS INT)",
             currency="currency",
-            inventory_count="inventory_count",
+            inventory_count="CAST(inventory_count AS INT)",
             primary_category="primary_category",
             is_active="is_active",
-            weight_grams="weight_grams",
+            weight_grams="CAST(weight_grams AS INT)",
             tags="tags",
             # Derived features
             is_expensive="IF(price_cents > 10000, 1, 0)",  # Over $100
@@ -38,10 +38,9 @@ source = EntitySource(
 
 )
 
-v1 = GroupBy(
+v2 = GroupBy(
     sources=[source],
     keys=["listing_id"],  # Key by listing_id for point lookups
     online=True,
-    version=0,
     aggregations=None,  # No aggregations - this is a simple passthrough
 )

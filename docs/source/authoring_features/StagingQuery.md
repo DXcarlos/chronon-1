@@ -56,6 +56,33 @@ v1 = Join(
 )
 ```
 
+## Engine Type
+
+By default, `StagingQuery` uses `SPARK` (Spark SQL) as its compute engine. You can override this by specifying the `engine_type` parameter to run your query on a different engine. The supported engine types are:
+
+| Engine Type | Description |
+|---|---|
+| `EngineType.SPARK` | Spark SQL (default) |
+| `EngineType.BIGQUERY` | Google BigQuery |
+| `EngineType.SNOWFLAKE` | Snowflake |
+
+To use a non-default engine, import `EngineType` and pass it to your `StagingQuery`:
+
+```python
+from ai.chronon.staging_query import StagingQuery, EngineType
+
+v1 = StagingQuery(
+    query="SELECT * FROM my_dataset.my_table WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+    engine_type=EngineType.BIGQUERY,
+    startPartition="2020-04-01",
+    metaData=MetaData(
+        dependencies=["my_dataset.my_table"],
+    )
+)
+```
+
+When using `BIGQUERY` or `SNOWFLAKE`, the query is executed on the respective platform and the results are imported back into Chronon's table format. If `engine_type` is not specified, it defaults to `SPARK`.
+
 Note: The output namespace of the staging query is dependent on the metaData value for output_namespace. By default, the
 metadata is extracted from [teams.json](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/teams.json) (or default team if one is not set).
 

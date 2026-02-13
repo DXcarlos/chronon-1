@@ -84,9 +84,9 @@ jobs:
           ./mill flink\[${{ env.SCALA_VERSION }}\].assembly
           ./mill cloud_gcp\[${{ env.SCALA_VERSION }}\].assembly
           ./mill cloud_aws\[${{ env.SCALA_VERSION }}\].assembly
-           ./mill cloud_azure\[${{ env.SCALA_VERSION }}\].assembly
+          ./mill cloud_azure\[${{ env.SCALA_VERSION }}\].assembly
           ./mill service\[${{ env.SCALA_VERSION }}\].assembly
-          ./mill flink_connectors\[${{ env.SCALA_VERSION }}\].assembly
+          ./mill flink_connectors.pubsub\[${{ env.SCALA_VERSION }}\].assembly
 
       - name: Upload Flink Assembly Jar
         uses: actions/upload-artifact@v4
@@ -106,12 +106,11 @@ jobs:
           name: cloud-gcp-jar
           path: out/cloud_gcp/${{ env.SCALA_VERSION }}/assembly.dest/out.jar
 
-      # TODO: uncomment when we hook up azure blob storage
-      #      - name: Upload Cloud Azure Jar
-      #        uses: actions/upload-artifact@v4
-      #        with:
-      #          name: cloud-azure-jar
-      #          path: out/cloud_azure/${{ env.SCALA_VERSION }}/assembly.dest/out.jar
+      - name: Upload Cloud Azure Jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-azure-jar
+          path: out/cloud_azure/${{ env.SCALA_VERSION }}/assembly.dest/out.jar
 
       - name: Upload Service Assembly Jar
         uses: actions/upload-artifact@v4
@@ -123,7 +122,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pubsub-jar
-          path: out/flink_connectors/${{ env.SCALA_VERSION }}/assembly.dest/out.jar
+          path: out/flink_connectors/pubsub/${{ env.SCALA_VERSION }}/assembly.dest/out.jar
     outputs:
       wheel_file: ${{ steps.build-wheel.outputs.wheel_file }}
       wheel_name: ${{ steps.build-wheel.outputs.wheel_name }}
@@ -268,6 +267,98 @@ jobs:
           gcloud storage objects update gs://zipline-artifacts-canary/release/${{ needs.build_artifacts.outputs.version }}/jars/connectors_pubsub_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
 
 
+  push_to_azure:
+    needs: build_artifacts
+    runs-on: ubuntu-latest
+    environment: main
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download Python Wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: zipline-ai-wheel
+
+      - name: Download Flink Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: flink-assembly-jar
+          path: flink-assembly-jar
+
+      - name: Download Service Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: service-assembly-jar
+          path: service-assembly-jar
+
+      - name: Download Cloud Azure Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-azure-jar
+          path: cloud-azure-jar
+
+      - name: Rename JAR files to expected names
+        run: |
+          mv cloud-azure-jar/out.jar cloud_azure_lib_deploy.jar
+          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
+          mv service-assembly-jar/out.jar service_assembly_deploy.jar
+
+      - name: Push Jars to Azure Blob Storage
+        shell: bash
+        run: |
+          set -eo pipefail
+          VERSION="${{ needs.build_artifacts.outputs.version }}"
+          ACCOUNT="ziplineai2"
+          CONTAINER="dev-zipline-artifacts"
+          
+          az storage blob upload \
+            --account-name $ACCOUNT \
+            --auth-mode login \
+            --container-name $CONTAINER \
+            --file cloud_azure_lib_deploy.jar \
+            --name release/${{ needs.build_artifacts.outputs.version }}/jars/cloud_azure_lib_deploy.jar \
+            --tier cool \
+            --overwrite
+          
+          az storage blob upload \
+            --account-name $ACCOUNT \
+            --auth-mode login \
+            --container-name $CONTAINER \
+            --file flink_assembly_deploy.jar \
+            --name release/${{ needs.build_artifacts.outputs.version }}/jars/flink_assembly_deploy.jar \
+            --tier cool \
+            --overwrite
+          
+          az storage blob upload \
+            --account-name $ACCOUNT \
+            --auth-mode login \
+            --container-name $CONTAINER \
+            --file service_assembly_deploy.jar \
+            --name release/${{ needs.build_artifacts.outputs.version }}/jars/service_assembly_deploy.jar \
+            --tier cool \
+            --overwrite
+          
+          az storage blob upload \
+            --account-name $ACCOUNT \
+            --auth-mode login \
+            --container-name $CONTAINER \
+            --file ${{ needs.build_artifacts.outputs.wheel_name }} \
+            --name release/${{ needs.build_artifacts.outputs.version }}/wheels/${{ needs.build_artifacts.outputs.wheel_name }} \
+            --tier cool \
+            --overwrite
+
   run_aws_integration_tests:
     runs-on: ubuntu-latest
     needs: [ build_artifacts, push_to_aws ]
@@ -357,11 +448,25 @@ jobs:
           name: cloud-gcp-jar
           path: cloud-gcp-jar
 
+      - name: Download Cloud AWS Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-aws-jar
+          path: cloud-aws-jar
+
+      - name: Download Cloud Azure Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-azure-jar
+          path: cloud-azure-jar
+
       - name: Copy the jars to expected paths and build
         shell: bash
         run: |
           mkdir build_output
           cp cloud-gcp-jar/out.jar build_output/cloud_gcp_lib_deploy.jar
+          cp cloud-aws-jar/out.jar build_output/cloud_aws_lib_deploy.jar
+          cp cloud-azure-jar/out.jar build_output/cloud_azure_lib_deploy.jar
           cp service-assembly-jar/out.jar build_output/service_assembly_deploy.jar
           docker buildx build \
           -f docker/fetcher/Dockerfile \
@@ -513,6 +618,16 @@ jobs:
           aws s3 cp cloud_aws_lib_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/cloud_aws_lib_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
           aws s3 cp service_assembly_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/service_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
 
+      - name: Push Jars to s3 Bucket (latest)
+        if: ${{ needs.run_aws_integration_tests.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        shell: bash
+        run: |
+          set -eo pipefail
+          aws s3 cp ${{ needs.build_artifacts.outputs.wheel_name }} s3://zipline-artifacts-canary/release/latest/wheels/ --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          aws s3 cp flink_assembly_deploy.jar s3://zipline-artifacts-canary/release/latest/jars/flink_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          aws s3 cp cloud_aws_lib_deploy.jar s3://zipline-artifacts-canary/release/latest/jars/cloud_aws_lib_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          aws s3 cp service_assembly_deploy.jar s3://zipline-artifacts-canary/release/latest/jars/service_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
 
   push_to_gcp_passing:
     needs: [ build_artifacts, run_gcp_integration_tests, run_aws_integration_tests, run_fetcher_integration_tests ]
@@ -595,13 +710,164 @@ jobs:
           gcloud storage cp connectors_pubsub_deploy.jar gs://zipline-artifacts-canary/release/passing-candidate/jars/connectors_pubsub_deploy.jar
           gcloud storage objects update gs://zipline-artifacts-canary/release/passing-candidate/jars/connectors_pubsub_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
 
+      - name: Push Jars to GCS Bucket (latest)
+        if: ${{ needs.run_gcp_integration_tests.result == 'success'  && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        shell: bash
+        env:
+          GAR_QUICKSTART_REPOSITORY: ${{env.GCP_REGION}}-docker.pkg.dev/${{env.GCP_PROJECT_ID}}/canary-images/quickstart
+          IMAGE_TAG: main
+        run: |
+          set -eo pipefail
+          gcloud storage cp ${{ needs.build_artifacts.outputs.wheel_name }} gs://zipline-artifacts-canary/release/latest/wheels/
+          gcloud storage objects update gs://zipline-artifacts-canary/release/latest/wheels/${{ needs.build_artifacts.outputs.wheel_name }} --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp flink_assembly_deploy.jar gs://zipline-artifacts-canary/release/latest/jars/flink_assembly_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/latest/jars/flink_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp cloud_gcp_lib_deploy.jar gs://zipline-artifacts-canary/release/latest/jars/cloud_gcp_lib_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/latest/jars/cloud_gcp_lib_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp service_assembly_deploy.jar gs://zipline-artifacts-canary/release/latest/jars/service_assembly_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/latest/jars/service_assembly_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+          gcloud storage cp connectors_pubsub_deploy.jar gs://zipline-artifacts-canary/release/latest/jars/connectors_pubsub_deploy.jar
+          gcloud storage objects update gs://zipline-artifacts-canary/release/latest/jars/connectors_pubsub_deploy.jar --custom-metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+
+
+  push_to_azure_passing:
+    needs: [ build_artifacts, run_gcp_integration_tests, run_aws_integration_tests, run_fetcher_integration_tests ]
+    runs-on: ubuntu-latest
+    environment: main
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download Python Wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: zipline-ai-wheel
+
+      - name: Download Flink Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: flink-assembly-jar
+          path: flink-assembly-jar
+
+      - name: Download Service Assembly Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: service-assembly-jar
+          path: service-assembly-jar
+
+      - name: Download Cloud Azure Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-azure-jar
+          path: cloud-azure-jar
+
+      - name: Rename JAR files to expected names
+        run: |
+          mv cloud-azure-jar/out.jar cloud_azure_lib_deploy.jar
+          mv flink-assembly-jar/out.jar flink_assembly_deploy.jar
+          mv service-assembly-jar/out.jar service_assembly_deploy.jar
+
+      - name: Push Jars to Azure Blob Storage
+        shell: bash
+        run: |
+            set -eo pipefail
+            ACCOUNT="ziplineai2"
+            CONTAINER="dev-zipline-artifacts"
+            az storage blob upload \
+              --account-name $ACCOUNT \
+              --auth-mode login \
+              --container-name $CONTAINER \
+              --file cloud_azure_lib_deploy.jar \
+              --name release/passing-candidate/jars/cloud_azure_lib_deploy.jar \
+              --tier cool \
+              --overwrite
+            az storage blob upload \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --container-name $CONTAINER \
+                --file flink_assembly_deploy.jar \
+                --name release/passing-candidate/jars/flink_assembly_deploy.jar \
+                --tier cool \
+                --overwrite
+            az storage blob upload \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --container-name $CONTAINER \
+                --file service_assembly_deploy.jar \
+                --name release/passing-candidate/jars/service_assembly_deploy.jar \
+                --tier cool \
+                --overwrite
+            az storage blob upload \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --container-name $CONTAINER \
+                --file ${{ needs.build_artifacts.outputs.wheel_name }} \
+                --name release/passing-candidate/wheels/${{ needs.build_artifacts.outputs.wheel_name }} \
+                --tier cool \
+                --overwrite
+
+      - name: Push Jars to Azure Blob Storage (latest)
+        if: ${{ needs.run_aws_integration_tests.result == 'success' && needs.run_gcp_integration_tests.result == 'success'  && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        shell: bash
+        run: |
+            set -eo pipefail
+            ACCOUNT="ziplineai2"
+            CONTAINER="dev-zipline-artifacts"
+            az storage blob upload \
+              --account-name $ACCOUNT \
+              --auth-mode login \
+              --container-name $CONTAINER \
+              --file cloud_azure_lib_deploy.jar \
+              --name release/latest/jars/cloud_azure_lib_deploy.jar \
+              --tier cool \
+              --overwrite
+            az storage blob upload \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --container-name $CONTAINER \
+                --file flink_assembly_deploy.jar \
+                --name release/latest/jars/flink_assembly_deploy.jar \
+                --tier cool \
+                --overwrite
+            az storage blob upload \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --container-name $CONTAINER \
+                --file service_assembly_deploy.jar \
+                --name release/latest/jars/service_assembly_deploy.jar \
+                --tier cool \
+                --overwrite
+            az storage blob upload \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --container-name $CONTAINER \
+                --file ${{ needs.build_artifacts.outputs.wheel_name }} \
+                --name release/latest/wheels/${{ needs.build_artifacts.outputs.wheel_name }} \
+                --tier cool \
+                --overwrite
+
   clean_up_artifacts:
     permissions:
       contents: read
 
     runs-on: ubuntu-latest
 
-    needs: [ push_to_gcp_passing, push_to_aws_passing ]
+    needs: [ push_to_gcp_passing, push_to_aws_passing, push_to_azure_passing ]
 
     steps:
       - name: Delete Artifacts

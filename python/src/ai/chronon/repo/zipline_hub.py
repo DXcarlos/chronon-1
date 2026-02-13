@@ -9,17 +9,23 @@ from ai.chronon.cli.formatter import Format, format_print
 
 
 class ZiplineHub:
-    def __init__(self, base_url, sa_name=None, use_auth=False, eval_url=None, cloud_provider=None, format: Format = Format.TEXT):
+    def __init__(self, base_url, sa_name=None, use_auth=False, eval_url=None, cloud_provider=None, scope=None, format: Format = Format.TEXT):
         if not base_url:
             raise ValueError("Base URL for ZiplineHub cannot be empty.")
         self.base_url = base_url
         self.eval_url = eval_url
         self.format = format
         self.cloud_provider = cloud_provider.lower() if cloud_provider is not None else cloud_provider
-        if self.base_url.startswith("https") or use_auth:
+        if self.base_url.startswith("https") and use_auth:
             if self.cloud_provider == "gcp":
                 self.use_auth = True
                 self._setup_gcp_auth(sa_name)
+            elif self.cloud_provider == "azure":
+                if not scope:
+                    raise ValueError("Azure auth requires a non-empty scope.")
+                self.use_auth = True
+                self.sa = None
+                self._setup_azure_auth(scope)
             else:
                 # For non-GCP clouds, check for generic token
                 self.id_token = os.getenv("ID_TOKEN")
@@ -63,6 +69,27 @@ class ZiplineHub:
             credentials.refresh(Request())
             self.sa = None
             self.id_token = credentials.id_token
+
+    def _setup_azure_auth(self, scope):
+        """Setup Azure authentication."""
+        from azure.core.exceptions import ClientAuthenticationError
+        from azure.identity import AzureCliCredential, CredentialUnavailableError
+
+        format_print("\n 🔐 Using Azure authentication for ZiplineHub.", format=self.format)
+        format_print(f"Acquiring token from cli credentials for scope: {scope}...", format=self.format)
+        try:
+            credential = AzureCliCredential()
+
+            # Request the token
+            token_object = credential.get_token(scope)
+            self.id_token = token_object.token
+
+            format_print("   Success! Token acquired.", format=self.format)
+        except (ClientAuthenticationError, CredentialUnavailableError) as e:
+            format_print(f"   Error: Could not acquire token. Make sure you are logged in via 'az login'.\n   Details: {e}", format=self.format)
+            self.use_auth = False
+            self.id_token = None
+            return
 
     def auth_headers(self, url):
         headers = {"Content-Type": "application/json"}

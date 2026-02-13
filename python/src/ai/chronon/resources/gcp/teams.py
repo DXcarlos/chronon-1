@@ -12,7 +12,7 @@ default = Team(
             "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
             "spark.chronon.table_write.format": "iceberg",
             "spark.sql.defaultCatalog": "bigquery_catalog",
-            "spark.sql.catalog.bigquery_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            "spark.sql.catalog.bigquery_catalog": "org.apache.iceberg.spark.SparkCatalog",
             "spark.sql.catalog.bigquery_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
             "spark.sql.catalog.bigquery_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
             "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",

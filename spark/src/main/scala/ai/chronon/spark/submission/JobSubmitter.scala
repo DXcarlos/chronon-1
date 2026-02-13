@@ -144,6 +144,7 @@ object JobSubmitterConstants {
   val JarURI = "jarUri"
   val FlinkMainJarURI = "flinkMainJarUri"
   val FlinkPubSubConnectorJarURI = "flinkPubSubConnectorJarUri"
+  val FlinkJarsUri = "flinkJarsUri"
   val AdditionalJars = "additionalJars"
   val SavepointUri = "savepointUri"
   val FlinkStateUri = "flinkStateUri"
@@ -173,6 +174,7 @@ object JobSubmitterConstants {
   val MainClassKeyword = "--main-class"
   val FlinkMainJarUriArgKeyword = "--flink-main-jar-uri"
   val FlinkPubSubJarUriArgKeyword = "--flink-pubsub-jar-uri"
+  val FlinkJarsUriArgKeyword = "--flink-jars-uri"
   val AdditionalJarsUriArgKeyword = "--additional-jars"
   val FlinkGroupByNameArgKeyword = "--groupby-name"
   val FilesArgKeyword = "--files"
@@ -203,6 +205,7 @@ object JobSubmitterConstants {
     MainClassKeyword,
     FlinkMainJarUriArgKeyword,
     FlinkPubSubJarUriArgKeyword,
+    FlinkJarsUriArgKeyword,
     AdditionalJarsUriArgKeyword,
     LocalConfPathArgKeyword,
     OriginalModeArgKeyword,
@@ -218,12 +221,20 @@ object JobSubmitterConstants {
     JobIdArgKeyword
   )
 
+  // Generic spark cluster name environment variable - works across all cloud providers
+  val SparkClusterNameEnvVar = "SPARK_CLUSTER_NAME"
+
   val GcpBigtableInstanceIdEnvVar = "GCP_BIGTABLE_INSTANCE_ID"
   val GcpProjectIdEnvVar = "GCP_PROJECT_ID"
   val GcpRegionEnvVar = "GCP_REGION"
   val GcpLocationEnvVar = "GCP_LOCATION"
+  // Deprecated: Use ClusterNameEnvVar instead
   val GcpDataprocClusterNameEnvVar = "GCP_DATAPROC_CLUSTER_NAME"
   val GcpEnableUploadKVClientEnvVar = "ENABLE_UPLOAD_CLIENTS"
+
+  // AWS-specific environment variables
+  // Deprecated: Use ClusterNameEnvVar instead
+  val EmrClusterNameEnvVar = "EMR_CLUSTER_NAME"
 
   val TablePartitionsDatasetNameArgKeyword = "--table-partitions-dataset"
   val TableStatsDatasetNameArgKeyword = "--table-stats-dataset"

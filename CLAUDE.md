@@ -12,3 +12,14 @@ We use the mill build system for this project. A couple of examples of command i
 - Make sure to sanity check compilation works when you’re done making a series of code changes
 - When done with compilation checks, make sure to run the related unit tests as well (either for the class or module)
 - When applicable, suggest test additions / extensions to go with your code changes
+
+# Code Commenting Style
+- Only add comments and scaladoc that provide non-obvious context, assumptions, or implementation details
+- DO NOT add comments that simply describe what the code does (e.g., "creates a table", "returns the result")
+- DO NOT add scaladoc that just restates parameter names or types
+- DO add comments that explain:
+  - Why something is done a certain way (e.g., "Deterministic seed for repeatable comparisons")
+  - Important assumptions (e.g., "tsMillis ignored by multiPut for streaming tables")
+  - Non-obvious behavior (e.g., "Ordering across threads doesn't matter for percentile/mean computation")
+  - Implementation details that aren't clear from the code (e.g., "READ TileKey construction: tileStartTs deliberately None")
+- Keep comments concise and focused on the "why" rather than the "what"

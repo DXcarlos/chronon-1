@@ -9,6 +9,7 @@ import com.google.cloud.spark.bigquery.SparkBigQueryUtil
 import org.apache.iceberg.gcp.bigquery.{BigQueryMetastoreCatalog => BQMSCatalog}
 import org.apache.iceberg.gcp.gcs.GCSFileIO
 import org.apache.iceberg.io.ResolvingFileIO
+import org.apache.iceberg.spark.SparkCatalog
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions.{col, to_date}
@@ -37,7 +38,7 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
 
 //        Uncomment to test
 //        "spark.sql.defaultCatalog" -> "default_iceberg",
-//        "spark.sql.catalog.default_iceberg" -> classOf[DelegatingBigQueryMetastoreCatalog].getName,
+//        "spark.sql.catalog.default_iceberg" -> classOf[SparkCatalog].getName,
 //        "spark.sql.catalog.default_iceberg.catalog-impl" -> classOf[BQMSCatalog].getName,
 //        "spark.sql.catalog.default_iceberg.io-impl" -> classOf[ResolvingFileIO].getName,
 //        "spark.sql.catalog.default_iceberg.warehouse" -> "gs://zipline-warehouse-canary/data/tables/",
@@ -45,8 +46,6 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
 //        "spark.sql.catalog.default_iceberg.gcp.bigquery.project-id" -> "canary-443022",
 //        "spark.kryo.registrator" -> classOf[ChrononIcebergKryoRegistrator].getName,
 //        "spark.sql.defaultUrlStreamHandlerFactory.enabled" -> false.toString,
-//
-//        "spark.sql.catalog.default_bigquery" -> classOf[BigQueryCatalog].getName,
       ))
   )
   lazy val tableUtils: TableUtils = TableUtils(spark)
@@ -257,14 +256,6 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "integration testing formats" ignore {
-    val externalTable = "default_iceberg.data.checkouts_parquet"
-    val externalFormat = FormatProvider.from(spark).readFormat(externalTable)
-    assertEquals(Some(BigQueryExternal), externalFormat)
-
-    val externalTableNoCat = "data.checkouts_parquet"
-    val externalFormatNoCat = FormatProvider.from(spark).readFormat(externalTableNoCat)
-    assertEquals(Some(BigQueryExternal), externalFormatNoCat)
-
     val nativeTable = "default_iceberg.data.checkouts_native"
     val nativeFormat = FormatProvider.from(spark).readFormat(nativeTable)
     assertEquals(Some(BigQueryNative), nativeFormat)
@@ -385,7 +376,7 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
     assertEquals(original.properties(), deserializedObj.asInstanceOf[GCSFileIO].properties())
   }
 
-  it should "test CheckPartitions end-to-end with DelegatingBigQueryMetastoreCatalog" in {
+  it should "test CheckPartitions end-to-end partition parsing" in {
     import ai.chronon.spark.catalog.Format
 
     // Test the partition name parsing logic that CheckPartitions uses
@@ -439,7 +430,7 @@ class BigQueryCatalogTest extends AnyFlatSpec with MockitoSugar {
                identifier.namespace().length <= 1)
   }
 
-  it should "simulate CheckPartitions table reachability with DelegatingBigQueryMetastoreCatalog" in {
+  it should "simulate CheckPartitions table reachability" in {
     // Test table reachability logic that CheckPartitions uses
     val testTables = Seq(
       "data.purchases",

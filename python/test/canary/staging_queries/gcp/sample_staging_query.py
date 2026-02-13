@@ -1,6 +1,6 @@
 from joins.gcp import training_set
 
-from ai.chronon.staging_query import EngineType, Import, StagingQuery, TableDependency
+from ai.chronon.staging_query import EngineType, StagingQuery, TableDependency
 
 
 def get_staging_query(category_name):
@@ -93,7 +93,7 @@ FROM {training_set.v1_hub.table}
 WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 """
 
-v1_bigquery_import = Import(
+v1_bigquery_import = StagingQuery(
     query=bigquery_import_query,
     engine_type=EngineType.BIGQUERY,
     output_namespace="data",

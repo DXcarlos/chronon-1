@@ -37,7 +37,7 @@ abstract class SparkTestBase extends AnyFlatSpec with BeforeAndAfterAll {
     "spark.ui.enabled" -> "false"
   )
 
-  protected lazy val spark: SparkSession = {
+  protected implicit lazy val spark: SparkSession = {
     val mergedConfig = DefaultSparkConfs ++ sparkConfs
     SparkSessionBuilder.build(
       getClass.getSimpleName,

@@ -65,6 +65,9 @@ object Constants {
   val FetchTimeout: Duration = Duration(10, concurrent.TimeUnit.MINUTES)
   val DefaultCharset: Charset = Charset.forName("UTF-8")
 
+  // Scrape wait time in seconds for metrics collection
+  lazy val ScrapeWaitSeconds: Int = sys.props.getOrElse("spark.chronon.scrape.wait.seconds", "15").toInt
+
   val extensionsToIgnore: Array[String] = Array(".class", ".csv", ".java", ".scala", ".py", ".pyc", ".DS_Store")
   val foldersToIgnore: Array[String] = Array(".git")
 

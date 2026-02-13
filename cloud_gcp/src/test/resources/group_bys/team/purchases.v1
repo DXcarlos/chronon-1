@@ -42,7 +42,7 @@
           "spark.chronon.backfill.small_mode.enabled": "false",
           "spark.chronon.join.backfill.carry_only_required_cols": "true",
           "spark.sql.defaultCatalog": "default_iceberg",
-          "spark.sql.catalog.default_iceberg": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+          "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
           "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
           "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
           "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-customer/data/tables/",

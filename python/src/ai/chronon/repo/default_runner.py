@@ -41,6 +41,7 @@ class Runner:
         self.no_savepoint = args.get("no_savepoint")
         self.version_check = args.get("version_check")
         self.additional_jars = args.get("additional_jars")
+        self.flink_jars_uri = args.get("flink_jars_uri")
 
         flink_state_uri = args.get("flink_state_uri")
         if flink_state_uri:

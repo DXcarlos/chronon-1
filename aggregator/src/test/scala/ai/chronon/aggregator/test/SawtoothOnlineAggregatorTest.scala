@@ -17,18 +17,17 @@
 package ai.chronon.aggregator.test
 
 import ai.chronon.aggregator.test.SawtoothAggregatorTest.sawtoothAggregate
-import ai.chronon.aggregator.windowing.FiveMinuteResolution
-import ai.chronon.aggregator.windowing.SawtoothOnlineAggregator
-import ai.chronon.api.Extensions.WindowOps
-import ai.chronon.api.Extensions.WindowUtils
+import ai.chronon.aggregator.windowing.{FinalBatchIr, FiveMinuteResolution, SawtoothOnlineAggregator}
+import ai.chronon.api.Extensions.{WindowOps, WindowUtils}
 import ai.chronon.api._
 import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
+import scala.collection.mutable
 
-import java.time.Instant
-import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.{Instant, ZoneOffset}
 import java.util.Locale
 
 class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
@@ -144,4 +143,179 @@ class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
     }
   }
 
+  it should "test updateNullCounts when collapsedIr is null and tailHops is not null" in {
+    val endPartition = "2023-08-20"
+    val endTs = PartitionSpec.daily.epochMillis(endPartition)
+
+    val numDays = 18
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(
+        operation = Operation.AVERAGE,
+        inputColumn = "num",
+        windows = Seq(
+          new Window(numDays, TimeUnit.DAYS))
+      )
+    )
+    val onlineAggregator = new SawtoothOnlineAggregator(endTs, aggregations, Seq(
+      ("ts", LongType),
+      ("num", LongType),
+      ("user", StringType),
+      ("ts_col", StringType)
+    ), FiveMinuteResolution)
+
+
+    // subtract numDays from endTs to get the start of the window
+    val windowStartTs = endTs - WindowUtils.Day.millis * numDays
+
+    // add 1 day to get a timestamp that is within the window but after the batch end ts
+    val eligibleTailHopTs = windowStartTs + WindowUtils.Day.millis * 1
+
+    val sampleBatchIr = FinalBatchIr(
+      collapsed = Array.fill(onlineAggregator.windowedAggregator.length)(null),
+      tailHops = Array(
+        Array(Array(Array(1.0, 1), eligibleTailHopTs)),
+        Array(),
+        Array()
+      )
+    )
+
+    val nullCountMap = mutable.HashMap.empty[String, Long]
+
+    onlineAggregator.updateNullCounts(batchIr = sampleBatchIr, nullCounts = nullCountMap)
+    nullCountMap.size shouldBe 0 // collapsed is null but tailHops has non-null value
+  }
+
+  it should "test updateNullCounts when collapsedIr is not null and tailHops is null" in {
+    val endPartition = "2023-08-20"
+    val endTs = PartitionSpec.daily.epochMillis(endPartition)
+
+    val queryEndTs = TsUtils.round(endTs, WindowUtils.Day.millis)
+    val batchEndTs = queryEndTs - WindowUtils.Day.millis
+
+    val numDays = 18
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(
+        operation = Operation.AVERAGE,
+        inputColumn = "num",
+        windows = Seq(
+          new Window(numDays, TimeUnit.DAYS))
+      )
+    )
+    val onlineAggregator = new SawtoothOnlineAggregator(batchEndTs, aggregations, Seq(
+      ("ts", LongType),
+      ("num", LongType),
+      ("user", StringType),
+      ("ts_col", StringType)
+    ), FiveMinuteResolution)
+
+    // subtract numDays from endTs to get the start of the window
+    val windowStartTs = endTs - WindowUtils.Day.millis * numDays
+
+    // add two days to get a timestamp that is within the window but after the batch end ts
+    val eligibleTailHopTs = windowStartTs + WindowUtils.Day.millis * 2
+
+    val sampleBatchIr = FinalBatchIr(
+      collapsed = Array(Array((461.0, 87L))),
+      tailHops = Array(
+        Array(Array(null, eligibleTailHopTs)),
+        Array(),
+        Array()
+      )
+    )
+
+    val nullCountMap = mutable.HashMap.empty[String, Long]
+
+    onlineAggregator.updateNullCounts(batchIr = sampleBatchIr, nullCounts = nullCountMap)
+    nullCountMap.size shouldBe 0 // collapsed is not null
+  }
+
+  it should "test updateNullCounts when collapsedIr is null and tailHops is null" in {
+    val endPartition = "2023-08-20"
+    val endTs = PartitionSpec.daily.epochMillis(endPartition)
+
+    val queryEndTs = TsUtils.round(endTs, WindowUtils.Day.millis)
+    val batchEndTs = queryEndTs - WindowUtils.Day.millis
+
+    val numDays = 18
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(
+        operation = Operation.AVERAGE,
+        inputColumn = "num",
+        windows = Seq(
+          new Window(numDays, TimeUnit.DAYS))
+      )
+    )
+    val onlineAggregator = new SawtoothOnlineAggregator(batchEndTs, aggregations, Seq(
+      ("ts", LongType),
+      ("num", LongType),
+      ("user", StringType),
+      ("ts_col", StringType)
+    ), FiveMinuteResolution)
+
+
+    // subtract numDays from endTs to get the start of the window
+    val windowStartTs = endTs - WindowUtils.Day.millis * numDays
+
+    // add two days to get a timestamp that is within the window but after the batch end ts
+    val eligibleTailHopTs = windowStartTs + WindowUtils.Day.millis * 2
+
+    val sampleBatchIr = FinalBatchIr(
+      collapsed = Array.fill(onlineAggregator.windowedAggregator.length)(null),
+      tailHops = Array(
+        Array(Array(null, eligibleTailHopTs)),
+        Array(),
+        Array()
+      )
+    )
+
+    val nullCountMap = mutable.HashMap.empty[String, Long]
+
+    onlineAggregator.updateNullCounts(batchIr = sampleBatchIr, nullCounts = nullCountMap)
+    nullCountMap.size shouldBe 1
+  }
+
+  it should "test updateNullCounts when collapsedIr is not null and tailHops is not null" in {
+    val endPartition = "2023-08-20"
+    val endTs = PartitionSpec.daily.epochMillis(endPartition)
+
+    val queryEndTs = TsUtils.round(endTs, WindowUtils.Day.millis)
+    val batchEndTs = queryEndTs - WindowUtils.Day.millis
+
+    val numDays = 18
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(
+        operation = Operation.AVERAGE,
+        inputColumn = "num",
+        windows = Seq(
+          new Window(numDays, TimeUnit.DAYS))
+      )
+    )
+    val onlineAggregator = new SawtoothOnlineAggregator(batchEndTs, aggregations, Seq(
+      ("ts", LongType),
+      ("num", LongType),
+      ("user", StringType),
+      ("ts_col", StringType)
+    ), FiveMinuteResolution)
+
+
+    // subtract numDays from endTs to get the start of the window
+    val windowStartTs = endTs - WindowUtils.Day.millis * numDays
+
+    // add two days to get a timestamp that is within the window but after the batch end ts
+    val eligibleTailHopTs = windowStartTs + WindowUtils.Day.millis * 2
+
+    val sampleBatchIr = FinalBatchIr(
+      collapsed = Array(Array((461.0, 87L))),
+      tailHops = Array(
+        Array(Array(Array(1.0, 1), eligibleTailHopTs)),
+        Array(),
+        Array()
+      )
+    )
+
+    val nullCountMap = mutable.HashMap.empty[String, Long]
+
+    onlineAggregator.updateNullCounts(batchIr = sampleBatchIr, nullCounts = nullCountMap)
+    nullCountMap.size shouldBe 0
+  }
 }

@@ -185,3 +185,109 @@ class TestHubRunner:
         # Check headers
         headers = call_args[1]['headers']
         assert headers['Content-Type'] == "application/json"
+
+    @patch('requests.post')
+    def test_cancel_end_to_end_post_request(
+        self,
+        mock_post,
+        canary,
+    ):
+        """Test end-to-end that the cancel command makes the right API call."""
+        # Mock the response from the cancel API
+        mock_post.return_value.json.return_value = {
+            "success": True,
+            "message": "Workflow cancelled successfully"
+        }
+        mock_post.return_value.raise_for_status.return_value = None
+
+        # Run cancel command
+        runner = CliRunner()
+        workflow_id = "test-workflow-123"
+        result = self._run_and_print(runner, hub, [
+            'cancel',
+            '--repo', canary,
+            '--workflow-id', workflow_id,
+            '--no-use-auth',
+            '--cloud-provider', 'gcp',
+        ])
+
+        assert result.exit_code == 0
+        assert "Workflow cancelled" in result.output
+        assert workflow_id in result.output
+
+        # Verify the actual POST request was made with correct parameters
+        mock_post.assert_called_once()
+        call_args = mock_post.call_args
+
+        # Check URL contains the workflow ID and cancel endpoint
+        url = call_args[0][0]
+        assert f"/workflow/v2/{workflow_id}/cancel" in url
+
+    @patch('requests.post')
+    def test_cancel_with_azure_and_customer_id(
+        self,
+        mock_post,
+        canary,
+    ):
+        """Test cancel command with Azure cloud provider and customer ID."""
+        # Mock the response from the cancel API
+        mock_post.return_value.json.return_value = {
+            "success": True,
+            "message": "Workflow cancelled successfully"
+        }
+        mock_post.return_value.raise_for_status.return_value = None
+
+        # Run cancel command with Azure and customer ID
+        runner = CliRunner()
+        workflow_id = "test-workflow-456"
+        customer_id = "test-customer-123"
+        result = self._run_and_print(runner, hub, [
+            'cancel',
+            '--repo', canary,
+            '--workflow-id', workflow_id,
+            '--no-use-auth',
+            '--cloud-provider', 'azure',
+            '--customer-id', customer_id,
+        ])
+
+        assert result.exit_code == 0
+        assert "Workflow cancelled" in result.output
+        assert workflow_id in result.output
+
+        # Verify the actual POST request was made
+        mock_post.assert_called_once()
+        call_args = mock_post.call_args
+
+        # Check URL contains the workflow ID and cancel endpoint
+        url = call_args[0][0]
+        assert f"/workflow/v2/{workflow_id}/cancel" in url
+
+    @patch('ai.chronon.repo.hub_runner.get_common_env_map')
+    def test_cancel_with_azure_missing_customer_id(
+        self,
+        mock_get_common_env_map,
+        canary,
+    ):
+        """Test cancel command fails when Azure is specified without customer ID."""
+        # Mock get_common_env_map to return config without CUSTOMER_ID
+        mock_get_common_env_map.return_value = {
+            "HUB_URL": "http://localhost:3903",
+            "FRONTEND_URL": "http://localhost:3000",
+            # Intentionally not including CUSTOMER_ID
+        }
+
+        # Run cancel command with Azure but no customer ID
+        runner = CliRunner()
+        workflow_id = "test-workflow-789"
+        result = self._run_and_print(runner, hub, [
+            'cancel',
+            '--repo', canary,
+            '--workflow-id', workflow_id,
+            '--no-use-auth',
+            '--cloud-provider', 'azure',
+            # Intentionally not providing --customer-id
+        ])
+
+        # Should fail with exit code 1
+        assert result.exit_code == 1
+        assert "Customer ID is not set for Azure" in result.output

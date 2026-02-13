@@ -32,25 +32,25 @@ source = EventSource(
 )
 
 # Join with user behavioral features and listing attributes
-v1 = Join(
+v2 = Join(
     left=source,
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
+        # user activity features disabled as streaming sources aren't ready yet
         # User behavioral features (aggregated over time windows)
+        # JoinPart(
+        #     group_by=user_activities.v1,
+        # ),
+        # Listing dimension attributes (point-in-time lookup)
         JoinPart(
-            group_by=user_activities.v1,
+            group_by=dim_listings.v2,
         ),
         # Listing dimension attributes (point-in-time lookup)
         JoinPart(
-            group_by=dim_listings.v1,
-        ),
-        # Listing dimension attributes (point-in-time lookup)
-        JoinPart(
-            group_by=dim_merchants.v1,
+            group_by=dim_merchants.v2,
             prefix="merchant_"
         ),
     ],
-    version=1,
     online=True,
     output_namespace="data",
     step_days=2,
@@ -58,16 +58,17 @@ v1 = Join(
 )
 
 # Example join with some derivations
-derivations_v1 = Join(
+derivations_v2 = Join(
     left=source,
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
         JoinPart(
-            group_by=dim_listings.v1,
+            group_by=dim_listings.v2,
         ),
-        JoinPart(
-            group_by=user_activities.v1,
-        ),
+        # user activity features disabled as streaming sources aren't ready yet
+        # JoinPart(
+        #     group_by=user_activities.v1,
+        # ),
     ],
     derivations=[
         Derivation(
@@ -101,7 +102,6 @@ derivations_v1 = Join(
             expression="*"
         )
     ],
-    version=2,
     online=True,
     output_namespace="data",
     step_days=2,

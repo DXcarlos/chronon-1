@@ -69,7 +69,7 @@ class ResultValidationAbilityTest extends AnyFlatSpec with BeforeAndAfter {
     val rdd = args.sparkSession.sparkContext.parallelize(leftData)
     val df = args.sparkSession.createDataFrame(rdd).toDF(columns: _*)
 
-    when(mockTableUtils.loadTable(any(), any(), any())).thenReturn(df)
+    when(mockTableUtils.loadTable(any(), any())).thenReturn(df)
 
     assertTrue(args.validateResult(df, Seq("keyId", "ds"), mockTableUtils))
   }
@@ -85,7 +85,7 @@ class ResultValidationAbilityTest extends AnyFlatSpec with BeforeAndAfter {
     val rightRdd = args.sparkSession.sparkContext.parallelize(rightData)
     val rightDf = args.sparkSession.createDataFrame(rightRdd).toDF(columns: _*)
 
-    when(mockTableUtils.loadTable(any(), any(), any())).thenReturn(rightDf)
+    when(mockTableUtils.loadTable(any(), any())).thenReturn(rightDf)
 
     assertFalse(args.validateResult(leftDf, Seq("keyId", "ds"), mockTableUtils))
   }

@@ -20,7 +20,7 @@ public class FetchHandlerJsonSerDeTest {
         when(mockRequestBody.asString()).thenReturn(mockRequest);
 
         String groupByName = "my_groupby.1";
-        JTry<List<JavaRequest>> maybeRequest = FetchHandler.parseJavaRequest(groupByName, mockRequestBody);
+        JTry<List<JavaRequest>> maybeRequest = FetchHandler.parseJavaRequest(groupByName, mockRequestBody.asString());
         assertTrue(maybeRequest.isSuccess());
         List<JavaRequest> reqs = maybeRequest.getValue();
         assertEquals(1, reqs.size());
@@ -38,7 +38,7 @@ public class FetchHandlerJsonSerDeTest {
         when(mockRequestBody.asString()).thenReturn(mockRequest);
 
         String groupByName = "my_groupby.1";
-        JTry<List<JavaRequest>> maybeRequest = FetchHandler.parseJavaRequest(groupByName, mockRequestBody);
+        JTry<List<JavaRequest>> maybeRequest = FetchHandler.parseJavaRequest(groupByName, mockRequestBody.asString());
         assertFalse(maybeRequest.isSuccess());
         assertNotNull(maybeRequest.getException());
     }
@@ -50,7 +50,7 @@ public class FetchHandlerJsonSerDeTest {
         when(mockRequestBody.asString()).thenReturn(mockRequest);
 
         String groupByName = "my_groupby.1";
-        JTry<List<JavaRequest>> maybeRequest = FetchHandler.parseJavaRequest(groupByName, mockRequestBody);
+        JTry<List<JavaRequest>> maybeRequest = FetchHandler.parseJavaRequest(groupByName, mockRequestBody.asString());
         assertFalse(maybeRequest.isSuccess());
         assertNotNull(maybeRequest.getException());
     }

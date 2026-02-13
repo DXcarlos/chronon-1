@@ -17,7 +17,7 @@ from ai.chronon.cli.compile.display.console import console
     envvar="CLOUD_PROVIDER",
     help="Cloud provider to use.",
     required=True,
-    type=click.Choice(["aws", "gcp"], case_sensitive=False),
+    type=click.Choice(["aws", "gcp", "azure"], case_sensitive=False),
 )
 @click.option(
     "--chronon-root",

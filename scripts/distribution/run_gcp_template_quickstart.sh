@@ -118,6 +118,22 @@ export PYTHONPATH="$CHRONON_ROOT" ARTIFACT_PREFIX="gs://zipline-artifacts-$ENVIR
 echo -e "${GREEN}<<<<<.....................................COMPILE.....................................>>>>>\033[0m"
 zipline compile --chronon-root=$CHRONON_ROOT
 
+echo -e "${GREEN}<<<<<.....................................IMPORT-PURCHASES.....................................>>>>>\033[0m"
+zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/staging_queries/gcp/purchases_import_${SUFFIX_VALUE}.v1__0 --start-ds $START_DS --end-ds $END_DS
+fail_if_bash_failed $?
+
+echo -e "${GREEN}<<<<<.....................................IMPORT-CHECKOUTS.....................................>>>>>\033[0m"
+zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/staging_queries/gcp/checkouts_import_${SUFFIX_VALUE}.v1__0 --start-ds $START_DS --end-ds $END_DS
+fail_if_bash_failed $?
+
+echo -e "${GREEN}<<<<<.....................................IMPORT-PURCHASES-NOTDS.....................................>>>>>\033[0m"
+zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/staging_queries/gcp/purchases_notds_import_${SUFFIX_VALUE}.v1__0 --start-ds $START_DS --end-ds $END_DS
+fail_if_bash_failed $?
+
+echo -e "${GREEN}<<<<<.....................................IMPORT-CHECKOUTS-NOTDS.....................................>>>>>\033[0m"
+zipline run --repo=$CHRONON_ROOT --version $VERSION --mode backfill --conf compiled/staging_queries/gcp/checkouts_notds_import_${SUFFIX_VALUE}.v1__0 --start-ds $START_DS --end-ds $END_DS
+fail_if_bash_failed $?
+
 echo -e "${GREEN}<<<<<.....................................BACKFILL.....................................>>>>>\033[0m"
 if [[ "$ENVIRONMENT" == "canary" ]]; then
   zipline run --repo=$CHRONON_ROOT  --version $VERSION --mode backfill --conf compiled/group_bys/gcp/purchases_${SUFFIX_VALUE}.v1_test__0 --start-ds $START_DS --end-ds $END_DS
@@ -199,6 +215,10 @@ echo -e "${GREEN}<<<<<.....................................SUCCEEDED!!!.........
 rm `pwd`/python/test/canary/group_bys/gcp/purchases_${SUFFIX_VALUE}.py
 rm `pwd`/python/test/canary/joins/gcp/training_set_${SUFFIX_VALUE}.py
 rm `pwd`/python/test/canary/staging_queries/gcp/exports_${SUFFIX_VALUE}.py
+rm `pwd`/python/test/canary/staging_queries/gcp/purchases_import_${SUFFIX_VALUE}.py
+rm `pwd`/python/test/canary/staging_queries/gcp/checkouts_import_${SUFFIX_VALUE}.py
+rm `pwd`/python/test/canary/staging_queries/gcp/purchases_notds_import_${SUFFIX_VALUE}.py
+rm `pwd`/python/test/canary/staging_queries/gcp/checkouts_notds_import_${SUFFIX_VALUE}.py
 
 ## Delete gcp tables to cleanup
 if [[ "$ENVIRONMENT" == "canary" ]]; then
@@ -217,3 +237,7 @@ else
 fi
 
 bq rm -f -t canary-443022:data.gcp_exports_${SUFFIX_VALUE}_checkouts__0
+bq rm -f -t canary-443022:data.gcp_purchases_import_${SUFFIX_VALUE}_v1__0
+bq rm -f -t canary-443022:data.gcp_checkouts_import_${SUFFIX_VALUE}_v1__0
+bq rm -f -t canary-443022:data.gcp_purchases_notds_import_${SUFFIX_VALUE}_v1__0
+bq rm -f -t canary-443022:data.gcp_checkouts_notds_import_${SUFFIX_VALUE}_v1__0

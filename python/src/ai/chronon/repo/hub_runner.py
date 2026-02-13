@@ -10,7 +10,7 @@ import requests
 from gen_thrift.planner.ttypes import Mode
 
 from ai.chronon.cli.formatter import Format, format_print, jsonify_exceptions_if_json_format
-from ai.chronon.cli.git_utils import get_current_branch
+from ai.chronon.cli.git_utils import get_current_branch, get_git_user_email
 from ai.chronon.click_helpers import handle_compile, handle_conf_not_found
 from ai.chronon.repo import hub_uploader, utils
 from ai.chronon.repo.constants import RunMode
@@ -31,6 +31,8 @@ class HubConfig:
     fetcher_url: Optional[str] = None
     cloud_provider: Optional[str] = None
     artifact_prefix: Optional[str] = None
+    customer_id: Optional[str] = None
+    auth_scope: Optional[str] = None
 
 
 @dataclass
@@ -59,6 +61,22 @@ def format_option(func):
 def force_option(func):
     return click.option(
         "--force", help="Force compile even if there are version changes to existing confs", is_flag=True
+    )(func)
+def cloud_provider_option(func):
+    return click.option(
+        "--cloud-provider",
+        help="Cloud provider for the hub and related services",
+        type=click.Choice(["aws", "gcp", "azure"], case_sensitive=False),
+        required=False,
+        default=None,
+    )(func)
+def customer_id_option(func):
+    return click.option(
+        "--customer-id",
+        help="Customer ID for additional authentication - (required if cloud provider is Azure)",
+        type=str,
+        required=False,
+        default=None,
     )(func)
 
 
@@ -122,10 +140,15 @@ def end_ds_option(func):
     )(func)
 
 def _get_zipline_hub(hub_url: Optional[str], hub_conf: Optional[HubConfig], use_auth: bool, format: Format = Format.TEXT):
+    scope = ""
+    if hub_conf.auth_scope is not None:
+        scope = hub_conf.auth_scope
+    elif hub_conf.cloud_provider == "azure" and hub_conf.customer_id is not None:
+        scope = f"api://{hub_conf.customer_id}-zipline-auth"
     if hub_url is not None:
-        zipline_hub = ZiplineHub(base_url=hub_url, sa_name=hub_conf.sa_name, use_auth=use_auth, cloud_provider=hub_conf.cloud_provider, format=format)
+        zipline_hub = ZiplineHub(base_url=hub_url, sa_name=hub_conf.sa_name, use_auth=use_auth, cloud_provider=hub_conf.cloud_provider, scope=scope, format=format)
     else:
-        zipline_hub = ZiplineHub(base_url=hub_conf.hub_url, sa_name=hub_conf.sa_name, use_auth=use_auth, cloud_provider=hub_conf.cloud_provider, format=format)
+        zipline_hub = ZiplineHub(base_url=hub_conf.hub_url, sa_name=hub_conf.sa_name, use_auth=use_auth, cloud_provider=hub_conf.cloud_provider, scope=scope, format=format)
     return zipline_hub
 
 def submit_workflow(repo, conf, mode, start_ds, end_ds, hub_url=None, use_auth=True, format: Format = Format.TEXT):
@@ -145,7 +168,7 @@ def submit_workflow(repo, conf, mode, start_ds, end_ds, hub_url=None, use_auth=T
         conf_name=conf_name,
         mode=mode,
         branch=branch,  # Get the current branch
-        user=os.environ.get("USER"),
+        user=get_git_user_email(),
         start=start_ds,
         end=end_ds,
         conf_hash=conf_name_to_hash_dict[conf_name].hash,
@@ -257,11 +280,14 @@ def schedule(repo, conf, hub_url, use_auth, format, force, skip_compile):
 @repo_option
 @hub_url_option
 @use_auth_option
+@format_option
 @workflow_id_option
 @jsonify_exceptions_if_json_format
-def cancel(repo, hub_url, use_auth, format, force, workflow_id):
-    zipline_hub = _get_zipline_hub(hub_url, get_hub_conf_from_metadata_conf(DEFAULT_TEAM_METADATA_CONF, root_dir=repo), use_auth, format)
-    response_json = zipline_hub.call_cancel_api(workflow_id, format=format)
+@cloud_provider_option
+@customer_id_option
+def cancel(repo, hub_url, use_auth, format, workflow_id, cloud_provider, customer_id):
+    zipline_hub = _get_zipline_hub(hub_url, get_hub_conf_from_metadata_conf(DEFAULT_TEAM_METADATA_CONF, root_dir=repo, cloud_provider=cloud_provider, customer_id=customer_id), use_auth, format)
+    response_json = zipline_hub.call_cancel_api(workflow_id)
     if format == Format.JSON:
         print(json.dumps(response_json, indent=4))
         sys.exit(0)
@@ -387,7 +413,12 @@ def eval(repo, conf, hub_url, use_auth, format, force, eval_url, generate_test_c
     """
     parameters = {}
     hub_conf = get_hub_conf(conf, root_dir=repo)
-    zipline_hub = ZiplineHub(base_url=hub_url or hub_conf.hub_url, sa_name=hub_conf.sa_name, use_auth=use_auth, eval_url=eval_url or hub_conf.eval_url, cloud_provider=hub_conf.cloud_provider, format=format)
+    scope = ""
+    if hub_conf.auth_scope is not None:
+        scope = hub_conf.auth_scope
+    elif hub_conf.cloud_provider == "azure" and hub_conf.customer_id is not None:
+        scope = f"api://{hub_conf.customer_id}-zipline-auth"
+    zipline_hub = ZiplineHub(base_url=hub_url or hub_conf.hub_url, sa_name=hub_conf.sa_name, use_auth=use_auth, eval_url=eval_url or hub_conf.eval_url, cloud_provider=hub_conf.cloud_provider, scope=scope, format=format)
     conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
     branch = get_current_branch()
     if test_data_path:
@@ -441,7 +472,7 @@ def get_hub_conf(conf_path, root_dir="."):
     kwargs = {k: common_env_map.get(k.upper()) for k in HubConfig.__dataclass_fields__.keys()}
     return HubConfig(**kwargs)
 
-def get_hub_conf_from_metadata_conf(metadata_path, root_dir="."):
+def get_hub_conf_from_metadata_conf(metadata_path, root_dir=".", cloud_provider: Optional[str]=None, customer_id: Optional[str]=None):
     """
     Get the hub configuration from the config file or environment variables.
     This method is used when the args are not provided.
@@ -454,7 +485,19 @@ def get_hub_conf_from_metadata_conf(metadata_path, root_dir="."):
     frontend_url = common_env_map.get("FRONTEND_URL")
     sa_name = common_env_map.get("SA_NAME")
     eval_url = common_env_map.get("EVAL_URL")
-    return HubConfig(hub_url=hub_url, frontend_url=frontend_url, sa_name=sa_name, eval_url=eval_url)
+
+    cloud_provider = cloud_provider or common_env_map.get("CLOUD_PROVIDER")
+
+    if not cloud_provider:
+        print(" 🔴 Cloud provider is not set. Please set the cloud provider using the --cloud-provider flag of the CLI, or the CLOUD_PROVIDER environment variable in the `default` team env common block and re-compile.")
+        sys.exit(1)
+
+    customer_id = customer_id or common_env_map.get("CUSTOMER_ID")
+    if cloud_provider == "azure" and not customer_id:
+        print(" 🔴 Customer ID is not set for Azure. Please set the customer ID using the --customer-id flag of the CLI, or the CUSTOMER_ID environment variable in the `default` team env common block and re-compile.")
+        sys.exit(1)
+
+    return HubConfig(hub_url=hub_url, frontend_url=frontend_url, sa_name=sa_name, eval_url=eval_url, cloud_provider=cloud_provider, customer_id=customer_id)
 
 
 def get_schedule_modes(conf_path):

@@ -39,7 +39,7 @@ trait FlinkModule extends Cross.Module[String] with build.BaseModule {
   def mainClass = Some("ai.chronon.flink.FlinkJob")
 
   def prependShellScript = ""
-  
+
   object test extends build.BaseTestModule {
     def scalaVersion = crossValue
     def moduleDeps = Seq(build.flink(crossValue))

@@ -227,7 +227,7 @@ abstract class JoinBase(val joinConfCloned: api.Join,
 
   }
 
-  def forceComputeRangeAndSave(range: PartitionRange): Option[DataFrame] = {
+  def forceComputeRangeAndSave(range: PartitionRange, semanticHash: Option[String] = None): Option[DataFrame] = {
 
     Option(joinConfCloned.setups).foreach(_.foreach(tableUtils.sql))
     val leftDfInRange = leftDf(joinConfCloned, range, tableUtils)
@@ -241,7 +241,7 @@ abstract class JoinBase(val joinConfCloned: api.Join,
       val table = joinMetaData.outputTable
 
       tableUtils.dropTableOnSchemaChange(table, df)
-      df.save(table)
+      df.save(table, semanticHash = semanticHash)
 
       tableUtils.loadTable(table, range.whereClauses)
     }

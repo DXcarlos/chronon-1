@@ -331,7 +331,8 @@ object Extensions {
       aggregations.foreach { agg =>
         val buckets = Option(agg.buckets)
           .map(_.toScala)
-          .getOrElse(Seq(null))
+          .getOrElse(Seq(null)) // this doesn't return empty Seq because this will act as a "global"
+        // unwindowed AggregationPart. in particular for collpasedIr in temporal cases
         val windows = Option(agg.windows)
           .map(_.toScala)
           .getOrElse(Seq(WindowUtils.Unbounded))

@@ -22,6 +22,8 @@ import ai.chronon.api._
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
+import scala.collection.mutable
+
 // Wrapper class for handling Irs in the tiled chronon use case
 case class TiledIr(ts: Long, ir: Array[Any])
 
@@ -162,6 +164,79 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
                                     ts: Long): Array[Any] = {
     // TODO: Add support for mutations / hasReversal to the tiled implementation
     windowedAggregator.finalize(lambdaAggregateIrTiled(finalBatchIr, streamingTiledIrs, ts))
+  }
+
+  // example: window size = 30d
+  //          collapsed = 28d
+  //          tail (tailBufferMillis = 2d) = [1d hops covering (28d, 30d)]
+  // tails hops could be shared (between 4d, 5d), collapsed are always separate per output column
+
+  // output cols = [txn_count_5d, txn_count_7d, ...]
+  //             = [collapsed_5d, collapsed_7d, ...]
+  //             tailHops = only 1 array of ir for collapsed
+  //               [  tail_1d  ]
+  //               [tail_4d_ago]
+  //               [tail_5d_ago]
+  //               [tail_6d_ago]
+  //               [tail_7d_ago]
+
+  // nullCounts = {txn_count_5d -> 100, txn_count_7d -> 200, ...}
+
+  // batch upload boundary is the (end_date + 24h) of the batch being uploaded
+  def updateNullCounts(batchIr: FinalBatchIr, nullCounts: mutable.Map[String, Long]): Unit = {
+    var i: Int = 0
+
+    // 1 Aggregation can have multiple windows (output columns), 1 aggregation part maps to 1 output col
+    // windowed agg will unpack [7d, 1d, 1h, None] into separate aggregationParts,
+    // it will have one part per output col
+    while (i < windowedAggregator.length) {
+      val window = windowMappings(i).aggregationPart.window
+
+      val hasNonNullCollapsed = batchIr.collapsed(i) != null
+      val hasNonNull = if (window != null) { // no hops for unwindowed
+        val windowMillis = windowMappings(i).millis
+        val hopIndex = tailHopIndices(i)
+        val queryTail = TsUtils.round(batchEndTs - windowMillis, hopSizes(hopIndex))
+
+        val hopIrs = batchIr.tailHops(hopIndex)
+        var idx: Int = 0
+
+        lazy val hasNonNullTailHop = {
+          // check if any of the relevant tail hops for this window has a non-null value
+          var hasNonNullTailHop_ = false
+
+          while (idx < hopIrs.length && !hasNonNullTailHop_) {
+            val hopIr: HopsAggregator.HopIr = hopIrs(idx)
+
+            import ai.chronon.aggregator.windowing.HopsAggregator.HopIrOps
+            val hopStartTimeStamp = hopIr.getTs
+
+            // Only want to inspect tail hops that fall within the tailBuffer (default 2d), and after the queryTail
+            if ((batchEndTs - windowMillis) + tailBufferMillis > hopStartTimeStamp && hopStartTimeStamp >= queryTail) {
+              val tailHop = hopIr(baseIrIndices(i))
+              if (tailHop != null) {
+                hasNonNullTailHop_ = true
+              }
+            }
+            idx += 1
+          }
+          hasNonNullTailHop_
+        }
+
+        hasNonNullCollapsed || hasNonNullTailHop
+
+      } else {
+        hasNonNullCollapsed
+      }
+
+      val colName = windowMappings(i).aggregationPart.outputColumnName
+      if (!hasNonNull) {
+        val currentCount = nullCounts.getOrElse(colName, 0L)
+        nullCounts.update(colName, currentCount + 1L)
+      }
+
+      i += 1
+    }
   }
 
 }

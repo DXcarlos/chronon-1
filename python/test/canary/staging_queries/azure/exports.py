@@ -1,50 +1,50 @@
 from ai.chronon.staging_query import EngineType, StagingQuery, TableDependency
 
 
-def get_select_star_export(table: str, partition_column: str = "_PARTITIONTIME"):
-    bigquery_export_sql = f"""
+def get_select_star_export(table: str, partition_column: str = "ds"):
+    snowflake_export_sql = f"""
     SELECT
-        *
-    FROM demo.{table}
+      * EXCLUDE ({partition_column}),
+       DATE_TRUNC('DAY', {partition_column})::DATE as ds
+    FROM {table}
     WHERE
-    TIMESTAMP_TRUNC({partition_column}, DAY) BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
+    DATE_TRUNC('DAY', {partition_column}) BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
     """
 
-
     return StagingQuery(
-        query=bigquery_export_sql,
+        query=snowflake_export_sql,
         output_namespace="data",
         engine_type=EngineType.SNOWFLAKE,
         dependencies=[
-            TableDependency(table=f"demo.{table}", partition_column=partition_column, offset=0)
+            TableDependency(table=f"{table}", partition_column=partition_column, offset=0)
         ],
         version=0,
     )
 
 
 def get_native_partition_export(table: str, partition_column: str):
-    native_partition_sql = f"""
+    snowflake_partition_sql = f"""
     SELECT
         *,
-        TIMESTAMP_TRUNC({partition_column}, DAY) as ds
-    FROM demo.{table}
+        DATE_TRUNC('DAY', {partition_column})::DATE as ds
+    FROM {table}
     WHERE
     {partition_column} BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
     """
     return StagingQuery(
-        query=native_partition_sql,
+        query=snowflake_partition_sql,
         output_namespace="data",
         engine_type=EngineType.SNOWFLAKE,
         dependencies=[
-            TableDependency(table=f"demo.{table}", partition_column=partition_column, offset=0)
+            TableDependency(table=f"{table}", partition_column=partition_column, offset=0)
         ],
         version=0,
     )
 
 
 
-user_activities = get_native_partition_export("user_activities", "_PARTITIONTIME")
-checkouts = get_native_partition_export("checkouts", "_PARTITIONTIME")
+user_activities = get_native_partition_export("user_activities", "ds")
+checkouts = get_native_partition_export("checkouts", "ds")
 dim_listings = get_select_star_export("dim_listings", "ds")
 dim_merchants = get_select_star_export("dim_merchants", "ds")
 dim_users = get_select_star_export("dim_users", "ds")

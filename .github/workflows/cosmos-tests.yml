@@ -1,0 +1,140 @@
+name: Azure Cosmos DB KVStore Tests
+
+# Tests Azure Cosmos DB KVStore implementation using the Cosmos DB Linux Emulator
+# Based on the docs: https://learn.microsoft.com/en-us/azure/cosmos-db/emulator-linux
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cloud_azure/**'
+      - 'online/**'
+      - 'api/**'
+      - '.github/workflows/cosmos-tests.yml'
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'cloud_azure/**'
+      - 'online/**'
+      - 'api/**'
+      - '.github/workflows/cosmos-tests.yml'
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cosmos_tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Install Thrift
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y thrift-compiler
+
+      - name: Cache Mill
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mill
+          key: ${{ runner.os }}-mill-${{ hashFiles('build.mill') }}
+          restore-keys: |
+            ${{ runner.os }}-mill-
+
+      - name: Verify Docker is available
+        run: |
+          docker version
+          docker info
+
+      - name: Start Cosmos DB Emulator
+        run: |
+          echo "Starting Cosmos DB Linux Emulator..."
+          docker run --detach \
+            --name cosmos-emulator \
+            --publish 8080:8080 \
+            --publish 8081:8081 \
+            --publish 1234:1234 \
+            mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview \
+            --protocol https
+
+          echo "Waiting for emulator to be ready..."
+          for i in {1..60}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ready 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "302" ]; then
+              echo "Emulator is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "ERROR: Emulator failed to start within 120s"
+              docker logs cosmos-emulator
+              exit 1
+            fi
+            echo "Waiting... (attempt $i/60)"
+            sleep 2
+          done
+
+          # Additional wait for full initialization
+          sleep 5
+
+      - name: Setup SSL Certificate
+        run: |
+          echo "Extracting emulator SSL certificate..."
+          CERT_FILE="/tmp/cosmos_emulator.cert"
+          openssl s_client -connect localhost:8081 </dev/null 2>/dev/null | \
+            sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > $CERT_FILE
+
+          echo "Setting up Java truststore..."
+          TRUSTSTORE_PATH="/tmp/cosmos-truststore.jks"
+          TRUSTSTORE_PASSWORD="changeit"
+
+          # Copy system cacerts to custom truststore
+          sudo cp $JAVA_HOME/lib/security/cacerts $TRUSTSTORE_PATH
+          sudo chmod 644 $TRUSTSTORE_PATH
+
+          # Import emulator certificate
+          sudo keytool -importcert -noprompt \
+            -alias cosmos-emulator \
+            -file $CERT_FILE \
+            -keystore $TRUSTSTORE_PATH \
+            -storepass $TRUSTSTORE_PASSWORD
+
+          echo "COSMOS_TRUSTSTORE_PATH=$TRUSTSTORE_PATH" >> $GITHUB_ENV
+          echo "COSMOS_TRUSTSTORE_PASSWORD=$TRUSTSTORE_PASSWORD" >> $GITHUB_ENV
+
+      - name: Run Cosmos DB tests
+        run: ./mill cloud_azure.test
+        env:
+          COSMOS_ENDPOINT: "https://localhost:8081"
+          COSMOS_KEY: "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+          COSMOS_DATABASE: "test_chronon_db"
+          JAVA_TOOL_OPTIONS: "-Djavax.net.ssl.trustStore=${{ env.COSMOS_TRUSTSTORE_PATH }} -Djavax.net.ssl.trustStorePassword=${{ env.COSMOS_TRUSTSTORE_PASSWORD }}"
+
+      - name: Stop Cosmos DB Emulator
+        if: always()
+        run: |
+          docker stop cosmos-emulator || true
+          docker rm cosmos-emulator || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cosmos-test-results
+          path: |
+            out/cloud_azure/test/testForked.dest/
+            out/cloud_azure/test/compile.dest/
+          retention-days: 7

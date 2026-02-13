@@ -49,6 +49,22 @@ def main():
     # Template mappings: (template_path, relative_output_path)
     templates = [
         (
+            'python/test/canary/staging_queries/gcp/purchases_import.py.j2',
+            f'python/test/canary/staging_queries/gcp/purchases_import_{args.test_id}.py'
+        ),
+        (
+            'python/test/canary/staging_queries/gcp/checkouts_import.py.j2',
+            f'python/test/canary/staging_queries/gcp/checkouts_import_{args.test_id}.py'
+        ),
+        (
+            'python/test/canary/staging_queries/gcp/purchases_notds_import.py.j2',
+            f'python/test/canary/staging_queries/gcp/purchases_notds_import_{args.test_id}.py'
+        ),
+        (
+            'python/test/canary/staging_queries/gcp/checkouts_notds_import.py.j2',
+            f'python/test/canary/staging_queries/gcp/checkouts_notds_import_{args.test_id}.py'
+        ),
+        (
             'python/test/canary/group_bys/gcp/purchases.py.j2',
             f'python/test/canary/group_bys/gcp/purchases_{args.test_id}.py'
         ),

@@ -304,8 +304,162 @@ jobs:
         run: |
           jf rt upload cloud_aws_lib_deploy.jar "jars/${VERSION#v}/"
 
+  promote-azure-candidate:
+    runs-on: ubuntu-latest
+    needs: [check_if_latest, build_python_wheel]
+    environment: main
+
+    permissions:
+      id-token: write
+      contents: write
+
+    steps:
+      - name: Checkout platform repo
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download Python Wheel Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zipline-ai-wheel
+
+      - name: Copy Azure Artifacts from Canary Candidate
+        shell: bash
+        run: |
+          set -eo pipefail
+          ACCOUNT="ziplineai2"
+          CONTAINER="dev-zipline-artifacts"
+
+          # Download Jar from Azure Blob Storage Canary for attaching to the release
+          az storage blob download \
+            --account-name $ACCOUNT \
+            --auth-mode login \
+            --container-name $CONTAINER \
+            --name release/passing-candidate/jars/cloud_azure_lib_deploy.jar \
+            --file cloud_azure_lib_deploy.jar
+
+          # Upload wheel to Azure Blob Storage for various environments
+          for customer_id in "canary" "base" "dev"; do
+            echo "Uploading wheel to Azure for customer_id: $customer_id"
+            # Note: Azure storage blob metadata syntax differs from GCS/S3
+            az storage blob upload \
+              --account-name $ACCOUNT \
+              --auth-mode login \
+              --container-name $CONTAINER \
+              --file ${{ needs.build_python_wheel.outputs.wheel_file }} \
+              --name release/${VERSION#v}/wheels/${{ needs.build_python_wheel.outputs.wheel_file }} \
+              --tier cool \
+              --overwrite
+
+            if [ "${{ needs.check_if_latest.outputs.is_latest }}" == "true" ]; then
+              az storage blob upload \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --container-name $CONTAINER \
+                --file ${{ needs.build_python_wheel.outputs.wheel_file }} \
+                --name release/latest/wheels/${{ needs.build_python_wheel.outputs.wheel_file }} \
+                --tier cool \
+                --overwrite
+            fi
+
+            echo "Uploading jars to Azure for customer_id: $customer_id"
+            # Upload flink_assembly_deploy.jar
+            az storage blob copy start \
+              --account-name $ACCOUNT \
+              --auth-mode login \
+              --destination-blob release/${VERSION#v}/jars/flink_assembly_deploy.jar \
+              --destination-container $CONTAINER \
+              --source-blob release/passing-candidate/jars/flink_assembly_deploy.jar \
+              --source-container $CONTAINER \
+              --source-account-name $ACCOUNT
+
+            if [ "${{ needs.check_if_latest.outputs.is_latest }}" == "true" ]; then
+              az storage blob copy start \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --destination-blob release/latest/jars/flink_assembly_deploy.jar \
+                --destination-container $CONTAINER \
+                --source-blob release/passing-candidate/jars/flink_assembly_deploy.jar \
+                --source-container $CONTAINER \
+                --source-account-name $ACCOUNT
+            fi
+
+            # Upload cloud_azure_lib_deploy.jar
+            az storage blob copy start \
+              --account-name $ACCOUNT \
+              --auth-mode login \
+              --destination-blob release/${VERSION#v}/jars/cloud_azure_lib_deploy.jar \
+              --destination-container $CONTAINER \
+              --source-blob release/passing-candidate/jars/cloud_azure_lib_deploy.jar \
+              --source-container $CONTAINER \
+              --source-account-name $ACCOUNT
+
+            if [ "${{ needs.check_if_latest.outputs.is_latest }}" == "true" ]; then
+              az storage blob copy start \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --destination-blob release/latest/jars/cloud_azure_lib_deploy.jar \
+                --destination-container $CONTAINER \
+                --source-blob release/passing-candidate/jars/cloud_azure_lib_deploy.jar \
+                --source-container $CONTAINER \
+                --source-account-name $ACCOUNT
+            fi
+
+            # Upload service_assembly_deploy.jar
+            az storage blob copy start \
+              --account-name $ACCOUNT \
+              --auth-mode login \
+              --destination-blob release/${VERSION#v}/jars/service_assembly_deploy.jar \
+              --destination-container $CONTAINER \
+              --source-blob release/passing-candidate/jars/service_assembly_deploy.jar \
+              --source-container $CONTAINER \
+              --source-account-name $ACCOUNT
+
+            if [ "${{ needs.check_if_latest.outputs.is_latest }}" == "true" ]; then
+              az storage blob copy start \
+                --account-name $ACCOUNT \
+                --auth-mode login \
+                --destination-blob release/latest/jars/service_assembly_deploy.jar \
+                --destination-container $CONTAINER \
+                --source-blob release/passing-candidate/jars/service_assembly_deploy.jar \
+                --source-container $CONTAINER \
+                --source-account-name $ACCOUNT
+            fi
+          done
+          echo "Artifacts uploaded to Azure Blob Storage"
+
+      - name: Attach Cloud Azure Jar to Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload $VERSION cloud_azure_lib_deploy.jar
+
+      # Setup JFrog CLI
+      - name: Setup JFrog CLI
+        uses: jfrog/setup-jfrog-cli@v4
+        with:
+          version: latest
+
+      - name: Configure JFrog CLI with Access Token
+        run: |
+          jf config add artifactory \
+            --url="${{ secrets.ARTIFACTORY_URL }}" \
+            --access-token="${{ secrets.ARTIFACTORY_TOKEN }}" \
+            --interactive=false
+
+      - name: Upload Cloud Azure Jar to Artifactory
+        run: |
+          jf rt upload cloud_azure_lib_deploy.jar "jars/${VERSION#v}/"
+
   build_and_publish_docker:
     runs-on: ubuntu-latest
+    environment: main
     needs: [ check_if_latest ]
     permissions:
       contents: read
@@ -342,11 +496,24 @@ jobs:
           role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/github_actions
           aws-region: ${{secrets.AWS_REGION}}
 
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Download JAR files from Canary Candidate
         run: |
           # Download Jars from Canary for Docker build
           gcloud storage cp gs://zipline-artifacts-canary/release/passing-candidate/jars/cloud_gcp_lib_deploy.jar .
           aws s3 cp s3://zipline-artifacts-canary/release/passing-candidate/jars/cloud_aws_lib_deploy.jar .
+          az storage blob download \
+            --account-name ziplineai2 \
+            --auth-mode login \
+            --container-name dev-zipline-artifacts \
+            --name release/passing-candidate/jars/cloud_azure_lib_deploy.jar \
+            --file cloud_azure_lib_deploy.jar
           gcloud storage cp gs://zipline-artifacts-canary/release/passing-candidate/jars/service_assembly_deploy.jar .
 
       - name: Prepare build artifacts
@@ -356,6 +523,7 @@ jobs:
           cp service_assembly_deploy.jar build_output/
           cp cloud_aws_lib_deploy.jar build_output/
           cp cloud_gcp_lib_deploy.jar build_output/
+          cp cloud_azure_lib_deploy.jar build_output/
 
       - name: Build and push Fetcher Docker image
         uses: docker/build-push-action@v6
@@ -375,7 +543,7 @@ jobs:
         run: rm -rf build_output
 
   on_fail_notify_slack:
-    needs: [ promote-aws-candidate, promote-gcp-candidate, build_and_publish_docker ]
+    needs: [ promote-aws-candidate, promote-gcp-candidate, promote-azure-candidate, build_and_publish_docker ]
     if: failure()
     runs-on: ubuntu-latest
 
@@ -403,7 +571,7 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    needs: [ promote-aws-candidate, promote-gcp-candidate ]
+    needs: [ promote-aws-candidate, promote-gcp-candidate, promote-azure-candidate ]
 
     steps:
       - name: Delete Artifacts

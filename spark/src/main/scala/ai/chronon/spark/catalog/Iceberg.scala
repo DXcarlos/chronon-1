@@ -1,10 +1,15 @@
 package ai.chronon.spark.catalog
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.StructType
 
+import scala.util.{Failure, Success, Try}
+
 case object Iceberg extends Format {
+
+  override def tableTypeString: String = "iceberg"
 
   override def tableProperties: Map[String, String] = {
     Map(
@@ -14,7 +19,8 @@ case object Iceberg extends Format {
       "commit.status-check.num-retries" -> "20", // default = 3
       "commit.status-check.min-wait-ms" -> (10 * 1000).toString, // default = 1000
       "commit.status-check.max-wait-ms" -> (600 * 1000).toString,
-      "write.merge.isolation-level" -> "snapshot"
+      "write.merge.isolation-level" -> "snapshot",
+      "format-version" -> "2"
     )
   }
 
@@ -28,24 +34,24 @@ case object Iceberg extends Format {
       throw new NotImplementedError("subPartitionsFilter is not supported on this format")
     }
 
-    getIcebergPartitions(tableName, partitionColumn)
+    Try(getIcebergPartitions(tableName, partitionColumn)) match {
+      case Success(p) => p
+      case Failure(e) =>
+        logger.warn(s"Failed to get partitions for $tableName: ${e.getMessage}")
+        List.empty
+    }
   }
 
   override def partitions(tableName: String, partitionFilters: String)(implicit
       sparkSession: SparkSession): List[Map[String, String]] = {
-    val partitionsDf = sparkSession.read
-      .format("iceberg")
-      .load(s"${tableName}.partitions")
+    val partitionsDf = sparkSession.table(s"${qualifyWithCatalog(tableName)}.partitions")
 
-    // Get the partition struct schema to understand what columns are partitioned
     val index = partitionsDf.schema.fieldIndex("partition")
-    val partitionStruct = partitionsDf.schema(index).dataType.asInstanceOf[StructType]
-    val partitionColumnNames = partitionStruct.fieldNames
+    val partitionColumnNames = partitionsDf.schema(index).dataType.asInstanceOf[StructType].fieldNames
 
-    // Collect all partition rows and convert each partition struct to a Map[String, String]
-    val partitionRows = partitionsDf.select(col("partition")).collect()
-
-    partitionRows
+    partitionsDf
+      .select(col("partition"))
+      .collect()
       .map { row =>
         val partitionData = row.getStruct(0)
         partitionColumnNames.flatMap { colName =>
@@ -59,9 +65,7 @@ case object Iceberg extends Format {
   private def getIcebergPartitions(tableName: String, partitionColumn: String)(implicit
       sparkSession: SparkSession): List[String] = {
 
-    val partitionsDf = sparkSession.read
-      .format("iceberg")
-      .load(s"${tableName}.partitions")
+    val partitionsDf = sparkSession.table(s"${qualifyWithCatalog(tableName)}.partitions")
 
     val index = partitionsDf.schema.fieldIndex("partition")
     if (partitionsDf.schema(index).dataType.asInstanceOf[StructType].fieldNames.contains("hr")) {
@@ -73,15 +77,18 @@ case object Iceberg extends Format {
         .filter(_.get(1) == null)
         .map(_.getString(0))
         .toList
-
     } else {
-
       partitionsDf
         .select(col(s"partition.$partitionColumn").cast("string"))
         .collect()
         .map(_.getString(0))
         .toList
     }
+  }
+
+  private[catalog] def qualifyWithCatalog(tableName: String)(implicit sparkSession: SparkSession): String = {
+    val resolved = Format.resolveTableName(tableName)
+    s"${QuotingUtils.quoteIdentifier(resolved.catalog)}.${QuotingUtils.quoteIdentifier(resolved.namespace)}.${QuotingUtils.quoteIdentifier(resolved.table)}"
   }
 
   override def supportSubPartitionsFilter: Boolean = false

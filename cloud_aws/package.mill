@@ -11,7 +11,7 @@ object `package` extends Cross[CloudAwsModule](build.Constants.scalaVersions) wi
 trait CloudAwsModule extends Cross.Module[String] with build.BaseModule {
   def moduleDeps = Seq(build.spark(crossValue), build.aggregator(crossValue), build.api(crossValue), build.online(crossValue))
 
-  def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingApiDeps ++ build.Constants.utilityDeps ++ build.Constants.sparkDeps ++ Seq(
+  def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingApiDeps ++ build.Constants.utilityDeps ++ Seq(
     mvn"software.amazon.awssdk:dynamodb:2.30.13",
     mvn"software.amazon.awssdk:ec2:2.30.13",
     mvn"software.amazon.awssdk:emr:2.30.13",
@@ -21,8 +21,8 @@ trait CloudAwsModule extends Cross.Module[String] with build.BaseModule {
     mvn"software.amazon.awssdk:utils:2.30.13",
     mvn"software.amazon.awssdk:auth:2.30.13",
     mvn"software.amazon.awssdk:url-connection-client:2.30.13",
+    mvn"software.amazon.awssdk:aws-crt-client:2.30.13",
     mvn"software.amazon.awssdk:identity-spi:2.30.13",
-    mvn"org.apache.hudi::hudi-spark3.5-bundle:1.0.0",
   )
   
   object test extends build.BaseTestModule {
@@ -30,8 +30,8 @@ trait CloudAwsModule extends Cross.Module[String] with build.BaseModule {
 
     def moduleDeps = Seq(build.cloud_aws(crossValue), build.spark(crossValue).test)
     def mvnDeps = super.mvnDeps() ++ Seq(
-      mvn"org.testcontainers:testcontainers:1.19.3",
-      mvn"org.testcontainers:junit-jupiter:1.19.3"
+      mvn"org.testcontainers:testcontainers:2.0.2",
+      mvn"org.apache.hudi::hudi-spark3.5-bundle:1.0.0",
     )
     override def testFramework = "org.scalatest.tools.Framework"
     def forkArgs = build.Constants.commonTestForkArgs ++ Seq(

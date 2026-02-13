@@ -50,35 +50,6 @@ class TableDependency:
         )
 
 
-def Import(
-    query: str,
-    version: Optional[int] = None,
-    output_namespace: Optional[str] = None,
-    engine_type: Optional[EngineType] = None,
-    dependencies: Optional[List[Union[TableDependency, Dict]]] = None,
-    conf: Optional[common.ConfigProperties] = None,
-    env_vars: Optional[common.EnvironmentVariables] = None,
-    offline_schedule: str = "@daily",
-):
-    assert dependencies is not None and len(dependencies) == 1, (
-        f"Import must specify exactly one table dependency. Got: {dependencies}"
-    )
-    assert dependencies[0].partition_column is not None, (
-        f"Import must specify a partition column for the table dependency. Got: {dependencies[0].partition_column}"
-    )
-
-    return StagingQuery(
-        query=query,
-        version=version,
-        output_namespace=output_namespace,
-        dependencies=dependencies,
-        conf=conf,
-        env_vars=env_vars,
-        engine_type=engine_type,
-        offline_schedule=offline_schedule,
-    )
-
-
 def StagingQuery(
     query: str,
     version: Optional[int] = None,

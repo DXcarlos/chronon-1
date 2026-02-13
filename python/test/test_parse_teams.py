@@ -14,12 +14,50 @@ Tests for the parse_teams module.
 #     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
+import pytest
 from gen_thrift.api.ttypes import GroupBy, Join, JoinPart, MetaData, Team
 from gen_thrift.common.ttypes import ConfigProperties
 
 from ai.chronon.cli.compile import parse_teams
 from ai.chronon.repo.constants import RunMode
 from ai.chronon.types import EnvironmentVariables, ExecutionInfo
+
+
+def test_check_deprecated_catalog_in_common_conf():
+    """Test that _check_deprecated_catalog rejects DelegatingBigQueryMetastoreCatalog in common conf."""
+    conf = ConfigProperties(
+        common={
+            "spark.sql.catalog.bigquery_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+        },
+    )
+    with pytest.raises(ValueError, match="DelegatingBigQueryMetastoreCatalog"):
+        parse_teams._check_deprecated_catalog("test_team", conf)
+
+
+def test_check_deprecated_catalog_in_mode_conf():
+    """Test that _check_deprecated_catalog rejects DelegatingBigQueryMetastoreCatalog in mode conf."""
+    conf = ConfigProperties(
+        common={},
+        modeConfigs={
+            RunMode.BACKFILL: {
+                "spark.sql.catalog.bigquery_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            },
+        },
+    )
+    with pytest.raises(ValueError, match="DelegatingBigQueryMetastoreCatalog"):
+        parse_teams._check_deprecated_catalog("test_team", conf)
+
+
+def test_check_deprecated_catalog_allows_valid_config():
+    """Test that _check_deprecated_catalog allows BigQueryMetastoreCatalog."""
+    conf = ConfigProperties(
+        common={
+            "spark.sql.catalog.bigquery_catalog": "org.apache.iceberg.spark.SparkCatalog",
+            "spark.sql.catalog.bigquery_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+        },
+    )
+    # Should not raise
+    parse_teams._check_deprecated_catalog("test_team", conf)
 
 
 def test_update_metadata_with_existing_output_namespace():
@@ -377,3 +415,180 @@ def test_merge_team_execution_info():
         assert(actual_conf.modeConfigs[mode] == expected_conf.modeConfigs[mode])
 
     assert(actual_execution_info == expected_execution_info)
+
+
+def test_merge_mode_maps_with_none_default_modes():
+    """Test that modeEnvironments propagate when the default team has no modeEnvironments.
+
+    This covers the GCP template scenario where the default team only defines
+    common env vars (modeEnvironments=None), and mode-level overrides are set
+    at the object level. Previously, these were silently discarded because the
+    local dict was never set back on the result object.
+    """
+    gcp_team = "gcp"
+    team_dict = {
+        "default": Team(
+            name="default",
+            env=EnvironmentVariables(
+                common={
+                    "common_env_key": "default_value",
+                },
+                # No modeEnvironments — this is the bug trigger
+            ),
+            conf=ConfigProperties(
+                common={
+                    "common_conf_key": "default_conf_value",
+                },
+                # No modeConfigs — same bug trigger for conf
+            ),
+        ),
+        gcp_team: Team(
+            name=gcp_team,
+            env=EnvironmentVariables(
+                common={
+                    "GCP_PROJECT_ID": "test_project",
+                },
+                # No modeEnvironments on team either
+            ),
+            conf=ConfigProperties(
+                common={
+                    "spark.chronon.cloud_provider": "gcp",
+                },
+            ),
+        ),
+    }
+
+    # Object-level metadata with modeEnvironments set
+    metadata = MetaData(
+        team=gcp_team,
+        name="test_metadata_for_groupby",
+        executionInfo=ExecutionInfo(
+            env=EnvironmentVariables(
+                common={
+                    "common_env_key": "object_override",
+                },
+                modeEnvironments={
+                    RunMode.BACKFILL: {
+                        "GCP_DATAPROC_CLUSTER_NAME": "my-backfill-cluster",
+                    },
+                    RunMode.STREAMING: {
+                        "GCP_DATAPROC_CLUSTER_NAME": "my-streaming-cluster",
+                    },
+                },
+            ),
+            conf=ConfigProperties(
+                common={
+                    "common_conf_key": "object_conf_override",
+                },
+                modeConfigs={
+                    RunMode.BACKFILL: {
+                        "spark.chronon.partition.column": "ds",
+                    },
+                },
+            ),
+        ),
+    )
+
+    parse_teams.merge_team_execution_info(metadata, team_dict, gcp_team)
+
+    actual_execution_info: ExecutionInfo = metadata.executionInfo
+
+    # modeEnvironments must be present (not None/empty)
+    assert actual_execution_info.env.modeEnvironments is not None
+    assert RunMode.BACKFILL in actual_execution_info.env.modeEnvironments
+    assert RunMode.STREAMING in actual_execution_info.env.modeEnvironments
+
+    # Verify backfill mode has all merged values
+    backfill_env = actual_execution_info.env.modeEnvironments[RunMode.BACKFILL]
+    assert backfill_env["GCP_DATAPROC_CLUSTER_NAME"] == "my-backfill-cluster"
+    assert backfill_env["common_env_key"] == "object_override"
+    assert backfill_env["GCP_PROJECT_ID"] == "test_project"
+
+    # Verify streaming mode
+    streaming_env = actual_execution_info.env.modeEnvironments[RunMode.STREAMING]
+    assert streaming_env["GCP_DATAPROC_CLUSTER_NAME"] == "my-streaming-cluster"
+    assert streaming_env["common_env_key"] == "object_override"
+    assert streaming_env["GCP_PROJECT_ID"] == "test_project"
+
+    # modeConfigs must be present (not None/empty)
+    assert actual_execution_info.conf.modeConfigs is not None
+    assert RunMode.BACKFILL in actual_execution_info.conf.modeConfigs
+
+    # Verify backfill conf has all merged values
+    backfill_conf = actual_execution_info.conf.modeConfigs[RunMode.BACKFILL]
+    assert backfill_conf["spark.chronon.partition.column"] == "ds"
+    assert backfill_conf["common_conf_key"] == "object_conf_override"
+    assert backfill_conf["spark.chronon.cloud_provider"] == "gcp"
+
+
+def test_merge_mode_maps_with_none_default_env():
+    """Test that modeEnvironments propagate when the default team has env=None.
+
+    When the default team has no env/conf at all (None), it gets filtered out
+    by _merge_mode_maps. The team-level env (with only common, no modes) becomes
+    the first item, and its modeEnvironments is None — triggering the same bug.
+    """
+    gcp_team = "gcp"
+    team_dict = {
+        "default": Team(
+            name="default",
+            # env=None, conf=None — no environment config at all
+        ),
+        gcp_team: Team(
+            name=gcp_team,
+            env=EnvironmentVariables(
+                common={
+                    "GCP_PROJECT_ID": "test_project",
+                },
+                # No modeEnvironments
+            ),
+            conf=ConfigProperties(
+                common={
+                    "spark.chronon.cloud_provider": "gcp",
+                },
+                # No modeConfigs
+            ),
+        ),
+    }
+
+    # Object-level metadata with modeEnvironments set
+    metadata = MetaData(
+        team=gcp_team,
+        name="test_metadata_for_groupby",
+        executionInfo=ExecutionInfo(
+            env=EnvironmentVariables(
+                modeEnvironments={
+                    RunMode.BACKFILL: {
+                        "GCP_DATAPROC_CLUSTER_NAME": "my-backfill-cluster",
+                    },
+                },
+            ),
+            conf=ConfigProperties(
+                modeConfigs={
+                    RunMode.BACKFILL: {
+                        "spark.chronon.partition.column": "ds",
+                    },
+                },
+            ),
+        ),
+    )
+
+    parse_teams.merge_team_execution_info(metadata, team_dict, gcp_team)
+
+    actual_execution_info: ExecutionInfo = metadata.executionInfo
+
+    # modeEnvironments must be present
+    assert actual_execution_info.env.modeEnvironments is not None
+    assert RunMode.BACKFILL in actual_execution_info.env.modeEnvironments
+
+    backfill_env = actual_execution_info.env.modeEnvironments[RunMode.BACKFILL]
+    assert backfill_env["GCP_DATAPROC_CLUSTER_NAME"] == "my-backfill-cluster"
+    assert backfill_env["GCP_PROJECT_ID"] == "test_project"
+
+    # modeConfigs must be present
+    assert actual_execution_info.conf.modeConfigs is not None
+    assert RunMode.BACKFILL in actual_execution_info.conf.modeConfigs
+
+    backfill_conf = actual_execution_info.conf.modeConfigs[RunMode.BACKFILL]
+    assert backfill_conf["spark.chronon.partition.column"] == "ds"
+    assert backfill_conf["spark.chronon.cloud_provider"] == "gcp"

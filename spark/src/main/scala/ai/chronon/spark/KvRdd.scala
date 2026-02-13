@@ -77,8 +77,10 @@ sealed trait BaseKvRdd {
   def toFlatDf: DataFrame
 }
 
-case class KvRdd(data: RDD[(Array[Any], Array[Any])], keySchema: StructType, valueSchema: StructType)(implicit
-    sparkSession: SparkSession)
+case class KvRdd(data: RDD[(Array[Any], Array[Any])],
+                 keySchema: StructType,
+                 valueSchema: StructType,
+                 nullCounts: Map[String, Long])(implicit sparkSession: SparkSession)
     extends BaseKvRdd {
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)

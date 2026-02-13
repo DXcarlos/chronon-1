@@ -50,10 +50,12 @@ echo "Building jars"
 
 ./mill cloud_gcp.assembly
 ./mill cloud_aws.assembly
+./mill cloud_azure.assembly
 ./mill service.assembly
 
 CLOUD_GCP_JAR="$CHRONON_ROOT_DIR/out/cloud_gcp/assembly.dest/out.jar"
 CLOUD_AWS_JAR="$CHRONON_ROOT_DIR/out/cloud_aws/assembly.dest/out.jar"
+CLOUD_AZURE_JAR="$CHRONON_ROOT_DIR/out/cloud_azure/assembly.dest/out.jar"
 SERVICE_JAR="$CHRONON_ROOT_DIR/out/service/assembly.dest/out.jar"
 
 if [ ! -f "$CLOUD_GCP_JAR" ]; then
@@ -71,12 +73,18 @@ if [ ! -f "$CLOUD_AWS_JAR" ]; then
     exit 1
 fi
 
+if [ ! -f "$CLOUD_AZURE_JAR" ]; then
+    echo "$CLOUD_AZURE_JAR not found"
+    exit 1
+fi
+
 # Copy jars to build output for docker build
 echo "Copying jars to build_output"
 mkdir -p build_output
 cp out/service/assembly.dest/out.jar build_output/service_assembly_deploy.jar
 cp out/cloud_aws/assembly.dest/out.jar build_output/cloud_aws_lib_deploy.jar
 cp out/cloud_gcp/assembly.dest/out.jar build_output/cloud_gcp_lib_deploy.jar
+cp out/cloud_azure/assembly.dest/out.jar build_output/cloud_azure_lib_deploy.jar
 
 if [[ "$LOCAL_BUILD" != true ]]; then
     echo "Kicking off a docker login"

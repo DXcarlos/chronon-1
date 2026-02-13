@@ -23,10 +23,12 @@ ENV LANG=C.UTF-8
 # https://stackoverflow.com/questions/31881904/docker-follow-symlink-outside-context
 ENV CLOUD_AWS_JAR_PATH=build_output/cloud_aws_lib_deploy.jar
 ENV CLOUD_GCP_JAR_PATH=build_output/cloud_gcp_lib_deploy.jar
+ENV CLOUD_AZURE_JAR_PATH=build_output/cloud_azure_lib_deploy.jar
 ENV FETCHER_SVC_JAR_PATH=build_output/service_assembly_deploy.jar
 ENV FETCHER_LAUNCH_SCRIPT=docker/fetcher/start.sh
 ENV GCP_ONLINE_CLASS=ai.chronon.integrations.cloud_gcp.GcpApiImpl
 ENV AWS_ONLINE_CLASS=ai.chronon.integrations.aws.AwsApiImpl
+ENV AZURE_ONLINE_CLASS=ai.chronon.integrations.cloud_azure.AzureApiImpl
 
 # Install Google Cloud Profiler
 RUN mkdir -p /opt/cprof && \
@@ -38,12 +40,13 @@ WORKDIR /srv/zipline
 
 ENV CLOUD_AWS_JAR=${CLOUD_AWS_JAR:-"/srv/zipline/cloud_aws/cloud_aws.jar"}
 ENV CLOUD_GCP_JAR=${CLOUD_GCP_JAR:-"/srv/zipline/cloud_gcp/cloud_gcp.jar"}
+ENV CLOUD_AZURE_JAR=${CLOUD_AZURE_JAR:-"/srv/zipline/cloud_azure/cloud_azure.jar"}
 ENV FETCHER_JAR=${FETCHER_JAR:-"/srv/zipline/fetcher/service.jar"}
 ENV LOG_PATH=${LOG_PATH:-"/srv/zipline/fetcher/logs"}
 
-# Skip aws jar till we fix cves
-#COPY $CLOUD_AWS_JAR_PATH "$CLOUD_AWS_JAR"
+COPY $CLOUD_AWS_JAR_PATH "$CLOUD_AWS_JAR"
 COPY $CLOUD_GCP_JAR_PATH "$CLOUD_GCP_JAR"
+COPY $CLOUD_AZURE_JAR_PATH "$CLOUD_AZURE_JAR"
 COPY $FETCHER_SVC_JAR_PATH "$FETCHER_JAR"
 COPY $FETCHER_LAUNCH_SCRIPT /srv/zipline/fetcher/start.sh
 

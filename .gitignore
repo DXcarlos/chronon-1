@@ -48,6 +48,7 @@ python/*.egg-info/
 **/*.egg-info/
 python/src/agent/
 python/src/gen_thrift/
+python/test/canary/compiled/
 
 # spark test scratch area
 **/spark-warehouse/
@@ -127,3 +128,9 @@ MODULE.bazel*
 
 # mill build output
 out/**
+
+
+# EC2 perf testing
+*.pem
+.ec2-instance-state
+perf-test-results-ec2-*.log

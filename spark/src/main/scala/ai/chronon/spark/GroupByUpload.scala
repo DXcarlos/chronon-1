@@ -23,6 +23,7 @@ import ai.chronon.aggregator.windowing.{
   Resolution,
   SawtoothOnlineAggregator
 }
+import ai.chronon.aggregator.windowing.{FinalBatchIr, FiveMinuteResolution, Resolution, SawtoothOnlineAggregator}
 import ai.chronon.api
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.api.Accuracy
@@ -42,6 +43,7 @@ import ai.chronon.api.PartitionRange
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.online.metrics.Metrics
 import ai.chronon.spark.Extensions._
+import ai.chronon.spark.submission.SparkSessionBuilder
 import org.apache.spark.SparkEnv
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -50,10 +52,13 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.functions.not
 import org.apache.spark.sql.types
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 import scala.annotation.tailrec
+import scala.collection.mutable
+import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
 class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable {
@@ -62,8 +67,40 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
   private val tableUtils: TableUtils = TableUtils(sparkSession)
   implicit private val partitionSpec: PartitionSpec = tableUtils.partitionSpec
 
+  private def snapshotAccuracyNullCountCheck(rdd: RDD[(Array[Any], Array[Any])],
+                                             fields: Array[StructField]): mutable.Map[String, Long] = {
+    rdd.cache()
+
+    val nullCounts = rdd
+      .treeAggregate(mutable.HashMap.empty[String, Long])(
+        seqOp = { case (counterMap, (_, values)) =>
+          for (i <- values.indices) {
+            if (values(i) == null) {
+              val field = fields(i)
+              val key = field.name
+              counterMap.update(key, counterMap.getOrElse(key, 0L) + 1L)
+            }
+          }
+          counterMap
+        },
+        combOp = { (map1, map2) =>
+          map2.foreach { case (key, count) =>
+            map1.update(key, map1.getOrElse(key, 0L) + count)
+          }
+          map1
+        }
+      )
+
+    nullCounts
+  }
+
   private def fromBase(rdd: RDD[(Array[Any], Array[Any])]): KvRdd = {
-    KvRdd(rdd.map { case (keyAndDs, values) => keyAndDs.init -> values }, groupBy.keySchema, groupBy.postAggSchema)
+
+    val nullCounts = snapshotAccuracyNullCountCheck(rdd, groupBy.postAggSchema.fields)
+
+    val pairRdd = rdd.map { case (keyAndDs, values) => keyAndDs.init -> values }
+
+    KvRdd(pairRdd, groupBy.keySchema, groupBy.postAggSchema, nullCounts.toMap)
   }
 
   def snapshotEntities: KvRdd = {
@@ -80,6 +117,8 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
           keyBuilder(row).data -> valuesIndices.map(row.get)
         }
 
+      val nullCounts = snapshotAccuracyNullCountCheck(rdd, groupBy.preAggSchema.fields)
+
       logger.info(s"""
            |pre-agg upload:
            |  input schema: ${groupBy.inputDf.schema.catalogString}
@@ -87,7 +126,7 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
            |  value schema: ${groupBy.preAggSchema.catalogString}
            |""".stripMargin)
 
-      KvRdd(rdd, groupBy.keySchema, groupBy.preAggSchema)
+      KvRdd(rdd, groupBy.keySchema, groupBy.preAggSchema, nullCounts.toMap)
 
     } else {
       fromBase(groupBy.snapshotEntitiesBase)
@@ -101,11 +140,13 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
   def temporalEvents(resolution: Resolution = FiveMinuteResolution): KvRdd = {
     val endTs = tableUtils.partitionSpec.epochMillis(endPartition)
     logger.info(s"TemporalEvents upload end ts: $endTs")
+
     val sawtoothOnlineAggregator = new SawtoothOnlineAggregator(
       endTs,
       groupBy.aggregations,
       SparkConversions.toChrononSchema(groupBy.inputDf.schema),
       resolution)
+
     val irSchema = SparkConversions.fromChrononSchema(sawtoothOnlineAggregator.batchIrSchema)
     val keyBuilder = FastHashing.generateKeyBuilder(groupBy.keyColumns.toArray, groupBy.inputDf.schema)
 
@@ -162,15 +203,35 @@ class GroupByUpload(endPartition: String, groupBy: GroupBy) extends Serializable
       )
     }
 
-    val outputRdd = outputRddAggregated
+    val outputAggregatedNormalized = outputRddAggregated
       .mapValues(sawtoothOnlineAggregator.normalizeBatchIr)
+
+    // Going to produce nullCounts and also later .save
+    outputAggregatedNormalized.cache()
+
+    val nullCounts = outputAggregatedNormalized
+      .treeAggregate(mutable.HashMap.empty[String, Long])(
+        seqOp = { case (counterMap, (_, batchIr)) =>
+          sawtoothOnlineAggregator.updateNullCounts(batchIr, counterMap)
+          counterMap
+        },
+        combOp = { (map1, map2) =>
+          map2.foreach { case (key, count) =>
+            map1.update(key, map1.getOrElse(key, 0L) + count)
+          }
+          map1
+        }
+      )
+
+    val outputRdd = outputAggregatedNormalized
       .map { case (keyWithHash: KeyWithHash, finalBatchIr: FinalBatchIr) =>
         val irArray = new Array[Any](2)
         irArray.update(0, finalBatchIr.collapsed)
         irArray.update(1, finalBatchIr.tailHops)
         keyWithHash.data -> irArray
       }
-    KvRdd(outputRdd, groupBy.keySchema, irSchema)
+
+    KvRdd(outputRdd, groupBy.keySchema, irSchema, nullCounts.toMap)
   }
 
 }
@@ -287,6 +348,15 @@ object GroupByUpload {
       case (Accuracy.TEMPORAL, DataModel.ENTITIES) => otherGroupByUpload.temporalEvents()
     }
 
+    // Emit null count map metrics
+    if (maybeContext.isDefined) {
+      logger.info(s"Emitting data quality metrics for ${result.nullCounts.keys.mkString("")} ")
+      result.nullCounts.foreach({ case (field, count) =>
+        maybeContext.get.gauge(s"NullCount.$field.$endDs", count)
+      })
+      Thread.sleep(Constants.ScrapeWaitSeconds.seconds.toMillis)
+    }
+
     result
   }
 
@@ -296,18 +366,19 @@ object GroupByUpload {
           showDf: Boolean = false,
           jsonPercent: Int = 1): Unit = {
     import ai.chronon.spark.submission.SparkSessionBuilder
-    val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
-    val startTs = System.currentTimeMillis()
     val tableUtils: TableUtils =
       tableUtilsOpt.getOrElse(
         TableUtils(
           SparkSessionBuilder
             .build(s"groupBy_${groupByConf.metaData.name}_upload")))
+    val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
+    val startTs = System.currentTimeMillis()
     val kvRdd = generateKvRdd(groupByConf = groupByConf,
                               endDs = endDs,
                               showDf = showDf,
                               tableUtils = tableUtils,
                               maybeContext = Option(context))
+
     val kvDf = kvRdd.toAvroDf(jsonPercent = jsonPercent)
 
     if (showDf) {
@@ -330,6 +401,9 @@ object GroupByUpload {
       .union(metaDf)
       .withColumn("ds", lit(endDs))
       .save(groupByConf.metaData.uploadTable, groupByConf.metaData.tableProps, partitionColumns = List("ds"))
+
+    // unpersist RDD
+    kvRdd.data.unpersist()
 
     val kvDfReloaded = tableUtils
       .loadTable(groupByConf.metaData.uploadTable)

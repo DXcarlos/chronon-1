@@ -6,7 +6,7 @@ import click
 from gen_thrift.api.ttypes import ConfType
 
 from ai.chronon.cli.compile.compile_context import CompileContext
-from ai.chronon.cli.compile.compiler import Compiler
+from ai.chronon.cli.compile.compiler import Compiler, CompileResult
 from ai.chronon.cli.compile.display.console import console
 from ai.chronon.cli.formatter import Format, jsonify_exceptions_if_json_format
 
@@ -49,10 +49,15 @@ def compile(chronon_root, ignore_python_errors, format, force):
     elif format != Format.JSON:
         console.print(f"\n[cyan italic]{chronon_root}[/cyan italic] already on python path.")
 
-    return __compile(chronon_root, ignore_python_errors, format=format, force=force)
+    compiled_result, has_errors = __compile(chronon_root, ignore_python_errors, format=format, force=force)
+
+    if has_errors and not ignore_python_errors:
+        sys.exit(1)
+    return compiled_result
 
 
-def __compile(chronon_root, ignore_python_errors=False, format=Format.TEXT, force=False):
+def __compile(chronon_root, ignore_python_errors=False, format=Format.TEXT, force=False) -> tuple[
+    dict[ConfType, CompileResult], bool]:
     if chronon_root:
         chronon_root_path = os.path.expanduser(chronon_root)
         os.chdir(chronon_root_path)
@@ -71,14 +76,13 @@ def __compile(chronon_root, ignore_python_errors=False, format=Format.TEXT, forc
     results = compiler.compile()
     if format == Format.JSON:
         print(json.dumps({
-            "status": "success", 
+            "status": "success",
             "results": {
                 ConfType._VALUES_TO_NAMES[conf_type]: list(conf_result.obj_dict.keys())
                 for conf_type, conf_result in results.items()
                 if conf_result.obj_dict
             }}, indent=4))
-        sys.exit(0)
-    return results
+    return results, compiler.has_compilation_errors()
 
 
 if __name__ == "__main__":

@@ -352,6 +352,10 @@ class GcpRunner(Runner):
         if self.additional_jars:
             user_args["--additional-jars"] = self.additional_jars
 
+        # Set flink jars base path
+        if self.flink_jars_uri:
+            user_args["--flink-jars-uri"] = self.flink_jars_uri
+
         user_args_str = " ".join(f"{key}={value}" for key, value in user_args.items() if value)
         # if online args are set we add them to the user_args_str
         if self.online_args:

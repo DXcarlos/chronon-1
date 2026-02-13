@@ -36,7 +36,6 @@ trait OnlineModule extends Cross.Module[String] with build.BaseModule {
     mvn"org.apache.logging.log4j:log4j-core:2.25.3",
     // Additional from Bazel
     mvn"net.jodah:typetools:0.6.3",
-    mvn"com.datadoghq:java-dogstatsd-client:4.4.0"
   )
   
   object test extends build.BaseTestModule {

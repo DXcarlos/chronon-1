@@ -22,6 +22,11 @@ import ai.chronon.api._
 import java.util
 import scala.collection.mutable
 
+/** Collapsed IR: Array of size # of aggregations.
+  * Tail Hops: Array of size # of hop sizes determined by Resolution.
+  * ex: [5min, 1hr, 1day] => tailHops[0] = all 5min hops, tailHops[1] = all 1hr hops, tailHops[2] = all 1day hops
+  * tailHops[i] = Array of Map[hopStartTs -> HopIr]. HopIr is Array of size # of *windowed aggregations + 1 (last element is ts)
+  */
 case class BatchIr(collapsed: Array[Any], tailHops: HopsAggregator.IrMapType)
 case class FinalBatchIr(collapsed: Array[Any], tailHops: HopsAggregator.OutputArrayType)
 

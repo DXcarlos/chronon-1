@@ -1,0 +1,48 @@
+package build.flink_connectors.pubsub
+import mill.api._
+import mill.scalalib._
+
+// PubSub connector sub-module - supports both flink_connectors.pubsub.test AND flink_connectors.pubsub[2.13.17].test
+object `package` extends Cross[PubSubConnectorModule](build.Constants.scalaVersions) with PubSubConnectorModule {
+  override val crossValue = build.Constants.defaultScalaVersion
+}
+
+trait PubSubConnectorModule extends Cross.Module[String] with build.BaseModule {
+  val flinkVersion = build.Constants.flinkVersion
+
+  def moduleDeps = Seq(build.aggregator(crossValue), build.api(crossValue), build.online(crossValue), build.flink(crossValue))
+
+  def compileMvnDeps = build.Constants.providedFlinkDeps
+
+  def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingApiDeps ++ build.Constants.utilityDeps ++ Seq(
+    mvn"io.dropwizard.metrics:metrics-core:4.2.19",
+    mvn"com.google.protobuf:protobuf-java-util:3.25.1",
+    mvn"com.google.protobuf:protobuf-java:3.25.1",
+    mvn"com.google.cloud:google-cloud-pubsub:1.141.2"
+      .exclude("com.fasterxml.jackson.core" -> "jackson-core")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-annotations"),
+    mvn"io.netty:netty-codec-http2:4.1.129.Final",
+  )
+
+  object test extends build.BaseTestModule {
+    def scalaVersion = crossValue
+    def moduleDeps = Seq(build.flink_connectors.pubsub(crossValue))
+    def forkArgs = build.Constants.commonTestForkArgs
+    def mvnDeps = super.mvnDeps() ++ super.compileMvnDeps() ++ build.Constants.testDeps ++ Seq(
+      mvn"org.apache.flink:flink-test-utils:$flinkVersion"
+        .exclude("org.apache.logging.log4j" -> "log4j-slf4j-impl")
+        .exclude("log4j" -> "log4j"),
+      mvn"com.google.cloud:google-cloud-pubsub:1.141.2"
+        .exclude("com.fasterxml.jackson.core" -> "jackson-core"),
+      mvn"org.apache.hadoop:hadoop-client-api:3.3.6"
+        .exclude("org.apache.logging.log4j" -> "log4j-slf4j-impl")
+        .exclude("log4j" -> "log4j"),
+      mvn"org.apache.hadoop:hadoop-client-runtime:3.3.6",
+      // Force correct Jackson versions
+      mvn"com.fasterxml.jackson.core:jackson-core:2.15.2",
+      mvn"com.fasterxml.jackson.core:jackson-databind:2.15.2",
+      mvn"com.fasterxml.jackson.core:jackson-annotations:2.15.2"
+    )
+  }
+}

@@ -62,8 +62,9 @@ class JavaStatsService(api: Api,
 
       val keyCodecOpt = responses(0).values match {
         case Success(values) if values.nonEmpty =>
-          val schemaString = new String(values.head.bytes, charset)
-          logger.info(s"Successfully found schema: $keySchemaKey")
+          // Use the most recent schema (last in the list)
+          val schemaString = new String(values.last.bytes, charset)
+          logger.info(s"Successfully found schema: $keySchemaKey (version: latest of ${values.size})")
           Some(new AvroCodec(schemaString))
         case _ =>
           logger.warn(s"Schema not found for key: $keySchemaKey")
@@ -72,8 +73,9 @@ class JavaStatsService(api: Api,
 
       val valueCodecOpt = responses(1).values match {
         case Success(values) if values.nonEmpty =>
-          val schemaString = new String(values.head.bytes, charset)
-          logger.info(s"Successfully found schema: $valueSchemaKey")
+          // Use the most recent schema (last in the list)
+          val schemaString = new String(values.last.bytes, charset)
+          logger.info(s"Successfully found schema: $valueSchemaKey (version: latest of ${values.size})")
           Some(new AvroCodec(schemaString))
         case _ =>
           logger.warn(s"Schema not found for key: $valueSchemaKey")
@@ -187,11 +189,40 @@ class JavaStatsService(api: Api,
               val aggregator = StatsGenerator.buildAggregator(enhancedMetrics, selectedSchema)
 
               // Merge all IRs after denormalizing (converts bytes back to sketch objects)
+              // Skip tiles that fail to decode due to schema evolution
+              var successfulTiles = 0
+              var skippedTiles = 0
               val mergedIr = timedValues.foldLeft(aggregator.init) { (acc, timedValue) =>
-                val irBytes = timedValue.bytes
-                val normalizedIr = valueCodec.decodeRow(irBytes)
-                val denormalizedIr = aggregator.denormalize(normalizedIr)
-                aggregator.merge(acc, denormalizedIr)
+                val result = Try {
+                  val irBytes = timedValue.bytes
+                  val normalizedIr = valueCodec.decodeRow(irBytes)
+                  val denormalizedIr = aggregator.denormalize(normalizedIr)
+                  aggregator.merge(acc, denormalizedIr)
+                }
+
+                result match {
+                  case Success(mergedResult) =>
+                    successfulTiles += 1
+                    mergedResult
+                  case Failure(e) =>
+                    skippedTiles += 1
+                    if (skippedTiles <= 3) {
+                      // Log first few failures in detail to help debug
+                      logger.warn(s"Skipping tile due to schema mismatch: ${e.getClass.getSimpleName}: ${e.getMessage}")
+                    }
+                    acc
+                }
+              }
+
+              if (successfulTiles == 0) {
+                throw new RuntimeException(
+                  s"All $skippedTiles tiles failed to decode for $tableName. " +
+                    "This may indicate a complete schema incompatibility."
+                )
+              }
+
+              if (skippedTiles > 0) {
+                logger.info(s"Successfully decoded $successfulTiles tiles, skipped $skippedTiles incompatible tiles")
               }
 
               // Finalize to get final statistics
@@ -201,12 +232,12 @@ class JavaStatsService(api: Api,
               val fieldNames = aggregator.outputSchema.map(_._1)
               val statsMap = fieldNames.zip(normalized).toMap
 
-              logger.info(s"Merged ${timedValues.size} tiles into final statistics for $tableName")
+              logger.info(s"Merged $successfulTiles tiles into final statistics for $tableName")
 
               // Add derived features
               val enhancedStatsMap = addDerivedFeatures(statsMap)
 
-              JavaStatsResponse.success(tableName, enhancedStatsMap.asJava, timedValues.size)
+              JavaStatsResponse.success(tableName, enhancedStatsMap.asJava, successfulTiles, skippedTiles)
             }
         }
       } match {
@@ -380,19 +411,24 @@ case class JavaStatsResponse(
     tableName: String,
     statistics: java.util.Map[String, Any],
     tilesCount: Int,
+    skippedTilesCount: Int,
     errorMessage: String
 ) {
   def isSuccess: Boolean = success
   def getStatistics: java.util.Map[String, Any] = statistics
   def getTilesCount: Int = tilesCount
+  def getSkippedTilesCount: Int = skippedTilesCount
   def getErrorMessage: String = errorMessage
   def getTableName: String = tableName
 }
 
 object JavaStatsResponse {
-  def success(tableName: String, stats: java.util.Map[String, Any], tilesCount: Int): JavaStatsResponse =
-    JavaStatsResponse(true, tableName, stats, tilesCount, null)
+  def success(tableName: String,
+              stats: java.util.Map[String, Any],
+              tilesCount: Int,
+              skippedTilesCount: Int = 0): JavaStatsResponse =
+    JavaStatsResponse(true, tableName, stats, tilesCount, skippedTilesCount, null)
 
   def failure(errorMessage: String): JavaStatsResponse =
-    JavaStatsResponse(false, null, java.util.Collections.emptyMap(), 0, errorMessage)
+    JavaStatsResponse(false, null, java.util.Collections.emptyMap(), 0, 0, errorMessage)
 }

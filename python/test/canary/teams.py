@@ -16,9 +16,6 @@ default = Team(
     env=EnvironmentVariables(
         common={
             "VERSION": "latest",
-            "JOB_MODE": "local[*]",
-            "PARTITION_COLUMN": "ds",
-            "PARTITION_FORMAT": "yyyy-MM-dd",
             "CUSTOMER_ID": "dev",
             "FRONTEND_URL": "http://localhost:3000",
             "HUB_URL": "http://localhost:3903",
@@ -48,12 +45,9 @@ gcp = Team(
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "dev",
             "VERSION": "latest",
-            "JOB_MODE": "local[*]",
-            "PARTITION_COLUMN": "ds",
-            "PARTITION_FORMAT": "yyyy-MM-dd",
             "GCP_PROJECT_ID": "canary-443022",
             "GCP_REGION": "us-central1",
-            "GCP_DATAPROC_CLUSTER_NAME": "zipline-canary-cluster",
+            "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
             "ENABLE_PUBSUB": "true",
             "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
@@ -64,7 +58,7 @@ gcp = Team(
         },
         modeEnvironments={
             RunMode.UPLOAD: {
-                "GCP_DATAPROC_CLUSTER_NAME": "zipline-transient-upload-cluster"
+                "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster"
             }
         }
     ),
@@ -82,13 +76,13 @@ gcp = Team(
             "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
             "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
             "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
-            "spark.sql.catalog.spark_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
             "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
             "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-canary/data/tables/",
             "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
             "spark.sql.catalog.default_iceberg.gcp.bigquery.project-id": "canary-443022",
             "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
-            "spark.sql.catalog.default_iceberg": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
             "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
             "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
             "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
@@ -101,9 +95,6 @@ gcp = Team(
             "spark.executor.cores": "1",
         },
         modeConfigs={
-            RunMode.BACKFILL: {
-                "spark.chronon.backfill_cloud_provider": "gcp",  # dummy test config
-            }
         }
     ),
     clusterConf=ClusterConfigProperties(
@@ -125,11 +116,8 @@ aws = Team(
             "CLOUD_PROVIDER": "aws",
             "CUSTOMER_ID": "dev",
             "VERSION": "latest",
-            "JOB_MODE": "local[*]",
-            "PARTITION_COLUMN": "ds",
-            "PARTITION_FORMAT": "yyyy-MM-dd",
             "AWS_REGION": "us-west-2",
-            "EMR_CLUSTER_NAME": "zipline-canary-emr",
+            "SPARK_CLUSTER_NAME": "zipline-canary-emr",
             "ARTIFACT_PREFIX": "s3://zipline-artifacts-dev",
             "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
@@ -188,29 +176,29 @@ azure = Team(
             "CLOUD_PROVIDER": "azure",
             "CUSTOMER_ID": "dev",
             "VERSION": "latest",
-            "JOB_MODE": "local[*]",
-            "PARTITION_COLUMN": "ds",
-            "PARTITION_FORMAT": "yyyy-MM-dd",
-            # "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
-            # "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+            "SPARK_CLUSTER_NAME": "kyuubi-dev.westus2.cloudapp.azure.com:10099",
+            "ARTIFACT_PREFIX": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net",
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
             "FRONTEND_URL": "http://localhost:3000",
             "HUB_URL": "http://localhost:3903",
+            "SNOWFLAKE_JDBC_URL": "jdbc:snowflake://VEJLULX-AZURE.snowflakecomputing.com/?user=demo_batch_service&db=Demo&schema=public&warehouse=demo_wh",
+            "SNOWFLAKE_VAULT_URI": "https://demo-service-writer-pkey.vault.azure.net/secrets/snowflake-private-key",
         },
     ),
     conf=ConfigProperties(
         common={
+            "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_azure.AzureFormatProvider",
             "spark.chronon.partition.format": "yyyy-MM-dd",
             "spark.chronon.partition.column": "ds",
-            "spark.chronon.table_write.prefix": "abfss://warehouse@ziplineai1.dfs.core.windows.net/data/tables/",
             "spark.chronon.table_write.format": "iceberg",
-            "spark.sql.catalog.spark_catalog.warehouse": "abfss://warehouse@ziplineai1.dfs.core.windows.net/data/",
             "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
-            'spark.sql.catalog.spark_catalog.type': 'rest',
-            "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
-            "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
+            "spark.sql.catalog.spark_catalog.type": "rest",
+            "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-azure-oc.snowflakecomputing.com/polaris/api/catalog",
+            "spark.sql.catalog.spark_catalog.credential": "XtyCirtE0/o3pcTMdkLCh7LXVno=:i++cOG/+vHgZwU8Wnj5Qx3hIzHwvlr0rhaGJnDwIBTg=",
+            "spark.sql.catalog.spark_catalog.warehouse": "demo-v2",
+            "spark.sql.catalog.spark_catalog.scope": "PRINCIPAL_ROLE:engine",
             "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "vended-credentials",
-            "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-opencatalog.snowflakecomputing.com/polaris/api/catalog",
+            "spark.kryo.registrator": "ai.chronon.spark.submission.ChrononKryoRegistrator",
             "spark.chronon.coalesce.factor": "10",
             "spark.default.parallelism": "10",
             "spark.sql.shuffle.partitions": "10",

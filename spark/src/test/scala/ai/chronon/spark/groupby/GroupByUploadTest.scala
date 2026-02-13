@@ -19,7 +19,7 @@ package ai.chronon.spark.groupby
 import ai.chronon.aggregator.test.Column
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
-import ai.chronon.api._
+import ai.chronon.api.{Window, _}
 import ai.chronon.online.fetcher.Fetcher
 import ai.chronon.spark.Extensions.DataframeOps
 import ai.chronon.spark.GroupByUpload
@@ -30,18 +30,45 @@ import com.google.gson.Gson
 import org.apache.spark.sql.SparkSession
 import org.junit.Assert.assertEquals
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
+import org.scalatest.matchers.should.Matchers
 import org.slf4j.{Logger, LoggerFactory}
 
+import java.util
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 
-class GroupByUploadTest extends SparkTestBase {
+class GroupByUploadTest extends SparkTestBase with Matchers {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  private val namespace = "group_by_upload_test"
   private val tableUtils = TableUtils(spark)
+  private val createdDatabases = scala.collection.mutable.Set[String]()
+
+  // Generate unique namespace per test to avoid interference
+  private def testNamespace(suffix: String = ""): String = {
+    val uuid = java.util.UUID.randomUUID().toString.replace("-", "").take(8)
+    val ns = if (suffix.isEmpty) {
+      s"group_by_upload_test_${uuid}"
+    } else {
+      s"group_by_upload_test_${suffix}_${uuid}"
+    }
+    createdDatabases.add(ns)
+    ns
+  }
+
+  override def afterAll(): Unit = {
+    // Cleanup: drop all created databases
+    createdDatabases.foreach { db =>
+      try {
+        spark.sql(s"DROP DATABASE IF EXISTS $db CASCADE")
+      } catch {
+        case e: Exception => logger.warn(s"Failed to drop database $db", e)
+      }
+    }
+    super.afterAll()
+  }
 
   it should "temporal events last k" in {
+    val namespace = testNamespace("temporal_events_last_k")
     val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
     val yesterday = tableUtils.partitionSpec.before(today)
     createDatabase(namespace)
@@ -70,6 +97,7 @@ class GroupByUploadTest extends SparkTestBase {
   }
 
   it should "struct support" in {
+    val namespace = testNamespace("struct_support")
     val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
     val yesterday = tableUtils.partitionSpec.before(today)
     createDatabase(namespace)
@@ -111,6 +139,7 @@ class GroupByUploadTest extends SparkTestBase {
   }
 
   it should "multiple avg counters" in {
+    val namespace = testNamespace("multiple_avg_counters")
     val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
     val yesterday = tableUtils.partitionSpec.before(today)
     createDatabase(namespace)
@@ -141,10 +170,248 @@ class GroupByUploadTest extends SparkTestBase {
     GroupByUpload.run(groupByConf, endDs = yesterday)
   }
 
+  it should "produce a valid nullCountMap where both collapsedIr and tailHops are null for temporal events case" in {
+    val namespace = testNamespace("nullcount_all_null")
+    val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
+    val yesterday = tableUtils.partitionSpec.before(today)
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val eventsTable = "my_events_always_null"
+    val eventSchema = List(
+      Column("user", StringType, 10),
+      Column("list_event", StringType, 100, nullRate = 1.0), // always null
+      Column("views", IntType, 10,  nullRate = 1.0), // always null
+    )
+    val eventDf = DataFrameGen.events(spark, eventSchema, count = 1000, partitions = 18)
+    eventDf.save(s"$namespace.$eventsTable")
+
+    // Count how many "user" keys there are in the eventDf
+    val numUsers = spark.sql(s"SELECT COUNT(DISTINCT user) as user_count FROM $namespace.$eventsTable").collect().head.getAs[Long]("user_count")
+
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.LAST_K, "list_event", Seq(new Window(18, TimeUnit.DAYS)), argMap = Map("k" -> "30")),
+      Builders.Aggregation(Operation.AVERAGE, "views", Seq(new Window(18, TimeUnit.DAYS), new Window(1, TimeUnit.DAYS)))
+    )
+    val keys = Seq("user").toArray
+    val groupByConf =
+      Builders.GroupBy(
+        sources = Seq(Builders.Source.events(Builders.Query(), table = eventsTable)),
+        keyColumns = keys,
+        aggregations = aggregations,
+        metaData = Builders.MetaData(namespace = namespace, name = "test_multiple_avg_upload"),
+        accuracy = Accuracy.TEMPORAL
+      )
+    val result = GroupByUpload.generateKvRdd(groupByConf, endDs = yesterday, tableUtils = tableUtils).nullCounts
+    print(result)
+
+    result.keys.size shouldBe 3 // 3 output columns. 1 agg with 1 window, 1 agg with 2 windows = 3 output columns
+    result.values.foreach { count =>
+      count shouldBe numUsers
+    }
+  }
+
+  it should "produce a valid nullCountMap with both collapsedIr and tailHops are non null for temporal events case" in {
+    val namespace = testNamespace("nullcount_non_null")
+    val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
+    val yesterday = tableUtils.partitionSpec.before(today)
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val eventsTable = "my_events_non_null"
+    val eventSchema = List(
+      Column("user", StringType, 10),
+      Column("list_event", StringType, 100, nullRate = 0.0), // never null
+      Column("views", IntType, 10,  nullRate = 0.0), // never null
+    )
+    val eventDf = DataFrameGen.events(spark, eventSchema, count = 1000, partitions = 18)
+    eventDf.save(s"$namespace.$eventsTable")
+
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.LAST_K, "list_event", Seq(new Window(18, TimeUnit.DAYS)), argMap = Map("k" -> "30")),
+      Builders.Aggregation(Operation.AVERAGE, "views", Seq(new Window(18, TimeUnit.DAYS), new Window(1, TimeUnit.DAYS)))
+    )
+    val keys = Seq("user").toArray
+    val groupByConf =
+      Builders.GroupBy(
+        sources = Seq(Builders.Source.events(Builders.Query(), table = eventsTable)),
+        keyColumns = keys,
+        aggregations = aggregations,
+        metaData = Builders.MetaData(namespace = namespace, name = "test_multiple_avg_upload"),
+        accuracy = Accuracy.TEMPORAL
+      )
+    val result = GroupByUpload.generateKvRdd(groupByConf, endDs = yesterday, tableUtils = tableUtils).nullCounts
+    print(result)
+
+    result.isEmpty shouldBe true // empty null count map
+  }
+
+  it should "produce a valid empty null nullCountMap for snapshot events case" in {
+    val namespace = testNamespace("snapshot_empty_null")
+    val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
+    val yesterday = tableUtils.partitionSpec.before(today)
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val eventsTable = "my_snapshot_events_empty_null"
+    val eventSchema = List(
+      Column("user", StringType, 10),
+      Column("list_event", StringType, 100, nullRate = 0.0), // never null
+      Column("views", IntType, 10,  nullRate = 0.0), // never null
+    )
+    val eventDf = DataFrameGen.events(spark, eventSchema, count = 1000, partitions = 18)
+    eventDf.save(s"$namespace.$eventsTable")
+
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.LAST_K, "list_event", Seq(WindowUtils.Unbounded), argMap = Map("k" -> "30")),
+      Builders.Aggregation(Operation.AVERAGE, "views", Seq(WindowUtils.Unbounded))
+    )
+    val keys = Seq("user").toArray
+    val groupByConf =
+      Builders.GroupBy(
+        sources = Seq(Builders.Source.events(Builders.Query(), table = eventsTable)),
+        keyColumns = keys,
+        aggregations = aggregations,
+        metaData = Builders.MetaData(namespace = namespace, name = "test_multiple_avg_upload"),
+        accuracy = Accuracy.SNAPSHOT
+      )
+    val result = GroupByUpload.generateKvRdd(groupByConf, endDs = yesterday, tableUtils = tableUtils).nullCounts
+    print(result)
+
+    result shouldBe empty
+  }
+
+  it should "produce a valid non-empty nullCountMap for snapshot events case" in {
+    val namespace = testNamespace("snapshot_non_empty_null")
+    val batchEndDs = "2024-08-01"
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val eventsTable = "my_snapshot_events_non_empty_null"
+
+    def ts(arg: String) = TsUtils.datetimeToTs(s"2023-$arg:00")
+    val viewColumns = Seq("user", "list_event", "views", "ts", "ds")
+    val viewsData = Seq(
+      ("user1", "some-list-event", null.asInstanceOf[Integer], ts("08-13 11:00"), "2023-08-13"),
+    )
+    val viewsRdd = spark.sparkContext.parallelize(viewsData)
+    val viewsDf = spark.createDataFrame(viewsRdd).toDF(viewColumns: _*)
+    viewsDf.save(eventsTable)
+    viewsDf.show()
+
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.LAST_K, "list_event", Seq(WindowUtils.Unbounded, new Window(5, TimeUnit.DAYS)), argMap = Map("k" -> "30")),
+      Builders.Aggregation(Operation.AVERAGE, "views", Seq(WindowUtils.Unbounded))
+    )
+    val keys = Seq("user").toArray
+    val groupByConf =
+      Builders.GroupBy(
+        sources = Seq(Builders.Source.events(Builders.Query(), table = eventsTable)),
+        keyColumns = keys,
+        aggregations = aggregations,
+        metaData = Builders.MetaData(namespace = namespace, name = "test_multiple_avg_upload"),
+        accuracy = Accuracy.SNAPSHOT
+      )
+    val result = GroupByUpload.generateKvRdd(groupByConf, endDs = batchEndDs, tableUtils = tableUtils).nullCounts
+    print(result)
+
+    result.isEmpty shouldBe false
+    result.keys.size shouldBe 2 // only the list_event unbounded was non-null. the other two should be null
+    result.values.foreach { count =>
+      count shouldBe 1L
+    }
+  }
+
+  it should "produce a valid empty nullCountMap for snapshot entities case" in {
+    val namespace = testNamespace("entities_empty_null")
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val reviewsTable = s"${namespace}.reviews_entity_non_empty_null"
+    setupReviewsTable(reviewsTable)
+
+    // empty out aggregations
+    val reviewGroupBy = sampleEntitiesGroupBy(reviewsTable, namespace)
+    reviewGroupBy.aggregations = null
+    reviewGroupBy.accuracy = Accuracy.SNAPSHOT
+
+    val result = GroupByUpload.generateKvRdd(reviewGroupBy, endDs = "2023-08-15", tableUtils = tableUtils).nullCounts
+    print(result)
+
+    result shouldBe empty
+  }
+
+  it should "produce a valid non-empty nullCountMap for snapshot entities case" in {
+    val namespace = testNamespace("entities_non_empty_null")
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+    val reviewsTable = s"${namespace}.reviews_entity_empty_null"
+
+    def ts(arg: String) = TsUtils.datetimeToTs(s"2023-$arg:00")
+    setupReviewsTable(reviewsTable, Option(Seq(
+      ("review3", null.asInstanceOf[String], ts("08-15 08:00"), "2023-08-15") // insert
+    )
+    ))
+
+    // empty out aggregations
+    val reviewGroupBy = sampleEntitiesGroupBy(reviewsTable, namespace)
+    reviewGroupBy.aggregations = null
+    reviewGroupBy.accuracy = Accuracy.SNAPSHOT
+
+    val result = GroupByUpload.generateKvRdd(reviewGroupBy, endDs = "2023-08-15", tableUtils = tableUtils).nullCounts
+    print(result)
+
+    result.isEmpty shouldBe false
+    result.values .foreach { count =>
+      count shouldBe 1L
+    }
+  }
+
+
+  def setupReviewsTable(reviewsTable: String, maybeReviewsData: Option[Seq[(String, String, Long, String)]] = None) = {
+    def ts(arg: String) = TsUtils.datetimeToTs(s"2023-$arg:00")
+
+    val reviewsColumns = Seq("review", "listing", "ts", "ds")
+    val reviewsData: Seq[(String, String, Long, String)] = maybeReviewsData.getOrElse(
+    Seq(
+      ("review1", "listing1", ts("07-13 10:00"), "2023-08-14"),
+      ("review2", "listing1", ts("07-13 11:00"), "2023-08-14"), // delete (next day)
+      ("review3", "listing2", ts("08-15 08:00"), "2023-08-15") // insert
+    ))
+
+    val reviewsRdd = spark.sparkContext.parallelize(reviewsData)
+    val reviewsDf = spark.createDataFrame(reviewsRdd).toDF(reviewsColumns: _*)
+    reviewsDf.save(reviewsTable)
+    reviewsDf.show()
+
+    val reviewsMutationsColumns = Seq("is_before", "mutation_ts", "review", "listing", "ts", "ds")
+    val reviewsMutations = Seq(
+      (true, ts("08-15 06:00"), "review2", "listing1", ts("07-13 11:00"), "2023-08-15"), // delete
+      (false, ts("08-15 08:00"), "review3", "listing2", ts("08-15 08:00"), "2023-08-15") // insert
+    )
+    val reviewsMutationsRdd = spark.sparkContext.parallelize(reviewsMutations)
+    val reviewsMutationsDf = spark.createDataFrame(reviewsMutationsRdd).toDF(reviewsMutationsColumns: _*)
+    reviewsMutationsDf.save(s"${reviewsTable}_mutations")
+    reviewsMutationsDf.show()
+  }
+  def sampleEntitiesGroupBy(reviewsTable: String, namespace: String) = {
+    Builders.GroupBy(
+      metaData = Builders.MetaData(namespace = namespace, name = "review_attrs"),
+      sources = Seq(
+        Builders.Source.entities(
+          Builders.Query(selects = Builders.Selects("review", "listing", "ts")),
+          snapshotTable = reviewsTable,
+          mutationTopic = s"${reviewsTable}_mutations",
+          mutationTable = s"${reviewsTable}_mutations"
+        )),
+      keyColumns = scala.Seq("review"),
+      aggregations = Seq(
+        Builders.Aggregation(
+          operation = Operation.LAST,
+          inputColumn = "listing"
+        ))
+    )
+  }
   //  joinLeft = (review, category, rating)  [ratings]
   //  joinPart = (review, user, listing)     [reviews]
   // groupBy = keys:[listing, category], aggs:[avg(rating)]
   it should "listing rating category join source" in {
+    val namespace = testNamespace("listing_rating")
     createDatabase(namespace)
     tableUtils.sql(s"USE $namespace")
 
@@ -182,26 +449,7 @@ class GroupByUploadTest extends SparkTestBase {
     ratingsMutationsDf.show()
 
     val reviewsTable = s"${namespace}.reviews"
-    val reviewsColumns = Seq("review", "listing", "ts", "ds")
-    val reviewsData = Seq(
-      ("review1", "listing1", ts("07-13 10:00"), "2023-08-14"),
-      ("review2", "listing1", ts("07-13 11:00"), "2023-08-14"), // delete (next day)
-      ("review3", "listing2", ts("08-15 08:00"), "2023-08-15") // insert
-    )
-    val reviewsRdd = spark.sparkContext.parallelize(reviewsData)
-    val reviewsDf = spark.createDataFrame(reviewsRdd).toDF(reviewsColumns: _*)
-    reviewsDf.save(reviewsTable)
-    reviewsDf.show()
-
-    val reviewsMutationsColumns = Seq("is_before", "mutation_ts", "review", "listing", "ts", "ds")
-    val reviewsMutations = Seq(
-      (true, ts("08-15 06:00"), "review2", "listing1", ts("07-13 11:00"), "2023-08-15"), // delete
-      (false, ts("08-15 08:00"), "review3", "listing2", ts("08-15 08:00"), "2023-08-15") // insert
-    )
-    val reviewsMutationsRdd = spark.sparkContext.parallelize(reviewsMutations)
-    val reviewsMutationsDf = spark.createDataFrame(reviewsMutationsRdd).toDF(reviewsMutationsColumns: _*)
-    reviewsMutationsDf.save(s"${reviewsTable}_mutations")
-    reviewsMutationsDf.show()
+    setupReviewsTable(reviewsTable)
 
     val leftRatings =
       Builders.Source.entities(
@@ -210,23 +458,7 @@ class GroupByUploadTest extends SparkTestBase {
         mutationTopic = s"${ratingsTable}_mutations",
         mutationTable = s"${ratingsTable}_mutations"
       )
-
-    val reviewGroupBy = Builders.GroupBy(
-      metaData = Builders.MetaData(namespace = namespace, name = "review_attrs"),
-      sources = Seq(
-        Builders.Source.entities(
-          Builders.Query(selects = Builders.Selects("review", "listing", "ts")),
-          snapshotTable = reviewsTable,
-          mutationTopic = s"${reviewsTable}_mutations",
-          mutationTable = s"${reviewsTable}_mutations"
-        )),
-      keyColumns = scala.Seq("review"),
-      aggregations = Seq(
-        Builders.Aggregation(
-          operation = Operation.LAST,
-          inputColumn = "listing"
-        ))
-    )
+    val reviewGroupBy = sampleEntitiesGroupBy(reviewsTable, namespace)
 
     val joinConf = Builders.Join(
       metaData = Builders.MetaData(namespace = namespace, name = "review_enrichment"),
@@ -319,6 +551,7 @@ class GroupByUploadTest extends SparkTestBase {
 
   // This test is to ensure that the GroupByUpload can handle a GroupBy with lastK struct and derivations
   it should "upload groupBy with lastK struct + derivations" in {
+    val namespace = testNamespace("lastk_struct_derivations")
     val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
     val yesterday = tableUtils.partitionSpec.before(today)
     createDatabase(namespace)
@@ -419,10 +652,17 @@ class GroupByUploadTest extends SparkTestBase {
       )
     )
 
-
-  protected def runAndValidateActualTemporalBatchData(sparkSession: SparkSession, tableUtils: TableUtils, eventsTable: String): Array[Array[Any]] = {
-    // Setup data
+  it should "produce valid batch data for temporal events case" in {
+    val namespace = testNamespace("temporal_batch_data")
     createDatabase(namespace)
+    val eventsTable = "my_events_check_temporal"
+    GroupByUploadTest.runAndValidateActualTemporalBatchData(namespace=namespace, sparkSession = spark, tableUtils = tableUtils, eventsTable = eventsTable)
+  }
+}
+
+object GroupByUploadTest {
+  def runAndValidateActualTemporalBatchData(namespace: String, sparkSession: SparkSession, tableUtils: TableUtils, eventsTable: String): Array[Array[Any]] = {
+    // Setup data
     tableUtils.sql(s"USE $namespace")
     val eventColumns = Seq("user", "views", "ts", "ds")
     val eventData =
@@ -461,6 +701,7 @@ class GroupByUploadTest extends SparkTestBase {
         accuracy = Accuracy.TEMPORAL
       )
     val result = GroupByUpload.generateKvRdd(groupByConf, endDs = "2023-08-14", tableUtils = tableUtils)
+    print(result)
 
     // Check the data
     val actualData = result.data.collect()
