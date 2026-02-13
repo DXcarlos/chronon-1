@@ -1,7 +1,7 @@
 from ai.chronon.staging_query import EngineType, StagingQuery, TableDependency
 
 
-def get_select_star_export(table: str, partition_column: str = "_PARTITIONTIME"):
+def get_select_star_export(table: str, partition_column: str = "_PARTITIONTIME", version=0):
     bigquery_export_sql = f"""
     SELECT 
         * 
@@ -23,7 +23,7 @@ def get_select_star_export(table: str, partition_column: str = "_PARTITIONTIME")
     )
 
 
-def get_native_partition_export(table: str, partition_column: str):
+def get_native_partition_export(table: str, partition_column: str, version=0):
     native_partition_sql = f"""
     SELECT 
         *,
@@ -46,7 +46,9 @@ def get_native_partition_export(table: str, partition_column: str):
 
 
 user_activities = get_native_partition_export("user-activities", "_PARTITIONTIME")
+user_activities_new = get_native_partition_export("user-activities", "_PARTITIONTIME", version=3)
 checkouts = get_native_partition_export("checkouts", "_PARTITIONTIME")
 dim_listings = get_select_star_export("dim_listings", "ds")
+dim_listings_new = get_select_star_export("dim_listings", "ds")
 dim_merchants = get_select_star_export("dim_merchants", "ds")
 dim_users = get_select_star_export("dim_users", "ds")

@@ -23,13 +23,71 @@ source = EventSource(
     table=exports.user_activities.table,
     query=Query(
         selects=selects(
-            user_id="user_id",
-            listing_id="listing_id",
+            user_id="user_id + 1",
+            listing_id="listing_id + 1",
             row_id="event_id"
         ),
-        time_column="event_time_ms",
+        time_column="event_time_ms + 2",
     ),
 )
+
+
+demo_precompute_v2 = Join(
+    left=source,
+    row_ids=["event_id"],
+    right_parts=[
+        # User behavioral features (aggregated over time windows)
+        JoinPart(
+            group_by=user_activities.v2,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_listings.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_merchants.v1,
+            prefix="merchant_"
+        ),
+    ],
+    derivations=[Derivation(
+        name="price_dollars",
+        expression="listing_id_price_cents / 100"
+    )],
+    version=1,
+    online=True,
+    output_namespace="data",
+    step_days=2,
+    enable_stats_compute=True,
+)
+
+
+# [{"user_id": 1, "listing_id": 1}]
+demo_precompute_v1 = Join(
+    left=source,
+    row_ids=["event_id"],
+    right_parts=[
+        # User behavioral features (aggregated over time windows)
+        JoinPart(
+            group_by=user_activities.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_listings.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_merchants.v1,
+            prefix="merchant_"
+        ),
+    ],
+    version=1,
+    online=True,
+    output_namespace="data",
+    step_days=2,
+    enable_stats_compute=True,
+)
+
 
 # Join with user behavioral features and listing attributes
 v1 = Join(
@@ -57,31 +115,6 @@ v1 = Join(
     enable_stats_compute=True,
 )
 
-
-v1_vzdemo = Join(
-    left=source,
-    row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
-    right_parts=[
-        # User behavioral features (aggregated over time windows)
-        JoinPart(
-            group_by=user_activities.v1,
-        ),
-        # Listing dimension attributes (point-in-time lookup)
-        JoinPart(
-            group_by=dim_listings.v1,
-        ),
-        # Listing dimension attributes (point-in-time lookup)
-        JoinPart(
-            group_by=dim_merchants.v1,
-            prefix="merchant_"
-        ),
-    ],
-    version=1,
-    online=True,
-    output_namespace="data",
-    step_days=2,
-    enable_stats_compute=True,
-)
 
 # Example join with some derivations
 derivations_v1 = Join(

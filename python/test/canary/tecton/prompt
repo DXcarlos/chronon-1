@@ -1,0 +1,9 @@
+Take a look at python/test/canary/tecton/existing_features.md, we're going to migrate some of these to chronon definitons. Use the Tecton migration part of the Zipline skill.
+
+Note that you're in Demo mode, so you'll need to mock the input sources.
+
+Work within the GCP team, use existing data sources but us staging query to transform them with SQL to match tecton imput source schemas so that everything we write can be eval'd and will actually run.
+
+Work within the GCP team. 
+
+Pick a simple one to start with and go ahead.

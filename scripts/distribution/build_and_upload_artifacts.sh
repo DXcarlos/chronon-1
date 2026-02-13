@@ -123,13 +123,13 @@ if [ "$SKIP_WHEEL" = false ]; then
     fi
 
     ./mill clean
-    ./mill python.wheel # we need CHRONON_VERSION set to build the wheel with specific version here
+    # ./mill python.wheel # we need CHRONON_VERSION set to build the wheel with specific version here
 
-    EXPECTED_ZIPLINE_WHEEL="./out/python/wheel.dest//dist/zipline_ai-$CHRONON_VERSION-py3-none-any.whl"
-    if [ ! -f "$EXPECTED_ZIPLINE_WHEEL" ]; then
-        echo "$EXPECTED_ZIPLINE_WHEEL not found"
-        exit 1
-    fi
+    # EXPECTED_ZIPLINE_WHEEL="./out/python/wheel.dest//dist/zipline_ai-$CHRONON_VERSION-py3-none-any.whl"
+    # if [ ! -f "$EXPECTED_ZIPLINE_WHEEL" ]; then
+    #     echo "$EXPECTED_ZIPLINE_WHEEL not found"
+    #     exit 1
+    # fi
 else
     echo "Skipping wheel build"
 fi
@@ -137,21 +137,21 @@ fi
 
 echo "Building jars"
 
-./mill flink.assembly
-./mill service.assembly
+# ./mill flink.assembly
+# ./mill service.assembly
 
-SRC_FLINK_JAR="$CHRONON_ROOT_DIR/out/flink/assembly.dest/out.jar"
-SRC_SERVICE_JAR="$CHRONON_ROOT_DIR/out/service/assembly.dest/out.jar"
+# SRC_FLINK_JAR="$CHRONON_ROOT_DIR/out/flink/assembly.dest/out.jar"
+# SRC_SERVICE_JAR="$CHRONON_ROOT_DIR/out/service/assembly.dest/out.jar"
 
-if [ ! -f "$SRC_SERVICE_JAR" ]; then
-    echo "$SRC_SERVICE_JAR not found"
-    exit 1
-fi
+# if [ ! -f "$SRC_SERVICE_JAR" ]; then
+#     echo "$SRC_SERVICE_JAR not found"
+#     exit 1
+# fi
 
-if [ ! -f "$SRC_FLINK_JAR" ]; then
-    echo "$SRC_FLINK_JAR not found"
-    exit 1
-fi
+# if [ ! -f "$SRC_FLINK_JAR" ]; then
+#     echo "$SRC_FLINK_JAR not found"
+#     exit 1
+# fi
 
 
 
@@ -182,10 +182,10 @@ if [ "$BUILD_GCP" = true ]; then
         echo "$SRC_CLOUD_GCP_JAR not found"
         exit 1
     fi
-    if [ ! -f "$SRC_FLINK_PUBSUB_JAR" ]; then
-        echo "$SRC_FLINK_PUBSUB_JAR not found"
-        exit 1
-    fi
+    # if [ ! -f "$SRC_FLINK_PUBSUB_JAR" ]; then
+    #     echo "$SRC_FLINK_PUBSUB_JAR not found"
+    #     exit 1
+    # fi
 fi
 if [ "$BUILD_AZURE" = true ]; then
     ./mill cloud_azure.assembly
@@ -224,12 +224,12 @@ function upload_to_gcp() {
                 NEW_ELEMENT_JAR_PATH=gs://zipline-artifacts-$element/release/$CHRONON_VERSION/jars
                 NEW_ELEMENT_WHEEL_PATH=gs://zipline-artifacts-$element/release/$CHRONON_VERSION/wheels/
                 gcloud storage cp "$SRC_CLOUD_GCP_JAR" "$NEW_ELEMENT_JAR_PATH/$CLOUD_GCP_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-                gcloud storage cp "$SRC_SERVICE_JAR" "$NEW_ELEMENT_JAR_PATH/$SERVICE_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-                if [ "$SKIP_WHEEL" = false ]; then
-                  gcloud storage cp "$EXPECTED_ZIPLINE_WHEEL" "$NEW_ELEMENT_WHEEL_PATH" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-                fi
-                gcloud storage cp "$SRC_FLINK_JAR" "$NEW_ELEMENT_JAR_PATH/$FLINK_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-                gcloud storage cp "$SRC_FLINK_PUBSUB_JAR" "$NEW_ELEMENT_JAR_PATH/$FLINK_PUBSUB_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                # gcloud storage cp "$SRC_SERVICE_JAR" "$NEW_ELEMENT_JAR_PATH/$SERVICE_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                # if [ "$SKIP_WHEEL" = false ]; then
+                #   gcloud storage cp "$EXPECTED_ZIPLINE_WHEEL" "$NEW_ELEMENT_WHEEL_PATH" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                # fi
+                # gcloud storage cp "$SRC_FLINK_JAR" "$NEW_ELEMENT_JAR_PATH/$FLINK_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+                # gcloud storage cp "$SRC_FLINK_PUBSUB_JAR" "$NEW_ELEMENT_JAR_PATH/$FLINK_PUBSUB_JAR" --custom-metadata="zipline_user=$USER,updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
               done
               echo "Succeeded"
               break;;
