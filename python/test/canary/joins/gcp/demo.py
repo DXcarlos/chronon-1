@@ -57,6 +57,32 @@ v1 = Join(
     enable_stats_compute=True,
 )
 
+
+v1_vzdemo = Join(
+    left=source,
+    row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
+    right_parts=[
+        # User behavioral features (aggregated over time windows)
+        JoinPart(
+            group_by=user_activities.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_listings.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_merchants.v1,
+            prefix="merchant_"
+        ),
+    ],
+    version=1,
+    online=True,
+    output_namespace="data",
+    step_days=2,
+    enable_stats_compute=True,
+)
+
 # Example join with some derivations
 derivations_v1 = Join(
     left=source,

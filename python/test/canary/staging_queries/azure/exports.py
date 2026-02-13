@@ -1,5 +1,6 @@
 from ai.chronon.staging_query import EngineType, StagingQuery, TableDependency
 
+GLOBAL_VERSION = 5
 
 def get_select_star_export(table: str, partition_column: str = "ds"):
     snowflake_export_sql = f"""

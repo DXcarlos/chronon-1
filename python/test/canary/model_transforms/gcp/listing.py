@@ -16,6 +16,7 @@ source = JoinSource(
     )
 )
 
+# [{"listing_id": "1"}]
 v1 = ModelTransforms(
     sources=[source],
     models=[listing.item_description_model],

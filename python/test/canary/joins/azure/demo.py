@@ -4,7 +4,7 @@ from staging_queries.azure import exports
 from ai.chronon.group_by import GroupBy
 from ai.chronon.join import Derivation, Join, JoinPart
 from ai.chronon.query import Query, selects
-from ai.chronon.source import EventSource
+from ai.chronon.source import EventSource, EntitySource
 
 """
 This Join combines user activity events with:
@@ -18,16 +18,15 @@ Right parts:
 """
 
 # Left side: Raw user activity events from PubSub export
-source = EventSource(
+source = EntitySource(
     # This will be the BigQuery table that receives the PubSub data
-    table=exports.user_activities.table,
+    snapshot_table=exports.dim_listings.table,
     query=Query(
         selects=selects(
-            user_id="user_id",
+            user_id="merchant_id",
             listing_id="listing_id",
-            row_id="event_id"
+            row_id="listing_id"
         ),
-        time_column="event_time_ms",
     ),
 )
 
