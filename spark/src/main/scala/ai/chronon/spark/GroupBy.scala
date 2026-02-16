@@ -46,6 +46,7 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import java.util
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 
 class GroupBy(val aggregations: Seq[api.Aggregation],
               val keyColumns: Seq[String],
@@ -130,28 +131,57 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
         |${preppedInputDf.schema.pretty}
         |""".stripMargin)
 
-      val snapshotAgg =
-        new SnapshotEntityAggregator(selectedSchema,
-                                     aggregations.flatMap(_.unpack),
-                                     hasWindows,
-                                     tableUtils.partitionSpec.spanMillis).toColumn.name("agg")
-      implicit val tupleEncoder: Encoder[(KeyWithHash, (api.Row, Long))] =
-        Encoders.kryo[(KeyWithHash, (api.Row, Long))]
+      val localAggParts = aggregations.flatMap(_.unpack)
+      val localSchema = selectedSchema
+      val localHasWindows = hasWindows
+      val localSpanMillis = tableUtils.partitionSpec.spanMillis
+      val localFinalize = finalize
+
+      implicit val pairEncoder: Encoder[(KeyWithHash, Array[Any])] = Encoders.kryo[(KeyWithHash, Array[Any])]
       implicit val keyEncoder: Encoder[KeyWithHash] = Encoders.kryo[KeyWithHash]
-      implicit val valueEncoder: Encoder[(api.Row, Long)] = Encoders.kryo[(api.Row, Long)]
+      implicit val irEncoder: Encoder[Array[Any]] = Encoders.kryo[Array[Any]]
       implicit val outputEncoder: Encoder[(Array[Any], Array[Any])] = Encoders.kryo[(Array[Any], Array[Any])]
 
-      preppedInputDf
-        .map { row =>
-          val key = keyBuilder(row)
-          val chrononRow = SparkConversions.toChrononRow(row, localTsIndex): api.Row
-          val partitionTs = if (hasWindows) row.getLong(partitionTsIndex) else 0L
-          (key, (chrononRow, partitionTs))
-        }(tupleEncoder)
+      // Phase 1: Per-partition pre-aggregation (reduces shuffle volume)
+      val partialAggs: Dataset[(KeyWithHash, Array[Any])] =
+        preppedInputDf.mapPartitions { iter =>
+          val rowAgg = new RowAggregator(localSchema, localAggParts)
+          val accum = new java.util.HashMap[KeyWithHash, Array[Any]]()
+
+          iter.foreach { row =>
+            val key = keyBuilder(row)
+            val chrononRow = SparkConversions.toChrononRow(row, localTsIndex)
+            val partitionTs = if (localHasWindows) row.getLong(partitionTsIndex) else 0L
+
+            val existing = accum.get(key)
+            if (existing == null) {
+              val ir = rowAgg.init
+              if (localHasWindows)
+                rowAgg.updateWindowed(ir, chrononRow, partitionTs + localSpanMillis)
+              else
+                rowAgg.update(ir, chrononRow)
+              accum.put(key, ir)
+            } else {
+              if (localHasWindows)
+                rowAgg.updateWindowed(existing, chrononRow, partitionTs + localSpanMillis)
+              else
+                rowAgg.update(existing, chrononRow)
+            }
+          }
+          accum.entrySet().iterator().asScala.map(e => (e.getKey, e.getValue))
+        }(pairEncoder)
+
+      // Phase 2: Merge partial IRs across partitions, then finalize.
+      // With SPJ, same (key, ds) data is mostly co-located so this shuffle is cheap.
+      partialAggs
         .groupByKey(_._1)(keyEncoder)
-        .mapValues(_._2)(valueEncoder)
-        .agg(snapshotAgg)
-        .map { case (keyWithHash, ir) => (keyWithHash.data, normalizeOrFinalize(ir)) }(outputEncoder)
+        .mapValues(_._2)(irEncoder)
+        .reduceGroups { (a, b) => new RowAggregator(localSchema, localAggParts).merge(a, b) }
+        .map { case (key, ir) =>
+          val agg = new RowAggregator(localSchema, localAggParts)
+          val result = if (localFinalize) agg.finalize(ir) else agg.normalize(ir)
+          (key.data, result)
+        }(outputEncoder)
     }
 
   def snapshotEntities: DataFrame =
@@ -483,21 +513,50 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
   private def hopsAggregate(minQueryTs: Long,
                             resolution: Resolution): Dataset[(KeyWithHash, HopsAggregator.OutputArrayType)] =
     tableUtils.withJobDescription(s"hopsAggregate(${keyColumns.mkString(",")})") {
-      val hopsAggregator =
-        new HopsAggregator(minQueryTs, aggregations, selectedSchema, resolution)
+      val localAggregations = aggregations
+      val localSchema = selectedSchema
       val keyBuilder = FastHashing.generateKeyBuilder(keyColumns.toArray, inputDf.schema)
       val localTsIndex = tsIndex
 
-      val hopsAgg = new HopsAggregatorWrapper(hopsAggregator).toColumn.name("agg")
-      implicit val tupleEncoder: Encoder[(KeyWithHash, api.Row)] = Encoders.kryo[(KeyWithHash, api.Row)]
+      implicit val pairEncoder: Encoder[(KeyWithHash, HopsAggregator.IrMapType)] =
+        Encoders.kryo[(KeyWithHash, HopsAggregator.IrMapType)]
       implicit val keyEncoder: Encoder[KeyWithHash] = Encoders.kryo[KeyWithHash]
-      implicit val rowEncoder: Encoder[api.Row] = Encoders.kryo[api.Row]
+      implicit val irEncoder: Encoder[HopsAggregator.IrMapType] = Encoders.kryo[HopsAggregator.IrMapType]
+      implicit val outputEncoder: Encoder[(KeyWithHash, HopsAggregator.OutputArrayType)] =
+        Encoders.kryo[(KeyWithHash, HopsAggregator.OutputArrayType)]
 
-      inputDf
-        .map { row => (keyBuilder(row), SparkConversions.toChrononRow(row, localTsIndex): api.Row) }(tupleEncoder)
+      // Phase 1: Per-partition pre-aggregation (reduces shuffle volume)
+      val partialAggs: Dataset[(KeyWithHash, HopsAggregator.IrMapType)] =
+        inputDf.mapPartitions { iter =>
+          val localHops = new HopsAggregator(minQueryTs, localAggregations, localSchema, resolution)
+          val accum = new java.util.HashMap[KeyWithHash, HopsAggregator.IrMapType]()
+
+          iter.foreach { row =>
+            val key = keyBuilder(row)
+            val chrononRow = SparkConversions.toChrononRow(row, localTsIndex)
+            val existing = accum.get(key)
+            if (existing == null) {
+              val ir = localHops.init()
+              localHops.update(ir, chrononRow)
+              accum.put(key, ir)
+            } else {
+              localHops.update(existing, chrononRow)
+            }
+          }
+          accum.entrySet().iterator().asScala.map(e => (e.getKey, e.getValue))
+        }(pairEncoder)
+
+      // Phase 2: Merge partial IRs across partitions.
+      // hopsAggregate keys by entity only (no ds), so the same key spans
+      // multiple ds partitions and requires a cross-partition merge.
+      partialAggs
         .groupByKey(_._1)(keyEncoder)
-        .mapValues(_._2)(rowEncoder)
-        .agg(hopsAgg)
+        .mapValues(_._2)(irEncoder)
+        .mapGroups { (key, irs) =>
+          val localHopsAgg = new HopsAggregator(minQueryTs, localAggregations, localSchema, resolution)
+          val merged = irs.reduce { (a, b) => localHopsAgg.merge(a, b) }
+          (key, localHopsAgg.toTimeSortedArray(merged.asInstanceOf[HopsAggregator.IrMapType]))
+        }(outputEncoder)
     }
 
   protected[spark] def toDf(aggregateDs: Dataset[(Array[Any], Array[Any])],

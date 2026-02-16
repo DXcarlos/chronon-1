@@ -97,7 +97,14 @@ object SparkSessionBuilder {
       "spark.hadoop.hive.exec.max.dynamic.partitions" -> "30000",
       "spark.sql.legacy.timeParserPolicy" -> "LEGACY",
       SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
-      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> "false"
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> "false",
+      // Storage Partitioned Join (SPJ) configs — lets Spark join Iceberg tables
+      // partition-by-partition on the ds column, eliminating cross-partition shuffles.
+      "spark.sql.sources.v2.bucketing.enabled" -> "true",
+      "spark.sql.iceberg.planning.preserve-data-grouping" -> "true",
+      "spark.sql.sources.v2.bucketing.pushPartValues.enabled" -> "true",
+      "spark.sql.requireAllClusterKeysForCoPartition" -> "false",
+      "spark.sql.sources.v2.bucketing.partiallyClusteredDistribution.enabled" -> "true"
     )
 
     // Staging queries don't benefit from the KryoSerializer and in fact may fail with buffer underflow in some cases.

@@ -47,25 +47,23 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
       })
       .getOrElse(source)
 
-    // This job benefits from a step day of 1 to avoid needing to shuffle on writing output (single partition)
-    dateRange.steps(days = 1).foreach { dayStep =>
-      val df = tableUtils.scanDf(skewFilteredSource.query,
-                                 skewFilteredSource.table,
-                                 Some((Map(tableUtils.partitionColumn -> null) ++ timeProjection).toMap),
-                                 range = Some(dayStep))
+    // Process the full range at once — SPJ joins partition-by-partition on ds
+    // without cross-partition shuffles, so stepping day-by-day is unnecessary.
+    val df = tableUtils.scanDf(skewFilteredSource.query,
+                               skewFilteredSource.table,
+                               Some((Map(tableUtils.partitionColumn -> null) ++ timeProjection).toMap),
+                               range = Some(dateRange))
 
-      if (df.isEmpty) {
-        logger.warn(s"Query produced 0 rows in range $dayStep. Skipping this partition.")
+    if (df.isEmpty) {
+      logger.warn(s"Query produced 0 rows in range $dateRange. Skipping.")
+    } else {
+      val dfWithTimeCol = if (source.dataModel == EVENTS) {
+        df.withTimeBasedColumn(Constants.TimePartitionColumn)
       } else {
-        val dfWithTimeCol = if (source.dataModel == EVENTS) {
-          df.withTimeBasedColumn(Constants.TimePartitionColumn)
-        } else {
-          df
-        }
-
-        // Save using the provided outputTable or compute one if not provided
-        dfWithTimeCol.save(outputTable, tableProperties = metaData.tableProps)
+        df
       }
+
+      dfWithTimeCol.save(outputTable, tableProperties = metaData.tableProps)
     }
   }
 

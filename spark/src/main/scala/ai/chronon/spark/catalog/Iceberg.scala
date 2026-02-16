@@ -20,6 +20,7 @@ case object Iceberg extends Format {
       "commit.status-check.min-wait-ms" -> (10 * 1000).toString, // default = 1000
       "commit.status-check.max-wait-ms" -> (600 * 1000).toString,
       "write.merge.isolation-level" -> "snapshot",
+      "write.distribution-mode" -> "none",
       "format-version" -> "2"
     )
   }

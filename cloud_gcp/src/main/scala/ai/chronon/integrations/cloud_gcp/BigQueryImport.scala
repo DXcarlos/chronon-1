@@ -126,10 +126,6 @@ class BigQueryImport(stagingQueryConf: api.StagingQuery, endPartition: String, t
             .map(_.toScala)
             .getOrElse(Seq.empty))
 
-      val tableProps = Option(stagingQueryConf.metaData.tableProperties)
-        .map(_.toScala.toMap)
-        .getOrElse(Map.empty[String, String])
-
       logger.info(s"Writing data to Iceberg table: $outputTable with partitions: ${partitionCols.mkString(", ")}")
       tableUtils.insertPartitions(
         df = df,

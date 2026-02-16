@@ -17,9 +17,12 @@ class StagingQuery(stagingQueryConf: api.StagingQuery, endPartition: String, tab
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   assert(Option(stagingQueryConf.metaData.outputNamespace).nonEmpty, "output namespace could not be empty or null")
   protected val outputTable = stagingQueryConf.metaData.outputTable
-  private val tableProps = Option(stagingQueryConf.metaData.tableProperties)
-    .map(_.toScala.toMap)
-    .orNull
+  // StagingQueries run freeform SQL that doesn't guarantee partition-localized output,
+  // so override the Iceberg default of write.distribution-mode=none back to hash.
+  protected val tableProps: Map[String, String] = {
+    val userProps = Option(stagingQueryConf.metaData.tableProperties).map(_.toScala.toMap).getOrElse(Map.empty)
+    (Map("write.distribution-mode" -> "hash") ++ userProps)
+  }
 
   private val partitionCols: Seq[String] =
     Seq(tableUtils.partitionColumn) ++

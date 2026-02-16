@@ -2,32 +2,21 @@ package ai.chronon.spark.batch
 
 import ai.chronon.api.DataModel.ENTITIES
 import ai.chronon.api.Extensions.{DateRangeOps, GroupByOps, JoinPartOps, MetadataOps, SourceOps}
-import ai.chronon.api.ScalaJavaConversions.{IterableOps, MapOps}
+import ai.chronon.api.ScalaJavaConversions.MapOps
 import ai.chronon.api.planner.RelevantLeftForJoinPart
-import ai.chronon.api.{
-  Accuracy,
-  Constants,
-  DataModel,
-  DateRange,
-  JoinPart,
-  MetaData,
-  PartitionRange,
-  PartitionSpec,
-  QueryUtils
-}
+import ai.chronon.api._
 import ai.chronon.planner.JoinMergeNode
 import ai.chronon.spark.Extensions._
-import ai.chronon.spark.JoinUtils.{coalescedJoin, leftDf}
 import ai.chronon.spark.JoinUtils
+import ai.chronon.spark.JoinUtils.coalescedJoin
 import ai.chronon.spark.catalog.TableUtils
 import com.google.gson.Gson
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.{col, date_add, date_format, left, log, to_date}
+import org.apache.spark.sql.functions.{col, date_add, date_format, to_date}
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.time.Instant
-
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /** Result of analyzing join parts for reuse from production table.
   *
@@ -84,57 +73,56 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     // Computed based on column level semantic hashing that occurs at compile time
     archiveOutputTableIfRequired()
 
-    // This job benefits from a step day of 1 to avoid needing to shuffle on writing output (single partition)
-    dateRange.steps(days = 1).foreach { dayStep =>
-      // Scan left input table once to get schema and potentially reuse
-      val leftInputDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(dayStep))
+    val tableProps = createTableProperties
+    // Process the full range at once — SPJ joins partition-by-partition on ds
+    // without cross-partition shuffles, so stepping day-by-day is unnecessary.
+    runDayStep(dateRange).get.save(outputTable, tableProps, autoExpand = true)
+  }
 
-      // Check if we can reuse columns from production table
-      val reuseAnalysis = analyzeJoinPartsForReuse(dayStep, leftInputDf)
+  def runDayStep(dayStep: PartitionRange): Try[DataFrame] = {
+    // Scan left input table once to get schema and potentially reuse
+    val leftInputDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(dayStep))
 
-      // Get left DataFrame with potentially reused columns from production
-      val leftDf = if (reuseAnalysis.reuseTable.isDefined) {
-        logger.info(s"Reusing ${reuseAnalysis.columnsToReuse.length} columns (${reuseAnalysis.columnsToReuse
-            .mkString(", ")}) from table: ${reuseAnalysis.reuseTable.get}")
+    // Check if we can reuse columns from production table
+    val reuseAnalysis = analyzeJoinPartsForReuse(dayStep, leftInputDf)
 
-        // Select left columns + reused columns from production table
-        val leftColumns = leftInputDf.schema.fieldNames.filterNot(processingColumns.contains)
-        val columnsToSelect = leftColumns ++ reuseAnalysis.columnsToReuse
-        val productionDf = tableUtils.scanDf(query = null, table = reuseAnalysis.reuseTable.get, range = Some(dayStep))
+    // Get left DataFrame with potentially reused columns from production
+    val leftDf = if (reuseAnalysis.reuseTable.isDefined) {
+      logger.info(s"Reusing ${reuseAnalysis.columnsToReuse.length} columns (${reuseAnalysis.columnsToReuse
+          .mkString(", ")}) from table: ${reuseAnalysis.reuseTable.get}")
 
-        val selectedDf = productionDf.select(columnsToSelect.map(col): _*)
+      // Select left columns + reused columns from production table
+      val leftColumns = leftInputDf.schema.fieldNames.filterNot(processingColumns.contains)
+      val columnsToSelect = leftColumns ++ reuseAnalysis.columnsToReuse
+      val productionDf = tableUtils.scanDf(query = null, table = reuseAnalysis.reuseTable.get, range = Some(dayStep))
 
-        // Add back ts_ds column if this is an EVENTS source and the column is missing
-        if (join.left.dataModel == DataModel.EVENTS && !selectedDf.columns.contains(Constants.TimePartitionColumn)) {
-          selectedDf.withTimeBasedColumn(Constants.TimePartitionColumn)
-        } else {
-          selectedDf
-        }
+      val selectedDf = productionDf.select(columnsToSelect.map(col): _*)
+
+      // Add back ts_ds column if this is an EVENTS source and the column is missing
+      if (join.left.dataModel == DataModel.EVENTS && !selectedDf.columns.contains(Constants.TimePartitionColumn)) {
+        selectedDf.withTimeBasedColumn(Constants.TimePartitionColumn)
       } else {
-        leftInputDf
+        selectedDf
       }
+    } else {
+      leftInputDf
+    }
 
-      // Get right parts data only for join parts that need to be computed
-      val rightPartsData = getRightPartsData(dayStep, reuseAnalysis.joinPartsToCompute)
+    // Get right parts data only for join parts that need to be computed
+    val rightPartsData = getRightPartsData(dayStep, reuseAnalysis.joinPartsToCompute)
 
-      val joinedDfTry =
-        try {
-          Success(
-            rightPartsData
-              .foldLeft(leftDf) { case (partialDf, (rightPart, rightDf)) =>
-                joinWithLeft(partialDf, rightDf, rightPart)
-              }
-              // drop all processing metadata columns
-              .drop(Constants.MatchedHashes, Constants.TimePartitionColumn))
-        } catch {
-          case e: Exception =>
-            e.printStackTrace()
-            Failure(e)
-        }
-
-      val tableProps = createTableProperties
-
-      joinedDfTry.get.save(outputTable, tableProps, autoExpand = true)
+    try {
+      Success(
+        rightPartsData
+          .foldLeft(leftDf) { case (partialDf, (rightPart, rightDf)) =>
+            joinWithLeft(partialDf, rightDf, rightPart)
+          }
+          // drop all processing metadata columns
+          .drop(Constants.MatchedHashes, Constants.TimePartitionColumn))
+    } catch {
+      case e: Exception =>
+        e.printStackTrace()
+        Failure(e)
     }
   }
 

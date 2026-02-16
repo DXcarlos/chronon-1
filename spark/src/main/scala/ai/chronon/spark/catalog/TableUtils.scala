@@ -234,10 +234,18 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                        autoExpand: Boolean = false,
                        semanticHash: Option[String] = None): Unit = {
 
-    // partitions to the last
-    val colOrder = df.columns.diff(partitionColumns) ++ partitionColumns
+    // Ensure partition columns are StringType so Iceberg stores them as identity(string)
+    // rather than native timestamp. This keeps ds consistent with GroupBy outputs and
+    // preserves Storage Partitioned Join compatibility.
+    val dfWithStringPartitions = partitionColumns.foldLeft(df) { (currentDf, colName) =>
+      currentDf.withColumn(colName, date_format(col(QuotingUtils.quoteIdentifier(colName)), partitionFormat))
+    }
 
-    val dfRearranged = df.select(colOrder.map(colName => df.col(QuotingUtils.quoteIdentifier(colName))): _*)
+    // partitions to the last
+    val colOrder = dfWithStringPartitions.columns.diff(partitionColumns) ++ partitionColumns
+
+    val dfRearranged = dfWithStringPartitions.select(
+      colOrder.map(colName => dfWithStringPartitions.col(QuotingUtils.quoteIdentifier(colName))): _*)
 
     if (!tableReachable(tableName, ignoreFailure = true)) {
       try {
@@ -276,7 +284,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       val finalColumns = tableSchema.fieldNames.map(fieldName => {
         val escapedName = QuotingUtils.quoteIdentifier(fieldName)
         if (dfRearranged.schema.fieldNames.contains(fieldName)) {
-          df(escapedName)
+          dfRearranged(escapedName)
         } else {
           lit(null).as(escapedName)
         }
@@ -346,7 +354,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
          |""".stripMargin)
     try {
       // Run the query
-      val df = sparkSession.sql(query).coalesce(coalesceFactor * parallelism)
+      val df = sparkSession.sql(query)
       df
     } catch {
       case e: AnalysisException if e.getMessage.contains(" already exists") =>
@@ -671,16 +679,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       df = df.where(whereStr)
     }
 
-    val parallelism = sparkSession.sparkContext.getConf.getInt("spark.default.parallelism", 1000)
-    val coalesceFactor = sparkSession.sparkContext.getConf.getInt("spark.chronon.coalesce.factor", 10)
-
-    // TODO: this is a temporary fix to handle the case where the partition column is not a string.
-    //  This is the case for partitioned BigQuery native tables.
-    (if (df.schema.fieldNames.contains(partitionColumn)) {
-       df.withColumn(partitionColumn, date_format(df.col(partitionColumn), partitionFormat))
-     } else {
-       df
-     }).coalesce(coalesceFactor * parallelism)
+    df
   }
 
   def whereClauses(

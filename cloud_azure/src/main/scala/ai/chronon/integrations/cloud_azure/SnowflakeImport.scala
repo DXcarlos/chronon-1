@@ -242,10 +242,6 @@ class SnowflakeImport(stagingQueryConf: api.StagingQuery, endPartition: String, 
             .map(_.toScala)
             .getOrElse(Seq.empty))
 
-      val tableProps = Option(stagingQueryConf.metaData.tableProperties)
-        .map(_.toScala.toMap)
-        .getOrElse(Map.empty[String, String])
-
       logger.info(s"Writing data to Iceberg table: $outputTable with partitions: ${partitionCols.mkString(", ")}")
       tableUtils.insertPartitions(
         df = df,
@@ -303,10 +299,6 @@ class SnowflakeImport(stagingQueryConf: api.StagingQuery, endPartition: String, 
       )
     val sfOptions = SnowflakeConnector.buildSparkConnectorOptions(snowflakeJdbcUrl, getPrivateKeyPem())
     val df = SnowflakeConnector.read(tableUtils.sparkSession, sfOptions, renderedQuery)
-
-    val tableProps = Option(stagingQueryConf.metaData.tableProperties)
-      .map(_.toScala.toMap)
-      .getOrElse(Map.empty[String, String])
 
     val partitionCols: Seq[String] =
       Seq(range.partitionSpec.column) ++
