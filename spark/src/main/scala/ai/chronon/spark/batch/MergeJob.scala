@@ -16,7 +16,6 @@ import org.apache.spark.sql.functions.{col, date_add, date_format, to_date}
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.time.Instant
-import scala.util.{Failure, Success, Try}
 
 /** Result of analyzing join parts for reuse from production table.
   *
@@ -76,15 +75,15 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     val tableProps = createTableProperties
     // Process the full range at once — SPJ joins partition-by-partition on ds
     // without cross-partition shuffles, so stepping day-by-day is unnecessary.
-    runDayStep(dateRange).get.save(outputTable, tableProps, autoExpand = true)
+    computeMerge(dateRange).save(outputTable, tableProps, autoExpand = true)
   }
 
-  def runDayStep(dayStep: PartitionRange): Try[DataFrame] = {
+  private[batch] def computeMerge(range: PartitionRange): DataFrame = {
     // Scan left input table once to get schema and potentially reuse
-    val leftInputDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(dayStep))
+    val leftInputDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(range))
 
     // Check if we can reuse columns from production table
-    val reuseAnalysis = analyzeJoinPartsForReuse(dayStep, leftInputDf)
+    val reuseAnalysis = analyzeJoinPartsForReuse(range, leftInputDf)
 
     // Get left DataFrame with potentially reused columns from production
     val leftDf = if (reuseAnalysis.reuseTable.isDefined) {
@@ -94,7 +93,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       // Select left columns + reused columns from production table
       val leftColumns = leftInputDf.schema.fieldNames.filterNot(processingColumns.contains)
       val columnsToSelect = leftColumns ++ reuseAnalysis.columnsToReuse
-      val productionDf = tableUtils.scanDf(query = null, table = reuseAnalysis.reuseTable.get, range = Some(dayStep))
+      val productionDf = tableUtils.scanDf(query = null, table = reuseAnalysis.reuseTable.get, range = Some(range))
 
       val selectedDf = productionDf.select(columnsToSelect.map(col): _*)
 
@@ -109,21 +108,13 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     }
 
     // Get right parts data only for join parts that need to be computed
-    val rightPartsData = getRightPartsData(dayStep, reuseAnalysis.joinPartsToCompute)
+    val rightPartsData = getRightPartsData(range, reuseAnalysis.joinPartsToCompute)
 
-    try {
-      Success(
-        rightPartsData
-          .foldLeft(leftDf) { case (partialDf, (rightPart, rightDf)) =>
-            joinWithLeft(partialDf, rightDf, rightPart)
-          }
-          // drop all processing metadata columns
-          .drop(Constants.MatchedHashes, Constants.TimePartitionColumn))
-    } catch {
-      case e: Exception =>
-        e.printStackTrace()
-        Failure(e)
-    }
+    rightPartsData
+      .foldLeft(leftDf) { case (partialDf, (rightPart, rightDf)) =>
+        joinWithLeft(partialDf, rightDf, rightPart)
+      }
+      .drop(Constants.MatchedHashes, Constants.TimePartitionColumn)
   }
 
   private def createTableProperties: Map[String, String] = {

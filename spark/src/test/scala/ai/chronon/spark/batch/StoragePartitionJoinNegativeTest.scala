@@ -112,7 +112,7 @@ class StoragePartitionJoinNegativeTest extends StoragePartitionJoinTestBase {
     assertTrue("Left data should not be empty", leftDfOpt.isDefined)
 
     val bootstrapInfo = BootstrapInfo.from(f.joinConf, f.partitionRange, tableUtils, leftDfOpt.map(_.schema))
-    val resultOpt = join.computeRange(leftDfOpt.get, f.partitionRange, bootstrapInfo, usingBootstrappedLeft = true)
+    val resultOpt = join.computeRange(leftDfOpt.get, f.partitionRange, bootstrapInfo, usingBootstrappedLeft = false)
 
     assertTrue("computeRange should return a result", resultOpt.isDefined)
     val resultDf = resultOpt.get

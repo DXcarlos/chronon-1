@@ -57,10 +57,7 @@ class StoragePartitionJoinTest extends StoragePartitionJoinTestBase {
       .setOutputNamespace(namespace)
     val mergeJob = new MergeJob(mergeNode, mergeMetaData, f.range, Seq(f.joinPart))
 
-    val resultTry = mergeJob.runDayStep(f.partitionRange)
-
-    assertTrue("runDayStep should succeed", resultTry.isSuccess)
-    val resultDf = resultTry.get
+    val resultDf = mergeJob.computeMerge(f.partitionRange)
 
     val plan = resultDf.queryExecution.executedPlan
     println(s"MergeJob multi-day physical plan:\n$plan")
