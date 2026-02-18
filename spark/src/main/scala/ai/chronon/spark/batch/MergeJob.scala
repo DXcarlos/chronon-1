@@ -77,7 +77,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
 
   val archiveReuseTable = outputTable + Constants.archiveReuseTableSuffix
 
-  def run(): Unit = {
+  def run(): Unit = tableUtils.withJobDescription(s"MergeJob($outputTable) $dateRange") {
 
     // Always check to see if we need to archive the current output table
     // Occurs when columns are changed/removed/added

@@ -1,38 +1,30 @@
 package ai.chronon.integrations.cloud_gcp
 
-import ai.chronon.spark.submission.SparkSessionBuilder
-import com.google.cloud.bigquery._
-import org.apache.spark.sql.SparkSession
-import org.mockito.Mockito.when
-import org.scalatest.flatspec.AnyFlatSpec
+import ai.chronon.spark.catalog.Iceberg
+import ai.chronon.spark.utils.SparkTestBase
+import org.junit.Assert.assertEquals
 import org.scalatestplus.mockito.MockitoSugar
 
-import java.util
+class GcpFormatProviderTest extends SparkTestBase with MockitoSugar {
 
-class GcpFormatProviderTest extends AnyFlatSpec with MockitoSugar {
-
-  lazy val spark: SparkSession = SparkSessionBuilder.build(
-    "GcpFormatProviderTest",
-    local = true
+  override def sparkConfs: Map[String, String] = Map(
+    "spark.chronon.table.format_provider.class" -> classOf[GcpFormatProvider].getName
   )
 
-  it should "check getFormat works for URI's that have a wildcard in between" ignore {
-    // todo(tchow): Remove this test, getting rid of this abstraction eventually.
+  it should "fall back to BigQueryNative when table is not found in any known format" in {
     val gcpFormatProvider = new GcpFormatProvider(spark)
-    val sourceUris = "gs://bucket-name/path/to/data/*.parquet"
-    val tableName = "gs://bucket-name/path/to/data"
+    val result = gcpFormatProvider.readFormat("nonexistent_table")
+    assertEquals(Some(BigQueryNative), result)
+  }
 
-    // mocking because bigquery Table doesn't have a constructor
-    val mockTable = mock[Table]
-    when(mockTable.getDefinition).thenReturn(
-      ExternalTableDefinition
-        .newBuilder("external")
-        .setSourceUris(util.Arrays.asList(sourceUris))
-        .setHivePartitioningOptions(HivePartitioningOptions.newBuilder().setSourceUriPrefix(tableName).build())
-        .setFormatOptions(FormatOptions.parquet())
-        .build())
-    when(mockTable.getTableId).thenReturn(TableId.of("project", "dataset", "table"))
-
-    val gcsFormat = gcpFormatProvider.readFormat(tableName)
+  it should "return Iceberg for tables that exist as iceberg" in {
+    val gcpFormatProvider = new GcpFormatProvider(spark)
+    spark.sql("CREATE TABLE iceberg_format_test (id INT, ds STRING) USING iceberg PARTITIONED BY (ds)")
+    try {
+      val result = gcpFormatProvider.readFormat("iceberg_format_test")
+      assertEquals(Some(Iceberg), result)
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS iceberg_format_test")
+    }
   }
 }

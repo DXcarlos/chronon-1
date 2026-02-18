@@ -126,11 +126,10 @@ class MergeJobAnalyzeReuseTest extends SparkTestBase {
       ))
 
     val productionData = spark.createDataFrame(
-      spark.sparkContext.parallelize(
-        Seq(
-          SparkRow("user1", "item1", 1000L, monthAgo, 100.0, 5L),
-          SparkRow("user2", "item2", 2000L, monthAgo, 200.0, 10L)
-        )),
+      java.util.Arrays.asList(
+        SparkRow("user1", "item1", 1000L, monthAgo, 100.0, 5L),
+        SparkRow("user2", "item2", 2000L, monthAgo, 200.0, 10L)
+      ),
       productionSchema
     )
 
@@ -180,20 +179,18 @@ class MergeJobAnalyzeReuseTest extends SparkTestBase {
       ))
 
     val pricePartData = spark.createDataFrame(
-      spark.sparkContext.parallelize(
-        Seq(
-          SparkRow("user1", 1000L, monthAgo, 100.0),
-          SparkRow("user2", 2000L, monthAgo, 200.0)
-        )),
+      java.util.Arrays.asList(
+        SparkRow("user1", 1000L, monthAgo, 100.0),
+        SparkRow("user2", 2000L, monthAgo, 200.0)
+      ),
       partTableSchema
     )
 
     val quantityPartData = spark.createDataFrame(
-      spark.sparkContext.parallelize(
-        Seq(
-          SparkRow("user1", 1000L, monthAgo, 5L),
-          SparkRow("user2", 2000L, monthAgo, 10L)
-        )),
+      java.util.Arrays.asList(
+        SparkRow("user1", 1000L, monthAgo, 5L),
+        SparkRow("user2", 2000L, monthAgo, 10L)
+      ),
       quantityPartTableSchema
     )
 
@@ -325,16 +322,13 @@ class MergeJobAnalyzeReuseTest extends SparkTestBase {
         SparkStructField("ts", SparkLongType),
         SparkStructField("ds", SparkStringType),
         SparkStructField("user_price_sum", SparkDoubleType)
-        // SparkStructField("user_ratings_avg", SparkDoubleType)
-        // Note: missing rating_user_rating_average
       ))
 
     val productionData = spark.createDataFrame(
-      spark.sparkContext.parallelize(
-        Seq(
-          SparkRow("user1", "item1", 1000L, monthAgo, 100.0, 4.5),
-          SparkRow("user2", "item2", 2000L, monthAgo, 200.0, 3.8)
-        )),
+      java.util.Arrays.asList(
+        SparkRow("user1", "item1", 1000L, monthAgo, 100.0),
+        SparkRow("user2", "item2", 2000L, monthAgo, 200.0)
+      ),
       productionSchema
     )
 
@@ -382,20 +376,18 @@ class MergeJobAnalyzeReuseTest extends SparkTestBase {
       ))
 
     val pricePartData = spark.createDataFrame(
-      spark.sparkContext.parallelize(
-        Seq(
-          SparkRow("user1", 1000L, monthAgo, 100.0),
-          SparkRow("user2", 2000L, monthAgo, 200.0)
-        )),
+      java.util.Arrays.asList(
+        SparkRow("user1", 1000L, monthAgo, 100.0),
+        SparkRow("user2", 2000L, monthAgo, 200.0)
+      ),
       pricePartTableSchema
     )
 
     val ratingPartData = spark.createDataFrame(
-      spark.sparkContext.parallelize(
-        Seq(
-          SparkRow("user1", 1000L, monthAgo, 4.5),
-          SparkRow("user2", 2000L, monthAgo, 3.8)
-        )),
+      java.util.Arrays.asList(
+        SparkRow("user1", 1000L, monthAgo, 4.5),
+        SparkRow("user2", 2000L, monthAgo, 3.8)
+      ),
       ratingPartTableSchema
     )
 
@@ -533,11 +525,10 @@ class MergeJobAnalyzeReuseTest extends SparkTestBase {
       ))
 
     val productionData = spark.createDataFrame(
-      spark.sparkContext.parallelize(
-        Seq(
-          SparkRow("user1", "item1", 1000L, monthAgo, 100.0),
-          SparkRow("user2", "item2", 2000L, monthAgo, 200.0)
-        )),
+      java.util.Arrays.asList(
+        SparkRow("user1", "item1", 1000L, monthAgo, 100.0),
+        SparkRow("user2", "item2", 2000L, monthAgo, 200.0)
+      ),
       productionSchema
     )
 
@@ -573,11 +564,10 @@ class MergeJobAnalyzeReuseTest extends SparkTestBase {
       ))
 
     val pricePartData = spark.createDataFrame(
-      spark.sparkContext.parallelize(
-        Seq(
-          SparkRow("user1", 1000L, monthAgo, 100.0),
-          SparkRow("user2", 2000L, monthAgo, 200.0)
-        )),
+      java.util.Arrays.asList(
+        SparkRow("user1", 1000L, monthAgo, 100.0),
+        SparkRow("user2", 2000L, monthAgo, 200.0)
+      ),
       partTableSchema
     )
 

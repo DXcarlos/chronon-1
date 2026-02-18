@@ -1,6 +1,9 @@
 package ai.chronon.spark.catalog
 
+import org.apache.iceberg.spark.SparkCatalog
+import org.apache.iceberg.spark.source.SparkTable
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Success, Try}
@@ -22,17 +25,34 @@ class DefaultFormatProvider(val sparkSession: SparkSession) extends FormatProvid
     } else { null })
   }
 
-  protected def isIcebergTable(tableName: String): Boolean =
-    Try {
-      sparkSession.read.format("iceberg").load(tableName)
-    } match {
-      case Success(_) =>
-        logger.info(s"IcebergCheck: Detected iceberg formatted table $tableName.")
-        true
+  protected def isIcebergTable(tableName: String): Boolean = {
+    val resolved = Format.resolveTableName(tableName)(sparkSession)
+    val catalog = sparkSession.sessionState.catalogManager.catalog(resolved.catalog)
+
+    catalog match {
+      case sparkCatalog: SparkCatalog =>
+        Try(sparkCatalog.loadTable(resolved.toIdentifier)) match {
+          case Success(_: SparkTable) =>
+            logger.info(s"IcebergCheck: Detected iceberg formatted table $tableName.")
+            true
+          case _ =>
+            logger.info(s"IcebergCheck: Checked table $tableName is not iceberg format.")
+            false
+        }
+      case tableCatalog: TableCatalog =>
+        Try(tableCatalog.loadTable(resolved.toIdentifier)) match {
+          case Success(_: SparkTable) =>
+            logger.info(s"IcebergCheck: Detected iceberg formatted table $tableName.")
+            true
+          case _ =>
+            logger.info(s"IcebergCheck: Checked table $tableName is not iceberg format.")
+            false
+        }
       case _ =>
         logger.info(s"IcebergCheck: Checked table $tableName is not iceberg format.")
         false
     }
+  }
 
   private def isDeltaTable(tableName: String): Boolean = {
     Try {

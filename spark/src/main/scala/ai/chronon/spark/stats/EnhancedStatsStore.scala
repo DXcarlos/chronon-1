@@ -22,7 +22,6 @@ import ai.chronon.api.{Constants, SerdeUtils, StringType, StructType}
 import ai.chronon.online.{Api, KVStore}
 import ai.chronon.online.KVStore.{GetRequest, PutRequest}
 import ai.chronon.online.serde.{AvroCodec, AvroConversions}
-import ai.chronon.spark.{GenericRowHandler, TimedKvRdd}
 import ai.chronon.spark.catalog.TableUtils
 import org.apache.avro.generic
 import org.apache.spark.sql.{DataFrame, Row}
@@ -39,7 +38,7 @@ import scala.util.{Failure, Success}
 /** Utilities for uploading and fetching enhanced statistics from KV Store.
   *
   * Handles:
-  * - Uploading TimedKvRdd (daily/hourly tiles with IRs) to KV Store
+  * - Uploading Avro-encoded DataFrames (daily/hourly tiles with IRs) to KV Store
   * - Fetching IRs for a given time range
   * - Merging IRs across time ranges using RowAggregator
   * - Normalizing merged IRs to final statistics
@@ -58,15 +57,12 @@ class EnhancedStatsStore(api: Api,
   // Use the specialized enhanced stats KV store for efficient BigTable time-series operations
   @transient lazy val kvStore: KVStore = api.genEnhancedStatsKvStore(tableBaseName)
 
-  /** Upload TimedKvRdd to KV Store.
+  /** Upload Avro DataFrame to KV Store.
     *
-    * @param timedKvRdd The tiled statistics to upload (from EnhancedStatsCompute.enhancedDailySummary)
+    * @param avroDf The Avro-encoded DataFrame (key_bytes, value_bytes, key_json, value_json, ts)
     * @param putsPerRequest Number of puts to batch per request (default: 100)
     */
-  def upload(timedKvRdd: TimedKvRdd, putsPerRequest: Int = 100): Unit = {
-    // Convert to Avro DataFrame format
-    // Note: toAvroDf already includes schema rows if storeSchemasPrefix is set
-    val avroDf = timedKvRdd.toAvroDf
+  def upload(avroDf: DataFrame, putsPerRequest: Int = 100): Unit = {
 
     // Debug logging to inspect the DataFrame
     val totalRows = avroDf.count()

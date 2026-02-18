@@ -90,17 +90,19 @@ class TileCodecTest extends AnyFlatSpec {
                              Array(
                                StructField("story_name", StringType),
                                StructField("story_rating", FloatType)
-                             ))
+                             )),
+    "price" -> DecimalType(10, 2)
   )
 
-  def createRow(ts: Long, views: Int, rating: Float, title: String, histInput: Seq[String]): Row = {
+  def createRow(ts: Long, views: Int, rating: Float, title: String, histInput: Seq[String], price: java.math.BigDecimal = new java.math.BigDecimal("0.00")): Row = {
     val values: Array[(String, Any)] = Array(
       "created" -> ts,
       "views" -> views,
       "rating" -> rating,
       "title" -> title,
       "hist_input" -> histInput,
-      "activity" -> Map("story_name" -> title, "story_rating" -> rating)
+      "activity" -> Map("story_name" -> title, "story_rating" -> rating),
+      "price" -> price
     )
     new ArrayRow(values.map(_._2), ts)
   }
@@ -177,6 +179,62 @@ class TileCodecTest extends AnyFlatSpec {
       case ((expected, actual), name) =>
         logger.info(s"Checking: $name")
         assertEquals(expected, actual)
+    }
+  }
+
+  it should "tile codec ir ser round trip with decimals" in {
+    val groupByMetadata = Builders.MetaData(name = "decimal_group_by")
+    val decimalAggregations = Array(
+      Builders.Aggregation(Operation.SUM, "price", Seq(new Window(1, TimeUnit.DAYS))),
+      Builders.Aggregation(Operation.MIN, "price", Seq(new Window(1, TimeUnit.DAYS))),
+      Builders.Aggregation(Operation.MAX, "price", Seq(new Window(1, TimeUnit.DAYS))),
+      Builders.Aggregation(Operation.AVERAGE, "price", Seq(new Window(1, TimeUnit.DAYS))),
+      Builders.Aggregation(Operation.TOP_K, "price", Seq(new Window(1, TimeUnit.DAYS)), argMap = Map("k" -> "2")),
+      Builders.Aggregation(Operation.BOTTOM_K, "price", Seq(new Window(1, TimeUnit.DAYS)), argMap = Map("k" -> "2")),
+      Builders.Aggregation(Operation.UNIQUE_COUNT, "price", Seq(new Window(1, TimeUnit.DAYS))),
+      Builders.Aggregation(Operation.APPROX_UNIQUE_COUNT, "price", Seq(new Window(1, TimeUnit.DAYS))),
+      Builders.Aggregation(Operation.APPROX_PERCENTILE, "price", Seq(new Window(1, TimeUnit.DAYS)), argMap = Map("percentile" -> "0.5"))
+    )
+
+    val groupBy = Builders.GroupBy(metaData = groupByMetadata, aggregations = decimalAggregations)
+    val tileCodec = new TileCodec(groupBy, schema)
+    val rowIR = tileCodec.rowAggregator.init
+
+    val originalIsComplete = true
+    val rows = Seq(
+      createRow(1519862399984L, 4, 4.0f, "A", Seq(), new java.math.BigDecimal("100.50")),
+      createRow(1519862399984L, 40, 5.0f, "B", Seq(), new java.math.BigDecimal("200.75")),
+      createRow(1519862399988L, 4, 3.0f, "C", Seq(), new java.math.BigDecimal("50.25"))
+    )
+    rows.foreach(row => tileCodec.rowAggregator.update(rowIR, row))
+    val bytes = tileCodec.makeTileIr(rowIR, originalIsComplete)
+    assert(bytes.length > 0)
+
+    val (deserPayload, isComplete) = tileCodec.decodeTileIr(bytes)
+    assert(isComplete == originalIsComplete)
+
+    // lets finalize the payload intermediate results and verify things
+    val finalResults = tileCodec.windowedRowAggregator.finalize(deserPayload)
+
+    val expectedDecimalResults = Seq(
+      new java.math.BigDecimal("351.50"), // SUM
+      new java.math.BigDecimal("50.25"),  // MIN
+      new java.math.BigDecimal("200.75"), // MAX
+      117.16666666666667,                 // AVERAGE (converted to Double)
+      List(new java.math.BigDecimal("200.75"), new java.math.BigDecimal("100.50")).asJava, // TOP_K
+      List(new java.math.BigDecimal("50.25"), new java.math.BigDecimal("100.50")).asJava,  // BOTTOM_K
+      3L, // UNIQUE_COUNT
+      3L, // APPROX_UNIQUE_COUNT
+      Array(100.5f) // APPROX_PERCENTILE returns array of floats (p50/median, converted to Double then Float)
+    )
+
+    assertEquals(expectedDecimalResults.length, finalResults.length)
+
+    val windowedRowAggregator = TileCodec.buildWindowedRowAggregator(groupBy, schema)
+    expectedDecimalResults.zip(finalResults).zip(windowedRowAggregator.outputSchema.map(_._1)).foreach {
+      case ((expected, actual), name) =>
+        logger.info(s"Checking decimal aggregation: $name - expected: $expected, actual: $actual")
+        deepEquals(expected, actual) shouldBe true
     }
   }
 }

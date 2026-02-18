@@ -23,7 +23,6 @@ import ai.chronon.spark.Extensions._
 import ai.chronon.spark.JoinUtils
 import ai.chronon.spark.JoinUtils.{contains_any, set_add}
 import ai.chronon.spark.utils.{DataFrameGen, TestUtils}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row}
@@ -48,8 +47,7 @@ class JoinUtilsTest extends BaseJoinTest {
     val schema: StructType = new StructType()
       .add("set", ArrayType(StringType))
       .add("item", StringType)
-    val rdd: RDD[Row] = spark.sparkContext.parallelize(data)
-    val df: DataFrame = spark.createDataFrame(rdd, schema)
+    val df: DataFrame = spark.createDataFrame(java.util.Arrays.asList(data: _*), schema)
 
     val actual = df
       .select(set_add(col("set"), col("item")).as("new_set"))
@@ -82,8 +80,7 @@ class JoinUtilsTest extends BaseJoinTest {
     val schema: StructType = new StructType()
       .add("array", ArrayType(StringType))
       .add("query", ArrayType(StringType))
-    val rdd: RDD[Row] = spark.sparkContext.parallelize(data)
-    val df: DataFrame = spark.createDataFrame(rdd, schema)
+    val df: DataFrame = spark.createDataFrame(java.util.Arrays.asList(data: _*), schema)
 
     val actual = df
       .select(contains_any(col("array"), col("query")).as("result"))
@@ -106,8 +103,8 @@ class JoinUtilsTest extends BaseJoinTest {
     val df = Try(
       JoinUtils.coalescedJoin(
         // using empty dataframe is sufficient to test spark query planning
-        spark.createDataFrame(spark.sparkContext.parallelize(Seq[Row]()), leftSchema),
-        spark.createDataFrame(spark.sparkContext.parallelize(Seq[Row]()), rightSchema),
+        spark.createDataFrame(java.util.Arrays.asList[Row](), leftSchema),
+        spark.createDataFrame(java.util.Arrays.asList[Row](), rightSchema),
         keys
       ))
     if (isFailure) {

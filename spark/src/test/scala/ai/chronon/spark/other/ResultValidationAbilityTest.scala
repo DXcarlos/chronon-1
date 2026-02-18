@@ -66,10 +66,9 @@ class ResultValidationAbilityTest extends AnyFlatSpec with BeforeAndAfter {
     // simple testing, more comprehensive testing are already done in CompareTest.scala
     val leftData = Seq((1, Some(1), 1.0, "a", "2021-04-10"), (2, Some(2), 2.0, "b", "2021-04-10"))
     val columns = Seq("serial", "value", "rating", "keyId", "ds")
-    val rdd = args.sparkSession.sparkContext.parallelize(leftData)
-    val df = args.sparkSession.createDataFrame(rdd).toDF(columns: _*)
+    val df = args.sparkSession.createDataFrame(leftData).toDF(columns: _*)
 
-    when(mockTableUtils.loadTable(any(), any(), any())).thenReturn(df)
+    when(mockTableUtils.loadTable(any(), any())).thenReturn(df)
 
     assertTrue(args.validateResult(df, Seq("keyId", "ds"), mockTableUtils))
   }
@@ -79,13 +78,11 @@ class ResultValidationAbilityTest extends AnyFlatSpec with BeforeAndAfter {
 
     val columns = Seq("serial", "value", "rating", "keyId", "ds")
     val leftData = Seq((1, Some(1), 1.0, "a", "2021-04-10"), (1, Some(2), 2.0, "b", "2021-04-10"))
-    val leftRdd = args.sparkSession.sparkContext.parallelize(leftData)
-    val leftDf = args.sparkSession.createDataFrame(leftRdd).toDF(columns: _*)
+    val leftDf = args.sparkSession.createDataFrame(leftData).toDF(columns: _*)
     val rightData = Seq((1, Some(1), 5.0, "a", "2021-04-10"), (2, Some(3), 2.0, "b", "2021-04-10"))
-    val rightRdd = args.sparkSession.sparkContext.parallelize(rightData)
-    val rightDf = args.sparkSession.createDataFrame(rightRdd).toDF(columns: _*)
+    val rightDf = args.sparkSession.createDataFrame(rightData).toDF(columns: _*)
 
-    when(mockTableUtils.loadTable(any(), any(), any())).thenReturn(rightDf)
+    when(mockTableUtils.loadTable(any(), any())).thenReturn(rightDf)
 
     assertFalse(args.validateResult(leftDf, Seq("keyId", "ds"), mockTableUtils))
   }

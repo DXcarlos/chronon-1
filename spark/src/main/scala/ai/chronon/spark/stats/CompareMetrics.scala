@@ -24,14 +24,14 @@ import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.online.fetcher.DataMetrics
-import ai.chronon.spark.Comparison
+import ai.chronon.spark.{Comparison, GenericRowHandler}
+import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.TimedKvRdd
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.apache.spark.sql.{Column, DataFrame, Encoder, Encoders, Row}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedFunction}
 import org.apache.spark.sql.functions
-import org.apache.spark.sql.types
+import org.apache.spark.sql.{types => sparkTypes}
 
 import scala.collection.immutable.SortedMap
 
@@ -72,7 +72,7 @@ object CompareMetrics {
           functions
             .when(
               smape_denom.notEqual(0.0),
-              (functions.abs(left - right) * 2).cast(types.DoubleType) / smape_denom
+              (functions.abs(left - right) * 2).cast(sparkTypes.DoubleType) / smape_denom
             )
             .otherwise(0.0),
           Operation.AVERAGE
@@ -157,7 +157,7 @@ object CompareMetrics {
               keys: Seq[String],
               name: String,
               mapping: Map[String, String] = Map.empty,
-              timeBucketMinutes: Long = 60): (TimedKvRdd, DataMetrics) = {
+              timeBucketMinutes: Long = 60): (DataFrame, DataMetrics) = {
     val tableUtils = TableUtils(inputDf.sparkSession)
     // spark maps cannot be directly compared, for now we compare the string representation
     // TODO 1: For Maps, we should find missing keys, extra keys and mismatched keys
@@ -193,30 +193,67 @@ object CompareMetrics {
     val timeIndex = secondPassDf.schema.fieldIndex(timeColumn)
     val outputColumns = rowAggregator.aggregationParts.map(_.outputColumnName).toArray
     def sortedMap(vals: Seq[(String, Any)]) = SortedMap.empty[String, Any] ++ vals
-    val resultRdd = secondPassDf.rdd
-      .keyBy(row => {
-        val timeValue = if (timeColumn == tableUtils.partitionColumn) {
+
+    val keySparkSchema = SparkConversions.fromChrononSchema(Constants.StatsKeySchema)
+    val valueSparkSchema = SparkConversions.fromChrononSchema(rowAggregator.outputSchema)
+    val flatSchema = sparkTypes.StructType(
+      keySparkSchema ++ valueSparkSchema :+ sparkTypes.StructField(Constants.TimeColumn, sparkTypes.LongType))
+    val flatZSchema = flatSchema.toChrononSchema("Flat")
+
+    // Collect results - stats data is small enough to collect
+    val compareAgg = new CompareAggregator(rowAggregator).toColumn.name("agg")
+    val tupleEncoder: Encoder[(Long, ai.chronon.api.Row)] = Encoders.kryo[(Long, ai.chronon.api.Row)]
+    val keyEncoder: Encoder[Long] = Encoders.scalaLong
+    val chrononRowEncoder: Encoder[ai.chronon.api.Row] = Encoders.kryo[ai.chronon.api.Row]
+
+    val isPartitionBased = timeColumn == tableUtils.partitionColumn
+    val collected = secondPassDf
+      .map { row =>
+        val timeValue = if (isPartitionBased) {
           tableUtils.partitionSpec.epochMillis(row.getString(timeIndex))
         } else {
           row.getLong(timeIndex)
         }
-        (timeValue / bucketMs) * bucketMs
-      }) // bin
-      .mapValues(SparkConversions.toChrononRow(_, -1))
-      .aggregateByKey(rowAggregator.init)(rowAggregator.updateWithReturn, rowAggregator.merge) // aggregate
-      .mapValues(rowAggregator.finalize)
-    val uploadRdd = resultRdd.map { case (k, v) => (Array(name.asInstanceOf[Any]), v, k) }
-    implicit val sparkSession = inputDf.sparkSession
-    val timedKvRdd = TimedKvRdd(
-      uploadRdd,
-      SparkConversions.fromChrononSchema(Constants.StatsKeySchema),
-      SparkConversions.fromChrononSchema(rowAggregator.outputSchema),
-      storeSchemasPrefix = Some(name)
-    )
-    val result = resultRdd
+        val ts = (timeValue / bucketMs) * bucketMs
+        (ts, SparkConversions.toChrononRow(row, -1): ai.chronon.api.Row)
+      }(tupleEncoder)
+      .groupByKey(_._1)(keyEncoder)
+      .mapValues(_._2)(chrononRowEncoder)
+      .agg(compareAgg)
       .collect()
       .sortBy(_._1)
+
+    val metricsResult = collected
       .map { case (bucketStart, vals) => bucketStart -> sortedMap(outputColumns.zip(vals)) }
-    (timedKvRdd -> DataMetrics(result))
+
+    // Build flat DataFrame from collected data
+    val rows: Seq[Row] = collected.map { case (ts, v) =>
+      val keys = Array(name.asInstanceOf[Any])
+      val all = new Array[Any](keys.length + v.length + 1)
+      System.arraycopy(keys, 0, all, 0, keys.length)
+      System.arraycopy(v, 0, all, keys.length, v.length)
+      all(all.length - 1) = ts
+      SparkConversions.toSparkRow(all, flatZSchema, GenericRowHandler.func).asInstanceOf[GenericRow]: Row
+    }.toSeq
+
+    implicit val sparkSession = inputDf.sparkSession
+    val flatDf = sparkSession.createDataFrame(
+      java.util.Arrays.asList(rows: _*),
+      flatSchema
+    )
+    (flatDf, DataMetrics(metricsResult))
   }
+}
+
+private[stats] class CompareAggregator(rowAggregator: RowAggregator)
+    extends Aggregator[ai.chronon.api.Row, Array[Any], Array[Any]]
+    with Serializable {
+
+  override def zero: Array[Any] = rowAggregator.init
+  override def reduce(buf: Array[Any], input: ai.chronon.api.Row): Array[Any] =
+    rowAggregator.updateWithReturn(buf, input)
+  override def merge(b1: Array[Any], b2: Array[Any]): Array[Any] = rowAggregator.merge(b1, b2)
+  override def finish(buf: Array[Any]): Array[Any] = rowAggregator.finalize(buf)
+  override def bufferEncoder: Encoder[Array[Any]] = Encoders.kryo[Array[Any]]
+  override def outputEncoder: Encoder[Array[Any]] = Encoders.kryo[Array[Any]]
 }

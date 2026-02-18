@@ -237,7 +237,7 @@ class ChainingFetcherTest extends SparkTestBase {
     metadataStore.putJoinConf(joinConf)
 
     def buildRequests(lagMs: Int = 0): Array[Request] =
-      endDsQueries.rdd
+      endDsQueries.collect()
         .map { row =>
           val keyMap = keyIndices.indices.map { idx =>
             keys(idx) -> row.get(keyIndices(idx)).asInstanceOf[AnyRef]
@@ -245,7 +245,6 @@ class ChainingFetcherTest extends SparkTestBase {
           val ts = row.get(tsIndex).asInstanceOf[Long]
           Request(joinConf.metaData.name, keyMap, Some(ts - lagMs))
         }
-        .collect()
 
     val requests = buildRequests()
 
@@ -276,8 +275,7 @@ class ChainingFetcherTest extends SparkTestBase {
     // comparison
     val keys = joinConf.leftKeyCols
     val keyishColumns = keys.toList ++ List(tableUtils.partitionColumn, Constants.TimeColumn)
-    val responseRdd = tableUtils.sparkSession.sparkContext.parallelize(responseRows.toSeq)
-    var responseDf = tableUtils.sparkSession.createDataFrame(responseRdd, expectedDf.schema)
+    var responseDf = tableUtils.sparkSession.createDataFrame(java.util.Arrays.asList(responseRows.toSeq: _*), expectedDf.schema)
     logger.info("expected:")
     expectedDf.show()
     logger.info("response:")

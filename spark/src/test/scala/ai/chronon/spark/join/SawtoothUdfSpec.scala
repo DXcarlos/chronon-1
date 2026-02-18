@@ -7,6 +7,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.{Row => SparkRow}
 import org.scalatest.matchers.should.Matchers
 
+
 class SawtoothUdfSpec extends BaseJoinTest with Matchers {
 
   "SawtoothUdf.sawtoothAggregate" should "perform point-in-time aggregation correctly" in {
@@ -23,10 +24,10 @@ class SawtoothUdfSpec extends BaseJoinTest with Matchers {
 
     // Create left rows (search requests)
     val leftRows =
-      Array(SparkRow(1, "query1", baseTs), SparkRow(1, "query2", baseTs + 3600000)) // Second search query, 1 hour later
+      Seq(SparkRow(1, "query1", baseTs), SparkRow(1, "query2", baseTs + 3600000)) // Second search query, 1 hour later
 
     // Create right rows (item-click events)
-    val rightRows = Array(
+    val rightRows = Seq(
       // Events that happened before first query
       SparkRow(1, "item1", 10.5, baseTs - 3600000), // 1 hour before
       SparkRow(1, "item2", 20.5, baseTs - 1800000), // 30 min before
@@ -126,8 +127,8 @@ class SawtoothUdfSpec extends BaseJoinTest with Matchers {
 
   it should "handle empty inputs gracefully" in {
     // Test with empty inputs
-    val emptyLeftRows = Array.empty[SparkRow]
-    val emptyRightRows = Array.empty[SparkRow]
+    val emptyLeftRows = Seq.empty[SparkRow]
+    val emptyRightRows = Seq.empty[SparkRow]
 
     // Define schemas
     val schema = org.apache.spark.sql.types.StructType(Seq(
@@ -176,10 +177,10 @@ class SawtoothUdfSpec extends BaseJoinTest with Matchers {
     val baseTs = 1600000000000L
 
     // Create left rows (queries)
-    val leftRows = Array(SparkRow(1, "query1", baseTs))
+    val leftRows = Seq(SparkRow(1, "query1", baseTs))
 
     // Create right rows (events), but all events are outside the window
-    val rightRows = Array(SparkRow(1, "item1", 10.5, baseTs - 3 * 24 * 3600 * 1000),
+    val rightRows = Seq(SparkRow(1, "item1", 10.5, baseTs - 3 * 24 * 3600 * 1000),
                           SparkRow(1, "item2", 20.5, baseTs + 100000)
     ) // After query
 
@@ -261,10 +262,10 @@ class SawtoothUdfSpec extends BaseJoinTest with Matchers {
     val baseTs = 1600000000000L
 
     // Create left rows - a query at baseTs
-    val leftRows = Array(SparkRow(1, "query1", baseTs))
+    val leftRows = Seq(SparkRow(1, "query1", baseTs))
 
     // Create right rows - an event at EXACTLY the same timestamp
-    val rightRows = Array(
+    val rightRows = Seq(
       SparkRow(1, "item1", 100.0, baseTs)  // Same timestamp as query
     )
 

@@ -31,9 +31,9 @@ source = Source(
                 is_desktop="IF(device_type = 'desktop', 1, 0)",
                 is_tablet="IF(device_type = 'tablet', 1, 0)",
                 # Activity structs for last_k tracking
-                user_event_struct="STRUCT(event_type, listing_id, unix_millis(TIMESTAMP(event_time_ms)) as timestamp)",
+                user_event_struct="STRUCT(event_type, listing_id, event_time_ms as timestamp)",
             ),
-            time_column="unix_millis(TIMESTAMP(event_time_ms))",
+            time_column="event_time_ms",
         ),
     )
 )

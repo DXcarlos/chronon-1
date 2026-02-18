@@ -19,7 +19,7 @@ import ai.chronon.aggregator.base.FrequentItemType.{DoubleItemType, LongItemType
 import ai.chronon.aggregator.base.FrequentItemsFriendly._
 import ai.chronon.aggregator.base.{FrequentItemType, FrequentItemsFriendly, ItemsSketchIR}
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.serializers.ClosureSerializer
+import com.esotericsoftware.kryo.serializers.{ClosureSerializer, JavaSerializer}
 import com.esotericsoftware.kryo.{Kryo, Serializer}
 import org.apache.datasketches.common.{ArrayOfItemsSerDe, ArrayOfStringsSerDe}
 import org.apache.datasketches.cpc.CpcSketch
@@ -115,6 +115,8 @@ class ChrononKryoRegistrator extends KryoRegistrator {
       "ai.chronon.online.serde.RowWrapper",
       "ai.chronon.online.fetcher.Fetcher$Request",
       "ai.chronon.spark.KeyWithHash",
+      "java.math.BigDecimal",
+      "java.math.BigInteger",
       "java.time.LocalDate",
       "java.time.LocalDateTime",
       "java.util.ArrayList",
@@ -202,6 +204,7 @@ class ChrononKryoRegistrator extends KryoRegistrator {
       "org.apache.spark.sql.types.DoubleType$",
       "org.apache.spark.sql.types.IntegerType$",
       "org.apache.spark.sql.types.LongType$",
+      "org.apache.spark.sql.types.MapType",
       "org.apache.spark.sql.types.Metadata",
       "org.apache.spark.sql.types.NullType$",
       "org.apache.spark.sql.types.StringType",
@@ -225,33 +228,11 @@ class ChrononKryoRegistrator extends KryoRegistrator {
       "scala.reflect.ManifestFactory$$anon$10",
       "scala.reflect.ManifestFactory$LongManifest",
       "scala.reflect.ManifestFactory$LongManifest",
-      "scala.collection.immutable.ArraySeq$ofInt"
-    )
-    names.foreach(name => doRegister(name, kryo))
-
-    kryo.register(classOf[Array[Array[Array[AnyRef]]]])
-    kryo.register(classOf[Array[Array[AnyRef]]])
-    kryo.register(classOf[CpcSketch], new CpcSketchKryoSerializer())
-    kryo.register(classOf[Array[ItemSketchSerializable]])
-    kryo.register(classOf[ItemsSketchIR[AnyRef]], new ItemsSketchKryoSerializer[AnyRef])
-    kryo.register(classOf[SerializedLambda])
-    kryo.register(classOf[ClosureSerializer.Closure], new ClosureSerializer)
-  }
-
-  def doRegister(name: String, kryo: Kryo): Unit = {
-    try {
-      kryo.register(Class.forName(name))
-      kryo.register(Class.forName(s"[L$name;")) // represents array of a type to jvm
-    } catch {
-      case _: ClassNotFoundException => // do nothing
-    }
-  }
-}
-
-class ChrononHudiKryoRegistrator extends ChrononKryoRegistrator {
-  override def registerClasses(kryo: Kryo): Unit = {
-    super.registerClasses(kryo)
-    val additionalClassNames = Seq(
+      "scala.collection.immutable.ArraySeq$ofInt",
+      // Delta Lake
+      "org.apache.spark.sql.delta.stats.DeltaFileStatistics",
+      "org.apache.spark.sql.delta.actions.AddFile",
+      // Hudi
       "org.apache.hudi.storage.StoragePath",
       "org.apache.hudi.metadata.HoodieBackedTableMetadataWriter$DirectoryInfo",
       "org.apache.hudi.common.model.HoodieAvroRecord",
@@ -270,20 +251,41 @@ class ChrononHudiKryoRegistrator extends ChrononKryoRegistrator {
       "org.apache.hudi.common.util.Option",
       "org.apache.hudi.storage.StoragePathInfo",
       "org.apache.hudi.metadata.HoodieTableMetadataUtil$DirectoryInfo",
-      "org.apache.spark.sql.execution.datasources.parquet.Spark35ParquetReader"
+      "org.apache.spark.sql.execution.datasources.parquet.Spark35ParquetReader",
+      // GCP
+      "org.apache.iceberg.gcp.gcs.GCSFileIO"
     )
-    additionalClassNames.foreach(name => doRegister(name, kryo))
+    names.foreach(name => doRegister(name, kryo))
+
+    kryo.register(classOf[Array[java.lang.Double]])
+    kryo.register(classOf[Array[java.lang.Float]])
+    kryo.register(classOf[Array[java.lang.Long]])
+    kryo.register(classOf[Array[java.lang.Integer]])
+    kryo.register(classOf[Array[java.lang.Boolean]])
+    kryo.register(classOf[Array[java.lang.String]])
+
+    // GCSFileIO needs JavaSerializer due to closure serialization issues in the GCSFileIO class
+    try {
+      kryo.register(Class.forName("org.apache.iceberg.gcp.gcs.GCSFileIO"), new JavaSerializer)
+    } catch {
+      case _: ClassNotFoundException => // GCP jars not on classpath
+    }
+
+    kryo.register(classOf[Array[Array[Array[AnyRef]]]])
+    kryo.register(classOf[Array[Array[AnyRef]]])
+    kryo.register(classOf[CpcSketch], new CpcSketchKryoSerializer())
+    kryo.register(classOf[Array[ItemSketchSerializable]])
+    kryo.register(classOf[ItemsSketchIR[AnyRef]], new ItemsSketchKryoSerializer[AnyRef])
+    kryo.register(classOf[SerializedLambda])
+    kryo.register(classOf[ClosureSerializer.Closure], new ClosureSerializer)
   }
 
-}
-
-class ChrononDeltaLakeKryoRegistrator extends ChrononKryoRegistrator {
-  override def registerClasses(kryo: Kryo): Unit = {
-    super.registerClasses(kryo)
-    val additionalDeltaNames = Seq(
-      "org.apache.spark.sql.delta.stats.DeltaFileStatistics",
-      "org.apache.spark.sql.delta.actions.AddFile"
-    )
-    additionalDeltaNames.foreach(name => doRegister(name, kryo))
+  def doRegister(name: String, kryo: Kryo): Unit = {
+    try {
+      kryo.register(Class.forName(name))
+      kryo.register(Class.forName(s"[L$name;")) // represents array of a type to jvm
+    } catch {
+      case _: ClassNotFoundException => // do nothing
+    }
   }
 }

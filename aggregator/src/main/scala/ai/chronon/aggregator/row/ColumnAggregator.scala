@@ -186,6 +186,25 @@ object ColumnAggregator {
     implicitly[Numeric[A]].toLong(inp.asInstanceOf[A]).asInstanceOf[java.lang.Long]
   private def toJavaDouble[A: Numeric](inp: Any) =
     implicitly[Numeric[A]].toDouble(inp.asInstanceOf[A]).asInstanceOf[java.lang.Double]
+  private def bigDecimalToDouble(inp: Any): Double = inp.asInstanceOf[java.math.BigDecimal].doubleValue()
+  private def bigDecimalToFloat(inp: Any): Float = inp.asInstanceOf[java.math.BigDecimal].floatValue()
+
+  // Numeric instance for java.math.BigDecimal to enable Sum[BigDecimal]
+  implicit val bigDecimalNumeric: Numeric[java.math.BigDecimal] = new Numeric[java.math.BigDecimal] {
+    def plus(x: java.math.BigDecimal, y: java.math.BigDecimal): java.math.BigDecimal = x.add(y)
+    def minus(x: java.math.BigDecimal, y: java.math.BigDecimal): java.math.BigDecimal = x.subtract(y)
+    def times(x: java.math.BigDecimal, y: java.math.BigDecimal): java.math.BigDecimal = x.multiply(y)
+    def negate(x: java.math.BigDecimal): java.math.BigDecimal = x.negate()
+    def fromInt(x: Int): java.math.BigDecimal = java.math.BigDecimal.valueOf(x.toLong)
+    def parseString(str: String): Option[java.math.BigDecimal] =
+      try { Some(new java.math.BigDecimal(str)) }
+      catch { case _: NumberFormatException => None }
+    def toInt(x: java.math.BigDecimal): Int = x.intValue()
+    def toLong(x: java.math.BigDecimal): Long = x.longValue()
+    def toFloat(x: java.math.BigDecimal): Float = x.floatValue()
+    def toDouble(x: java.math.BigDecimal): Double = x.doubleValue()
+    def compare(x: java.math.BigDecimal, y: java.math.BigDecimal): Int = x.compareTo(y)
+  }
 
   def construct(baseInputType: DataType,
                 aggregationPart: AggregationPart,
@@ -259,24 +278,26 @@ object ColumnAggregator {
         }
       case Operation.SUM =>
         inputType match {
-          case IntType     => simple(new Sum[Long](LongType), toLong[Int])
-          case LongType    => simple(new Sum[Long](inputType))
-          case ShortType   => simple(new Sum[Long](LongType), toLong[Short])
-          case BooleanType => simple(new Sum[Long](LongType), boolToLong)
-          case DoubleType  => simple(new Sum[Double](inputType))
-          case FloatType   => simple(new Sum[Double](inputType), toDouble[Float])
-          case _           => mismatchException
+          case IntType           => simple(new Sum[Long](LongType), toLong[Int])
+          case LongType          => simple(new Sum[Long](inputType))
+          case ShortType         => simple(new Sum[Long](LongType), toLong[Short])
+          case BooleanType       => simple(new Sum[Long](LongType), boolToLong)
+          case DoubleType        => simple(new Sum[Double](inputType))
+          case FloatType         => simple(new Sum[Double](DoubleType), toDouble[Float])
+          case DecimalType(_, _) => simple(new Sum[java.math.BigDecimal](inputType))
+          case _                 => mismatchException
         }
       case Operation.UNIQUE_COUNT =>
         inputType match {
-          case IntType    => simple(new UniqueCount[Int](inputType))
-          case LongType   => simple(new UniqueCount[Long](inputType))
-          case ShortType  => simple(new UniqueCount[Short](inputType))
-          case DoubleType => simple(new UniqueCount[Double](inputType))
-          case FloatType  => simple(new UniqueCount[Float](inputType))
-          case StringType => simple(new UniqueCount[String](inputType))
-          case BinaryType => simple(new UniqueCount[Array[Byte]](inputType))
-          case _          => mismatchException
+          case IntType           => simple(new UniqueCount[Int](inputType))
+          case LongType          => simple(new UniqueCount[Long](inputType))
+          case ShortType         => simple(new UniqueCount[Short](inputType))
+          case DoubleType        => simple(new UniqueCount[Double](inputType))
+          case FloatType         => simple(new UniqueCount[Float](inputType))
+          case StringType        => simple(new UniqueCount[String](inputType))
+          case BinaryType        => simple(new UniqueCount[Array[Byte]](inputType))
+          case DecimalType(_, _) => simple(new UniqueCount[java.math.BigDecimal](inputType))
+          case _                 => mismatchException
         }
       case Operation.APPROX_UNIQUE_COUNT =>
         inputType match {
@@ -288,7 +309,9 @@ object ColumnAggregator {
             simple(new ApproxDistinctCount[Double](aggregationPart.getInt("k", Some(8))), toDouble[Float])
           case StringType => simple(new ApproxDistinctCount[String](aggregationPart.getInt("k", Some(8))))
           case BinaryType => simple(new ApproxDistinctCount[Array[Byte]](aggregationPart.getInt("k", Some(8))))
-          case _          => mismatchException
+          case DecimalType(_, _) =>
+            simple(new ApproxDistinctCount[Double](aggregationPart.getInt("k", Some(8))), bigDecimalToDouble)
+          case _ => mismatchException
         }
 
       case Operation.APPROX_PERCENTILE =>
@@ -298,98 +321,107 @@ object ColumnAggregator {
           mapper.readValue(aggregationPart.argMap.getOrDefault("percentiles", "[0.5]"), classOf[Array[Double]])
         val agg = new ApproxPercentiles(k, percentiles)
         inputType match {
-          case IntType    => simple(agg, toFloat[Int])
-          case LongType   => simple(agg, toFloat[Long])
-          case DoubleType => simple(agg, toFloat[Double])
-          case FloatType  => simple(agg)
-          case ShortType  => simple(agg, toFloat[Short])
-          case _          => mismatchException
+          case IntType           => simple(agg, toFloat[Int])
+          case LongType          => simple(agg, toFloat[Long])
+          case DoubleType        => simple(agg, toFloat[Double])
+          case FloatType         => simple(agg)
+          case ShortType         => simple(agg, toFloat[Short])
+          case DecimalType(_, _) => simple(agg, bigDecimalToFloat)
+          case _                 => mismatchException
         }
 
       case Operation.AVERAGE =>
         inputType match {
-          case IntType    => simple(new Average, toDouble[Int])
-          case LongType   => simple(new Average, toDouble[Long])
-          case ShortType  => simple(new Average, toDouble[Short])
-          case DoubleType => simple(new Average)
-          case FloatType  => simple(new Average, toDouble[Float])
-          case _          => mismatchException
+          case IntType           => simple(new Average, toDouble[Int])
+          case LongType          => simple(new Average, toDouble[Long])
+          case ShortType         => simple(new Average, toDouble[Short])
+          case DoubleType        => simple(new Average)
+          case FloatType         => simple(new Average, toDouble[Float])
+          case DecimalType(_, _) => simple(new Average, bigDecimalToDouble)
+          case _                 => mismatchException
         }
 
       case Operation.VARIANCE =>
         inputType match {
-          case IntType    => simple(new Variance, toDouble[Int])
-          case LongType   => simple(new Variance, toDouble[Long])
-          case ShortType  => simple(new Variance, toDouble[Short])
-          case DoubleType => simple(new Variance)
-          case FloatType  => simple(new Variance, toDouble[Float])
-          case _          => mismatchException
+          case IntType           => simple(new Variance, toDouble[Int])
+          case LongType          => simple(new Variance, toDouble[Long])
+          case ShortType         => simple(new Variance, toDouble[Short])
+          case DoubleType        => simple(new Variance)
+          case FloatType         => simple(new Variance, toDouble[Float])
+          case DecimalType(_, _) => simple(new Variance, bigDecimalToDouble)
+          case _                 => mismatchException
         }
 
       case Operation.SKEW =>
         inputType match {
-          case IntType    => simple(new Skew, toDouble[Int])
-          case LongType   => simple(new Skew, toDouble[Long])
-          case ShortType  => simple(new Skew, toDouble[Short])
-          case DoubleType => simple(new Skew)
-          case FloatType  => simple(new Skew, toDouble[Float])
-          case _          => mismatchException
+          case IntType           => simple(new Skew, toDouble[Int])
+          case LongType          => simple(new Skew, toDouble[Long])
+          case ShortType         => simple(new Skew, toDouble[Short])
+          case DoubleType        => simple(new Skew)
+          case FloatType         => simple(new Skew, toDouble[Float])
+          case DecimalType(_, _) => simple(new Skew, bigDecimalToDouble)
+          case _                 => mismatchException
         }
 
       case Operation.KURTOSIS =>
         inputType match {
-          case IntType    => simple(new Kurtosis, toDouble[Int])
-          case LongType   => simple(new Kurtosis, toDouble[Long])
-          case ShortType  => simple(new Kurtosis, toDouble[Short])
-          case DoubleType => simple(new Kurtosis)
-          case FloatType  => simple(new Kurtosis, toDouble[Float])
-          case _          => mismatchException
+          case IntType           => simple(new Kurtosis, toDouble[Int])
+          case LongType          => simple(new Kurtosis, toDouble[Long])
+          case ShortType         => simple(new Kurtosis, toDouble[Short])
+          case DoubleType        => simple(new Kurtosis)
+          case FloatType         => simple(new Kurtosis, toDouble[Float])
+          case DecimalType(_, _) => simple(new Kurtosis, bigDecimalToDouble)
+          case _                 => mismatchException
         }
 
       case Operation.MIN =>
         inputType match {
-          case IntType    => simple(new Min[Int](inputType))
-          case LongType   => simple(new Min[Long](inputType))
-          case ShortType  => simple(new Min[Short](inputType))
-          case DoubleType => simple(new Min[Double](inputType))
-          case FloatType  => simple(new Min[Float](inputType))
-          case StringType => simple(new Min[String](inputType))
-          case _          => mismatchException
+          case IntType           => simple(new Min[Int](inputType))
+          case LongType          => simple(new Min[Long](inputType))
+          case ShortType         => simple(new Min[Short](inputType))
+          case DoubleType        => simple(new Min[Double](inputType))
+          case FloatType         => simple(new Min[Float](inputType))
+          case StringType        => simple(new Min[String](inputType))
+          case DecimalType(_, _) => simple(new Min[java.math.BigDecimal](inputType))
+          case _                 => mismatchException
         }
 
       case Operation.MAX =>
         inputType match {
-          case IntType    => simple(new Max[Int](inputType))
-          case LongType   => simple(new Max[Long](inputType))
-          case ShortType  => simple(new Max[Short](inputType))
-          case DoubleType => simple(new Max[Double](inputType))
-          case FloatType  => simple(new Max[Float](inputType))
-          case StringType => simple(new Max[String](inputType))
-          case _          => mismatchException
+          case IntType           => simple(new Max[Int](inputType))
+          case LongType          => simple(new Max[Long](inputType))
+          case ShortType         => simple(new Max[Short](inputType))
+          case DoubleType        => simple(new Max[Double](inputType))
+          case FloatType         => simple(new Max[Float](inputType))
+          case StringType        => simple(new Max[String](inputType))
+          case DecimalType(_, _) => simple(new Max[java.math.BigDecimal](inputType))
+          case _                 => mismatchException
         }
 
       case Operation.TOP_K =>
         val k = aggregationPart.getInt("k")
         inputType match {
-          case IntType    => simple(new TopK[Int](inputType, k))
-          case LongType   => simple(new TopK[Long](inputType, k))
-          case ShortType  => simple(new TopK[Short](inputType, k))
-          case DoubleType => simple(new TopK[Double](inputType, k))
-          case FloatType  => simple(new TopK[Float](inputType, k))
-          case StringType => simple(new TopK[String](inputType, k))
-          case _          => mismatchException
+          case IntType           => simple(new TopK[Int](inputType, k))
+          case LongType          => simple(new TopK[Long](inputType, k))
+          case ShortType         => simple(new TopK[Short](inputType, k))
+          case DoubleType        => simple(new TopK[Double](inputType, k))
+          case FloatType         => simple(new TopK[Float](inputType, k))
+          case StringType        => simple(new TopK[String](inputType, k))
+          case DecimalType(_, _) => simple(new TopK[java.math.BigDecimal](inputType, k))
+          case _                 => mismatchException
         }
 
       case Operation.BOTTOM_K =>
         val k = aggregationPart.getInt("k")
         inputType match {
-          case IntType    => simple(new BottomK[Int](inputType, k))
-          case LongType   => simple(new BottomK[Long](inputType, k))
-          case ShortType  => simple(new BottomK[Short](inputType, k))
-          case DoubleType => simple(new BottomK[Double](inputType, k))
-          case FloatType  => simple(new BottomK[Float](inputType, k))
-          case StringType => simple(new BottomK[String](inputType, k))
-          case _          => mismatchException
+          case IntType           => simple(new BottomK[Int](inputType, k))
+          case LongType          => simple(new BottomK[Long](inputType, k))
+          case ShortType         => simple(new BottomK[Short](inputType, k))
+          case DoubleType        => simple(new BottomK[Double](inputType, k))
+          case FloatType         => simple(new BottomK[Float](inputType, k))
+          case StringType        => simple(new BottomK[String](inputType, k))
+          case DecimalType(_, _) => simple(new BottomK[java.math.BigDecimal](inputType, k))
+          case _                 => mismatchException
         }
 
       case Operation.UNIQUE_TOP_K =>

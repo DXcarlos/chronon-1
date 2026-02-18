@@ -227,25 +227,26 @@ abstract class JoinBase(val joinConfCloned: api.Join,
 
   }
 
-  def forceComputeRangeAndSave(range: PartitionRange): Option[DataFrame] = {
+  def forceComputeRangeAndSave(range: PartitionRange, semanticHash: Option[String] = None): Option[DataFrame] =
+    tableUtils.withJobDescription(s"MonolithJoin(${joinMetaData.name}) $range") {
 
-    Option(joinConfCloned.setups).foreach(_.foreach(tableUtils.sql))
-    val leftDfInRange = leftDf(joinConfCloned, range, tableUtils)
+      Option(joinConfCloned.setups).foreach(_.foreach(tableUtils.sql))
+      val leftDfInRange = leftDf(joinConfCloned, range, tableUtils)
 
-    if (leftDfInRange.isEmpty) return None
+      if (leftDfInRange.isEmpty) return None
 
-    val bootstrapInfo = BootstrapInfo.from(joinConfCloned.deepCopy(), range, tableUtils, leftDfInRange.map(_.schema))
+      val bootstrapInfo = BootstrapInfo.from(joinConfCloned.deepCopy(), range, tableUtils, leftDfInRange.map(_.schema))
 
-    val dfOpt = computeRange(leftDfInRange.get, range, bootstrapInfo)
-    dfOpt.map { df =>
-      val table = joinMetaData.outputTable
+      val dfOpt = computeRange(leftDfInRange.get, range, bootstrapInfo)
+      dfOpt.map { df =>
+        val table = joinMetaData.outputTable
 
-      tableUtils.dropTableOnSchemaChange(table, df)
-      df.save(table)
+        tableUtils.dropTableOnSchemaChange(table, df)
+        df.save(table, semanticHash = semanticHash)
 
-      tableUtils.loadTable(table, range.whereClauses)
+        tableUtils.loadTable(table, range.whereClauses)
+      }
     }
-  }
 
   def computeJoin(stepDays: Option[Int] = None, overrideStartPartition: Option[String] = None): DataFrame = {
     computeJoinOpt(stepDays, overrideStartPartition).get

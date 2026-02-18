@@ -63,17 +63,9 @@ systems like Arize and Fiddler.
 
 Some of the APIs we added to Chronon at airbnb, generalized poorly to the diverse needs of ML/AI data engineering.
 
-One example is the `LabelPart` API which is intended to be used for label computation. This builds on the existing 
-`GroupBy` concept. We later found that most label computation setups are way more complicated than what the `GroupBy` concept can handle.
-Even for the simpler cases, having to write and reason about a `GroupBy` alongside label offsets was extremely unintuitive. This often 
-lead to subtle but significant errors in the training data. As a result most companies that adopted Chronon actually DON'T use the
-label-part api at all! They stitch chronon with external systems to generate training data. 
+One example is label computation. The previous API (`LabelPart`) built on the `GroupBy` concept, but most label computation setups were too complicated for `GroupBy` to handle. Even for simpler cases, reasoning about a `GroupBy` alongside label offsets was unintuitive and often led to subtle but significant errors in training data.
 
-We rectified this by removing the existing label-part API all together, and replaced it with StagingQuery (free form sql query) with 
-and additional "recompute" flag, that produces the recomputation behavior that label generation needs. This has been very 
-intuitive for even novice users and an **order-of-magnitude cheaper and faster** since we don't convert parquet data into on-heap java objects.
-
-The previous api also didn't support point-in-time label attribution that many impression-to-engagement-attribution use-cases need.
+We replaced this with `StagingQuery` (free-form SQL) with `recomputeDays`, which produces the recomputation behavior that label generation needs. This has been very intuitive for even novice users and an **order-of-magnitude cheaper and faster** since we don't convert parquet data into on-heap Java objects. It also supports point-in-time label attribution that many impression-to-engagement-attribution use-cases need.
 
 ---
 

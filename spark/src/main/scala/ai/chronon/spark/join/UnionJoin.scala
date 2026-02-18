@@ -8,13 +8,11 @@ import ai.chronon.spark.Extensions._
 import ai.chronon.spark.JoinUtils
 import ai.chronon.spark.batch.MergeJob
 import ai.chronon.spark.catalog.TableUtils
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row, functions => F}
 import org.slf4j.LoggerFactory
-
-import scala.collection.mutable
 
 object UnionJoin {
 
@@ -155,30 +153,28 @@ object UnionJoin {
         aggregationInfo.outputSparkSchema)
     )
 
-    // when I tried to do this via udf + dataframe, spark simply OOMs
-    // analyzing with profiler indicates that the catalyst generated code creates
-    // too much garbage when dealing with UDF outputs
-    // and it particularly memory intensive.
-    val outputRdd: RDD[Row] = unionDf.df.rdd.mapPartitions { rows: Iterator[Row] =>
-      rows.flatMap { row =>
-        val leftData = row.get(leftIdx).asInstanceOf[mutable.WrappedArray[Row]]
-        val rightData = row.get(rightIdx).asInstanceOf[mutable.WrappedArray[Row]]
-        val aggregatedData: Iterator[CGenericRow] = aggregationInfo.aggregate(leftData, rightData)
-        val keys = leftKeyIndices.map(row.get)
+    // mapPartitions avoids Catalyst UDF overhead that causes OOMs
+    val rowEncoder = ExpressionEncoder(outputSchema)
+    val baseResultDf = unionDf.df
+      .mapPartitions { rows: Iterator[Row] =>
+        rows.flatMap { row =>
+          val leftData = row.getSeq[Row](leftIdx)
+          val rightData = row.getSeq[Row](rightIdx)
+          val aggregatedData: Iterator[CGenericRow] = aggregationInfo.aggregate(leftData, rightData)
+          val keys = leftKeyIndices.map(row.get)
 
-        aggregatedData.map { data =>
-          val values = data.values
-          val result = new Array[Any](keys.length + values.length)
+          aggregatedData.map { data =>
+            val values = data.values
+            val result = new Array[Any](keys.length + values.length)
 
-          System.arraycopy(keys, 0, result, 0, keys.length)
-          System.arraycopy(values, 0, result, keys.length, values.length)
+            System.arraycopy(keys, 0, result, 0, keys.length)
+            System.arraycopy(values, 0, result, keys.length, values.length)
 
-          new GenericRow(result)
+            new GenericRow(result): Row
+          }
         }
-      }
-    }
-
-    val baseResultDf = tableUtils.sparkSession.createDataFrame(outputRdd, outputSchema)
+      }(rowEncoder)
+      .toDF()
 
     // Apply GroupBy derivations to the aggregated results if we're producing final join output
     // Else, it gets applied later in the JoinPartJob
@@ -228,10 +224,12 @@ object UnionJoin {
     !joinConf.isSetBootstrapParts
   }
 
-  def computeJoinAndSave(joinConf: api.Join, dateRange: PartitionRange)(implicit tableUtils: TableUtils): Unit = {
-    val resultDf = computeJoin(joinConf, dateRange)
-    logger.info(s"Saving output to ${joinConf.metaData.outputTable}")
-    resultDf.save(joinConf.metaData.outputTable)
-  }
+  def computeJoinAndSave(joinConf: api.Join, dateRange: PartitionRange, semanticHash: Option[String] = None)(implicit
+      tableUtils: TableUtils): Unit =
+    tableUtils.withJobDescription(s"UnionJoin(${joinConf.metaData.name}) $dateRange") {
+      val resultDf = computeJoin(joinConf, dateRange)
+      logger.info(s"Saving output to ${joinConf.metaData.outputTable}")
+      resultDf.save(joinConf.metaData.outputTable, semanticHash = semanticHash)
+    }
 
 }

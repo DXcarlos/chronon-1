@@ -22,14 +22,17 @@ import ai.chronon.api
 import ai.chronon.api.Extensions._
 import ai.chronon.online.serde.{SparkConversions, AvroConversions}
 import ai.chronon.spark.Extensions._
+import ai.chronon.spark.GenericRowHandler
 import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.TimedKvRdd
 import org.apache.datasketches.kll.KllFloatsSketch
 import org.apache.datasketches.memory.Memory
-import org.apache.spark.sql.Column
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Column, DataFrame, Encoder, Encoders, Row}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
 import scala.util.Try
 
@@ -90,8 +93,7 @@ class StatsCompute(inputDf: DataFrame, keys: Seq[String], name: String) extends 
   /** Navigate the dataframe and compute statistics partitioned by date stamp
     *
     * Partitioned by day version of the normalized summary. Useful for scheduling a job that computes daily stats.
-    * Returns a KvRdd to be able to be pushed into a KvStore for fetching and merging. As well as a dataframe for
-    * storing in hive.
+    * Returns a DataFrame that can be encoded for KvStore upload, fetching and merging, or stored in hive.
     *
     * For entity on the left we use daily partition as the key. For events we bucket by timeBucketMinutes (def. 1 hr)
     * Since the stats are mergeable coarser granularities can be obtained through fetcher merging.
@@ -104,7 +106,12 @@ class StatsCompute(inputDf: DataFrame, keys: Seq[String], name: String) extends 
     *     3. This would leverage Spark SQL's optimizations and avoid row-by-row processing overhead
     *   Benefits: Better performance for large datasets, easier to optimize/debug via SQL plans
     */
-  def dailySummary(aggregator: RowAggregator, sample: Double = 1.0, timeBucketMinutes: Long = 60): TimedKvRdd = {
+  def dailySummary(aggregator: RowAggregator, sample: Double = 1.0, timeBucketMinutes: Long = 60): DataFrame = {
+    val keySparkSchema = SparkConversions.fromChrononSchema(api.Constants.StatsKeySchema)
+    val valueSparkSchema = SparkConversions.fromChrononSchema(aggregator.irSchema)
+    val flatSchema = StructType(keySparkSchema ++ valueSparkSchema :+ StructField(api.Constants.TimeColumn, LongType))
+    val flatZSchema = flatSchema.toChrononSchema("Flat")
+
     val partitionIdx = selectedDf.schema.fieldIndex(tableUtils.partitionColumn)
     val partitionSpec = tableUtils.partitionSpec
     val bucketMs = timeBucketMinutes * 1000 * 60
@@ -113,23 +120,34 @@ class StatsCompute(inputDf: DataFrame, keys: Seq[String], name: String) extends 
       else -1
     val isTimeBucketed = tsIdx >= 0 && timeBucketMinutes > 0
     val keyName: Any = name
-    val result = selectedDf
+
+    val statsAgg = new StatsAggregator(aggregator.inputSchema, aggregator.aggregationParts).toColumn.name("agg")
+    val tupleEncoder: Encoder[(Long, api.Row)] = Encoders.kryo[(Long, api.Row)]
+    val keyEncoder: Encoder[Long] = Encoders.scalaLong
+    val chrononRowEncoder: Encoder[api.Row] = Encoders.kryo[api.Row]
+    val rowEncoder = ExpressionEncoder(flatSchema)
+
+    selectedDf
       .sample(sample)
-      .rdd
-      .map(SparkConversions.toChrononRow(_, tsIdx))
-      .keyBy(row =>
-        if (isTimeBucketed) (row.ts / bucketMs) * bucketMs
-        else partitionSpec.epochMillis(row.getAs[String](partitionIdx)))
-      .aggregateByKey(aggregator.init)(seqOp = aggregator.updateWithReturn, combOp = aggregator.merge)
-      .mapValues(aggregator.normalize(_))
-      .map { case (k, v) => (Array(keyName), v, k) } // To use KvRdd
-    implicit val sparkSession = inputDf.sparkSession
-    TimedKvRdd(
-      result,
-      SparkConversions.fromChrononSchema(api.Constants.StatsKeySchema),
-      SparkConversions.fromChrononSchema(aggregator.irSchema),
-      storeSchemasPrefix = Some(name)
-    )
+      .map { row =>
+        val chrononRow = SparkConversions.toChrononRow(row, tsIdx)
+        val ts =
+          if (isTimeBucketed) (chrononRow.ts / bucketMs) * bucketMs
+          else partitionSpec.epochMillis(row.getString(partitionIdx))
+        (ts, chrononRow: api.Row)
+      }(tupleEncoder)
+      .groupByKey(_._1)(keyEncoder)
+      .mapValues(_._2)(chrononRowEncoder)
+      .agg(statsAgg)
+      .map { case (ts: Long, v: Array[Any]) =>
+        val keys = Array(keyName)
+        val all = new Array[Any](keys.length + v.length + 1)
+        System.arraycopy(keys, 0, all, 0, keys.length)
+        System.arraycopy(v, 0, all, keys.length, v.length)
+        all(all.length - 1) = ts
+        SparkConversions.toSparkRow(all, flatZSchema, GenericRowHandler.func).asInstanceOf[GenericRow]: Row
+      }(rowEncoder)
+      .toDF()
   }
 
   /** Compute cardinality map for all columns in the DataFrame.
@@ -194,9 +212,14 @@ class EnhancedStatsCompute(inputDf: DataFrame, keys: Seq[String], name: String, 
     *     3. This would leverage Spark SQL's optimizations and avoid row-by-row processing overhead
     *   Benefits: Better performance for large datasets, easier to optimize/debug via SQL plans
     */
-  def enhancedDailySummary(sample: Double = 1.0, timeBucketMinutes: Long = 60): TimedKvRdd = {
+  def enhancedDailySummary(sample: Double = 1.0, timeBucketMinutes: Long = 60): (DataFrame, Map[String, String]) = {
     val selectedSchema = api.StructType.from(name, SparkConversions.toChrononSchema(enhancedSelectedDf.schema))
     val enhancedAggregator = StatsGenerator.buildAggregator(enhancedMetrics, selectedSchema)
+
+    val keySparkSchema = SparkConversions.fromChrononSchema(api.Constants.StatsKeySchema)
+    val valueSparkSchema = SparkConversions.fromChrononSchema(enhancedAggregator.irSchema)
+    val flatSchema = StructType(keySparkSchema ++ valueSparkSchema :+ StructField(api.Constants.TimeColumn, LongType))
+    val flatZSchema = flatSchema.toChrononSchema("Flat")
 
     val partitionIdx = enhancedSelectedDf.schema.fieldIndex(tableUtils.partitionColumn)
     val partitionSpec = tableUtils.partitionSpec
@@ -208,23 +231,39 @@ class EnhancedStatsCompute(inputDf: DataFrame, keys: Seq[String], name: String, 
     val isTimeBucketed = tsIdx >= 0 && timeBucketMinutes > 0
     val keyName: Any = name
 
-    val result = enhancedSelectedDf
+    val statsAgg =
+      new StatsAggregator(enhancedAggregator.inputSchema, enhancedAggregator.aggregationParts).toColumn.name("agg")
+    val tupleEncoder: Encoder[(Long, api.Row)] = Encoders.kryo[(Long, api.Row)]
+    val keyEncoder: Encoder[Long] = Encoders.scalaLong
+    val chrononRowEncoder: Encoder[api.Row] = Encoders.kryo[api.Row]
+    val rowEncoder = ExpressionEncoder(flatSchema)
+
+    val flatDf = enhancedSelectedDf
       .sample(sample)
-      .rdd
-      .map(SparkConversions.toChrononRow(_, tsIdx))
-      .keyBy(row =>
-        if (isTimeBucketed) (row.ts / bucketMs) * bucketMs
-        else partitionSpec.epochMillis(row.getAs[String](partitionIdx)))
-      .aggregateByKey(enhancedAggregator.init)(seqOp = enhancedAggregator.updateWithReturn,
-                                               combOp = enhancedAggregator.merge)
-      .mapValues(enhancedAggregator.normalize)
-      .map { case (k, v) => (Array(keyName), v, k) }
+      .map { row =>
+        val chrononRow = SparkConversions.toChrononRow(row, tsIdx)
+        val ts =
+          if (isTimeBucketed) (chrononRow.ts / bucketMs) * bucketMs
+          else partitionSpec.epochMillis(row.getString(partitionIdx))
+        (ts, chrononRow: api.Row)
+      }(tupleEncoder)
+      .groupByKey(_._1)(keyEncoder)
+      .mapValues(_._2)(chrononRowEncoder)
+      .agg(statsAgg)
+      .map { case (ts: Long, v: Array[Any]) =>
+        val keys = Array(keyName)
+        val all = new Array[Any](keys.length + v.length + 1)
+        System.arraycopy(keys, 0, all, 0, keys.length)
+        System.arraycopy(v, 0, all, keys.length, v.length)
+        all(all.length - 1) = ts
+        SparkConversions.toSparkRow(all, flatZSchema, GenericRowHandler.func).asInstanceOf[GenericRow]: Row
+      }(rowEncoder)
+      .toDF()
 
     // Prepare metadata for reconstructing the aggregator
     enhancedSelectedDf.printSchema()
     val noKeysSchema = api.StructType.from(name, SparkConversions.toChrononSchema(noKeysDf.schema))
 
-    // Convert metadata to JSON strings
     val cardinalityMapJson = cardinalityMap.map { case (k, v) => s""""$k":$v""" }.mkString("{", ",", "}")
     val selectedSchemaJson = AvroConversions.fromChrononSchema(selectedSchema).toString(true)
     val noKeysSchemaJson = AvroConversions.fromChrononSchema(noKeysSchema).toString(true)
@@ -235,13 +274,22 @@ class EnhancedStatsCompute(inputDf: DataFrame, keys: Seq[String], name: String, 
       "noKeysSchema" -> noKeysSchemaJson
     )
 
-    implicit val sparkSession = inputDf.sparkSession
-    TimedKvRdd(
-      result,
-      SparkConversions.fromChrononSchema(api.Constants.StatsKeySchema),
-      SparkConversions.fromChrononSchema(enhancedAggregator.irSchema),
-      storeSchemasPrefix = Some(name),
-      metadata = Some(metadata)
-    )
+    (flatDf, metadata)
   }
+}
+
+private[stats] class StatsAggregator(inputSchema: Seq[(String, api.DataType)],
+                                     aggregationParts: Seq[api.AggregationPart])
+    extends Aggregator[api.Row, Array[Any], Array[Any]]
+    with Serializable {
+
+  // RowAggregator contains non-serializable internals (TimedDispatcher) so recreate lazily
+  @transient private lazy val rowAggregator = new RowAggregator(inputSchema, aggregationParts)
+
+  override def zero: Array[Any] = rowAggregator.init
+  override def reduce(buf: Array[Any], input: api.Row): Array[Any] = rowAggregator.updateWithReturn(buf, input)
+  override def merge(b1: Array[Any], b2: Array[Any]): Array[Any] = rowAggregator.merge(b1, b2)
+  override def finish(buf: Array[Any]): Array[Any] = rowAggregator.normalize(buf)
+  override def bufferEncoder: Encoder[Array[Any]] = Encoders.kryo[Array[Any]]
+  override def outputEncoder: Encoder[Array[Any]] = Encoders.kryo[Array[Any]]
 }

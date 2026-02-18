@@ -32,7 +32,6 @@ class ModularJoinTest extends SparkTestBase {
     val dollarTransactions = List(
       Column("user", StringType, 10),
       Column("user_name", api.StringType, 10),
-      Column("ts", LongType, 200),
       Column("amount_dollars", LongType, 1000)
     )
 
@@ -47,7 +46,7 @@ class ModularJoinTest extends SparkTestBase {
     val rupeeTable = s"$namespace.rupee_transactions"
     spark.sql(s"DROP TABLE IF EXISTS $dollarTable")
     spark.sql(s"DROP TABLE IF EXISTS $rupeeTable")
-    DataFrameGen.entities(spark, dollarTransactions, 2000, partitions = 80).save(dollarTable, Map("tblProp1" -> "1"))
+    DataFrameGen.events(spark, dollarTransactions, 2000, partitions = 80).save(dollarTable, Map("tblProp1" -> "1"))
     DataFrameGen.entities(spark, rupeeTransactions, 3000, partitions = 80).save(rupeeTable)
 
     val dollarSource = Builders.Source.entities(
@@ -72,7 +71,6 @@ class ModularJoinTest extends SparkTestBase {
       table = dollarTable
     )
 
-    // println("Rupee Source start partition $month")
     val rupeeSource =
       Builders.Source.entities(
         query = Builders.Query(
@@ -196,11 +194,8 @@ class ModularJoinTest extends SparkTestBase {
     val modularMonolith = new ModularMonolith(joinConf, dateRange)
     modularMonolith.run()
 
-    // Verify outputs
-    // test_namespace_jointest_modular.test_namespace_jointest_modular__queries__a0b941_source_cache
-    // test_namespace_jointest_modular.test_namespace_jointest_modular__queries__a0b941_source_cache
+    // Verify source output
     val sourceOutputTable = JoinUtils.computeFullLeftSourceTableName(joinConf)
-    tableUtils.sql(s"SELECT * FROM $sourceOutputTable").show()
     val sourceExpected = spark.sql(s"SELECT *, date as ds FROM $queryTable WHERE date >= '$start' AND date <= '$threeDaysAgo'")
     val sourceComputed = tableUtils.sql(s"SELECT * FROM $sourceOutputTable").drop("ts_ds")
     val diff = Comparison.sideBySide(sourceComputed, sourceExpected, List("user_name", "user", "ts"))
@@ -232,21 +227,19 @@ class ModularJoinTest extends SparkTestBase {
         "ds"
       )
     assertEquals(expectedSchema, boostrapSchema)
-    tableUtils.sql(s"SELECT * FROM $bootstrapOutputTable").show()
 
     // Verify join part tables were created
     val joinPart1FullTableName = planner.RelevantLeftForJoinPart.fullPartTableName(joinConf, jp1)
     val joinPart2FullTableName = planner.RelevantLeftForJoinPart.fullPartTableName(joinConf, jp2)
-    tableUtils.sql(s"SELECT * FROM $joinPart1FullTableName").show()
-    tableUtils.sql(s"SELECT * FROM $joinPart2FullTableName").show()
+    assertTrue(tableUtils.tableReachable(joinPart1FullTableName))
+    assertTrue(tableUtils.tableReachable(joinPart2FullTableName))
 
     // Verify merge job output
     val mergeJobOutputTable = joinConf.metaData.outputTable
-    tableUtils.sql(s"SELECT * FROM $mergeJobOutputTable").show()
+    assertTrue(tableUtils.tableReachable(mergeJobOutputTable))
 
     // Verify derivation job output
     val derivationOutputTable = s"$namespace.test_user_transaction_features__derived"
-    tableUtils.sql(s"SELECT * FROM $derivationOutputTable").show()
 
     val expectedQuery = s"""
                 |WITH
@@ -256,37 +249,33 @@ class ModularJoinTest extends SparkTestBase {
                 |         ts,
                 |         date as ds
                 |     from $queryTable
-                |     where user_name IS NOT null
-                |         AND user IS NOT NULL
-                |         AND ts IS NOT NULL
-                |         AND date IS NOT NULL
-                |         AND date >= '$start'
+                |     where date >= '$start'
                 |         AND date <= '$threeDaysAgo')
                 |  SELECT
                 |    queries.user,
                 |    queries.ts,
                 |    queries.ds,
-                |    SUM(IF(dollar.ts < queries.ts, dollar.amount_dollars, null)) / 1 as ratio_derivation,
+                |    SUM(IF(dollar.ts < CAST(DATEDIFF(queries.ds, '1970-01-01') AS BIGINT) * 86400000, dollar.amount_dollars, null)) / 1 as ratio_derivation,
                 |    1 as external_coalesce
                 |  FROM queries
                 |  LEFT OUTER JOIN $dollarTable as dollar
                 |  on queries.user == dollar.user
+                |    AND dollar.ds >= '$yearAgo'
+                |    AND dollar.ds <= '$dayAndMonthBefore'
                 |  GROUP BY queries.user, queries.ts, queries.ds
                 |""".stripMargin
-    spark.sql(expectedQuery).show()
     val expected = spark.sql(expectedQuery)
     val computed = spark.sql(s"SELECT user, ts, ds, ratio_derivation, external_coalesce FROM $derivationOutputTable")
 
     val finalDiff = Comparison.sideBySide(computed, expected, List("user", "ts", "ds"))
 
-    // TODO: The diff and assert are wrong, but don't plan to fix it in this PR
     if (finalDiff.count() > 0) {
       println(s"Actual count: ${computed.count()}")
       println(s"Expected count: ${expected.count()}")
-      println(s"Diff count: ${diff.count()}")
+      println(s"Diff count: ${finalDiff.count()}")
       println("diff result rows")
-      diff.show()
+      finalDiff.show(50, truncate = false)
     }
-    assertEquals(0, diff.count())
+    assertEquals(0, finalDiff.count())
   }
 }

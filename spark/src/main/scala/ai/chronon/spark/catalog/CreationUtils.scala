@@ -20,7 +20,6 @@ object CreationUtils {
                      schema: StructType,
                      partitionColumns: List[String],
                      tableProperties: Map[String, String],
-                     fileFormatString: String,
                      tableTypeString: String): String = {
 
     require(
@@ -55,7 +54,7 @@ object CreationUtils {
 
     val propertiesFragment = if (tableProperties != null && tableProperties.nonEmpty) {
       s"""TBLPROPERTIES (
-         |    ${(tableProperties + ("file_format" -> fileFormatString) + ("table_type" -> tableTypeString))
+         |    ${(tableProperties + ("file_format" -> "PARQUET") + ("table_type" -> tableTypeString))
           .transform((k, v) => s"'${escapeSqlStringValue(k)}'='${escapeSqlStringValue(v)}'")
           .values
           .mkString(",\n   ")}

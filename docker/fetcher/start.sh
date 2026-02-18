@@ -22,8 +22,11 @@ if [[ $PROVIDER_UPPER == "AWS" ]]; then
 elif [[ $PROVIDER_UPPER == "GCP" ]]; then
   ONLINE_JAR=$CLOUD_GCP_JAR
   ONLINE_CLASS=$GCP_ONLINE_CLASS
+elif [[ $PROVIDER_UPPER == "AZURE" ]]; then
+  ONLINE_JAR=$CLOUD_AZURE_JAR
+  ONLINE_CLASS=$AZURE_ONLINE_CLASS
 else
-  echo "Error: Invalid PROVIDER value '$PROVIDER'. Must be 'AWS' or 'GCP'"
+  echo "Error: Invalid PROVIDER value '$PROVIDER'. Must be 'AWS', 'GCP', or 'AZURE'"
   exit 1
 fi
 

@@ -109,6 +109,10 @@ object SparkInternalRowConversions {
         def stringConvertor(x: Any): Any = x.asInstanceOf[UTF8String].toString
 
         stringConvertor
+      case types.DecimalType() =>
+        def decimalConverter(x: Any): Any = x.asInstanceOf[org.apache.spark.sql.types.Decimal].toJavaBigDecimal
+
+        decimalConverter
       case _ => id
     }
     def guardedFunc(x: Any): Any = if (x == null) x else unguardedFunc(x)
@@ -192,6 +196,12 @@ object SparkInternalRowConversions {
         def stringConvertor(x: Any): Any = { UTF8String.fromString(x.asInstanceOf[String]) }
 
         stringConvertor
+      case dt: types.DecimalType =>
+        def decimalConverter(x: Any): Any = {
+          org.apache.spark.sql.types.Decimal(x.asInstanceOf[java.math.BigDecimal], dt.precision, dt.scale)
+        }
+
+        decimalConverter
       case _ => id
     }
     def guardedFunc(x: Any): Any = if (x == null) x else unguardedFunc(x)

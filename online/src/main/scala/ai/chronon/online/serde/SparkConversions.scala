@@ -74,6 +74,7 @@ object SparkConversions {
       case BooleanType               => api.BooleanType
       case DateType                  => api.DateType
       case TimestampType             => api.TimestampType
+      case dt: DecimalType           => api.DecimalType(dt.precision, dt.scale)
       case ArrayType(elementType, _) => api.ListType(toChrononType(s"${typeName}Element", elementType))
       case MapType(keyType, valueType, _) =>
         api.MapType(toChrononType(s"${typeName}Key", keyType), toChrononType(s"${typeName}Value", valueType))
@@ -90,18 +91,19 @@ object SparkConversions {
 
   def fromChrononType(zType: api.DataType): DataType =
     zType match {
-      case api.IntType               => IntegerType
-      case api.LongType              => LongType
-      case api.ShortType             => ShortType
-      case api.ByteType              => ByteType
-      case api.FloatType             => FloatType
-      case api.DoubleType            => DoubleType
-      case api.StringType            => StringType
-      case api.BinaryType            => BinaryType
-      case api.BooleanType           => BooleanType
-      case api.DateType              => DateType
-      case api.TimestampType         => TimestampType
-      case api.ListType(elementType) => ArrayType(fromChrononType(elementType))
+      case api.IntType                       => IntegerType
+      case api.LongType                      => LongType
+      case api.ShortType                     => ShortType
+      case api.ByteType                      => ByteType
+      case api.FloatType                     => FloatType
+      case api.DoubleType                    => DoubleType
+      case api.StringType                    => StringType
+      case api.BinaryType                    => BinaryType
+      case api.BooleanType                   => BooleanType
+      case api.DateType                      => DateType
+      case api.TimestampType                 => TimestampType
+      case api.DecimalType(precision, scale) => DecimalType(precision, scale)
+      case api.ListType(elementType)         => ArrayType(fromChrononType(elementType))
       case api.MapType(keyType, valueType) =>
         MapType(fromChrononType(keyType), fromChrononType(valueType))
       case api.StructType(_, fields) =>

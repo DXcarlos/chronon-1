@@ -96,41 +96,43 @@ class MutationsTest extends SparkTestBase {
     * @return If the expected rows are in the dataframe.
     */
   def compareResult(computed: DataFrame, expectedRows: Seq[Row]): Boolean = {
-    val df = spark.createDataFrame(spark.sparkContext.parallelize(expectedRows), expectedSchema)
+    val df = spark.createDataFrame(java.util.Arrays.asList(expectedRows: _*), expectedSchema)
     val totalExpectedRows = df.count()
     if (computed.count() != totalExpectedRows) return false
     // Join on keys that should be the same.
     val ratingAverageColumn = computed.schema.fields
       .map(_.name)
       .filter(_.contains("rating_average"))(0)
-    val expectedRdd = df.rdd.map { row =>
-      ((
-         row.getAs[Int]("listing_id"),
-         row.getAs[Long]("ts"),
-         row.getAs[Int]("event"),
-         row.getAs[Double]("rating_average"),
-         row.getAs[String]("ds")
-       ),
-       1)
+    type RowKey = (Int, Long, Int, Option[Double], String)
+    val expectedMap: Map[RowKey, Int] = df.collect().map { row =>
+      (
+        row.getAs[Int]("listing_id"),
+        row.getAs[Long]("ts"),
+        row.getAs[Int]("event"),
+        Option(row.getAs[java.lang.Double]("rating_average")).map(_.doubleValue()),
+        row.getAs[String]("ds")
+      )
+    }.groupBy(identity).mapValues(_.length).toMap
+    val computedMap: Map[RowKey, Int] = computed.collect().map { row =>
+      (
+        row.getAs[Int]("listing_id"),
+        row.getAs[Long]("ts"),
+        row.getAs[Int]("event"),
+        Option(row.getAs[java.lang.Double](ratingAverageColumn)).map(_.doubleValue()),
+        row.getAs[String]("ds")
+      )
+    }.groupBy(identity).mapValues(_.length).toMap
+    val matched = expectedMap.keySet.intersect(computedMap.keySet).filter { key =>
+      expectedMap(key) == computedMap(key)
     }
-    val computedRdd = computed.rdd.map { row =>
-      ((
-         row.getAs[Int]("listing_id"),
-         row.getAs[Long]("ts"),
-         row.getAs[Int]("event"),
-         row.getAs[Double](ratingAverageColumn),
-         row.getAs[String]("ds")
-       ),
-       2)
-    }
-    val joinRdd = expectedRdd.join(computedRdd)
-    if (totalExpectedRows == joinRdd.count()) return true
+    val matchedCount = matched.toSeq.map(expectedMap(_)).sum
+    if (totalExpectedRows == matchedCount) return true
     println("Failed to assert equality!")
-    println("== Joined RDD (listing_id, ts, rating_average)")
-    val readableRDD = joinRdd.map { case ((id, ts, event, avg, ds), _) =>
-      Row(id, ts, event, avg, ds)
-    }
-    spark.createDataFrame(readableRDD, expectedSchema).show()
+    println("== Matched rows (listing_id, ts, rating_average)")
+    val matchedRows = matched.map { case (id, ts, event, avg, ds) =>
+      Row(id, ts, event, avg.map(java.lang.Double.valueOf).orNull, ds)
+    }.toSeq
+    spark.createDataFrame(java.util.Arrays.asList(matchedRows: _*), expectedSchema).show()
     println("== Expected")
     df.replaceWithReadableTime(Seq("ts"), false).show()
     println("== Computed")
@@ -148,12 +150,12 @@ class MutationsTest extends SparkTestBase {
                               operation: Operation = Operation.AVERAGE): DataFrame = {
     val testNamespace = namespace(suffix)
     tableUtils.sql(s"CREATE DATABASE IF NOT EXISTS $testNamespace")
-    spark.createDataFrame(spark.sparkContext.parallelize(leftData), leftSchema).save(s"$testNamespace.$eventTable")
+    spark.createDataFrame(java.util.Arrays.asList(leftData: _*), leftSchema).save(s"$testNamespace.$eventTable")
     spark
-      .createDataFrame(spark.sparkContext.parallelize(snapshotData), snapshotSchema)
+      .createDataFrame(java.util.Arrays.asList(snapshotData: _*), snapshotSchema)
       .save(s"$testNamespace.$snapshotTable")
     spark
-      .createDataFrame(spark.sparkContext.parallelize(mutationData), mutationSchema)
+      .createDataFrame(java.util.Arrays.asList(mutationData: _*), mutationSchema)
       .save(s"$testNamespace.$mutationTable")
     computeJoinFromTables(suffix, startPartition, endPartition, windows, operation)
   }

@@ -1,28 +1,13 @@
 package ai.chronon.spark.catalog
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
+import org.apache.spark.sql.catalyst.util.QuotingUtils
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.types.StructType
 import org.slf4j.{Logger, LoggerFactory}
 
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
-import java.util.function
 import scala.util.{Failure, Success, Try}
-
-object TableCache {
-  private val dfMap: ConcurrentMap[String, DataFrame] = new ConcurrentHashMap[String, DataFrame]()
-
-  def get(tableName: String)(implicit sparkSession: SparkSession): DataFrame = {
-    dfMap.computeIfAbsent(tableName,
-                          new function.Function[String, DataFrame] {
-                            override def apply(t: String): DataFrame = {
-                              sparkSession.read.table(t)
-                            }
-                          })
-  }
-
-  def remove(tableName: String): Unit = {
-    dfMap.remove(tableName)
-  }
-}
 
 trait Format {
 
@@ -30,14 +15,44 @@ trait Format {
 
   def tableProperties: Map[String, String] = Map.empty[String, String]
 
-  def table(tableName: String, partitionFilters: String, cacheDf: Boolean = false)(implicit
-      sparkSession: SparkSession): DataFrame = {
+  def tableTypeString: String = ""
 
-    val df = if (cacheDf) {
-      TableCache.get(tableName)
-    } else {
-      sparkSession.read.table(tableName)
+  def createTable(tableName: String,
+                  schema: StructType,
+                  partitionColumns: List[String],
+                  providedProperties: Map[String, String],
+                  semanticHash: Option[String] = None)(implicit sparkSession: SparkSession): Unit = {
+    val (creationName, quotedOriginal) = semanticHash match {
+      case Some(hash) =>
+        val parts = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName).toList
+        val hashedParts = parts.init :+ s"${parts.last}_$hash"
+        (hashedParts.map(QuotingUtils.quoteIdentifier).mkString("."),
+         parts.map(QuotingUtils.quoteIdentifier).mkString("."))
+      case None => (tableName, tableName)
     }
+    sparkSession.sql(
+      CreationUtils
+        .createTableSql(creationName, schema, partitionColumns, providedProperties, tableTypeString))
+    if (semanticHash.isDefined) {
+      try {
+        sparkSession.sql(s"ALTER TABLE $creationName RENAME TO $quotedOriginal")
+      } catch {
+        case _: TableAlreadyExistsException =>
+          // Another writer already created the target table — safe to clean up our intermediate table
+          logger.info(s"Table $quotedOriginal already exists, dropping intermediate table $creationName")
+          sparkSession.sql(s"DROP TABLE IF EXISTS $creationName")
+        case e: Exception =>
+          logger.error(
+            s"Failed to rename $creationName to $quotedOriginal. Orphan table $creationName may need manual cleanup.",
+            e)
+          throw e
+      }
+    }
+  }
+
+  def table(tableName: String, partitionFilters: String)(implicit sparkSession: SparkSession): DataFrame = {
+
+    val df = sparkSession.read.table(tableName)
 
     if (partitionFilters.isEmpty) {
       df
@@ -93,6 +108,10 @@ trait Format {
 
 }
 
+case class ResolvedTableName(catalog: String, namespace: String, table: String) {
+  def toIdentifier: Identifier = Identifier.of(Array(namespace), table)
+}
+
 object Format {
 
   def parseHiveStylePartition(pstring: String): List[(String, String)] = {
@@ -105,17 +124,28 @@ object Format {
       .toList
   }
 
+  def resolveTableName(tableName: String)(implicit sparkSession: SparkSession): ResolvedTableName = {
+    val parsed = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    def defaultCatalog: String = sparkSession.conf.get("spark.sql.defaultCatalog", "spark_catalog")
+    parsed.toList match {
+      case catalog :: namespace :: table :: Nil => ResolvedTableName(catalog, namespace, table)
+      case namespace :: table :: Nil            => ResolvedTableName(defaultCatalog, namespace, table)
+      case table :: Nil =>
+        ResolvedTableName(defaultCatalog, sparkSession.catalog.currentDatabase, table)
+      case _ => throw new IllegalStateException(s"Invalid table naming convention specified: ${tableName}")
+    }
+  }
+
+  // Lightweight version that avoids triggering catalog initialization
   def getCatalog(inputTableName: String)(implicit sparkSession: SparkSession): String = {
     val parsed = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(inputTableName)
-    // Use config directly to avoid triggering catalog initialization (which may require auth)
     def defaultCatalog: String = sparkSession.conf.get("spark.sql.defaultCatalog", "spark_catalog")
-    val parsedCatalog = parsed.toList match {
-      case catalog :: namespace :: tableName :: Nil => catalog
-      case namespace :: tableName :: Nil            => defaultCatalog
-      case tableName :: Nil                         => defaultCatalog
+    parsed.toList match {
+      case catalog :: _ :: _ :: Nil => catalog
+      case _ :: _ :: Nil            => defaultCatalog
+      case _ :: Nil                 => defaultCatalog
       case _ => throw new IllegalStateException(s"Invalid table naming convention specified: ${inputTableName}")
     }
-    parsedCatalog
   }
 
 }

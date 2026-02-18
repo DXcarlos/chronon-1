@@ -20,7 +20,6 @@ import ai.chronon.api._
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.online._
 import ai.chronon.spark.Extensions._
-import ai.chronon.spark.TimedKvRdd
 import ai.chronon.spark.catalog.TableUtils
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.DataType
@@ -114,7 +113,7 @@ object CompareBaseJob {
       mapping: Map[String, String] = Map.empty,
       migrationCheck: Boolean = false,
       name: String = "undefined"
-  ): (DataFrame, TimedKvRdd, fetcher.DataMetrics) = {
+  ): (DataFrame, DataFrame, fetcher.DataMetrics) = {
     // 1. Check for schema consistency issues
     val leftFields: Map[String, DataType] = leftDf.schema.fields.map(sb => (sb.name, sb.dataType)).toMap
     val rightFields: Map[String, DataType] = rightDf.schema.fields.map(sb => (sb.name, sb.dataType)).toMap
@@ -177,9 +176,9 @@ object CompareBaseJob {
                                          .map(tup => StructField(tup._1, tup._2)))
 
     // 5. Run the consistency check
-    val (metricsTimedKvRdd, metrics) = CompareMetrics.compute(leftChrononSchema.fields, compareDf, keys, name, mapping)
+    val (metricsFlatDf, metrics) = CompareMetrics.compute(leftChrononSchema.fields, compareDf, keys, name, mapping)
 
-    // Return the data frame of the actual comparison table, metrics table and the metrics itself
-    (compareDf, metricsTimedKvRdd, metrics)
+    // Return the data frame of the actual comparison table, metrics flat df and the metrics itself
+    (compareDf, metricsFlatDf, metrics)
   }
 }

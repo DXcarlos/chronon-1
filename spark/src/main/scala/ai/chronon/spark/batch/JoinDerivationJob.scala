@@ -34,7 +34,7 @@ class JoinDerivationJob(node: JoinDerivationNode, metaData: MetaData, range: Dat
   // Output table for this derivation job comes from the metadata
   private val outputTable = metaData.outputTable
 
-  def run(): Unit = {
+  def run(): Unit = tableUtils.withJobDescription(s"JoinDerivationJob(${join.metaData.name}) $dateRange") {
 
     val leftDf = tableUtils.scanDf(query = null, table = trueLeftTable, range = Some(dateRange))
     val trueLeftCols = leftDf.columns

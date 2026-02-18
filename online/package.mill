@@ -19,7 +19,10 @@ trait OnlineModule extends Cross.Module[String] with build.BaseModule {
     // Core dependencies from Bazel
     mvn"com.github.ben-manes.caffeine:caffeine:3.1.8",
     mvn"org.apache.kafka:kafka-clients:3.8.1",
-    mvn"org.apache.avro:avro:1.11.4",
+    mvn"org.apache.avro:avro:${build.Constants.avroVersion}"
+      .exclude("com.fasterxml.jackson.core" -> "jackson-core")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-annotations"),
     mvn"com.linkedin.avroutil1:avro-fastserde:0.4.25",
     mvn"org.rogach::scallop:5.1.0",
     // Scala reflection dependencies

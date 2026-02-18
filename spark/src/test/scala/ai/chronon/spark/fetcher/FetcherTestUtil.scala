@@ -188,7 +188,7 @@ object FetcherTestUtil {
     metadataStore.putJoinConf(joinConf)
 
     def buildRequests(lagMs: Int = 0): Array[Request] =
-      endDsQueries.rdd
+      endDsQueries.collect()
         .map { row =>
           val keyMap = keyIndices.indices.map { idx =>
             keys(idx) -> row.get(keyIndices(idx)).asInstanceOf[AnyRef]
@@ -196,7 +196,6 @@ object FetcherTestUtil {
           val ts = row.get(tsIndex).asInstanceOf[Long]
           Request(joinConf.metaData.name, keyMap, Some(ts - lagMs))
         }
-        .collect()
 
     val requests = buildRequests()
 
@@ -246,8 +245,7 @@ object FetcherTestUtil {
     logger.info(endDsExpected.schema.pretty)
 
     val keyishColumns = keys.toList ++ List(tableUtils.partitionColumn, Constants.TimeColumn)
-    val responseRdd = tableUtils.sparkSession.sparkContext.parallelize(responseRows.toSeq)
-    var responseDf = tableUtils.sparkSession.createDataFrame(responseRdd, endDsExpected.schema)
+    var responseDf = tableUtils.sparkSession.createDataFrame(java.util.Arrays.asList(responseRows.toSeq: _*), endDsExpected.schema)
     val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
     if (endDs != today) {
       responseDf = responseDf.drop("ds").withColumn("ds", lit(endDs))

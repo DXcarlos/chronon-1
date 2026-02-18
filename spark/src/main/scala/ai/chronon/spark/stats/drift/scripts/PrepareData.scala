@@ -15,7 +15,6 @@ import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.functions.col
@@ -431,8 +430,7 @@ case class PrepareData(namespace: String)(implicit tableUtils: TableUtils) {
     }
 
     val spark = tableUtils.sparkSession
-    val rdd: RDD[SRow] = spark.sparkContext.parallelize(data)
-    val df = spark.createDataFrame(rdd, fraudSchema)
+    val df = spark.createDataFrame(java.util.Arrays.asList(data: _*), fraudSchema)
     val dfWithTimeConvention = df
       .withColumn(Constants.TimeColumn, col("transaction_time"))
       .withColumn(tableUtils.partitionColumn,

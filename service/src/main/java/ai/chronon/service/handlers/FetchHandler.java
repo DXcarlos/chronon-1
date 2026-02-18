@@ -57,7 +57,8 @@ public class FetchHandler implements Handler<RoutingContext> {
 
         logger.debug("Retrieving {}", entityName);
 
-        JTry<List<JavaRequest>> maybeRequest = parseJavaRequest(entityName, ctx.body());
+        String requestBody = ctx.body().asString();
+        JTry<List<JavaRequest>> maybeRequest = parseJavaRequest(entityName, requestBody);
 
         if (! maybeRequest.isSuccess()) {
 
@@ -131,13 +132,13 @@ public class FetchHandler implements Handler<RoutingContext> {
         }
     }
 
-    public static JTry<List<JavaRequest>> parseJavaRequest(String name, RequestBody body) {
+    public static JTry<List<JavaRequest>> parseJavaRequest(String name, String requestPayload) {
 
         TypeReference<List<Map<String, Object>>> ref = new TypeReference<List<Map<String, Object>>>() { };
 
         try {
 
-            List<Map<String, Object>> entityKeysList = objectMapper.readValue(body.asString(), ref);
+            List<Map<String, Object>> entityKeysList = objectMapper.readValue(requestPayload, ref);
 
             List<JavaRequest> requests = entityKeysList
                     .stream()

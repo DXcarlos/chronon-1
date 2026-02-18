@@ -175,17 +175,8 @@ cd thrift-0.21.0
 yum install -y gcc gcc-c++ make automake libtool bison flex openssl-devel boost-devel libevent-devel
 
 # Build and install Thrift (minimal build - just the compiler)
-./configure --without-python --without-go --without-nodejs --without-ruby --without-php --without-perl --without-csharp --without-java --without-erlang --without-lua --without-haskell --without-d --without-dart --without-dotnetcore --without-rs
-make -j$(nproc)
-
-# Manually install the compiled binary
-cp compiler/cpp/thrift /usr/local/bin/thrift
-chmod 755 /usr/local/bin/thrift
-
-# Update library cache
-ldconfig
-
-cd /
+./configure --without-python --without-cpp --without-nodejs --without-java
+make && make install
 
 # Verify thrift is installed
 /usr/local/bin/thrift --version

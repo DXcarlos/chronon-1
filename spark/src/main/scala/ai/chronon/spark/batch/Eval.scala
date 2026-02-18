@@ -113,7 +113,7 @@ class Eval(implicit tableUtils: TableUtils) {
       StructType(SparkConversions.fromChrononSchema(groupBy.outputSchema).fields ++ keyAndPartitionFields)
     }
     val dummyOutputDf = tableUtils.sparkSession
-      .createDataFrame(tableUtils.sparkSession.sparkContext.parallelize(immutable.Seq[Row]()), sparkSchema)
+      .createDataFrame(java.util.Collections.emptyList[Row](), sparkSchema)
     val finalOutputColumns = groupByConf.derivationsScala.finalOutputColumn(dummyOutputDf.columns).toSeq
 
     // Try to run the derivations, if anything is invalid set the error and return early
@@ -317,7 +317,7 @@ class Eval(implicit tableUtils: TableUtils) {
 
     // Create dummy DataFrame to compute derivation schema
     val dummyOutputDf = tableUtils.sparkSession
-      .createDataFrame(tableUtils.sparkSession.sparkContext.parallelize(immutable.Seq[Row]()), fullSparkSchema)
+      .createDataFrame(java.util.Collections.emptyList[Row](), fullSparkSchema)
 
     // Apply derivations to compute final output columns
     try {

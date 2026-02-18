@@ -48,7 +48,7 @@ class SummaryUploader(summaryDF: DataFrame,
     require(summaryDF.schema(valueIndex).dataType == types.BinaryType, "valueBytes must be BinaryType")
     require(summaryDF.schema(timestampIndex).dataType == types.LongType, "timestamp must be LongType")
 
-    summaryDF.rdd.foreachPartition((rows: Iterator[Row]) => {
+    summaryDF.foreachPartition((rows: Iterator[Row]) => {
       val kvStore: KVStore = api.genKvStore
 
       def toPutRequest(row: Row): PutRequest = {
@@ -76,6 +76,7 @@ class SummaryUploader(summaryDF: DataFrame,
       }
       // wait for futures to wrap up
       Await.result(aggregatedFuture, Duration(10L, TimeUnit.SECONDS))
+      ()
     })
   }
 }

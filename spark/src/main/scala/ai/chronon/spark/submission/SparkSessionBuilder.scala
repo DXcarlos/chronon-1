@@ -19,7 +19,6 @@ package ai.chronon.spark.submission
 import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.logging.log4j.core.LoggerContext
 import org.apache.logging.log4j.core.config.builder.api.ConfigurationBuilderFactory
-import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 import org.slf4j.LoggerFactory
@@ -76,99 +75,65 @@ object SparkSessionBuilder {
 
   private val warehouseId = java.util.UUID.randomUUID().toString.takeRight(6)
   private val DefaultWarehouseDir = new File("/tmp/chronon/spark-warehouse_" + warehouseId)
-  val FormatTestEnvVar: String = "format_test"
 
   def expandUser(path: String): String = path.replaceFirst("~", System.getProperty("user.home"))
   // we would want to share locally generated warehouse during CI testing
   def build(name: String,
             local: Boolean = false,
-            hiveSupport: Boolean = true,
             localWarehouseLocation: Option[String] = None,
             additionalConfig: Option[Map[String, String]] = None,
             enforceKryoSerializer: Boolean = true): SparkSession = {
-
-    // allow us to override the format by specifying env vars. This allows us to not have to worry about interference
-    // between Spark sessions created in existing chronon tests that need the hive format and some specific tests
-    // that require a format override like delta lake.
-    val (formatConfigs, kryoRegistrator) = sys.env.get(FormatTestEnvVar) match {
-      case Some("deltalake") =>
-        logger.info("Using the delta lake table format + kryo registrators")
-        val configMap = Map(
-          "spark.sql.extensions" -> "io.delta.sql.DeltaSparkSessionExtension",
-          "spark.sql.catalog.spark_catalog" -> "org.apache.spark.sql.delta.catalog.DeltaCatalog",
-          "spark.chronon.table_write.format" -> "delta"
-        )
-        (configMap, "ai.chronon.spark.submission.ChrononDeltaLakeKryoRegistrator")
-      case _ => (Map.empty, "ai.chronon.spark.submission.ChrononKryoRegistrator")
-    }
-
-    // tack on format configs with additional configs
-    val mergedConfigs = additionalConfig.getOrElse(Map.empty) ++ formatConfigs
 
     val userName = Properties.userName
     val warehouseDir = localWarehouseLocation.map(expandUser).getOrElse(DefaultWarehouseDir.getAbsolutePath)
     println(s"Using warehouse dir: $warehouseDir")
 
-    var baseBuilder = SparkSession
-      .builder()
-      .appName(name)
-
-    if (hiveSupport) baseBuilder = baseBuilder.enableHiveSupport()
-
-    baseBuilder = baseBuilder
-      .config("spark.sql.session.timeZone", "UTC")
-      // otherwise overwrite will delete ALL partitions, not just the ones it touches
-      .config("spark.sql.sources.partitionOverwriteMode",
-              "DYNAMIC"
-      ) // needs to be uppercase until https://github.com/GoogleCloudDataproc/spark-bigquery-connector/pull/1313 is available
-      .config("hive.exec.dynamic.partition", "true")
-      .config("hive.exec.dynamic.partition.mode", "nonstrict")
-      .config("spark.sql.catalogImplementation", "hive")
-      .config("spark.hadoop.hive.exec.max.dynamic.partitions", 30000)
-      .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
-      .config(SQLConf.DATETIME_JAVA8API_ENABLED.key, true)
-      .config(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key, false)
+    val baseConfigs = Map(
+      "spark.sql.session.timeZone" -> "UTC",
+      // needs to be uppercase until https://github.com/GoogleCloudDataproc/spark-bigquery-connector/pull/1313 is available
+      "spark.sql.sources.partitionOverwriteMode" -> "DYNAMIC",
+      "hive.exec.dynamic.partition" -> "true",
+      "hive.exec.dynamic.partition.mode" -> "nonstrict",
+      "spark.hadoop.hive.exec.max.dynamic.partitions" -> "30000",
+      "spark.sql.legacy.timeParserPolicy" -> "LEGACY",
+      SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+      SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> "false"
+    )
 
     // Staging queries don't benefit from the KryoSerializer and in fact may fail with buffer underflow in some cases.
-    if (enforceKryoSerializer) {
-      val sparkConf = new SparkConf()
-      val kryoSerializerConfMap = Map(
-        "spark.serializer" -> "org.apache.spark.serializer.KryoSerializer",
-        "spark.kryo.registrator" -> kryoRegistrator,
-        "spark.kryoserializer.buffer.max" -> "2000m",
-        "spark.kryo.referenceTracking" -> "false"
-      ).filter { case (k, _) => !sparkConf.contains(k) }
+    val kryoConfigs =
+      if (enforceKryoSerializer)
+        Map(
+          "spark.serializer" -> "org.apache.spark.serializer.KryoSerializer",
+          "spark.kryo.registrator" -> "ai.chronon.spark.submission.ChrononKryoRegistrator",
+          "spark.kryoserializer.buffer.max" -> "2000m",
+          "spark.kryo.referenceTracking" -> "false"
+        )
+      else Map.empty[String, String]
 
-      baseBuilder.config(kryoSerializerConfMap)
-    }
-
-    if (SPARK_VERSION.startsWith("2")) {
-      // Otherwise files left from deleting the table with the same name result in test failures
-      baseBuilder.config("spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "true")
-    }
-    mergedConfigs.foreach { config => baseBuilder = baseBuilder.config(config._1, config._2) }
-
-    val builder = if (local) {
+    val localConfigs = if (local) {
       logger.info(s"Building local spark session with warehouse at $warehouseDir")
       val metastoreDb = s"jdbc:derby:;databaseName=$warehouseDir/metastore_db;create=true"
-      baseBuilder
-        // use all threads - or the tests will be slow
-        .master("local[*]")
-        .config("spark.kryo.registrationRequired", s"${localWarehouseLocation.isEmpty}")
-        .config("spark.local.dir", s"/tmp/$userName/${name}_$warehouseId")
-        .config("spark.sql.warehouse.dir", s"$warehouseDir/data")
-        .config("spark.hadoop.javax.jdo.option.ConnectionURL", metastoreDb)
-        .config("spark.driver.bindAddress", "127.0.0.1")
-        .config("spark.ui.enabled", "false")
-        .config("spark.sql.catalogImplementation", "hive")
-    } else {
-      // hive jars need to be available on classpath - no needed for local testing
-      baseBuilder
-    }
-    val spark = builder.getOrCreate()
-    // disable log spam
-    spark.sparkContext.setLogLevel("ERROR")
+      Map(
+        "spark.master" -> "local[*]",
+        "spark.kryo.registrationRequired" -> s"${localWarehouseLocation.isEmpty}",
+        "spark.local.dir" -> s"/tmp/$userName/${name}_$warehouseId",
+        "spark.sql.warehouse.dir" -> s"$warehouseDir/data",
+        "spark.hadoop.javax.jdo.option.ConnectionURL" -> metastoreDb,
+        "spark.driver.bindAddress" -> "127.0.0.1",
+        "spark.ui.enabled" -> "false"
+      )
+    } else Map.empty[String, String]
 
+    // additionalConfig applied last so callers can override any default
+    val allConfigs = baseConfigs ++ kryoConfigs ++ localConfigs ++ additionalConfig.getOrElse(Map.empty)
+
+    val baseBuilder = SparkSession.builder().appName(name).enableHiveSupport()
+
+    val builder = allConfigs.foldLeft(baseBuilder) { case (b, (k, v)) => b.config(k, v) }
+
+    val spark = builder.getOrCreate()
+    spark.sparkContext.setLogLevel("ERROR")
     Logger.getLogger("parquet.hadoop").setLevel(java.util.logging.Level.SEVERE)
     configureLogging()
     spark

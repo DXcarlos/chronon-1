@@ -1,13 +1,10 @@
 package ai.chronon.integrations.aws.dynamo_load
 
-import ai.chronon.integrations.aws.DynamoDBKVStoreImpl
+import ai.chronon.integrations.aws.AwsApiImpl
+import ai.chronon.online.KVStore
 import ai.chronon.online.kv_load.{DataLoader, PerfTestConstants, TrafficDriver}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.slf4j.{Logger, LoggerFactory}
-import software.amazon.awssdk.regions.Region
-import software.amazon.awssdk.services.dynamodb.DynamoDbClient
-
-import java.net.URI
 
 /** ScalaTest entry point for the DynamoDB perf-test framework.
   *
@@ -32,14 +29,9 @@ class DynamoDBPerfTestHarness extends AnyFlatSpec {
   private val perfTestEnabled: Boolean =
     sys.env.getOrElse(PerfTestConstants.ENABLED_ENV_VAR, "false").toLowerCase == "true"
 
-  private lazy val ddbClient: DynamoDbClient = {
-    val builder = DynamoDbClient.builder()
-    sys.env.get("AWS_DEFAULT_REGION").foreach(r => builder.region(Region.of(r)))
-    sys.env.get("DYNAMO_ENDPOINT").foreach(ep => builder.endpointOverride(URI.create(ep)))
-    builder.build()
-  }
+  private lazy val awsApi: AwsApiImpl = new AwsApiImpl(Map.empty)
 
-  private lazy val kvStore: DynamoDBKVStoreImpl = new DynamoDBKVStoreImpl(ddbClient)
+  private lazy val kvStore: KVStore = awsApi.genKvStore
 
   // --- Configurable parameters ---------------------------------------------
   private val tileSizeMs: Long =

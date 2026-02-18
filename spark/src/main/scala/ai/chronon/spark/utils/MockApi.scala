@@ -106,7 +106,7 @@ class MockApi(kvStore: () => KVStore, val namespace: String) extends Api(null) {
   }
 
   def loggedValuesToDf(loggedValues: Seq[LoggableResponseBase64], session: SparkSession): DataFrame = {
-    val df = session.sqlContext.createDataFrame(session.sparkContext.parallelize(loggedValues.toSeq))
+    val df = session.sqlContext.createDataFrame(loggedValues.toSeq)
     df.withTimeBasedColumn("ds", "tsMillis").camelToSnake
   }
 

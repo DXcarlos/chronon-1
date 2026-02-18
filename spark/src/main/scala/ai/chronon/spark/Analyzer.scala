@@ -27,7 +27,8 @@ import ai.chronon.spark.Driver.parseConf
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission.ItemSketchSerializable
 import org.apache.datasketches.frequencies.ErrorType
-import org.apache.spark.sql.{types, DataFrame, Row}
+import org.apache.spark.sql.{Encoder, Encoders, types, DataFrame, Row}
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.slf4j.{Logger, LoggerFactory}
@@ -85,31 +86,13 @@ class Analyzer(tableUtils: TableUtils,
     }
 
     val colsLength = stringifiedCols.length
-    val init = Array.fill(colsLength)((new ItemSketchSerializable).init(frequentItemMapSize))
+    val aggregator = new FrequentItemsAggregator(colsLength, frequentItemMapSize, sampleFraction)
     val freqMaps = df
       .selectExpr(stringifiedCols: _*)
       .sample(sampleFraction)
-      .rdd
-      .treeAggregate(init)(
-        seqOp = { case (sketches, row) =>
-          var i = 0
-          while (i < colsLength) {
-            sketches(i).sketch.update(row.getString(i))
-            i += 1
-          }
-          sketches
-        },
-        combOp = { case (sketches1, sketches2) =>
-          var i = 0
-          while (i < colsLength) {
-            sketches1(i).sketch.merge(sketches2(i).sketch)
-            i += 1
-          }
-          sketches1
-        }
-      )
-      .map(_.sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES))
-      .map(_.map(sketchRow => sketchRow.getItem -> (sketchRow.getEstimate.toDouble / sampleFraction).toLong).toArray)
+      .select(aggregator.toColumn)
+      .as(Encoders.kryo[Array[Array[(String, Long)]]])
+      .head()
     frequentItemKeys.zip(freqMaps)
   }
 
@@ -184,7 +167,7 @@ class Analyzer(tableUtils: TableUtils,
         StructType(SparkConversions.fromChrononSchema(groupBy.outputSchema).fields ++ keyAndPartitionFields)
       }
       val dummyOutputDf = tableUtils.sparkSession
-        .createDataFrame(tableUtils.sparkSession.sparkContext.parallelize(immutable.Seq[Row]()), sparkSchema)
+        .createDataFrame(java.util.Collections.emptyList[Row](), sparkSchema)
       val finalOutputColumns = groupByConf.derivationsScala.finalOutputColumn(dummyOutputDf.columns).toSeq
       val derivedDummyOutputDf = dummyOutputDf.select(finalOutputColumns: _*)
       val columns = SparkConversions.toChrononSchema(
@@ -567,4 +550,47 @@ class Analyzer(tableUtils: TableUtils,
       case _ => throw new IllegalArgumentException("No configuration found for Analyzer")
     }
   }
+}
+
+private[spark] class FrequentItemsAggregator(
+    colsLength: Int,
+    mapSize: Int,
+    sampleFraction: Double
+) extends Aggregator[Row, Array[ItemSketchSerializable], Array[Array[(String, Long)]]]
+    with Serializable {
+
+  override def zero: Array[ItemSketchSerializable] =
+    Array.fill(colsLength)((new ItemSketchSerializable).init(mapSize))
+
+  override def reduce(sketches: Array[ItemSketchSerializable], row: Row): Array[ItemSketchSerializable] = {
+    var i = 0
+    while (i < colsLength) {
+      sketches(i).sketch.update(row.getString(i))
+      i += 1
+    }
+    sketches
+  }
+
+  override def merge(
+      sketches1: Array[ItemSketchSerializable],
+      sketches2: Array[ItemSketchSerializable]
+  ): Array[ItemSketchSerializable] = {
+    var i = 0
+    while (i < colsLength) {
+      sketches1(i).sketch.merge(sketches2(i).sketch)
+      i += 1
+    }
+    sketches1
+  }
+
+  override def finish(sketches: Array[ItemSketchSerializable]): Array[Array[(String, Long)]] = {
+    sketches
+      .map(_.sketch.getFrequentItems(ErrorType.NO_FALSE_POSITIVES))
+      .map(_.map(sketchRow => sketchRow.getItem -> (sketchRow.getEstimate.toDouble / sampleFraction).toLong).toArray)
+  }
+
+  override def bufferEncoder: Encoder[Array[ItemSketchSerializable]] =
+    Encoders.kryo[Array[ItemSketchSerializable]]
+  override def outputEncoder: Encoder[Array[Array[(String, Long)]]] =
+    Encoders.kryo[Array[Array[(String, Long)]]]
 }

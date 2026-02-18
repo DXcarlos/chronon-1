@@ -30,6 +30,11 @@ object FlexibleExecutionContext {
     override def newThread(r: Runnable): Thread = {
       val t = new Thread(r)
       t.setName(s"chronon-fetcher-$instanceId-${counter.incrementAndGet()}")
+      // Set the context class loader if missing for libs like Spark (used in catalyst util) that rely on it to find classes
+      if (t.getContextClassLoader == null) {
+        t.setContextClassLoader(getClass.getClassLoader)
+      }
+
       t
     }
   }

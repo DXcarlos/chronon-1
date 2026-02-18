@@ -46,10 +46,9 @@ object DataFrameGen {
     )
     val RowsWithSchema(rows, schema) =
       CStream.gen(columns, count, effectiveSpec)
-    val genericRows = rows.map { row => new GenericRow(row.fieldsSeq.toArray) }.toArray
-    val data: RDD[Row] = spark.sparkContext.parallelize(genericRows)
+    val genericRows = rows.map { row => new GenericRow(row.fieldsSeq.toArray): Row }.toArray
     val sparkSchema = SparkConversions.fromChrononSchema(schema)
-    spark.createDataFrame(data, sparkSchema)
+    spark.createDataFrame(java.util.Arrays.asList(genericRows: _*), sparkSchema)
   }
 
   //  The main api: that generates dataframes given certain properties of data
@@ -127,8 +126,7 @@ object DataFrameGen {
           col(Constants.MutationTimeColumn),
           unix_timestamp(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) * 1000 + 86400 * 1000)
       )
-    val realizedData = spark.sparkContext.parallelize(mutatedFromDf.rdd.collect())
-    val realizedFrom = spark.createDataFrame(realizedData, mutatedFromDf.schema)
+    val realizedFrom = spark.createDataFrame(java.util.Arrays.asList(mutatedFromDf.collect(): _*), mutatedFromDf.schema)
 
     // Generate mutation values then store to fix the random value.
     val randomReplace = udf(() => (math.random * mutationColumn.cardinality).round.toDouble)
@@ -136,7 +134,7 @@ object DataFrameGen {
       .withColumn(Constants.ReversalColumn, lit(false))
       .withColumn(mutationColumn.name, randomReplace())
     val realizedTo =
-      spark.createDataFrame(spark.sparkContext.parallelize(mutatedToDf.rdd.collect()), mutatedToDf.schema)
+      spark.createDataFrame(java.util.Arrays.asList(mutatedToDf.collect(): _*), mutatedToDf.schema)
 
     val mutationsDf = withInserts
       .union(realizedFrom)

@@ -65,8 +65,6 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     sparkSession.conf.get("spark.chronon.join.backfill.check.left_time_range", "false").toBoolean
   private val isBenchmarkMode = sparkSession.conf.get("spark.chronon.backfill.benchmarkMode.enabled", "true").toBoolean
 
-  private val tableWriteFormat = sparkSession.conf.get("spark.chronon.table_write.format", "").toLowerCase
-
   // TODO: This should be at the level of groupBy in theory
   val skewFreeMode: Boolean = sparkSession.conf
     .get("spark.chronon.join.backfill.mode.skewFree", "true")
@@ -78,6 +76,14 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
   @transient private lazy val tableFormatProvider: FormatProvider = FormatProvider.from(sparkSession)
 
   sparkSession.sparkContext.setLogLevel("ERROR")
+
+  def withJobDescription[T](desc: String)(block: => T): T = {
+    val sc = sparkSession.sparkContext
+    val prev = sc.getLocalProperty("spark.job.description")
+    sc.setJobDescription(s"[chronon] $desc")
+    try block
+    finally sc.setJobDescription(prev)
+  }
 
   def tableReachable(tableName: String, ignoreFailure: Boolean = false): Boolean = {
     Try { sparkSession.table(tableName) } match {
@@ -93,12 +99,10 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     }
   }
 
-  def loadTable(tableName: String,
-                rangeWheres: Seq[String] = List.empty[String],
-                cacheDf: Boolean = false): DataFrame = {
+  def loadTable(tableName: String, rangeWheres: Seq[String] = List.empty[String]): DataFrame = {
     tableFormatProvider
       .readFormat(tableName)
-      .map(_.table(tableName, andPredicates(rangeWheres), cacheDf)(sparkSession))
+      .map(_.table(tableName, andPredicates(rangeWheres))(sparkSession))
       .getOrElse(
         throw new RuntimeException(s"Could not load table: ${tableName} with partition filter: ${rangeWheres}"))
   }
@@ -193,51 +197,40 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       tablePartitionSpec = Some(partitionSpec)
     ).reduceOption((x, y) => Ordering[String].min(x, y))
 
-  def createTable(df: DataFrame,
-                  tableName: String,
-                  partitionColumns: List[String] = List.empty,
-                  tableProperties: Map[String, String] = null,
-                  fileFormat: String): Unit = {
-
-    if (!tableReachable(tableName, ignoreFailure = true)) {
-      try {
-        sql(
-          CreationUtils
-            .createTableSql(tableName, df.schema, partitionColumns, tableProperties, fileFormat, tableWriteFormat))
-      } catch {
-        case _: TableAlreadyExistsException =>
-          logger.info(s"Table $tableName already exists, skipping creation")
-        case e: Exception =>
-          logger.error(s"Failed to create table $tableName", e)
-          throw e
-
-      }
-    }
-  }
-
   def insertPartitions(df: DataFrame,
                        tableName: String,
                        tableProperties: Map[String, String] = null,
                        partitionColumns: List[String] = List(partitionColumn),
                        saveMode: SaveMode = SaveMode.Overwrite,
-                       fileFormat: String = "PARQUET",
-                       autoExpand: Boolean = false): Unit = {
+                       autoExpand: Boolean = false,
+                       semanticHash: Option[String] = None): Unit = {
 
     // partitions to the last
     val colOrder = df.columns.diff(partitionColumns) ++ partitionColumns
 
     val dfRearranged = df.select(colOrder.map(colName => df.col(QuotingUtils.quoteIdentifier(colName))): _*)
 
-    createTable(dfRearranged, tableName, partitionColumns, tableProperties, fileFormat)
+    if (!tableReachable(tableName, ignoreFailure = true)) {
+      try {
+        tableFormatProvider.writeFormat.createTable(tableName,
+                                                    dfRearranged.schema,
+                                                    partitionColumns,
+                                                    tableProperties,
+                                                    semanticHash)(sparkSession)
+      } catch {
+        case _: TableAlreadyExistsException =>
+          logger.info(s"Table $tableName already exists, skipping creation")
+        case e: Exception =>
+          logger.error(s"Failed to create table $tableName", e)
+          throw e
+      }
+    }
 
     if (autoExpand) {
       expandTable(tableName, dfRearranged.schema)
     }
 
-    val defaultTableProperties = tableFormatProvider
-      .readFormat(tableName)
-      .map(_.tableProperties)
-      .getOrElse(Map.empty)
+    val defaultTableProperties = tableFormatProvider.writeFormat.tableProperties
     val userTableProperties = Option(tableProperties).getOrElse(Map.empty)
     val desiredTableProperties = defaultTableProperties ++ userTableProperties
     val existingTableProperties = getTableProperties(tableName).getOrElse(Map.empty)
@@ -265,8 +258,6 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       // so that an exception will be thrown below
       dfRearranged
     }
-
-    TableCache.remove(tableName)
 
     if (!isBenchmarkMode) {
       finalizedDf.cache()
@@ -617,8 +608,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                  table: String,
                  wheres: Seq[String],
                  rangeWheres: Seq[String],
-                 fallbackSelects: Option[Map[String, String]] = None,
-                 cacheDf: Boolean = false): DataFrame = {
+                 fallbackSelects: Option[Map[String, String]] = None): DataFrame = {
 
     val selects = QueryUtils.buildSelects(selectMap, fallbackSelects)
 
@@ -632,7 +622,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                    |    ${rangeWheres.mkString(",\n    ").green}
                    |""".stripMargin)
 
-    var df = loadTable(table, rangeWheres, cacheDf)
+    var df = loadTable(table, rangeWheres)
 
     if (selects.nonEmpty) df = df.selectExpr(selects: _*)
 

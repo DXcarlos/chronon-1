@@ -25,7 +25,7 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
     Option(jmap).map(_.toScala.map { case (key, list) => key -> list.asScala.toSeq }.toMap)
   }
 
-  def run(): Unit = {
+  def run(): Unit = tableUtils.withJobDescription(s"SourceJob($outputTable) $dateRange") {
 
     val source = sourceWithFilter.source
 

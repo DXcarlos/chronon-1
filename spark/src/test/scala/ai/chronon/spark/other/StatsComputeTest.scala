@@ -45,12 +45,11 @@ class StatsComputeTest extends AnyFlatSpec {
       ("3", None, None, Some("d"))
     )
     val columns = Seq("keyId", "value", "double_value", "string_value")
-    val rdd = spark.sparkContext.parallelize(data)
-    val df = spark.createDataFrame(rdd).toDF(columns: _*).withColumn(tableUtils.partitionColumn, lit("2022-04-09"))
+    val df = spark.createDataFrame(data).toDF(columns: _*).withColumn(tableUtils.partitionColumn, lit("2022-04-09"))
     val stats = new StatsCompute(df, Seq("keyId"), "test")
     val aggregator =
       StatsGenerator.buildAggregator(stats.metrics, StructType.from("test", toChrononSchema(stats.selectedDf.schema)))
-    val result = stats.dailySummary(aggregator).toFlatDf
+    val result = stats.dailySummary(aggregator)
     stats.addDerivedMetrics(result, aggregator).show()
   }
 
@@ -63,16 +62,15 @@ class StatsComputeTest extends AnyFlatSpec {
       ("3", None, None, Some("d"))
     )
     val columns = Seq("keyId", "value", "double_value", "string_value")
-    val rdd = spark.sparkContext.parallelize(data)
     val df = spark
-      .createDataFrame(rdd)
+      .createDataFrame(data)
       .toDF(columns: _*)
       .withColumn(tableUtils.partitionColumn, lit("2022-04-09"))
       .drop(Constants.TimeColumn)
     val stats = new StatsCompute(df, Seq("keyId"), "snapshotTest")
     val aggregator =
       StatsGenerator.buildAggregator(stats.metrics, StructType.from("test", toChrononSchema(stats.selectedDf.schema)))
-    val result = stats.dailySummary(aggregator).toFlatDf
+    val result = stats.dailySummary(aggregator)
     stats.addDerivedMetrics(result, aggregator).save(s"$namespace.testTablenameSnapshot")
   }
 
@@ -86,13 +84,12 @@ class StatsComputeTest extends AnyFlatSpec {
     val aggregator =
       StatsGenerator.buildAggregator(stats.metrics,
                                      StructType.from("generatedTest", toChrononSchema(stats.selectedDf.schema)))
-    val daily = stats.dailySummary(aggregator, timeBucketMinutes = 0).toFlatDf
+    val daily = stats.dailySummary(aggregator, timeBucketMinutes = 0)
 
     logger.info("Daily Stats")
     daily.show()
     val bucketed = stats
       .dailySummary(aggregator)
-      .toFlatDf
       .replaceWithReadableTime(Seq(Constants.TimeColumn), false)
 
     logger.info("Bucketed Stats")
@@ -115,11 +112,11 @@ class StatsComputeTest extends AnyFlatSpec {
     val aggregator =
       StatsGenerator.buildAggregator(stats.metrics,
                                      StructType.from("noTsTest", toChrononSchema(stats.selectedDf.schema)))
-    val daily = stats.dailySummary(aggregator, timeBucketMinutes = 0).toFlatDf
+    val daily = stats.dailySummary(aggregator, timeBucketMinutes = 0)
 
     logger.info("Daily Stats")
     daily.show()
-    val bucketed = stats.dailySummary(aggregator).toFlatDf
+    val bucketed = stats.dailySummary(aggregator)
 
     logger.info("Bucketed Stats")
     bucketed.show()
@@ -145,13 +142,12 @@ class StatsComputeTest extends AnyFlatSpec {
     val aggregator =
       StatsGenerator.buildAggregator(stats.metrics,
                                      StructType.from("byteTest", toChrononSchema(stats.selectedDf.schema)))
-    val daily = stats.dailySummary(aggregator, timeBucketMinutes = 0).toFlatDf
+    val daily = stats.dailySummary(aggregator, timeBucketMinutes = 0)
 
     logger.info("Daily Stats")
     daily.show()
     val bucketed = stats
       .dailySummary(aggregator)
-      .toFlatDf
       .replaceWithReadableTime(Seq(Constants.TimeColumn), false)
 
     logger.info("Bucketed Stats")

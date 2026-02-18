@@ -39,11 +39,35 @@
           "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
           "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
           "spark.sql.catalog.default_iceberg.warehouse": "s3://zipline-warehouse-dev/data/tables/",
-          "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
+          "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
           "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
           "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-dev/data/tables/",
           "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+          "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
           "spark.sql.shuffle.partitions": "10"
+        },
+        "modeConfigs": {
+          "backfill": {
+            "spark.chronon.coalesce.factor": "10",
+            "spark.chronon.partition.column": "ds",
+            "spark.chronon.partition.format": "yyyy-MM-dd",
+            "spark.chronon.table_write.format": "iceberg",
+            "spark.chronon.table_write.prefix": "s3://zipline-warehouse-dev/data/tables/",
+            "spark.default.parallelism": "10",
+            "spark.driver.cores": "1",
+            "spark.driver.memory": "1g",
+            "spark.executor.cores": "1",
+            "spark.executor.memory": "1g",
+            "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
+            "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
+            "spark.sql.catalog.default_iceberg.warehouse": "s3://zipline-warehouse-dev/data/tables/",
+            "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
+            "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
+            "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-dev/data/tables/",
+            "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+            "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+            "spark.sql.shuffle.partitions": "10"
+          }
         }
       },
       "env": {
@@ -56,11 +80,22 @@
           "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
           "FRONTEND_URL": "http://localhost:3000",
           "HUB_URL": "http://localhost:3903",
-          "JOB_MODE": "local[*]",
-          "PARTITION_COLUMN": "ds",
-          "PARTITION_FORMAT": "yyyy-MM-dd",
           "SPARK_CLUSTER_NAME": "zipline-canary-emr",
           "VERSION": "latest"
+        },
+        "modeEnvironments": {
+          "upload": {
+            "ARTIFACT_PREFIX": "s3://zipline-artifacts-dev",
+            "AWS_REGION": "us-west-2",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+            "CLOUD_PROVIDER": "aws",
+            "CUSTOMER_ID": "dev",
+            "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
+            "FRONTEND_URL": "http://localhost:3000",
+            "HUB_URL": "http://localhost:3903",
+            "SPARK_CLUSTER_NAME": "zipline-canary-emr",
+            "VERSION": "latest"
+          }
         }
       }
     },
@@ -104,11 +139,35 @@
               "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
               "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
               "spark.sql.catalog.default_iceberg.warehouse": "s3://zipline-warehouse-dev/data/tables/",
-              "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
+              "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
               "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
               "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-dev/data/tables/",
               "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+              "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
               "spark.sql.shuffle.partitions": "10"
+            },
+            "modeConfigs": {
+              "backfill": {
+                "spark.chronon.coalesce.factor": "10",
+                "spark.chronon.partition.column": "ds",
+                "spark.chronon.partition.format": "yyyy-MM-dd",
+                "spark.chronon.table_write.format": "iceberg",
+                "spark.chronon.table_write.prefix": "s3://zipline-warehouse-dev/data/tables/",
+                "spark.default.parallelism": "10",
+                "spark.driver.cores": "1",
+                "spark.driver.memory": "1g",
+                "spark.executor.cores": "1",
+                "spark.executor.memory": "1g",
+                "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
+                "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
+                "spark.sql.catalog.default_iceberg.warehouse": "s3://zipline-warehouse-dev/data/tables/",
+                "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
+                "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
+                "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-dev/data/tables/",
+                "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+                "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+                "spark.sql.shuffle.partitions": "10"
+              }
             }
           },
           "env": {
@@ -121,11 +180,22 @@
               "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
               "FRONTEND_URL": "http://localhost:3000",
               "HUB_URL": "http://localhost:3903",
-              "JOB_MODE": "local[*]",
-              "PARTITION_COLUMN": "ds",
-              "PARTITION_FORMAT": "yyyy-MM-dd",
               "SPARK_CLUSTER_NAME": "zipline-canary-emr",
               "VERSION": "latest"
+            },
+            "modeEnvironments": {
+              "upload": {
+                "ARTIFACT_PREFIX": "s3://zipline-artifacts-dev",
+                "AWS_REGION": "us-west-2",
+                "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+                "CLOUD_PROVIDER": "aws",
+                "CUSTOMER_ID": "dev",
+                "FLINK_STATE_URI": "s3://zipline-warehouse-dev/flink-state",
+                "FRONTEND_URL": "http://localhost:3000",
+                "HUB_URL": "http://localhost:3903",
+                "SPARK_CLUSTER_NAME": "zipline-canary-emr",
+                "VERSION": "latest"
+              }
             }
           }
         },
@@ -559,11 +629,11 @@
                           "is_tablet": "IF(device_type = 'tablet', 1, 0)",
                           "listing_id": "listing_id",
                           "purchase_event": "IF(event_type = 'purchase', 1, 0)",
-                          "user_event_struct": "STRUCT(event_type, listing_id, unix_millis(TIMESTAMP(event_time_ms)) as timestamp)",
+                          "user_event_struct": "STRUCT(event_type, listing_id, event_time_ms as timestamp)",
                           "user_id": "user_id",
                           "view_event": "IF(event_type = 'view', 1, 0)"
                         },
-                        "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
+                        "timeColumn": "event_time_ms"
                       },
                       "table": "data.aws_exports_user_activities__0",
                       "topic": "kafka://user-activities-v2/serde=custom/provider_class=ai.chronon.flink.deser.MockCustomSchemaProvider/schema_name=user-activities"

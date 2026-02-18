@@ -53,8 +53,7 @@ class ApproxDistinctTest extends AnyFlatSpec with Matchers {
       Row(4, "D", 4.0)
     )
 
-    val rdd = spark.sparkContext.parallelize(data)
-    val df = spark.createDataFrame(rdd, schema)
+    val df = spark.createDataFrame(java.util.Arrays.asList(data: _*), schema)
     val result = ApproxDistinct.columnCardinality(df)
 
     result("int_col") should be(3L +- 1L) // Exact: 3 (null is not counted)

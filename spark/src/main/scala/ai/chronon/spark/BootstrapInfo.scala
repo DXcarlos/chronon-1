@@ -104,7 +104,7 @@ object BootstrapInfo {
           )
 
           val dummyOutputDf = tableUtils.sparkSession
-            .createDataFrame(tableUtils.sparkSession.sparkContext.parallelize(immutable.Seq[Row]()), sparkSchema)
+            .createDataFrame(java.util.Collections.emptyList[Row](), sparkSchema)
 
           val finalOutputColumns = part.groupBy.derivationsScala.finalOutputColumn(dummyOutputDf.columns).toSeq
           val derivedDummyOutputDf = dummyOutputDf.select(finalOutputColumns: _*)
@@ -138,7 +138,7 @@ object BootstrapInfo {
     val sparkSchema = StructType(SparkConversions.fromChrononSchema(api.StructType("", baseFields.toArray)))
 
     val baseDf = tableUtils.sparkSession.createDataFrame(
-      tableUtils.sparkSession.sparkContext.parallelize(immutable.Seq[Row]()),
+      java.util.Collections.emptyList[Row](),
       sparkSchema
     )
 

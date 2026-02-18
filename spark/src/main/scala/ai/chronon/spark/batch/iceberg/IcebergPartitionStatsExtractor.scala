@@ -4,12 +4,13 @@ import ai.chronon.api.ScalaJavaConversions.JMapOps
 import ai.chronon.api.{PartitionSpec, ThriftJsonCodec}
 import ai.chronon.observability._
 import ai.chronon.online.KVStore.PutRequest
+import ai.chronon.spark.catalog.Format
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.iceberg.spark.source.SparkTable
 import org.apache.iceberg.{DataFile, ManifestFiles}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.TableCatalog
 
 import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
@@ -182,20 +183,13 @@ class IcebergPartitionStatsExtractor(spark: SparkSession) {
 
   private def loadIcebergTable(fullTableName: String): Option[org.apache.iceberg.Table] = {
     try {
-      val parsed = spark.sessionState.sqlParser.parseMultipartIdentifier(fullTableName)
-      val (catalogName, namespace, tableName) = parsed.toList match {
-        case catalog :: namespace :: table :: Nil => (catalog, namespace, table)
-        case namespace :: table :: Nil            => (spark.catalog.currentCatalog(), namespace, table)
-        case table :: Nil                         => (spark.catalog.currentCatalog(), "default", table)
-        case _                                    => return None
-      }
-
+      implicit val sparkSession: SparkSession = spark
+      val resolved = Format.resolveTableName(fullTableName)
       val catalog = spark.sessionState.catalogManager
-        .catalog(catalogName)
+        .catalog(resolved.catalog)
         .asInstanceOf[TableCatalog]
 
-      val tableId = Identifier.of(Array(namespace), tableName)
-      Option(catalog.loadTable(tableId)) match {
+      Option(catalog.loadTable(resolved.toIdentifier)) match {
         case Some(sparkTable: SparkTable) => Some(sparkTable.table())
         case _                            => None
       }

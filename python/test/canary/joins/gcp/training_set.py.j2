@@ -1,5 +1,6 @@
 from gen_thrift.api.ttypes import EventSource, Source
 from group_bys.gcp import purchases_{{ test_id }}
+from staging_queries.gcp import checkouts_import_{{ test_id }}, checkouts_notds_import_{{ test_id }}
 
 from ai.chronon.join import Join, JoinPart
 from ai.chronon.query import Query, selects
@@ -8,15 +9,16 @@ from ai.chronon.query import Query, selects
 This is the "left side" of the join that will comprise our training set. It is responsible for providing the primary keys
 and timestamps for which features will be computed.
 """
+# Source data is exported from BigQuery to Iceberg via a StagingQuery (checkouts_import).
 source = Source(
     events=EventSource(
-        table="data.checkouts",
+        table=checkouts_import_{{ test_id }}.v1.table,
         query=Query(
             selects=selects(
                 "user_id"
-            ),  # The primary key used to join various GroupBys together
+            ),
             time_column="ts",
-        ),  # The event time used to compute feature values as-of
+        ),
     )
 )
 
@@ -49,14 +51,14 @@ v1_dev = Join(
 
 source_notds = Source(
     events=EventSource(
-        table="data.checkouts_notds",
+        table=checkouts_notds_import_{{ test_id }}.v1.table,
         query=Query(
             selects=selects(
                 "user_id"
-            ),  # The primary key used to join various GroupBys together
+            ),
             time_column="ts",
             partition_column="notds",
-        ),  # The event time used to compute feature values as-of
+        ),
     )
 )
 

@@ -9,6 +9,8 @@ import scala.util.{Failure, Success, Try}
 
 case object Iceberg extends Format {
 
+  override def tableTypeString: String = "iceberg"
+
   override def tableProperties: Map[String, String] = {
     Map(
       "commit.retry.num-retries" -> "20", // default = 4
@@ -85,18 +87,8 @@ case object Iceberg extends Format {
   }
 
   private[catalog] def qualifyWithCatalog(tableName: String)(implicit sparkSession: SparkSession): String = {
-    val parsed = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    val catalog = Format.getCatalog(tableName)
-    val currentNamespace = sparkSession.catalog.currentDatabase
-    parsed.toList match {
-      case cat :: ns :: tbl :: Nil =>
-        s"${QuotingUtils.quoteIdentifier(cat)}.${QuotingUtils.quoteIdentifier(ns)}.${QuotingUtils.quoteIdentifier(tbl)}"
-      case namespace :: table :: Nil =>
-        s"${QuotingUtils.quoteIdentifier(catalog)}.${QuotingUtils.quoteIdentifier(namespace)}.${QuotingUtils.quoteIdentifier(table)}"
-      case table :: Nil =>
-        s"${QuotingUtils.quoteIdentifier(catalog)}.${QuotingUtils.quoteIdentifier(currentNamespace)}.${QuotingUtils.quoteIdentifier(table)}"
-      case _ => throw new IllegalStateException(s"Invalid table naming convention: ${tableName}")
-    }
+    val resolved = Format.resolveTableName(tableName)
+    s"${QuotingUtils.quoteIdentifier(resolved.catalog)}.${QuotingUtils.quoteIdentifier(resolved.namespace)}.${QuotingUtils.quoteIdentifier(resolved.table)}"
   }
 
   override def supportSubPartitionsFilter: Boolean = false

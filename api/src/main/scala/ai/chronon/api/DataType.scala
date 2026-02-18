@@ -25,21 +25,22 @@ sealed trait DataType extends Serializable
 object DataType {
   def toString(dataType: DataType): String =
     dataType match {
-      case IntType                     => "int"
-      case LongType                    => "long"
-      case DoubleType                  => "double"
-      case FloatType                   => "float"
-      case ShortType                   => "short"
-      case BooleanType                 => "bool"
-      case ByteType                    => "byte"
-      case StringType                  => "string"
-      case BinaryType                  => "binary"
-      case ListType(elementType)       => s"list_${toString(elementType)}"
-      case MapType(keyType, valueType) => s"map_${toString(keyType)}_${toString(valueType)}"
-      case DateType                    => "date"
-      case TimestampType               => "timestamp"
-      case StructType(name, _)         => s"struct_$name"
-      case UnknownType(_)              => "unknown_type"
+      case IntType                       => "int"
+      case LongType                      => "long"
+      case DoubleType                    => "double"
+      case FloatType                     => "float"
+      case ShortType                     => "short"
+      case BooleanType                   => "bool"
+      case ByteType                      => "byte"
+      case StringType                    => "string"
+      case BinaryType                    => "binary"
+      case ListType(elementType)         => s"list_${toString(elementType)}"
+      case MapType(keyType, valueType)   => s"map_${toString(keyType)}_${toString(valueType)}"
+      case DateType                      => "date"
+      case TimestampType                 => "timestamp"
+      case DecimalType(precision, scale) => s"decimal_${precision}_${scale}"
+      case StructType(name, _)           => s"struct_$name"
+      case UnknownType(_)                => "unknown_type"
     }
 
   def isScalar(dt: DataType): Boolean =
@@ -51,8 +52,8 @@ object DataType {
 
   def isNumeric(dt: DataType): Boolean =
     dt match {
-      case IntType | LongType | DoubleType | FloatType | ShortType | ByteType => true
-      case _                                                                  => false
+      case IntType | LongType | DoubleType | FloatType | ShortType | ByteType | DecimalType(_, _) => true
+      case _                                                                                      => false
     }
 
   def isList(dt: DataType): Boolean =
@@ -82,6 +83,16 @@ object DataType {
       case DataKind.BINARY    => BinaryType
       case DataKind.DATE      => DateType
       case DataKind.TIMESTAMP => TimestampType
+      case DataKind.DECIMAL => {
+        assert(typeParams != null && typeParams.size() == 2,
+               s"TDataType needs non null `params` with length 2 when kind == DECIMAL. Given: $typeParams")
+        val precision = typeParams.get(0).name.toInt
+        val scale = typeParams.get(1).name.toInt
+        require(precision > 0, s"Decimal precision must be > 0, got $precision")
+        require(scale >= 0 && scale <= precision,
+                s"Decimal scale must be between 0 and precision. precision=$precision scale=$scale")
+        DecimalType(precision, scale)
+      }
 
       // parametric types
       case DataKind.MAP => {
@@ -128,6 +139,13 @@ object DataType {
         new TDataType(DataKind.MAP).setParams(toParams("key" -> keyType, "value" -> valueType))
       case DateType      => new TDataType(DataKind.DATE)
       case TimestampType => new TDataType(DataKind.TIMESTAMP)
+      case DecimalType(precision, scale) => {
+        val params = List(
+          new DataField().setName(precision.toString).setDataType(new TDataType(DataKind.INT)),
+          new DataField().setName(scale.toString).setDataType(new TDataType(DataKind.INT))
+        ).toJava
+        new TDataType(DataKind.DECIMAL).setParams(params)
+      }
       case StructType(name, fields) =>
         new TDataType(DataKind.STRUCT).setName(name).setParams(toParams(fields.map(f => f.name -> f.fieldType): _*))
       case UnknownType(_) => throw new RuntimeException("Cannot convert unknown type")
@@ -174,17 +192,32 @@ object DataType {
       case _                    => value
     }
 
+  def castToDecimal(value: AnyRef): AnyRef =
+    value match {
+      case bd: java.math.BigDecimal => bd
+      case d: java.lang.Double      => java.math.BigDecimal.valueOf(d)
+      case f: java.lang.Float       => java.math.BigDecimal.valueOf(f.doubleValue())
+      case i: java.lang.Integer     => new java.math.BigDecimal(i)
+      case s: java.lang.Short       => new java.math.BigDecimal(s.intValue())
+      case b: java.lang.Byte        => new java.math.BigDecimal(b.intValue())
+      case l: java.lang.Long        => new java.math.BigDecimal(l)
+      case bi: java.math.BigInteger => new java.math.BigDecimal(bi)
+      case s: java.lang.String      => new java.math.BigDecimal(s)
+      case _                        => value
+    }
+
   def castTo(value: AnyRef, typ: DataType): AnyRef = {
     if (value == null) {
       return null
     }
 
     typ match {
-      case LongType   => castToLong(value)
-      case DoubleType => castToDouble(value)
-      case IntType    => castToInt(value)
-      case StringType => if (value.isInstanceOf[String]) value else value.toString
-      case _          => value
+      case LongType                      => castToLong(value)
+      case DoubleType                    => castToDouble(value)
+      case IntType                       => castToInt(value)
+      case StringType                    => if (value.isInstanceOf[String]) value else value.toString
+      case DecimalType(precision, scale) => castToDecimal(value)
+      case _                             => value
     }
 
   }
@@ -229,6 +262,9 @@ case object DateType extends DataType
 // java.sql.Timestamp and java.sql.Date are used for the same purpose.
 // ```
 case object TimestampType extends DataType
+
+// maps to java.math.BigDecimal
+case class DecimalType(precision: Int, scale: Int) extends DataType
 
 // maps to Array[Any]
 case class StructType(name: String, fields: Array[StructField]) extends DataType with Seq[StructField] {

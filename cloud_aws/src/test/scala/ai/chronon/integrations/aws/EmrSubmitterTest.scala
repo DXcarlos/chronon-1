@@ -32,6 +32,8 @@ class EmrSubmitterTest extends AnyFlatSpec with MockitoSugar {
     val expectedMainClass = "some-main-class"
     val expectedJarURI = "s3://-random-jar-uri"
 
+    val expectedJobProperties = Map("spark.executor.memory" -> "4g", "spark.executor.cores" -> "2")
+
     val submitter = new EmrSubmitter(expectedCustomerId, mockEmrClient, mockEc2Client)
     val submittedStepId = submitter.submit(
       jobType = SparkJob,
@@ -40,7 +42,7 @@ class EmrSubmitterTest extends AnyFlatSpec with MockitoSugar {
         JarURI -> expectedJarURI,
         ClusterId -> clusterId
       ),
-      jobProperties = Map.empty,
+      jobProperties = expectedJobProperties,
       files = expectedFiles,
       labels = Map.empty,
       expectedApplicationArgs: _*
@@ -56,13 +58,21 @@ class EmrSubmitterTest extends AnyFlatSpec with MockitoSugar {
     assertEquals(actualRequest.steps().size(), 1)
 
     val stepConfig = actualRequest.steps().get(0)
-    assertEquals(stepConfig.actionOnFailure().name(), "CANCEL_AND_WAIT")
+    assertEquals(stepConfig.actionOnFailure().name(), "CONTINUE")
     assertEquals(stepConfig.name(), "Run Zipline Job")
     assertEquals(stepConfig.hadoopJarStep().jar(), "command-runner.jar")
-    assertEquals(
-      stepConfig.hadoopJarStep().args().toScala.mkString(" "),
-      s"bash -c aws s3 cp s3://random-conf /mnt/zipline/; \naws s3 cp s3://random-data /mnt/zipline/; \nspark-submit --class some-main-class s3://-random-jar-uri group-by-backfill arg1 arg2"
-    )
+
+    val actualArgs = stepConfig.hadoopJarStep().args().toScala.mkString(" ")
+    // Verify file copy commands are present
+    assert(actualArgs.contains("aws s3 cp s3://random-conf /mnt/zipline/"))
+    assert(actualArgs.contains("aws s3 cp s3://random-data /mnt/zipline/"))
+    // Verify spark-submit with --conf args for job properties
+    assert(actualArgs.contains("--conf 'spark.executor.memory=4g'"))
+    assert(actualArgs.contains("--conf 'spark.executor.cores=2'"))
+    // Verify spark-submit class, jar, and application args
+    assert(actualArgs.contains(s"--class $expectedMainClass"))
+    assert(actualArgs.contains(expectedJarURI))
+    assert(actualArgs.contains(expectedApplicationArgs.mkString(" ")))
   }
 
   it should "test flink job locally" ignore {}

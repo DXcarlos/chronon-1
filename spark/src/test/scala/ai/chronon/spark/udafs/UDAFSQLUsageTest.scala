@@ -37,7 +37,7 @@ class UDAFSQLUsageTest extends AnyFlatSpec with Matchers with BeforeAndAfterAll 
         StructField("group", StringType, nullable = false),
         StructField("data", MapType(StringType, LongType), nullable = true)
       ))
-    val mapDF = spark.createDataFrame(spark.sparkContext.parallelize(mapData), mapSchema)
+    val mapDF = spark.createDataFrame(java.util.Arrays.asList(mapData: _*), mapSchema)
     mapDF.createOrReplaceTempView("map_data")
 
     val stringData = Seq(
@@ -55,7 +55,7 @@ class UDAFSQLUsageTest extends AnyFlatSpec with Matchers with BeforeAndAfterAll 
         StructField("group", StringType, nullable = false),
         StructField("data", StringType, nullable = true)
       ))
-    val stringDF = spark.createDataFrame(spark.sparkContext.parallelize(stringData), stringSchema)
+    val stringDF = spark.createDataFrame(java.util.Arrays.asList(stringData: _*), stringSchema)
     stringDF.createOrReplaceTempView("string_data")
 
     val arrayData = Seq(
@@ -70,7 +70,7 @@ class UDAFSQLUsageTest extends AnyFlatSpec with Matchers with BeforeAndAfterAll 
         StructField("group", StringType, nullable = false),
         StructField("data", ArrayType(StringType), nullable = true)
       ))
-    val arrayDF = spark.createDataFrame(spark.sparkContext.parallelize(arrayData), arraySchema)
+    val arrayDF = spark.createDataFrame(java.util.Arrays.asList(arrayData: _*), arraySchema)
     arrayDF.createOrReplaceTempView("array_data")
   }
 

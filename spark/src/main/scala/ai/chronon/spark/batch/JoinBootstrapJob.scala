@@ -31,7 +31,7 @@ class JoinBootstrapJob(node: JoinBootstrapNode, metaData: MetaData, range: DateR
   // Use the node's metadata output table
   private val outputTable = metaData.outputTable
 
-  def run(): Unit = {
+  def run(): Unit = tableUtils.withJobDescription(s"JoinBootstrapJob(${join.metaData.name}) $dateRange") {
     // Runs the bootstrap query and produces an output table specific to the `left` side of the Join
     // LeftSourceTable is the same as the SourceJob output table for the Left.
     // `f"${source.table}_${ThriftJsonCodec.md5Digest(sourceWithFilter)}"` Logic should  be computed by orchestrator

@@ -88,6 +88,25 @@ jobs:
     outputs:
       wheel_file: ${{ steps.build-wheel.outputs.wheel_file }}
 
+  publish_to_pypi:
+    runs-on: ubuntu-latest
+    needs: [build_python_wheel]
+    environment: pypi
+    permissions:
+      id-token: write  # Required for trusted publishing (OIDC)
+
+    steps:
+      - name: Download Python Wheel Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zipline-ai-wheel
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+
   promote-gcp-candidate:
     runs-on: ubuntu-latest
     needs: [check_if_latest, build_python_wheel]
@@ -546,7 +565,7 @@ jobs:
         run: rm -rf build_output
 
   on_fail_notify_slack:
-    needs: [ promote-aws-candidate, promote-gcp-candidate, promote-azure-candidate, build_and_publish_docker ]
+    needs: [ publish_to_pypi, promote-aws-candidate, promote-gcp-candidate, promote-azure-candidate, build_and_publish_docker ]
     if: failure()
     runs-on: ubuntu-latest
 

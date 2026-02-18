@@ -33,7 +33,7 @@ trait RedisModule extends Cross.Module[String] with build.BaseModule {
     def compileMvnDeps = build.Constants.sparkDeps
 
     def mvnDeps = super.mvnDeps() ++ build.Constants.testDeps ++ build.Constants.sparkDeps ++ Seq(
-      mvn"org.testcontainers:testcontainers:1.19.3"
+      mvn"org.testcontainers:testcontainers:2.0.2"
     )
 
     override def testFramework = "org.scalatest.tools.Framework"

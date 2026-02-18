@@ -40,7 +40,7 @@ case class AggregationInfo(hopsAggregator: HopsAggregator,
                            outputSparkSchema: spark.StructType,
                            resolution: Resolution) {
 
-  type Rows = mutable.WrappedArray[SparkRow]
+  type Rows = Seq[SparkRow]
 
   def aggregate(leftRows: Rows, rightRows: Rows): Iterator[CGenericRow] = {
     sawtoothAggregate(this)(leftRows, rightRows)

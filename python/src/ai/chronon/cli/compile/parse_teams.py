@@ -41,6 +41,35 @@ def import_module_from_file(file_path):
     return module
 
 
+_DEPRECATED_CATALOG = "DelegatingBigQueryMetastoreCatalog"
+_REPLACEMENT_CATALOG = "org.apache.iceberg.spark.SparkCatalog"
+
+
+def _check_deprecated_catalog(team_name: str, conf):
+    """Check if a team's config references the deprecated DelegatingBigQueryMetastoreCatalog."""
+    if conf is None:
+        return
+    if conf.common:
+        for key, value in conf.common.items():
+            val_str = value if isinstance(value, str) else str(value or "")
+            if _DEPRECATED_CATALOG in val_str:
+                raise ValueError(
+                    f"Team '{team_name}' uses deprecated {_DEPRECATED_CATALOG} in conf key '{key}'. "
+                    f"Please migrate to {_REPLACEMENT_CATALOG} with BigQueryMetastoreCatalog as the catalog-impl."
+                )
+    mode_configs = getattr(conf, "modeConfigs", None) or getattr(conf, "modeClusterConfigs", None)
+    if mode_configs:
+        for mode, mode_map in mode_configs.items():
+            if mode_map:
+                for key, value in mode_map.items():
+                    val_str = value if isinstance(value, str) else str(value or "")
+                    if _DEPRECATED_CATALOG in val_str:
+                        raise ValueError(
+                            f"Team '{team_name}' uses deprecated {_DEPRECATED_CATALOG} in conf key '{key}' "
+                            f"(mode: {mode}). Please migrate to {_REPLACEMENT_CATALOG} with BigQueryMetastoreCatalog as the catalog-impl."
+                        )
+
+
 def load_teams(conf_root: str, print: bool = True) -> Dict[str, Team]:
     teams_file = os.path.join(conf_root, "teams.py")
 
@@ -63,6 +92,7 @@ def load_teams(conf_root: str, print: bool = True) -> Dict[str, Team]:
     for name, obj in team_module.__dict__.items():
         if isinstance(obj, Team):
             obj.name = name
+            _check_deprecated_catalog(name, obj.conf)
             team_dict[name] = obj
 
     return team_dict

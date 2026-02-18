@@ -30,7 +30,7 @@ class NullnessCountersAggregatorTest extends AnyFlatSpec with Matchers with Befo
     )
 
     val testData: DataFrame = spark.createDataFrame(
-      spark.sparkContext.parallelize(data),
+      java.util.Arrays.asList(data: _*),
       schema
     )
     testData.createOrReplaceTempView("test_data")

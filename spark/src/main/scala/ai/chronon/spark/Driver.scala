@@ -99,7 +99,15 @@ object Driver {
     val stepDays: ScallopOption[Int] =
       opt[Int](required = false,
                descr = "Runs offline backfill in steps, step-days at a time. Default is 30 days",
-               default = Option(30))
+               default = None)
+
+    def effectiveStepDays(metaData: api.MetaData, default: Int = 30): Option[Int] = {
+      val cliStepDays = stepDays.toOption
+      val confStepDays = Option(metaData.executionInfo)
+        .filter(_.isSetStepDays)
+        .map(_.stepDays)
+      cliStepDays.orElse(confStepDays).orElse(Some(default))
+    }
 
     val startPartition: ScallopOption[String] =
       opt[String](required = false, descr = "Start date to compute offline backfill.")
@@ -275,7 +283,7 @@ object Driver {
         val endPartition = args.endDate()
 
         val joinName = args.joinConf.metaData.name
-        val stepDays = args.stepDays.toOption.getOrElse(1)
+        val stepDays = args.effectiveStepDays(args.joinConf.metaData).get
 
         logger.info(
           s"Filling partitions for join:$joinName, partitions:[$startPartition, $endPartition], steps:$stepDays")
@@ -302,7 +310,9 @@ object Driver {
 
       if (args.selectedJoinParts.isDefined) {
         val result =
-          join.computeJoinOpt(args.stepDays.toOption, args.startPartition.toOption, args.useCachedLeft.getOrElse(false))
+          join.computeJoinOpt(args.effectiveStepDays(args.joinConf.metaData),
+                              args.startPartition.toOption,
+                              args.useCachedLeft.getOrElse(false))
         if (result.isDefined) {
           logger.info(
             s"Backfilling selected join parts: ${args.selectedJoinParts()} is complete. Skipping the final join. Exiting."
@@ -311,7 +321,9 @@ object Driver {
         return
       }
 
-      val df = join.computeJoin(args.stepDays.toOption, args.startPartition.toOption)
+      val finalStepDays = args.effectiveStepDays(args.joinConf.metaData)
+
+      val df = join.computeJoin(finalStepDays, args.startPartition.toOption)
 
       if (args.shouldExport()) {
         args.exportTableToLocal(args.joinConf.metaData.outputTable, tableUtils)
@@ -395,7 +407,7 @@ object Driver {
         startPartition,
         args.endDate(),
         tableUtils,
-        args.stepDays.toOption,
+        args.effectiveStepDays(args.groupByConf.metaData),
         !args.runFirstHole()
       )
 
@@ -487,11 +499,13 @@ object Driver {
     def run(args: Args): Unit = {
       val tableUtils = args.buildTableUtils()
       val stagingQueryJob = StagingQuery.from(args.stagingQueryConf, args.endDate(), tableUtils)
-      stagingQueryJob.computeStagingQuery(args.stepDays.toOption,
-                                          args.enableAutoExpand.toOption,
-                                          args.startPartition.toOption,
-                                          !args.runFirstHole(),
-                                          args.forceOverwrite())
+      stagingQueryJob.computeStagingQuery(
+        args.effectiveStepDays(args.stagingQueryConf.metaData),
+        args.enableAutoExpand.toOption,
+        args.startPartition.toOption,
+        !args.runFirstHole(),
+        args.forceOverwrite()
+      )
 
       if (args.shouldExport()) {
         args.exportTableToLocal(args.stagingQueryConf.metaData.outputTable, tableUtils)
@@ -723,7 +737,7 @@ object Driver {
         args.endDate(),
         args.logTable(),
         args.schemaTable(),
-        Some(args.stepDays())
+        args.effectiveStepDays(args.joinConf.metaData)
       )
       logFlattenerJob.buildLogTable(args.startPartition.toOption)
     }

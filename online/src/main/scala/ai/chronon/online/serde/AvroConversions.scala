@@ -32,7 +32,6 @@ import com.linkedin.avro.fastserde.BufferBackedPrimitiveFloatList
 
 object AvroConversions {
 
-  @tailrec
   def toAvroValue(value: AnyRef, schema: Schema): Object =
     schema.getType match {
       case Schema.Type.UNION => toAvroValue(value, schema.getTypes.get(1))
@@ -49,7 +48,44 @@ object AvroConversions {
       case Schema.Type.INT    => value.asInstanceOf[Int].asInstanceOf[Object]
       case Schema.Type.FLOAT  => value.asInstanceOf[Float].asInstanceOf[Object]
       case Schema.Type.DOUBLE => value.asInstanceOf[Double].asInstanceOf[Object]
-      case _                  => value
+      case Schema.Type.BYTES =>
+        Option(schema.getLogicalType) match {
+          case Some(decimalType: LogicalTypes.Decimal) =>
+            // Convert BigDecimal to ByteBuffer for Avro decimal logical type
+            val bigDecimal = value.asInstanceOf[java.math.BigDecimal]
+            val scale = decimalType.getScale
+            // Set scale to match the schema's scale
+            val scaledDecimal = bigDecimal.setScale(scale, java.math.RoundingMode.HALF_UP)
+            val unscaledValue = scaledDecimal.unscaledValue()
+            ByteBuffer.wrap(unscaledValue.toByteArray).asInstanceOf[Object]
+          case _ => value
+        }
+      // Recursively process arrays and maps to handle nested values requiring transformation.
+      // Avro natively supports collections of primitives (Int, Long, String, etc.), but types
+      // requiring explicit conversion (e.g., BigDecimal → ByteBuffer for decimal logical type)
+      // must be transformed recursively within nested structures.
+      case Schema.Type.ARRAY =>
+        val elementSchema = schema.getElementType
+        val list = value.asInstanceOf[util.ArrayList[AnyRef]]
+        val result = new util.ArrayList[Any](list.size())
+        val it = list.iterator()
+        while (it.hasNext) {
+          val elem = it.next()
+          result.add(if (elem != null) toAvroValue(elem, elementSchema) else null)
+        }
+        result.asInstanceOf[Object]
+      case Schema.Type.MAP =>
+        val valueSchema = schema.getValueType
+        val map = value.asInstanceOf[util.Map[Any, AnyRef]]
+        val result = new util.HashMap[Any, Any](map.size())
+        val it = map.entrySet().iterator()
+        while (it.hasNext) {
+          val entry = it.next()
+          val convertedValue = if (entry.getValue != null) toAvroValue(entry.getValue, valueSchema) else null
+          result.put(entry.getKey, convertedValue)
+        }
+        result.asInstanceOf[Object]
+      case _ => value
     }
 
   def toChrononSchema(schema: Schema): DataType = {
@@ -69,10 +105,16 @@ object AvroConversions {
       case Schema.Type.LONG
           if Option(schema.getLogicalType).map(_.getName).getOrElse("") == LogicalTypes.timestampMillis().getName =>
         TimestampType
-      case Schema.Type.LONG    => LongType
-      case Schema.Type.FLOAT   => FloatType
-      case Schema.Type.DOUBLE  => DoubleType
-      case Schema.Type.BYTES   => BinaryType
+      case Schema.Type.LONG   => LongType
+      case Schema.Type.FLOAT  => FloatType
+      case Schema.Type.DOUBLE => DoubleType
+      case Schema.Type.BYTES => {
+        Option(schema.getLogicalType) match {
+          case Some(decimalType: LogicalTypes.Decimal) =>
+            DecimalType(decimalType.getPrecision, decimalType.getScale)
+          case _ => BinaryType
+        }
+      }
       case Schema.Type.BOOLEAN => BooleanType
       case Schema.Type.UNION => toChrononSchema(schema.getTypes.get(1)) // unions are only used to represent nullability
       case _ => throw new UnsupportedOperationException(s"Cannot convert avro type ${schema.getType.toString}")
@@ -126,6 +168,8 @@ object AvroConversions {
       case TimestampType => LogicalTypes.timestampMillis().addToSchema(Schema.create(Schema.Type.LONG))
       case DateType =>
         LogicalTypes.date().addToSchema(Schema.create(Schema.Type.INT))
+      case DecimalType(precision, scale) =>
+        LogicalTypes.decimal(precision, scale).addToSchema(Schema.create(Schema.Type.BYTES))
       case _ =>
         throw new UnsupportedOperationException(
           s"Cannot convert chronon type $dataType to avro type. Cast it to string please")
@@ -143,8 +187,20 @@ object AvroConversions {
       { (data: Array[Any], elemDataType: DataType, providedSchema: Option[Schema]) =>
         val schema = providedSchema.getOrElse(AvroConversions.fromChrononSchema(elemDataType))
         val record = new GenericData.Record(schema)
-        data.zipWithIndex.foreach { case (value1, idx) =>
-          record.put(idx, value1)
+        // For StructType, apply toAvroValue to each field to handle types requiring transformation.
+        // This ensures fields like DecimalType (BigDecimal → ByteBuffer) are properly converted
+        // before being added to the GenericRecord, as Avro doesn't natively support BigDecimal.
+        elemDataType match {
+          case StructType(_, fields) =>
+            data.zipWithIndex.foreach { case (value1, idx) =>
+              val fieldSchema = schema.getFields.get(idx).schema()
+              val convertedValue = if (value1 != null) toAvroValue(value1.asInstanceOf[AnyRef], fieldSchema) else null
+              record.put(idx, convertedValue)
+            }
+          case _ =>
+            data.zipWithIndex.foreach { case (value1, idx) =>
+              record.put(idx, value1)
+            }
         }
         record
       },

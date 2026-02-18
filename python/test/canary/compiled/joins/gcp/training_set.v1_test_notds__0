@@ -73,17 +73,17 @@
         ],
         "metaData": {
           "columnHashes": {
-            "purchase_price_average_1d": "ff8fca8d015c942b760d0e08e9f729fe",
-            "purchase_price_average_3d": "ff8fca8d015c942b760d0e08e9f729fe",
-            "purchase_price_average_7d": "ff8fca8d015c942b760d0e08e9f729fe",
-            "purchase_price_count_1d": "ff8fca8d015c942b760d0e08e9f729fe",
-            "purchase_price_count_3d": "ff8fca8d015c942b760d0e08e9f729fe",
-            "purchase_price_count_7d": "ff8fca8d015c942b760d0e08e9f729fe",
-            "purchase_price_last10": "ff8fca8d015c942b760d0e08e9f729fe",
-            "purchase_price_sum_1d": "ff8fca8d015c942b760d0e08e9f729fe",
-            "purchase_price_sum_3d": "ff8fca8d015c942b760d0e08e9f729fe",
-            "purchase_price_sum_7d": "ff8fca8d015c942b760d0e08e9f729fe",
-            "user_id": "393f5e98e4ffd73344977d7ac9780627"
+            "purchase_price_average_1d": "75c7ab0be06806e6086fcdd7de7077ea",
+            "purchase_price_average_3d": "75c7ab0be06806e6086fcdd7de7077ea",
+            "purchase_price_average_7d": "75c7ab0be06806e6086fcdd7de7077ea",
+            "purchase_price_count_1d": "75c7ab0be06806e6086fcdd7de7077ea",
+            "purchase_price_count_3d": "75c7ab0be06806e6086fcdd7de7077ea",
+            "purchase_price_count_7d": "75c7ab0be06806e6086fcdd7de7077ea",
+            "purchase_price_last10": "75c7ab0be06806e6086fcdd7de7077ea",
+            "purchase_price_sum_1d": "75c7ab0be06806e6086fcdd7de7077ea",
+            "purchase_price_sum_3d": "75c7ab0be06806e6086fcdd7de7077ea",
+            "purchase_price_sum_7d": "75c7ab0be06806e6086fcdd7de7077ea",
+            "user_id": "e2bd778ac7f0e189c7f627b51b0eaa13"
           },
           "executionInfo": {
             "clusterConf": {
@@ -109,14 +109,13 @@
                 "spark.driver.memory": "1g",
                 "spark.executor.cores": "1",
                 "spark.executor.memory": "1g",
-                "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
-                "spark.sql.catalog.default_iceberg": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+                "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
                 "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
                 "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
                 "spark.sql.catalog.default_iceberg.gcp.bigquery.project-id": "canary-443022",
                 "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
                 "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-canary/data/tables/",
-                "spark.sql.catalog.spark_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+                "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
                 "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
                 "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
                 "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
@@ -139,11 +138,25 @@
                 "GCP_PROJECT_ID": "canary-443022",
                 "GCP_REGION": "us-central1",
                 "HUB_URL": "http://localhost:3903",
-                "JOB_MODE": "local[*]",
-                "PARTITION_COLUMN": "ds",
-                "PARTITION_FORMAT": "yyyy-MM-dd",
                 "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
                 "VERSION": "latest"
+              },
+              "modeEnvironments": {
+                "upload": {
+                  "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
+                  "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+                  "CLOUD_PROVIDER": "gcp",
+                  "CUSTOMER_ID": "dev",
+                  "ENABLE_PUBSUB": "true",
+                  "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+                  "FRONTEND_URL": "http://localhost:3000",
+                  "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+                  "GCP_PROJECT_ID": "canary-443022",
+                  "GCP_REGION": "us-central1",
+                  "HUB_URL": "http://localhost:3903",
+                  "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
+                  "VERSION": "latest"
+                }
               }
             },
             "historicalBackfill": 0,
@@ -167,7 +180,7 @@
                 "startPartition": "2023-11-01",
                 "timeColumn": "ts"
               },
-              "table": "data.purchases_notds"
+              "table": "data.gcp_purchases_notds_import_v1__0"
             }
           }
         ]
@@ -185,25 +198,25 @@
         },
         "timeColumn": "ts"
       },
-      "table": "data.checkouts_notds"
+      "table": "data.gcp_checkouts_notds_import_v1__0"
     }
   },
   "metaData": {
     "columnHashes": {
-      "ts": "c4364195d7639fb8b71e2f87ee017d4d",
-      "user_id": "fbc25deb4a5dd5d9c1d6e960c3922d0e",
-      "user_id_purchase_price_average_1d": "1d85a493771d48ac9fb6581c18f186e2",
-      "user_id_purchase_price_average_3d": "1d85a493771d48ac9fb6581c18f186e2",
-      "user_id_purchase_price_average_7d": "1d85a493771d48ac9fb6581c18f186e2",
-      "user_id_purchase_price_count_1d": "1d85a493771d48ac9fb6581c18f186e2",
-      "user_id_purchase_price_count_3d": "1d85a493771d48ac9fb6581c18f186e2",
-      "user_id_purchase_price_count_7d": "1d85a493771d48ac9fb6581c18f186e2",
-      "user_id_purchase_price_last10": "1d85a493771d48ac9fb6581c18f186e2",
-      "user_id_purchase_price_sum_1d": "1d85a493771d48ac9fb6581c18f186e2",
-      "user_id_purchase_price_sum_3d": "1d85a493771d48ac9fb6581c18f186e2",
-      "user_id_purchase_price_sum_7d": "1d85a493771d48ac9fb6581c18f186e2"
+      "ts": "e2212d8cb616fe6331426d0f64d0a049",
+      "user_id": "805c4121299eea43e17c6c535f568e0f",
+      "user_id_purchase_price_average_1d": "31dfb8cbf0c4d756d1d6725d1b003466",
+      "user_id_purchase_price_average_3d": "31dfb8cbf0c4d756d1d6725d1b003466",
+      "user_id_purchase_price_average_7d": "31dfb8cbf0c4d756d1d6725d1b003466",
+      "user_id_purchase_price_count_1d": "31dfb8cbf0c4d756d1d6725d1b003466",
+      "user_id_purchase_price_count_3d": "31dfb8cbf0c4d756d1d6725d1b003466",
+      "user_id_purchase_price_count_7d": "31dfb8cbf0c4d756d1d6725d1b003466",
+      "user_id_purchase_price_last10": "31dfb8cbf0c4d756d1d6725d1b003466",
+      "user_id_purchase_price_sum_1d": "31dfb8cbf0c4d756d1d6725d1b003466",
+      "user_id_purchase_price_sum_3d": "31dfb8cbf0c4d756d1d6725d1b003466",
+      "user_id_purchase_price_sum_7d": "31dfb8cbf0c4d756d1d6725d1b003466"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_notds_with_offset_0\", \"spec\": \"data.checkouts_notds/notds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_notds_with_offset_0\", \"spec\": \"data.purchases_notds/notds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_checkouts_notds_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_checkouts_notds_import_v1__0/notds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_purchases_notds_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_notds_import_v1__0/notds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -228,14 +241,13 @@
           "spark.driver.memory": "1g",
           "spark.executor.cores": "1",
           "spark.executor.memory": "1g",
-          "spark.kryo.registrator": "ai.chronon.integrations.cloud_gcp.ChrononIcebergKryoRegistrator",
-          "spark.sql.catalog.default_iceberg": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+          "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
           "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
           "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
           "spark.sql.catalog.default_iceberg.gcp.bigquery.project-id": "canary-443022",
           "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
           "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-canary/data/tables/",
-          "spark.sql.catalog.spark_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+          "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
           "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
           "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
           "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
@@ -258,11 +270,25 @@
           "GCP_PROJECT_ID": "canary-443022",
           "GCP_REGION": "us-central1",
           "HUB_URL": "http://localhost:3903",
-          "JOB_MODE": "local[*]",
-          "PARTITION_COLUMN": "ds",
-          "PARTITION_FORMAT": "yyyy-MM-dd",
           "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
           "VERSION": "latest"
+        },
+        "modeEnvironments": {
+          "upload": {
+            "ARTIFACT_PREFIX": "gs://zipline-artifacts-dev",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+            "CLOUD_PROVIDER": "gcp",
+            "CUSTOMER_ID": "dev",
+            "ENABLE_PUBSUB": "true",
+            "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+            "FRONTEND_URL": "http://localhost:3000",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "HUB_URL": "http://localhost:3903",
+            "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
+            "VERSION": "latest"
+          }
         }
       },
       "offlineSchedule": "@daily"

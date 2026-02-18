@@ -11,10 +11,23 @@
         "FRONTEND_URL": "http://localhost:3000",
         "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
         "HUB_URL": "http://localhost:3903",
-        "JOB_MODE": "local[*]",
-        "PARTITION_COLUMN": "ds",
-        "PARTITION_FORMAT": "yyyy-MM-dd",
         "VERSION": "latest"
+      },
+      "modeEnvironments": {
+        "backfill": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        },
+        "upload": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
       }
     }
   }

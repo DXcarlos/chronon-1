@@ -183,12 +183,21 @@ class EmrSubmitter(customerId: String, emrClient: EmrClient, ec2Client: Ec2Clien
   private def createStepConfig(filesToMount: List[String],
                                mainClass: String,
                                jarUri: String,
+                               jobProperties: Map[String, String],
                                args: String*): StepConfig = {
     // TODO: see if we can use the spark.files or --files instead of doing this ourselves
     // Copy files from s3 to cluster
     val awsS3CpArgs = filesToMount.map(file => s"aws s3 cp $file /mnt/zipline/")
+    // Escape single quotes for safe shell interpolation inside bash -c '...'
+    val confArgs = jobProperties
+      .map { case (k, v) =>
+        val escapedKey = k.replace("'", "'\\''")
+        val escapedValue = v.replace("'", "'\\''")
+        s"--conf '${escapedKey}=${escapedValue}'"
+      }
+      .mkString(" ")
     val sparkSubmitArgs =
-      List(s"spark-submit --class $mainClass $jarUri ${args.mkString(" ")}")
+      List(s"spark-submit $confArgs --class $mainClass $jarUri ${args.mkString(" ")}")
     val finalArgs = List(
       "bash",
       "-c",
@@ -198,7 +207,7 @@ class EmrSubmitter(customerId: String, emrClient: EmrClient, ec2Client: Ec2Clien
     StepConfig
       .builder()
       .name("Run Zipline Job")
-      .actionOnFailure(ActionOnFailure.CANCEL_AND_WAIT)
+      .actionOnFailure(ActionOnFailure.CONTINUE)
       .hadoopJarStep(
         HadoopJarStepConfig
           .builder()
@@ -209,6 +218,47 @@ class EmrSubmitter(customerId: String, emrClient: EmrClient, ec2Client: Ec2Clien
           .build()
       )
       .build()
+  }
+
+  /** Finds an EMR cluster by name, paginating through all results.
+    * Only searches for clusters in active states (STARTING, BOOTSTRAPPING, RUNNING, WAITING).
+    *
+    * @param clusterName The name of the cluster to find
+    * @return Option[ClusterSummary] if found, None otherwise
+    */
+  def findClusterByName(clusterName: String): Option[ClusterSummary] = {
+    import scala.annotation.tailrec
+
+    @tailrec
+    def searchPages(marker: Option[String]): Option[ClusterSummary] = {
+      val requestBuilder = ListClustersRequest
+        .builder()
+        .clusterStates(
+          ClusterState.STARTING,
+          ClusterState.BOOTSTRAPPING,
+          ClusterState.RUNNING,
+          ClusterState.WAITING
+        )
+
+      val request = marker match {
+        case Some(m) => requestBuilder.marker(m).build()
+        case None    => requestBuilder.build()
+      }
+
+      val response = emrClient.listClusters(request)
+
+      response.clusters().asScala.find(_.name() == clusterName) match {
+        case some @ Some(_) => some
+        case None =>
+          Option(response.marker()) match {
+            case Some(nextMarker) if nextMarker.nonEmpty => searchPages(Some(nextMarker))
+            case _                                       => None
+          }
+      }
+    }
+
+    logger.info(s"Searching for EMR cluster: $clusterName")
+    searchPages(None)
   }
 
   /** Gets or creates an EMR cluster with the given configuration.
@@ -222,42 +272,13 @@ class EmrSubmitter(customerId: String, emrClient: EmrClient, ec2Client: Ec2Clien
     require(clusterName.nonEmpty, "clusterName cannot be empty")
 
     try {
-      // Try to find the cluster by name
-      val listClustersResponse = emrClient.listClusters(
-        ListClustersRequest
-          .builder()
-          .clusterStates(
-            ClusterState.STARTING,
-            ClusterState.BOOTSTRAPPING,
-            ClusterState.RUNNING,
-            ClusterState.WAITING,
-            ClusterState.TERMINATED
-          )
-          .build()
-      )
-
-      val matchingCluster: Option[ClusterSummary] = listClustersResponse
-        .clusters()
-        .asScala
-        .find(_.name() == clusterName)
+      // Find cluster by name, paginating through all results (active states only)
+      val matchingCluster: Option[ClusterSummary] = findClusterByName(clusterName)
 
       matchingCluster match {
         case Some(cluster) if Set(ClusterState.RUNNING, ClusterState.WAITING).contains(cluster.status().state()) =>
           logger.info(s"EMR cluster $clusterName already exists and is in state ${cluster.status().state()}.")
           cluster.id()
-
-        case Some(cluster) if cluster.status().state() == ClusterState.TERMINATED =>
-          val stateChangeReason = cluster.status().stateChangeReason()
-          val terminationMessage = if (stateChangeReason != null && stateChangeReason.message() != null) {
-            stateChangeReason.message()
-          } else {
-            "No termination reason provided"
-          }
-          logger.error(s"EMR cluster $clusterName is TERMINATED. Reason: $terminationMessage")
-          throw new RuntimeException(
-            s"EMR cluster $clusterName is in TERMINATED state and cannot be used. " +
-              s"Termination reason: $terminationMessage. Please create a new cluster or check cluster configuration."
-          )
 
         case Some(cluster) =>
           logger.info(
@@ -265,7 +286,7 @@ class EmrSubmitter(customerId: String, emrClient: EmrClient, ec2Client: Ec2Clien
           waitForClusterReadiness(cluster.id(), clusterName)
 
         case None =>
-          // Cluster doesn't exist, create it if config is provided
+          // Cluster doesn't exist (or is terminated), create it if config is provided
           if (maybeClusterConfig.isDefined && maybeClusterConfig.get.contains("emr.config")) {
             logger.info(s"EMR cluster $clusterName does not exist. Creating it with the provided config.")
 
@@ -415,7 +436,12 @@ class EmrSubmitter(customerId: String, emrClient: EmrClient, ec2Client: Ec2Clien
     val request = AddJobFlowStepsRequest
       .builder()
       .jobFlowId(existingJobId)
-      .steps(createStepConfig(files, submissionProperties(MainClass), submissionProperties(JarURI), userArgs: _*))
+      .steps(
+        createStepConfig(files,
+                         submissionProperties(MainClass),
+                         submissionProperties(JarURI),
+                         jobProperties,
+                         userArgs: _*))
       .build()
 
     val responseStepId = emrClient.addJobFlowSteps(request).stepIds().get(0)

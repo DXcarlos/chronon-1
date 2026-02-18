@@ -56,11 +56,14 @@ object Constants {
     mvn"net.logstash.logback:logstash-logback-encoder:9.0"
   )
 
+  // Jackson version must match Spark 3.5.3 (2.15.2)
+  val jacksonVersion = "2.15.2"
+
   def utilityDeps = Seq(
-    mvn"com.fasterxml.jackson.core:jackson-core:2.15.2",
-    mvn"com.fasterxml.jackson.core:jackson-databind:2.15.2",
-    mvn"com.fasterxml.jackson.core:jackson-annotations:2.15.2",
-    mvn"com.fasterxml.jackson.module::jackson-module-scala:2.15.2",
+    mvn"com.fasterxml.jackson.core:jackson-core:$jacksonVersion",
+    mvn"com.fasterxml.jackson.core:jackson-databind:$jacksonVersion",
+    mvn"com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion",
+    mvn"com.fasterxml.jackson.module::jackson-module-scala:$jacksonVersion",
     mvn"com.google.code.gson:gson:2.10.1",
     mvn"org.apache.commons:commons-lang3:3.18.0",
     mvn"org.apache.commons:commons-math3:3.6.1",
@@ -87,21 +90,21 @@ object Constants {
   val sparkVersion = "3.5.3"
   def sparkDeps = Seq(
     mvn"org.apache.spark::spark-core:$sparkVersion",
-    mvn"org.apache.spark::spark-sql:$sparkVersion", 
+    mvn"org.apache.spark::spark-sql:$sparkVersion",
     mvn"org.apache.spark::spark-catalyst:$sparkVersion",
     mvn"org.apache.spark::spark-hive:$sparkVersion",
-    mvn"org.apache.hudi::hudi-spark3.5-bundle:1.0.0",
     mvn"org.apache.hadoop:hadoop-client-api:3.3.6",
     mvn"org.apache.hadoop:hadoop-client-runtime:3.3.6",
     mvn"org.apache.iceberg::iceberg-spark-runtime-3.5:1.10.0",
   )
-  
+
   val flinkVersion = "1.17.0"
   def providedFlinkDeps = Seq(
     mvn"org.apache.flink:flink-streaming-java:$flinkVersion",
     mvn"org.apache.flink:flink-clients:$flinkVersion",
   )
-  
+
+  val avroVersion = "1.12.1"
   val protobufVersion = "3.25.5"
   
   // Common JVM arguments for all test modules

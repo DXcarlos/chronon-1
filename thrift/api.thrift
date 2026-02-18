@@ -474,6 +474,7 @@ struct GroupByServingInfo {
 
 // DataKind + TypeParams = DataType
 // for primitive types there is no need for params
+// IMPORTANT: Declaration order must match enum values (ordinal == value) for TSimpleJSONProtocol compatibility
 enum DataKind {
     // non parametric types
     BOOLEAN = 0,
@@ -492,6 +493,9 @@ enum DataKind {
     MAP = 11,
     LIST = 12,
     STRUCT = 13,
+
+    // non-parametric but placed here to maintain ordinal == value ordering
+    DECIMAL = 14,
 }
 
 struct DataField {

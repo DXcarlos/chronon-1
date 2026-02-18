@@ -13,7 +13,7 @@ object SawtoothUdf {
 
   // scala's collection.groupBy assumes unsorted input
   // if we know that the collection is sorted, we can be a lot more optimal
-  def sortedArrayGroupBy[T, K, V](arr: mutable.WrappedArray[T],
+  def sortedArrayGroupBy[T, K, V](arr: Seq[T],
                                   keyFunc: T => K,
                                   valueFunc: T => V): mutable.Buffer[(K, mutable.Buffer[V])] = {
     val result = mutable.ArrayBuffer.empty[(K, mutable.Buffer[V])]
@@ -79,9 +79,8 @@ object SawtoothUdf {
   //                         - these features "as of" the timestamp in the search event
   //                         - by filtering events from the right side: right.ts in [left.ts - window, left.ts)
   //                         - un-windowed aggregations are also supported
-  def sawtoothAggregate(aggregators: AggregationInfo)(
-      leftRows: mutable.WrappedArray[SparkRow],
-      rightRows: mutable.WrappedArray[SparkRow]): Iterator[CGenericRow] = {
+  def sawtoothAggregate(
+      aggregators: AggregationInfo)(leftRows: Seq[SparkRow], rightRows: Seq[SparkRow]): Iterator[CGenericRow] = {
 
     val hopsAggregator = aggregators.hopsAggregator
     val sawtoothAggregator = aggregators.sawtoothAggregator

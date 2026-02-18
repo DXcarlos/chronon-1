@@ -9,7 +9,6 @@ import ai.chronon.api.StructType
 import ai.chronon.spark.catalog.IncompatibleSchemaException
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.catalog.{DefaultFormatProvider, FormatProvider}
-import ai.chronon.spark.submission.SparkSessionBuilder.FormatTestEnvVar
 import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.utils.{DataFrameGen, TestUtils}
 import ai.chronon.spark.utils.TestUtils.makeDf
@@ -29,9 +28,19 @@ class TableUtilsFormatTest extends AnyFlatSpec {
 
   import TableUtilsFormatTest._
 
-  // Read the format we want this instantiation of the test to run via environment vars
+  private val FormatTestEnvVar = "format_test"
   val format: String = sys.env.getOrElse(FormatTestEnvVar, "hive")
-  val spark: SparkSession = SparkSessionBuilder.build("TableUtilsFormatTest", local = true)
+  private val formatConfigs = format match {
+    case "deltalake" =>
+      Map(
+        "spark.sql.extensions" -> "io.delta.sql.DeltaSparkSessionExtension",
+        "spark.sql.catalog.spark_catalog" -> "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+        "spark.chronon.table_write.format" -> "delta"
+      )
+    case _ => Map.empty[String, String]
+  }
+  val spark: SparkSession =
+    SparkSessionBuilder.build("TableUtilsFormatTest", local = true, additionalConfig = Some(formatConfigs))
   val tableUtils: TableUtils = TableUtils(spark)
 
   it should "testing dynamic classloading" in {

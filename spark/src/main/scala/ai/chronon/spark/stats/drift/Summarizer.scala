@@ -17,9 +17,9 @@ import ai.chronon.spark.stats.drift.Expressions.TileRow
 import ai.chronon.spark.udafs.ArrayApproxDistinct
 import ai.chronon.spark.udafs.ArrayStringHistogramAggregator
 import ai.chronon.spark.udafs.HistogramAggregator
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.functions.expr
 import org.apache.spark.sql.functions.lit
@@ -322,20 +322,6 @@ class SummaryPacker(confPath: String,
     val func: sql.Row => Seq[TileRow] =
       Expressions.summaryPopulatorFunc(summaryExpressions, df.schema, keyBuilder, tu.partitionColumn)
 
-    val packedRdd: RDD[sql.Row] = df.rdd.flatMap(func).map { tileRow =>
-      // pack into bytes
-      val serializer = compactSerializer.get()
-
-      val partition = tileRow.partition
-      val timestamp = tileRow.tileTs
-      val summaries = tileRow.summaries
-      val key = tileRow.key
-      val keyBytes = serializer.serialize(key)
-      val valueBytes = serializer.serialize(summaries)
-      val result = Array(partition, timestamp, keyBytes, valueBytes)
-      new GenericRow(result)
-    }
-
     val packedSchema: types.StructType = types.StructType(
       Seq(
         types.StructField(tu.partitionColumn, types.StringType, nullable = false),
@@ -343,8 +329,18 @@ class SummaryPacker(confPath: String,
         types.StructField("keyBytes", types.BinaryType, nullable = false),
         types.StructField("valueBytes", types.BinaryType, nullable = false)
       ))
+    val rowEncoder = ExpressionEncoder(packedSchema)
 
-    val packedDf = tu.sparkSession.createDataFrame(packedRdd, packedSchema)
+    val packedDf = df
+      .flatMap { row =>
+        func(row).map { tileRow =>
+          val serializer = compactSerializer.get()
+          val keyBytes = serializer.serialize(tileRow.key)
+          val valueBytes = serializer.serialize(tileRow.summaries)
+          Row(tileRow.partition, tileRow.tileTs, keyBytes, valueBytes): Row
+        }
+      }(rowEncoder)
+      .toDF()
     packedDf -> ()
   }
 }

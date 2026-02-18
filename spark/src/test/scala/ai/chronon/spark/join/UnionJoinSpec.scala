@@ -174,7 +174,7 @@ class UnionJoinSpec extends BaseJoinTest with Matchers {
       Row(2, "C", 300, 3000)
     )
     val leftDF = spark.createDataFrame(
-      spark.sparkContext.parallelize(leftData),
+      java.util.Arrays.asList(leftData: _*),
       leftSchema
     )
 
@@ -195,7 +195,7 @@ class UnionJoinSpec extends BaseJoinTest with Matchers {
       Row(2, "Z", 70.5, 2500)
     )
     val rightDF = spark.createDataFrame(
-      spark.sparkContext.parallelize(rightData),
+      java.util.Arrays.asList(rightData: _*),
       rightSchema
     )
 

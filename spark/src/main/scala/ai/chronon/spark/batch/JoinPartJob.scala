@@ -41,48 +41,49 @@ class JoinPartJob(node: JoinPartNode,
     skewKeys.asScala.map { case (k, v) => k -> v.asScala.toSeq }.toMap
   }
 
-  def run(context: Option[JoinPartJobContext] = None): Option[DataFrame] = {
+  def run(context: Option[JoinPartJobContext] = None): Option[DataFrame] =
+    tableUtils.withJobDescription(s"JoinPartJob(${joinPart.groupBy.metaData.name}) $dateRange") {
 
-    logger.info(s"Running join part job for ${joinPart.groupBy.metaData.name} on range $dateRange")
+      logger.info(s"Running join part job for ${joinPart.groupBy.metaData.name} on range $dateRange")
 
-    val jobContext = context.getOrElse {
-      // LeftTable is already computed by SourceJob, no need to apply query/filters/etc
-      val relevantLeftCols =
-        joinPart.rightToLeft.keys.toArray ++ Seq(tableUtils.partitionColumn) ++ (node.leftDataModel match {
-          case ENTITIES => None
-          case EVENTS   => Some(Constants.TimeColumn)
-        })
+      val jobContext = context.getOrElse {
+        // LeftTable is already computed by SourceJob, no need to apply query/filters/etc
+        val relevantLeftCols =
+          joinPart.rightToLeft.keys.toArray ++ Seq(tableUtils.partitionColumn) ++ (node.leftDataModel match {
+            case ENTITIES => None
+            case EVENTS   => Some(Constants.TimeColumn)
+          })
 
-      val query = Builders.Query(selects = relevantLeftCols.map(t => t -> t).toMap)
-      val cachedLeftDf = tableUtils.scanDf(query = query, leftTable, range = Some(dateRange))
+        val query = Builders.Query(selects = relevantLeftCols.map(t => t -> t).toMap)
+        val cachedLeftDf = tableUtils.scanDf(query = query, leftTable, range = Some(dateRange))
 
-      // If the left dataframe is empty, skip this range entirely
-      if (cachedLeftDf.isEmpty) {
-        logger.info(s"Left dataframe is empty for range $dateRange, skipping join part computation")
-        return None
+        // If the left dataframe is empty, skip this range entirely
+        if (cachedLeftDf.isEmpty) {
+          logger.info(s"Left dataframe is empty for range $dateRange, skipping join part computation")
+          return None
+        }
+
+        val runSmallMode = JoinUtils.runSmallMode(tableUtils, cachedLeftDf)
+
+        val leftWithStats = cachedLeftDf.withStats
+
+        val joinLevelBloomMapOpt =
+          JoinUtils.genBloomFilterIfNeeded(joinPart, node.leftDataModel, dateRange, None)
+
+        JoinPartJobContext(Option(leftWithStats),
+                           joinLevelBloomMapOpt,
+                           Option(metaData.tableProps).getOrElse(Map.empty[String, String]),
+                           runSmallMode)
       }
 
-      val runSmallMode = JoinUtils.runSmallMode(tableUtils, cachedLeftDf)
-
-      val leftWithStats = cachedLeftDf.withStats
-
-      val joinLevelBloomMapOpt =
-        JoinUtils.genBloomFilterIfNeeded(joinPart, node.leftDataModel, dateRange, None)
-
-      JoinPartJobContext(Option(leftWithStats),
-                         joinLevelBloomMapOpt,
-                         Option(metaData.tableProps).getOrElse(Map.empty[String, String]),
-                         runSmallMode)
+      // TODO: fix left df and left time range, bloom filter, small mode args
+      computeRightTable(
+        jobContext,
+        joinPart,
+        dateRange,
+        metaData.outputTable
+      )
     }
-
-    // TODO: fix left df and left time range, bloom filter, small mode args
-    computeRightTable(
-      jobContext,
-      joinPart,
-      dateRange,
-      metaData.outputTable
-    )
-  }
 
   private def computeRightTable(jobContext: JoinPartJobContext,
                                 joinPart: JoinPart,

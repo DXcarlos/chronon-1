@@ -70,59 +70,6 @@ trait SchemaTraverser[SchemaType] {
 }
 
 object Row {
-  // recursively traverse a logical struct, and convert it chronon's row type
-  def from[CompositeType, BinaryType, ArrayType, StringType](
-      value: Any,
-      dataType: DataType,
-      decomposer: (CompositeType, Seq[StructField]) => Iterator[Any],
-      debinarizer: BinaryType => Array[Byte],
-      delister: ArrayType => util.ArrayList[Any],
-      deStringer: StringType => String): Any = {
-    if (value == null) return null
-    def edit(value: Any, dataType: DataType): Any =
-      from(value, dataType, decomposer, debinarizer, delister, deStringer)
-    dataType match {
-      case StructType(_, fields) =>
-        value match {
-          case record: CompositeType =>
-            val iter = decomposer(record, fields)
-            val newArr = new Array[Any](fields.size)
-            var idx = 0
-            while (iter.hasNext) {
-              val value = iter.next()
-              newArr.update(idx, edit(value, fields(idx).fieldType))
-              idx += 1
-            }
-            newArr
-        }
-      case ListType(elemType) =>
-        value match {
-          case list: ArrayType =>
-            val arr = delister(list)
-            var idx = 0
-            while (idx < arr.size) {
-              arr.set(idx, edit(arr.get(idx), elemType))
-              idx += 1
-            }
-            arr
-        }
-      case MapType(keyType, valueType) =>
-        value match {
-          case map: util.Map[Any, Any] =>
-            val newMap = new util.HashMap[Any, Any]()
-            val iter = map.entrySet().iterator()
-            while (iter.hasNext) {
-              val entry = iter.next()
-              newMap.put(edit(entry.getKey, keyType), edit(entry.getValue, valueType))
-            }
-            newMap
-        }
-      case BinaryType => debinarizer(value.asInstanceOf[BinaryType])
-      case StringType => deStringer(value.asInstanceOf[StringType])
-      case _          => value
-    }
-  }
-
   private val passThroughFunc: Any => Any = { value: Any => value }
 
   // recursively traverse a logical struct, and convert it chronon's row type
@@ -201,6 +148,22 @@ object Row {
           // thus we multiply by 1000 to work with them
           case millis: Long => millis * 1000L
           case value        => value
+        }
+
+      case DecimalType(precision, scale) =>
+        guard { value: Any =>
+          value match {
+            case buffer: java.nio.ByteBuffer =>
+              val bytes = new Array[Byte](buffer.remaining())
+              buffer.get(bytes)
+              val unscaledValue = new java.math.BigInteger(bytes)
+              new java.math.BigDecimal(unscaledValue, scale)
+            case arr: Array[Byte] =>
+              val unscaledValue = new java.math.BigInteger(arr)
+              new java.math.BigDecimal(unscaledValue, scale)
+            case bd: java.math.BigDecimal => bd
+            case _                        => value
+          }
         }
 
       case StringType => guard { value: Any => deStringer(value.asInstanceOf[StringType]) }
@@ -347,7 +310,7 @@ object Row {
                 )
               }
             mapper(newMap)
-          case map: collection.immutable.Map[Any, Any] =>
+          case map: collection.Map[Any, Any] =>
             val newMap = new util.HashMap[Any, Any](map.size)
             map
               .foreach { entry =>
@@ -366,16 +329,17 @@ object Row {
               }
             mapper(newMap)
         }
-      case BinaryType  => binarizer(value.asInstanceOf[Array[Byte]])
-      case IntType     => value.asInstanceOf[Number].intValue()
-      case LongType    => value.asInstanceOf[Number].longValue()
-      case DoubleType  => value.asInstanceOf[Number].doubleValue()
-      case FloatType   => value.asInstanceOf[Number].floatValue()
-      case ShortType   => value.asInstanceOf[Number].shortValue()
-      case ByteType    => value.asInstanceOf[Number].byteValue()
-      case BooleanType => value.asInstanceOf[Boolean]
-      case StringType  => value.toString
-      case _           => value
+      case BinaryType        => binarizer(value.asInstanceOf[Array[Byte]])
+      case IntType           => value.asInstanceOf[Number].intValue()
+      case LongType          => value.asInstanceOf[Number].longValue()
+      case DoubleType        => value.asInstanceOf[Number].doubleValue()
+      case FloatType         => value.asInstanceOf[Number].floatValue()
+      case ShortType         => value.asInstanceOf[Number].shortValue()
+      case ByteType          => value.asInstanceOf[Number].byteValue()
+      case BooleanType       => value.asInstanceOf[Boolean]
+      case StringType        => value.toString
+      case DecimalType(_, _) => value.asInstanceOf[java.math.BigDecimal]
+      case _                 => value
     }
   }
 }

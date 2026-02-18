@@ -29,7 +29,6 @@ import ai.chronon.spark.Analyzer
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.batch.StagingQuery
 import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.TimedKvRdd
 import ai.chronon.spark.stats.CompareJob.getJoinKeys
 import org.apache.spark.sql.DataFrame
 import org.slf4j.Logger
@@ -72,7 +71,7 @@ class CompareJob(
       StagingQuery.substitute(tableUtils, stagingQueryConf.query, startDate, endDate, endDate)
     )
 
-    val (compareDf: DataFrame, metricsTimedKvRdd: TimedKvRdd, metrics: DataMetrics) =
+    val (compareDf: DataFrame, metricsFlatDf: DataFrame, metrics: DataMetrics) =
       CompareBaseJob.compare(leftDf, rightDf, getJoinKeys(joinConf, tableUtils), tableUtils, migrationCheck = true)
 
     // Save the comparison table
@@ -83,16 +82,16 @@ class CompareJob(
 
     // Save the metrics table
     logger.info("Saving metrics output..")
-    val metricsDf = metricsTimedKvRdd.toFlatDf
-    logger.info(s"Metrics schema ${metricsDf.schema.fields.map(sb => (sb.name, sb.dataType)).toMap.mkString("\n - ")}")
-    metricsDf.save(metricsTableName, tableProps, partitionColumns = List.empty)
+    logger.info(
+      s"Metrics schema ${metricsFlatDf.schema.fields.map(sb => (sb.name, sb.dataType)).toMap.mkString("\n - ")}")
+    metricsFlatDf.save(metricsTableName, tableProps, partitionColumns = List.empty)
 
     logger.info("Printing basic comparison results..")
     logger.info("(Note: This is just an estimation and not a detailed analysis of results)")
     CompareJob.printAndGetBasicMetrics(metrics, tableUtils.partitionSpec)
 
     logger.info("Finished compare stats.")
-    (compareDf, metricsDf, metrics)
+    (compareDf, metricsFlatDf, metrics)
   }
 
   def validate(): Unit = {

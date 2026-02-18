@@ -26,7 +26,7 @@ import ai.chronon.online.metrics._
 import ai.chronon.online.serde._
 import ai.chronon.spark.Extensions.{StructTypeOps, _}
 import ai.chronon.spark.catalog.TableUtils
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.functions.{col, unbase64}
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -130,13 +130,14 @@ class LogFlattenerJob(session: SparkSession,
     val metadataFields = StructField(Constants.SchemaHash, StringType) +: timeFields
     val outputSchema = StructType("", metadataFields ++ dataFields)
     val (keyBase64Idx, valueBase64Idx, tsIdx, dsIdx, schemaHashIdx) = (0, 1, 2, 3, 4)
-    val outputRdd: RDD[Row] = rawDf
+    val outputSparkSchema = SparkConversions.fromChrononSchema(outputSchema)
+    val rowEncoder = ExpressionEncoder(outputSparkSchema)
+    rawDf
       .select(unbase64(col("key_base64").alias("key")),
               unbase64(col("value_base64")).alias("value"),
               col("ts_millis"),
               col("ds"),
               col(Constants.SchemaHash))
-      .rdd
       .flatMap { row =>
         if (row.isNullAt(schemaHashIdx)) {
           // ignore older logs that do not have schema_hash info
@@ -167,13 +168,11 @@ class LogFlattenerJob(session: SparkSession,
             val metadataColumns = Array(row.get(schemaHashIdx), row.get(tsIdx), row.get(dsIdx))
             val outputRow = metadataColumns ++ dataColumns
             val unpackedRow = SparkConversions.toSparkRow(outputRow, outputSchema).asInstanceOf[GenericRow]
-            Some(unpackedRow)
+            Some(unpackedRow: Row)
           }
         }
-      }
-
-    val outputSparkSchema = SparkConversions.fromChrononSchema(outputSchema)
-    session.createDataFrame(outputRdd, outputSparkSchema)
+      }(rowEncoder)
+      .toDF()
   }
 
   private def fetchSchemas(hashes: Seq[String]): Map[String, String] = {

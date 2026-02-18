@@ -26,9 +26,11 @@ import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.utils.{DataFrameGen, SparkTestBase, TestUtils}
 import ai.chronon.spark.{GroupBy, _}
 import com.google.gson.Gson
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{StructField, StructType, LongType => SparkLongType, StringType => SparkStringType}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Encoders, Row}
+
+import java.util.Arrays
 import org.junit.Assert._
 
 import scala.collection.mutable
@@ -96,8 +98,8 @@ class GroupByTest extends SparkTestBase {
 
     val groupBy = new GroupBy(aggregations, Seq("user"), df)
     val actualDf = groupBy.snapshotEvents(PartitionRange(outputDates.min, outputDates.max))
-    val outputDatesRdd: RDD[Row] = spark.sparkContext.parallelize(outputDates.map(Row(_)))
-    val outputDatesDf = spark.createDataFrame(outputDatesRdd, StructType(Seq(StructField("ds", SparkStringType))))
+    val outputDatesList = Arrays.asList(outputDates.map(Row(_)): _*)
+    val outputDatesDf = spark.createDataFrame(outputDatesList, StructType(Seq(StructField("ds", SparkStringType))))
     val datesViewName = "test_group_by_snapshot_events_output_range"
     outputDatesDf.createOrReplaceTempView(datesViewName)
     val expectedDf = df.sqlContext.sql(s"""
@@ -168,7 +170,7 @@ class GroupByTest extends SparkTestBase {
       println(s"Diff count: ${diff.count()}")
       println("diff result rows last_k_test")
       diff.show()
-      diff.rdd.foreach { row =>
+      diff.collect().foreach { row =>
         val gson = new Gson()
         val computed =
           Option(row(4)).map(_.asInstanceOf[mutable.WrappedArray[String]].toArray).getOrElse(Array.empty[String])
@@ -242,7 +244,8 @@ class GroupByTest extends SparkTestBase {
           (key.data :+ query, groupBy.windowAggregator.finalize(ir))
         }
     }
-    val naiveDf = groupBy.toDf(naiveRdd, Seq((Constants.TimeColumn, SparkLongType)))
+    implicit val pairEncoder = org.apache.spark.sql.Encoders.kryo[(Array[Any], Array[Any])]
+    val naiveDf = groupBy.toDf(spark.createDataset(naiveRdd), Seq((Constants.TimeColumn, SparkLongType)))
 
     val diff = Comparison.sideBySide(naiveDf, resultDf, List("user", Constants.TimeColumn))
     if (diff.count() > 0) {

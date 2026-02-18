@@ -46,7 +46,7 @@ Teams define metadata, Spark config, and environment variables.
 
 In [teams.py](teams.py), fill in the appropriate values in the TODO section.
 
-Make sure to replace placeholders like `<project-id>` and `<gcs-prefix>` with real values.
+Make sure to replace placeholders like `<project-id>` and `<abfss-prefix>` with real values.
 
 ### Partition format and column
 Chronon expects tables to be date partitioned. Please specify the partition format and the column in teams.py here:

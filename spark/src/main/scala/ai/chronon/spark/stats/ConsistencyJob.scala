@@ -23,6 +23,7 @@ import ai.chronon.api._
 import ai.chronon.online.OnlineDerivationUtil.timeFields
 import ai.chronon.online.metrics.Metrics
 import ai.chronon.online.{fetcher, _}
+import ai.chronon.spark.AvroKvEncoder
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
 import org.apache.spark.sql.SparkSession
@@ -179,17 +180,22 @@ class ConsistencyJob(session: SparkSession, joinConf: Join, endDate: String) ext
         timeFields.map(_.name).toList ++ joinConf.leftKeyCols
       }
       logger.info(s"Using ${joinKeys.mkString("[", ",", "]")} as join keys between log and backfill.")
-      val (_, metricsKvRdd, metrics) =
+      val (_, metricsFlatDf, metrics) =
         CompareBaseJob.compare(comparisonDf,
                                loggedDfNoExternalCols,
                                keys = joinKeys,
                                tableUtils,
                                name = joinConf.metaData.name)
       logger.info("Saving output.")
-      val outputDf = metricsKvRdd.toFlatDf.withTimeBasedColumn("ds")
+      val outputDf = metricsFlatDf.withTimeBasedColumn("ds")
       logger.info(s"output schema ${outputDf.schema.fields.map(sb => (sb.name, sb.dataType)).toMap.mkString("\n - ")}")
       outputDf.save(joinConf.metaData.consistencyTable, tableProperties = tblProperties, autoExpand = true)
-      metricsKvRdd.toAvroDf
+
+      implicit val sparkSession: SparkSession = session
+      val keyColumns = Seq("JoinPath")
+      val valueColumns = metricsFlatDf.columns.filterNot(c => c == "JoinPath" || c == Constants.TimeColumn).toSeq
+      AvroKvEncoder
+        .encodeTimed(metricsFlatDf, keyColumns, valueColumns, storeSchemasPrefix = Some(joinConf.metaData.name))
         .withTimeBasedColumn(tableUtils.partitionColumn)
         .save(joinConf.metaData.consistencyUploadTable, tblProperties)
       metrics

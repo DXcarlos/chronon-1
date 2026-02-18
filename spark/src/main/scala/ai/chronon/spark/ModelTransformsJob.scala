@@ -65,7 +65,7 @@ object ModelTransformsJob {
     // Create an empty DataFrame with the post-inference schema
     val sparkSession = tableUtils.sparkSession
     val emptyDfAfterInference = sparkSession.createDataFrame(
-      sparkSession.sparkContext.parallelize(Seq.empty[Row]),
+      java.util.Collections.emptyList[Row](),
       schemaAfterInference
     )
 

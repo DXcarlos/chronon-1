@@ -18,15 +18,15 @@ package ai.chronon.spark.other
 
 import ai.chronon.api._
 import ai.chronon.spark._
-import ai.chronon.spark.catalog.{Format, IncompatibleSchemaException, TableUtils}
+import ai.chronon.spark.catalog.{Format, Hive, IncompatibleSchemaException, TableUtils}
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.utils.TestUtils.makeDf
 import ai.chronon.spark.utils.SparkTestBase
+import ai.chronon.spark.utils.TestUtils.makeDf
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.{Row, _}
-import org.junit.Assert.{assertEquals, assertNull, assertTrue}
+import org.junit.Assert.{assertEquals, assertFalse, assertNull, assertTrue}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.util.Try
@@ -466,7 +466,7 @@ class TableUtilsTest extends AnyFlatSpec {
           Row(1L, 2, "3")
         )
       )
-      tableUtils.createTable(df, tableName, fileFormat = "PARQUET")
+      tableUtils.insertPartitions(df, tableName, partitionColumns = List.empty)
       assertTrue(spark.catalog.tableExists(tableName))
     } finally {
       spark.sql(s"DROP TABLE IF EXISTS $tableName")
@@ -507,8 +507,81 @@ class TableUtilsTest extends AnyFlatSpec {
           Row(1L, 2, "3")
         )
       )
-      tableUtils.createTable(df, tableName, fileFormat = "PARQUET")
+      tableUtils.insertPartitions(df, tableName, partitionColumns = List.empty)
       assertTrue(spark.catalog.tableExists(tableName))
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "create table with semantic hash renames to final name" in {
+    val dbName = s"db_${System.currentTimeMillis()}"
+    val tableName = s"$dbName.test_semantic_hash"
+    val hash = "abc123"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+    try {
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("id", org.apache.spark.sql.types.IntegerType)
+        .add("value", org.apache.spark.sql.types.StringType)
+      Hive.createTable(tableName, schema, List.empty, null, Some(hash))(spark)
+      assertTrue(s"Final table $tableName should exist", spark.catalog.tableExists(tableName))
+      assertFalse(s"Intermediate table should not exist",
+        spark.catalog.tableExists(s"$dbName.test_semantic_hash_$hash"))
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+      spark.sql(s"DROP TABLE IF EXISTS $dbName.test_semantic_hash_$hash")
+    }
+  }
+
+  it should "semantic hash appends only to table name component, not database" in {
+    val dbName = s"db_${System.currentTimeMillis()}"
+    val tableName = s"$dbName.test_hash_component"
+    val hash = "def456"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+    try {
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("id", org.apache.spark.sql.types.IntegerType)
+        .add("value", org.apache.spark.sql.types.StringType)
+      Hive.createTable(tableName, schema, List.empty, null, Some(hash))(spark)
+      assertTrue(s"Final table $tableName should exist", spark.catalog.tableExists(tableName))
+      // The intermediate table should have the hash appended to the table part only
+      assertFalse(s"Intermediate table should not exist after rename",
+        spark.catalog.tableExists(s"$dbName.test_hash_component_$hash"))
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+      spark.sql(s"DROP TABLE IF EXISTS $dbName.test_hash_component_$hash")
+    }
+  }
+
+  it should "semantic hash handles backtick-quoted identifiers" in {
+    val dbName = s"db_${System.currentTimeMillis()}"
+    val tableName = s"`$dbName`.`test_quoted_hash`"
+    val hash = "xyz789"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+    try {
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("id", org.apache.spark.sql.types.IntegerType)
+        .add("value", org.apache.spark.sql.types.StringType)
+      Hive.createTable(tableName, schema, List.empty, null, Some(hash))(spark)
+      assertTrue(s"Final table should exist", spark.catalog.tableExists(s"$dbName.test_quoted_hash"))
+      assertFalse(s"Intermediate hashed table should not exist",
+        spark.catalog.tableExists(s"$dbName.test_quoted_hash_$hash"))
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $dbName.test_quoted_hash")
+      spark.sql(s"DROP TABLE IF EXISTS $dbName.test_quoted_hash_$hash")
+    }
+  }
+
+  it should "create table without semantic hash uses name directly" in {
+    val dbName = s"db_${System.currentTimeMillis()}"
+    val tableName = s"$dbName.test_no_hash"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+    try {
+      val schema = new org.apache.spark.sql.types.StructType()
+        .add("id", org.apache.spark.sql.types.IntegerType)
+        .add("value", org.apache.spark.sql.types.StringType)
+      Hive.createTable(tableName, schema, List.empty, null, None)(spark)
+      assertTrue(s"Table $tableName should exist", spark.catalog.tableExists(tableName))
     } finally {
       spark.sql(s"DROP TABLE IF EXISTS $tableName")
     }

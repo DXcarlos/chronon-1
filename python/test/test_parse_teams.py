@@ -14,12 +14,50 @@ Tests for the parse_teams module.
 #     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
+import pytest
 from gen_thrift.api.ttypes import GroupBy, Join, JoinPart, MetaData, Team
 from gen_thrift.common.ttypes import ConfigProperties
 
 from ai.chronon.cli.compile import parse_teams
 from ai.chronon.repo.constants import RunMode
 from ai.chronon.types import EnvironmentVariables, ExecutionInfo
+
+
+def test_check_deprecated_catalog_in_common_conf():
+    """Test that _check_deprecated_catalog rejects DelegatingBigQueryMetastoreCatalog in common conf."""
+    conf = ConfigProperties(
+        common={
+            "spark.sql.catalog.bigquery_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+        },
+    )
+    with pytest.raises(ValueError, match="DelegatingBigQueryMetastoreCatalog"):
+        parse_teams._check_deprecated_catalog("test_team", conf)
+
+
+def test_check_deprecated_catalog_in_mode_conf():
+    """Test that _check_deprecated_catalog rejects DelegatingBigQueryMetastoreCatalog in mode conf."""
+    conf = ConfigProperties(
+        common={},
+        modeConfigs={
+            RunMode.BACKFILL: {
+                "spark.sql.catalog.bigquery_catalog": "ai.chronon.integrations.cloud_gcp.DelegatingBigQueryMetastoreCatalog",
+            },
+        },
+    )
+    with pytest.raises(ValueError, match="DelegatingBigQueryMetastoreCatalog"):
+        parse_teams._check_deprecated_catalog("test_team", conf)
+
+
+def test_check_deprecated_catalog_allows_valid_config():
+    """Test that _check_deprecated_catalog allows BigQueryMetastoreCatalog."""
+    conf = ConfigProperties(
+        common={
+            "spark.sql.catalog.bigquery_catalog": "org.apache.iceberg.spark.SparkCatalog",
+            "spark.sql.catalog.bigquery_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+        },
+    )
+    # Should not raise
+    parse_teams._check_deprecated_catalog("test_team", conf)
 
 
 def test_update_metadata_with_existing_output_namespace():

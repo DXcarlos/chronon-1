@@ -9,6 +9,8 @@ import org.apache.spark.sql.delta.DeltaLog
 // In such cases, you should implement your own FormatProvider built on the newer Delta lake version
 case object DeltaLake extends Format {
 
+  override def tableTypeString: String = "delta"
+
   override def primaryPartitions(tableName: String,
                                  partitionColumn: String,
                                  partitionFilters: String,

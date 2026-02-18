@@ -60,7 +60,10 @@ trait ApiModule extends Cross.Module[String] with build.BaseModule {
   )
 
   def mvnDeps = build.Constants.commonDeps ++ build.Constants.loggingApiDeps ++ build.Constants.utilityDeps ++ Seq(
-    mvn"org.apache.avro:avro:1.11.4",
+    mvn"org.apache.avro:avro:${build.Constants.avroVersion}"
+      .exclude("com.fasterxml.jackson.core" -> "jackson-core")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-annotations"),
   )
   
   object test extends build.BaseTestModule {

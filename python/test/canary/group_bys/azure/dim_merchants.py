@@ -11,21 +11,20 @@ providing a clean interface to listing attributes for joins and feature engineer
 """
 
 source = EntitySource(
-    # BigQuery table written directly by the batch process
+    # Snowflake table written directly by the batch process
     snapshot_table=exports.dim_merchants.table,
     query=Query(
         selects=selects(
-            listing_id="merchant_id",
+            listing_id="CAST(merchant_id AS INT)",
             primary_category="primary_category",
         ),
         start_partition="2025-01-01"
     ),
 )
 
-v1 = GroupBy(
+v2 = GroupBy(
     sources=[source],
     keys=["listing_id"],  # Key by listing_id for point lookups
     online=True,
-    version=0,
     aggregations=None,  # No aggregations - this is a simple passthrough
 )

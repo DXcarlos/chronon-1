@@ -453,13 +453,20 @@ jobs:
         with:
           name: cloud-aws-jar
           path: cloud-aws-jar
-      
+
+      - name: Download Cloud Azure Lib Jar
+        uses: actions/download-artifact@v4
+        with:
+          name: cloud-azure-jar
+          path: cloud-azure-jar
+
       - name: Copy the jars to expected paths and build
         shell: bash
         run: |
           mkdir build_output
           cp cloud-gcp-jar/out.jar build_output/cloud_gcp_lib_deploy.jar
           cp cloud-aws-jar/out.jar build_output/cloud_aws_lib_deploy.jar
+          cp cloud-azure-jar/out.jar build_output/cloud_azure_lib_deploy.jar
           cp service-assembly-jar/out.jar build_output/service_assembly_deploy.jar
           docker buildx build \
           -f docker/fetcher/Dockerfile \

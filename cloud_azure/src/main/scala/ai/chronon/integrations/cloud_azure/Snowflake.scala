@@ -2,6 +2,7 @@ package ai.chronon.integrations.cloud_azure
 
 import ai.chronon.spark.catalog.Format
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.types.StructType
 import org.slf4j.LoggerFactory
 
 import java.net.URI
@@ -23,10 +24,17 @@ case object Snowflake extends Format {
 
   @transient private lazy val snowflakeLogger = LoggerFactory.getLogger(getClass)
 
-  override def table(tableName: String, partitionFilters: String, cacheDf: Boolean = false)(implicit
-      sparkSession: SparkSession): DataFrame = {
+  override def table(tableName: String, partitionFilters: String)(implicit sparkSession: SparkSession): DataFrame = {
     throw new UnsupportedOperationException(
       "Direct table reads are not supported for Snowflake format. Use a stagingQuery with EngineType.SNOWFLAKE to export the data first.")
+  }
+
+  override def createTable(tableName: String,
+                           schema: StructType,
+                           partitionColumns: List[String],
+                           tableProperties: Map[String, String],
+                           semanticHash: Option[String])(implicit sparkSession: SparkSession): Unit = {
+    throw new UnsupportedOperationException("Table creation is not supported for Snowflake format.")
   }
 
   override def partitions(tableName: String, partitionFilters: String)(implicit

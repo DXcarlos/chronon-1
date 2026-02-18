@@ -16,7 +16,7 @@ class ZiplineHub:
         self.eval_url = eval_url
         self.format = format
         self.cloud_provider = cloud_provider.lower() if cloud_provider is not None else cloud_provider
-        if self.base_url.startswith("https") or use_auth:
+        if self.base_url.startswith("https") and use_auth:
             if self.cloud_provider == "gcp":
                 self.use_auth = True
                 self._setup_gcp_auth(sa_name)

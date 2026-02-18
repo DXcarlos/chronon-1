@@ -7,7 +7,7 @@ import ai.chronon.api.Extensions.AggregationOps
 import ai.chronon.api._
 import ai.chronon.spark.join.{AggregationInfo, CGenericRow, SawtoothUdf, UnionJoin}
 import ai.chronon.spark.utils.DataFrameGen
-import org.apache.spark.sql.{DataFrame, types}
+import org.apache.spark.sql.{DataFrame, Row, types}
 import org.scalatest.matchers.should.Matchers
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -50,7 +50,7 @@ class SawtoothUdfPerformanceTest extends BaseJoinTest with Matchers {
       .cache()
 
     // Convert to SparkRows for the test
-    val rightRows = rightDf.collect()
+    val rightRows: Seq[Row] = rightDf.collect().toSeq
 
     // Generate left dataframe (queries at specific timestamps)
     val leftColumns = Seq(
@@ -66,7 +66,7 @@ class SawtoothUdfPerformanceTest extends BaseJoinTest with Matchers {
       .cache()
 
     // Convert to SparkRows for the test
-    val leftRows = leftDf.collect()
+    val leftRows: Seq[Row] = leftDf.collect().toSeq
 
     timer.publish("Data generation")
 

@@ -13,13 +13,17 @@ object `package` extends Cross[CloudGcpModule](build.Constants.scalaVersions) wi
 trait CloudGcpModule extends Cross.Module[String] with build.BaseModule {
   def moduleDeps = Seq(build.spark(crossValue), build.aggregator(crossValue), build.api(crossValue), build.online(crossValue))
   def bigqueryJarFile = Task.Source(moduleDir / "iceberg-bigquery-1.11.0-SNAPSHOT.jar")
-  
+
+  // Versions force-overridden to fix CVEs from uber-jar transitive deps.
+  // Also used by patchAssemblyMetadata to write correct pom.properties.
+  private val avroVersion = build.Constants.avroVersion
+
   def excludeJackson(dep: mill.scalalib.Dep): mill.scalalib.Dep = {
     dep
       .exclude("com.fasterxml.jackson.core" -> "jackson-core")
       .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
       .exclude("com.fasterxml.jackson.core" -> "jackson-annotations")
-      .exclude("com.fasterxml.jackson.datatype" -> "jackson-datatype-jsr310")    
+      .exclude("com.fasterxml.jackson.datatype" -> "jackson-datatype-jsr310")
   }
 
   // Merge strategy for assembly
@@ -27,8 +31,46 @@ trait CloudGcpModule extends Cross.Module[String] with build.BaseModule {
 //  override def assemblyRules = super.assemblyRules ++ Seq(
 //    Assembly.Rule.Relocate("org.apache.iceberg.gcp.bigquery.**", "shade.org.apache.iceberg.gcp.bigquery.@1")
 //  )
+  override def assemblyRules = super.assemblyRules ++ Seq(
+    // Uber-jars (iceberg-spark-runtime) embed stale pom.properties that override
+    // the correct versions during assembly merge. Exclude conflicting metadata here;
+    // the assembly task patches the correct versions back in from our resolved dependencies.
+    Assembly.Rule.ExcludePattern("META-INF/maven/org\\.apache\\.avro/.*"),
+  )
+
   override def unmanagedClasspath = Task {
     super.unmanagedClasspath() ++ Seq(bigqueryJarFile())
+  }
+
+  // Uber-jars (iceberg-spark-runtime) embed stale pom.properties that win the assembly
+  // merge. assemblyRules strips all copies; this method patches the correct versions
+  // back so grype/SBOM tools see the actual versions on the classpath.
+  private val patchedMetadata: Seq[(String, String, String)] = Seq(
+    ("org.apache.avro", "avro", avroVersion),
+  )
+
+  private def patchAssemblyMetadata(jar: os.Path): Unit = {
+    val uri = java.net.URI.create("jar:" + jar.toIO.toURI)
+    val env = new java.util.HashMap[String, String]()
+    val fs = java.nio.file.FileSystems.newFileSystem(uri, env)
+    try {
+      patchedMetadata.foreach { case (groupId, artifactId, version) =>
+        val entry = fs.getPath(s"META-INF/maven/$groupId/$artifactId/pom.properties")
+        java.nio.file.Files.createDirectories(entry.getParent)
+        val content = s"artifactId=$artifactId\ngroupId=$groupId\nversion=$version\n"
+        java.nio.file.Files.write(entry, content.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+      }
+    } finally {
+      fs.close()
+    }
+  }
+
+  override def assembly = Task {
+    val result = super.assembly()
+    val out = Task.dest / "out.jar"
+    os.copy(result.path, out)
+    patchAssemblyMetadata(out)
+    PathRef(out)
   }
 
   def compileMvnDeps = build.Constants.sparkDeps ++ Seq(
@@ -51,11 +93,15 @@ trait CloudGcpModule extends Cross.Module[String] with build.BaseModule {
       mvn"io.vertx:vertx-web-client:4.5.24",
       mvn"com.google.auth:google-auth-library-oauth2-http:1.40.0",
   ).map(excludeJackson) ++ Seq(
-    mvn"com.fasterxml.jackson.core:jackson-core:2.15.2",
-    mvn"com.fasterxml.jackson.core:jackson-databind:2.15.2",
-    mvn"com.fasterxml.jackson.core:jackson-annotations:2.15.2",
-    mvn"com.fasterxml.jackson.module::jackson-module-scala:2.15.2",
-    mvn"com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.15.2",
+    mvn"com.fasterxml.jackson.core:jackson-core:${build.Constants.jacksonVersion}",
+    mvn"com.fasterxml.jackson.core:jackson-databind:${build.Constants.jacksonVersion}",
+    mvn"com.fasterxml.jackson.core:jackson-annotations:${build.Constants.jacksonVersion}",
+    mvn"com.fasterxml.jackson.module::jackson-module-scala:${build.Constants.jacksonVersion}",
+    mvn"com.fasterxml.jackson.datatype:jackson-datatype-jsr310:${build.Constants.jacksonVersion}",
+    mvn"org.apache.avro:avro:$avroVersion"
+      .exclude("com.fasterxml.jackson.core" -> "jackson-core")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-annotations"),
   ).map(_.forceVersion())
   
   object test extends build.BaseTestModule {
