@@ -675,6 +675,7 @@ object Driver {
     class Args extends Subcommand("group-by-upload-bulk-load") with OnlineSubcommand {
       // Expectation that run.py only sets confPath
       val confPath: ScallopOption[String] = opt[String](required = false, descr = "path to groupBy conf")
+      lazy val groupByConf: _root_.ai.chronon.api.GroupBy = parseConf[_root_.ai.chronon.api.GroupBy](confPath())
 
       def partitionString(): String = endDateInternal.getOrElse(throw new Exception("partition date is not provided!"))
 
@@ -685,11 +686,11 @@ object Driver {
 
       // Override to add warehouse type to props
       override def serializableProps: Map[String, String] =
-        super.serializableProps + ("UPLOADER" -> uploader().toLowerCase)
+        super.serializableProps + ("UPLOADER" -> uploader().toLowerCase) ++ groupByConf.commonConf
     }
 
     def run(args: Args): Unit = {
-      val groupByConf = parseConf[api.GroupBy](args.confPath())
+      val groupByConf = args.groupByConf
       val offlineTable = groupByConf.metaData.uploadTable
       val groupByName = groupByConf.metaData.name
       val startTime = System.currentTimeMillis()

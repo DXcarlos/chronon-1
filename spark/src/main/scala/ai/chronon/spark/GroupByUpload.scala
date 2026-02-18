@@ -482,24 +482,53 @@ object GroupByUpload {
       kvDf.schema
     )
 
-    kvDf
-      .union(metaDf)
-      .withColumn("ds", lit(endDs))
-      .save(groupByConf.metaData.uploadTable, groupByConf.metaData.tableProps, partitionColumns = List("ds"))
+    val uploadFormat =
+      groupByConf
+        .commonConfValue(IonPathConfig.UploadFormatKey)
+        .getOrElse("parquet")
+    val partitionCol = groupByConf
+      .commonConfValue(IonPathConfig.PartitionColumnKey)
+      .getOrElse(IonPathConfig.DefaultPartitionColumn)
+    val uploadDf = kvDf.union(metaDf).withColumn(partitionCol, lit(endDs))
 
-    val kvDfReloaded = tableUtils
-      .loadTable(groupByConf.metaData.uploadTable)
-      .where(not(col("key_json").eqNullSafe(Constants.GroupByServingInfoKey)))
+    logger.info(s"GroupBy upload with upload format: $uploadFormat")
 
-    val metricRow =
-      kvDfReloaded.selectExpr("sum(bit_length(key_bytes))/8", "sum(bit_length(value_bytes))/8", "count(*)").collect()
-
-    if (metricRow.length > 0 && metricRow(0).getLong(2) > 0) {
-      context.gauge(Metrics.Name.KeyBytes, metricRow(0).getDouble(0).toLong)
-      context.gauge(Metrics.Name.ValueBytes, metricRow(0).getDouble(1).toLong)
-      context.gauge(Metrics.Name.RowCount, metricRow(0).getLong(2))
+    if (uploadFormat == "ion") {
+      val rootPath =
+        groupByConf
+          .commonConfValue(IonPathConfig.UploadLocationKey)
+      val ionDf = uploadDf.withColumn(partitionCol, to_date(col(partitionCol)))
+      val result = IonWriter.write(
+        ionDf,
+        groupByConf.metaData.uploadTable,
+        partitionCol,
+        endDs,
+        rootPath
+      )
+      context.gauge(Metrics.Name.KeyBytes, result.keyBytes)
+      context.gauge(Metrics.Name.ValueBytes, result.valueBytes)
+      context.gauge(Metrics.Name.RowCount, result.rowCount)
     } else {
-      throw new RuntimeException("GroupBy upload resulted in zero rows.")
+      uploadDf.save(groupByConf.metaData.uploadTable,
+                    groupByConf.metaData.tableProps,
+                    partitionColumns = List(partitionCol))
+
+      val kvDfReloaded = tableUtils
+        .loadTable(groupByConf.metaData.uploadTable)
+        .where(not(col("key_json").eqNullSafe(Constants.GroupByServingInfoKey)))
+
+      val metricRow =
+        kvDfReloaded
+          .selectExpr("sum(bit_length(key_bytes))/8", "sum(bit_length(value_bytes))/8", "count(*)")
+          .collect()
+
+      if (metricRow.length > 0 && metricRow(0).getLong(2) > 0) {
+        context.gauge(Metrics.Name.KeyBytes, metricRow(0).getDouble(0).toLong)
+        context.gauge(Metrics.Name.ValueBytes, metricRow(0).getDouble(1).toLong)
+        context.gauge(Metrics.Name.RowCount, metricRow(0).getLong(2))
+      } else {
+        throw new RuntimeException("GroupBy upload resulted in zero rows.")
+      }
     }
 
     val jobDuration = (System.currentTimeMillis() - startTs) / 1000

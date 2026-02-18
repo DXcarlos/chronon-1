@@ -596,6 +596,26 @@ object Extensions {
       groupBy.sources.toScala
         .find(_.topic != null)
 
+    def commonConfValue(key: String): Option[String] = {
+      for {
+        metaData <- Option(groupBy.metaData)
+        execInfo <- Option(metaData.executionInfo)
+        conf <- Option(execInfo.conf)
+        common <- Option(conf.common)
+        value <- Option(common.get(key)).map(_.trim).filter(_.nonEmpty)
+      } yield value
+    }
+
+    /** Returns the entire common configuration map from executionInfo.conf.common */
+    def commonConf: Map[String, String] = {
+      (for {
+        metaData <- Option(groupBy.metaData)
+        execInfo <- Option(metaData.executionInfo)
+        conf <- Option(execInfo.conf)
+        common <- Option(conf.common)
+      } yield common.toScala.toMap).getOrElse(Map.empty)
+    }
+
     // de-duplicate all columns necessary for aggregation in a deterministic order
     // so we use distinct instead of toSet here
     def aggregationInputs: Array[String] =
