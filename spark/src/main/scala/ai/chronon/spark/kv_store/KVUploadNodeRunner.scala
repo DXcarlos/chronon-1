@@ -158,7 +158,12 @@ object KVUploadNodeRunner {
       val node = ThriftJsonCodec.fromJsonFile[Node](confPath, check = false)
       val metadata = node.metaData
 
-      val api = instantiateApi(onlineClass, props)
+      // Merge Node's common conf into API props so config like upload location flows through.
+      // Note: executionInfo is erased from the GroupBy inside node content, but preserved on node.metaData.
+      val nodeCommonConf = metadata.commonConf
+      val mergedProps = nodeCommonConf ++ props // CLI props take precedence
+
+      val api = instantiateApi(onlineClass, mergedProps)
 
       implicit val partitionSpec: PartitionSpec = PartitionSpec.daily
       val range = Some(PartitionRange(null, endDs))

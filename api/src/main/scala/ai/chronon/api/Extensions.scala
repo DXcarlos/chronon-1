@@ -209,6 +209,15 @@ object Extensions {
         .map(_.toScala.toMap)
         .orNull
 
+    /** Returns the common configuration map from executionInfo.conf.common */
+    def commonConf: Map[String, String] = {
+      (for {
+        execInfo <- Option(metaData.executionInfo)
+        conf <- Option(execInfo.conf)
+        common <- Option(conf.common)
+      } yield common.toScala.toMap).getOrElse(Map.empty)
+    }
+
     @deprecated("Use `name` instead.")
     def nameToFilePath: String = metaData.name.replaceFirst("\\.", "/")
 

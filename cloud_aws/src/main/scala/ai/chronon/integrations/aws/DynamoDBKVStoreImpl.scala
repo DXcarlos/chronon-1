@@ -437,21 +437,39 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
     val startTime = System.currentTimeMillis()
 
     var status: ImportStatus = ImportStatus.IN_PROGRESS
+    var lastDescription: software.amazon.awssdk.services.dynamodb.model.ImportTableDescription = null
     while (status == ImportStatus.IN_PROGRESS && (System.currentTimeMillis() - startTime) < maxWaitTimeMs) {
       Thread.sleep(pollIntervalMs)
 
       val describeRequest = DescribeImportRequest.builder().importArn(importArn).build()
       val describeResponse = dynamoDbClient.describeImport(describeRequest).join()
-      status = describeResponse.importTableDescription().importStatus()
+      lastDescription = describeResponse.importTableDescription()
+      status = lastDescription.importStatus()
 
-      logger.info(s"DynamoDB import status for $tableName: $status")
+      val elapsed = (System.currentTimeMillis() - startTime) / 1000
+      logger.info(
+        s"DynamoDB import status for $tableName: $status " +
+          s"(${elapsed}s elapsed, processed: ${lastDescription.processedItemCount()} items, " +
+          s"imported: ${lastDescription.importedItemCount()} items, " +
+          s"errors: ${lastDescription.errorCount()})")
     }
 
     status match {
       case ImportStatus.COMPLETED =>
-        logger.info(s"DynamoDB import completed successfully for table: $tableName")
+        logger.info(s"DynamoDB import completed successfully for table: $tableName " +
+          s"(imported: ${lastDescription.importedItemCount()} items, errors: ${lastDescription.errorCount()})")
       case ImportStatus.FAILED | ImportStatus.CANCELLED =>
-        throw new RuntimeException(s"DynamoDB import failed with status: $status for table: $tableName")
+        val diagnostics =
+          s"""DynamoDB import failed for table: $tableName
+             |  Status: $status
+             |  Failure Code: ${lastDescription.failureCode()}
+             |  Failure Message: ${lastDescription.failureMessage()}
+             |  Error Count: ${lastDescription.errorCount()}
+             |  Processed Items: ${lastDescription.processedItemCount()}
+             |  Imported Items: ${lastDescription.importedItemCount()}
+             |  Import ARN: $importArn""".stripMargin
+        logger.error(diagnostics)
+        throw new RuntimeException(diagnostics)
       case ImportStatus.IN_PROGRESS =>
         throw new RuntimeException(s"DynamoDB import timed out after ${maxWaitTimeMs}ms for table: $tableName")
       case _ =>

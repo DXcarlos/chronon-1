@@ -186,6 +186,11 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   private def runGroupByUpload(metadata: MetaData, groupByUpload: GroupByUploadNode, range: PartitionRange): Unit = {
     require(groupByUpload.isSetGroupBy, "GroupByUploadNode must have a groupBy set")
     val groupBy = groupByUpload.groupBy
+    // Restore executionInfo that was erased during planning (eraseExecutionInfo in GroupByPlanner).
+    // The node-level metadata preserves executionInfo, which contains config like upload format/location.
+    if (metadata.isSetExecutionInfo) {
+      groupBy.metaData.setExecutionInfo(metadata.executionInfo)
+    }
     logger.info(s"Running groupBy upload for '${metadata.name}' for day: ${range.end}")
 
     GroupByUpload.run(groupBy, range.end, Option(tableUtils))
