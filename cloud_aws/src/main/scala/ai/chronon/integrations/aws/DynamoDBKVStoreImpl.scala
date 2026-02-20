@@ -21,9 +21,11 @@ import software.amazon.awssdk.services.dynamodb.model.{
   BillingMode,
   CreateTableRequest,
   DescribeImportRequest,
+  DeleteTableRequest,
   DescribeTableRequest,
   GetItemRequest,
   ImportStatus,
+  ImportTableDescription,
   ImportTableRequest,
   InputCompressionType,
   InputFormat,
@@ -81,7 +83,6 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
     else dataset
   }
 
-  /** Creates the batch table registry if it doesn't exist. Uses a String partition key. */
   private def ensureRegistryTable(): Unit = {
     val request = CreateTableRequest.builder
       .tableName(batchTableRegistry)
@@ -112,7 +113,6 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
     }
   }
 
-  /** Writes a mapping from logical dataset name to physical table name in the registry. */
   private def writeRegistryEntry(logicalName: String, physicalName: String): Unit = {
     val item = Map(
       registryKeyColumn -> AttributeValue.builder.s(logicalName).build,
@@ -384,6 +384,10 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
       .tableCreationParameters(tableParams)
       .build()
 
+    // If the table already exists (e.g. from a previous failed/successful import attempt),
+    // delete it first so ImportTable can recreate it. This makes bulkPut idempotent.
+    deleteTableIfExists(physicalTableName)
+
     try {
       val startTs = System.currentTimeMillis()
       val importResponse = dynamoDbClient.importTable(importRequest).join()
@@ -430,14 +434,28 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
       .build()
   }
 
-  /** Waits for a DynamoDB import to complete by polling the import status. */
+  private def deleteTableIfExists(tableName: String): Unit = {
+    val describeRequest = DescribeTableRequest.builder().tableName(tableName).build()
+    try {
+      dynamoDbClient.describeTable(describeRequest).join()
+      logger.warn(s"Table $tableName already exists from a previous attempt. Deleting before re-import.")
+      val deleteRequest = DeleteTableRequest.builder().tableName(tableName).build()
+      dynamoDbClient.deleteTable(deleteRequest)
+        .thenCompose(_ => dynamoDbClient.waiter().waitUntilTableNotExists(describeRequest))
+        .join()
+      logger.info(s"Table $tableName deleted successfully.")
+    } catch {
+      case e: java.util.concurrent.CompletionException if e.getCause.isInstanceOf[ResourceNotFoundException] =>
+    }
+  }
+
   private def waitForImportCompletion(importArn: String, tableName: String): Unit = {
     val maxWaitTimeMs = 30 * 60 * 1000L // 30 minutes
     val pollIntervalMs = 10 * 1000L // 10 seconds
     val startTime = System.currentTimeMillis()
 
     var status: ImportStatus = ImportStatus.IN_PROGRESS
-    var lastDescription: software.amazon.awssdk.services.dynamodb.model.ImportTableDescription = null
+    var lastDescription: ImportTableDescription = null
     while (status == ImportStatus.IN_PROGRESS && (System.currentTimeMillis() - startTime) < maxWaitTimeMs) {
       Thread.sleep(pollIntervalMs)
 
