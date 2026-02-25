@@ -54,6 +54,7 @@ v1 = Join(
     online=True,
     output_namespace="data",
     step_days=2,
+    enable_stats_compute=True,
 )
 
 # Example join with some derivations
@@ -104,4 +105,5 @@ derivations_v1 = Join(
     online=True,
     output_namespace="data",
     step_days=2,
+    enable_stats_compute=True,
 )
