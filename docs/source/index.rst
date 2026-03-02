@@ -57,6 +57,13 @@
    Code_Guidelines
    Kaggle_Outbrain
 
+.. toctree::
+   :maxdepth: 2
+   :hidden:
+   :caption: Runbooks
+
+   runbooks/connecting_with_snowflake
+
 
 .. |br| raw:: html
 
