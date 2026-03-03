@@ -16,7 +16,7 @@ source = EntitySource(
     query=Query(
         selects=selects(
             listing_id="listing_id",
-            merchant_id="merchant_id", 
+            merchant_id="merchant_id",
             headline="headline",
             brief_description="brief_description",
             long_description="long_description",
@@ -33,9 +33,8 @@ source = EntitySource(
             main_image_path="main_image_path",
             secondary_image_paths="secondary_image_paths",
         ),
-        start_partition="2025-01-01"
+        start_partition="2025-01-01",
     ),
-    
 )
 
 v1 = GroupBy(
@@ -43,9 +42,9 @@ v1 = GroupBy(
     keys=["listing_id"],  # Key by listing_id for point lookups
     online=True,
     version=0,
+    step_days=10,
     aggregations=None,  # No aggregations - this is a simple passthrough
 )
-
 
 
 source2 = EntitySource(
@@ -55,7 +54,7 @@ source2 = EntitySource(
     query=Query(
         selects=selects(
             listing_id="listing_id",
-            merchant_id="merchant_id", 
+            merchant_id="merchant_id",
             headline="headline",
             brief_description="brief_description",
             long_description="long_description",
@@ -72,9 +71,8 @@ source2 = EntitySource(
             main_image_path="main_image_path",
             secondary_image_paths="secondary_image_paths",
         ),
-        start_partition="2025-01-01"
+        start_partition="2025-01-01",
     ),
-    
 )
 
 v2 = GroupBy(

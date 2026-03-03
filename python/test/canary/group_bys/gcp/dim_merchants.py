@@ -18,7 +18,7 @@ source = EntitySource(
             listing_id="merchant_id",
             primary_category="primary_category",
         ),
-        start_partition="2025-01-01"
+        start_partition="2025-01-01",
     ),
 )
 
@@ -27,5 +27,6 @@ v1 = GroupBy(
     keys=["listing_id"],  # Key by listing_id for point lookups
     online=True,
     version=0,
+    step_days=10,
     aggregations=None,  # No aggregations - this is a simple passthrough
 )

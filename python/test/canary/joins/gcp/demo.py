@@ -22,48 +22,13 @@ source = EventSource(
     # This will be the BigQuery table that receives the PubSub data
     table=exports.user_activities.table,
     query=Query(
-        selects=selects(
-            user_id="user_id + 1",
-            listing_id="listing_id + 1",
-            row_id="event_id"
-        ),
-        time_column="event_time_ms + 2",
+        selects=selects(user_id="user_id", listing_id="listing_id", row_id="event_id"),
+        time_column="event_time_ms",
     ),
 )
 
-
-demo_precompute_v2 = Join(
-    left=source,
-    row_ids=["event_id"],
-    right_parts=[
-        # User behavioral features (aggregated over time windows)
-        JoinPart(
-            group_by=user_activities.v2,
-        ),
-        # Listing dimension attributes (point-in-time lookup)
-        JoinPart(
-            group_by=dim_listings.v1,
-        ),
-        # Listing dimension attributes (point-in-time lookup)
-        JoinPart(
-            group_by=dim_merchants.v1,
-            prefix="merchant_"
-        ),
-    ],
-    derivations=[Derivation(
-        name="price_dollars",
-        expression="listing_id_price_cents / 100"
-    )],
-    version=1,
-    online=True,
-    output_namespace="data",
-    step_days=2,
-    enable_stats_compute=True,
-)
-
-
 # [{"user_id": 1, "listing_id": 1}]
-demo_precompute_v1 = Join(
+features_xyz4 = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[
@@ -76,10 +41,72 @@ demo_precompute_v1 = Join(
             group_by=dim_listings.v1,
         ),
         # Listing dimension attributes (point-in-time lookup)
-        JoinPart(
-            group_by=dim_merchants.v1,
-            prefix="merchant_"
+        JoinPart(group_by=dim_merchants.v1, prefix="merchant_"),
+    ],
+    version=1,
+    online=True,
+    output_namespace="data",
+    step_days=2,
+    enable_stats_compute=True,
+    derivations=[
+        Derivation(
+            name="simple_ratio",
+            expression="user_id_view_event_average_7d / (user_id_view_event_average_3d + 1)",
         ),
+        Derivation(
+            name="*",
+            expression="*",
+        ),
+    ],
+)
+
+features_xyz3 = Join(
+    left=source,
+    row_ids=["event_id"],
+    right_parts=[
+        # User behavioral features (aggregated over time windows)
+        JoinPart(
+            group_by=user_activities.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_listings.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(group_by=dim_merchants.v1, prefix="merchant_"),
+    ],
+    version=1,
+    online=True,
+    output_namespace="data",
+    step_days=2,
+    enable_stats_compute=True,
+    derivations=[
+        Derivation(
+            name="simple_ratio",
+            expression="user_id_view_event_average_7d / (user_id_view_event_average_3d + 1)",
+        ),
+        Derivation(
+            name="*",
+            expression="*",
+        ),
+    ],
+)
+
+# [{"user_id": "user_1", "listing_id": 1}]
+features_xyz3_no_deriv = Join(
+    left=source,
+    row_ids=["event_id"],
+    right_parts=[
+        # User behavioral features (aggregated over time windows)
+        JoinPart(
+            group_by=user_activities.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(
+            group_by=dim_listings.v1,
+        ),
+        # Listing dimension attributes (point-in-time lookup)
+        JoinPart(group_by=dim_merchants.v1, prefix="merchant_"),
     ],
     version=1,
     online=True,
@@ -89,10 +116,9 @@ demo_precompute_v1 = Join(
 )
 
 
-# Join with user behavioral features and listing attributes
 v1 = Join(
     left=source,
-    row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
+    row_ids=["event_id"],
     right_parts=[
         # User behavioral features (aggregated over time windows)
         JoinPart(
@@ -103,10 +129,7 @@ v1 = Join(
             group_by=dim_listings.v1,
         ),
         # Listing dimension attributes (point-in-time lookup)
-        JoinPart(
-            group_by=dim_merchants.v1,
-            prefix="merchant_"
-        ),
+        JoinPart(group_by=dim_merchants.v1, prefix="merchant_"),
     ],
     version=1,
     online=True,
@@ -115,11 +138,10 @@ v1 = Join(
     enable_stats_compute=True,
 )
 
-
 # Example join with some derivations
 derivations_v1 = Join(
     left=source,
-    row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
+    row_ids=["event_id"],  # TODO -- kill this once the SPJ API change goes through
     right_parts=[
         JoinPart(
             group_by=dim_listings.v1,
@@ -131,21 +153,17 @@ derivations_v1 = Join(
     derivations=[
         Derivation(
             name="is_listing_heavy",
-            expression="IF(listing_id_weight_grams > 1000, 1, 0)"
+            expression="IF(listing_id_weight_grams > 1000, 1, 0)",
         ),
         # with a built-in Spark fn
         Derivation(
             name="is_item_handmade",
-            expression="array_contains(split(listing_id_tags, ','), 'handmade')"
+            expression="array_contains(split(listing_id_tags, ','), 'handmade')",
         ),
-        Derivation(
-            name="price_log",
-            expression="log1p(listing_id_price_cents)"
-        ),
+        Derivation(name="price_log", expression="log1p(listing_id_price_cents)"),
         Derivation(
             name="price_bucket",
-            expression=
-            """
+            expression="""
                 CASE
                     WHEN listing_id_price_cents < 1000 THEN 0
                     WHEN listing_id_price_cents < 5000 THEN 1
@@ -153,17 +171,14 @@ derivations_v1 = Join(
                     WHEN listing_id_price_cents < 50000 THEN 3
                     ELSE 4
                 END
-            """
+            """,
         ),
-        Derivation(
-            name="*",
-            expression="*"
-        )
+        Derivation(name="*", expression="*"),
     ],
     version=2,
     online=True,
     output_namespace="data",
     step_days=30,
     offline_schedule="0 3 * * *",
-    online_schedule="0 3 * * *"
+    online_schedule="0 3 * * *",
 )

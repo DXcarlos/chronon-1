@@ -33,49 +33,67 @@ source = Source(
                 # Activity structs for last_k tracking
                 user_event_struct="STRUCT(event_type, listing_id, unix_millis(TIMESTAMP(event_time_ms)) as timestamp)",
             ),
-            time_column="unix_millis(TIMESTAMP(event_time_ms))",
+            time_column="event_time_ms",
         ),
     )
 )
 
 # Define window sizes for aggregations (1d, 7d, 14d, 30d)
-window_sizes = [Window(length=days, time_unit=TimeUnit.DAYS) for days in [1, 3, 7]]
+window_sizes = [
+    Window(length=days, time_unit=TimeUnit.DAYS) for days in [1, 3, 7, 10, 15]
+]
 
 # Event type columns for aggregations
-event_columns = ["view_event", "click_event", "purchase_event", "favorite_event", "add_to_cart_event"]
+event_columns = [
+    "view_event",
+    "click_event",
+    "purchase_event",
+    "favorite_event",
+    "add_to_cart_event",
+]
 device_columns = ["is_mobile", "is_desktop", "is_tablet"]
 last_k_columns = ["user_event_struct"]
 
 aggregations = []
 
 # Event type aggregations - Sum and Average over various windows
-aggregations.extend([
-    Aggregation(input_column=col, operation=Operation.SUM, windows=window_sizes)
-    for col in event_columns
-])
+aggregations.extend(
+    [
+        Aggregation(input_column=col, operation=Operation.SUM, windows=window_sizes)
+        for col in event_columns
+    ]
+)
 
-aggregations.extend([
-    Aggregation(input_column=col, operation=Operation.AVERAGE, windows=window_sizes)
-    for col in event_columns
-])
+aggregations.extend(
+    [
+        Aggregation(input_column=col, operation=Operation.AVERAGE, windows=window_sizes)
+        for col in event_columns
+    ]
+)
 
 # Device type aggregations - Sum over various windows
-aggregations.extend([
-    Aggregation(input_column=col, operation=Operation.SUM, windows=window_sizes)
-    for col in device_columns
-])
+aggregations.extend(
+    [
+        Aggregation(input_column=col, operation=Operation.SUM, windows=window_sizes)
+        for col in device_columns
+    ]
+)
 
 # Last K aggregations - Keep track of recent activity patterns
-aggregations.extend([
-    Aggregation(input_column=col, operation=Operation.LAST_K(128), windows=window_sizes)
-    for col in last_k_columns
-])
+aggregations.extend(
+    [
+        Aggregation(
+            input_column=col, operation=Operation.LAST_K(128), windows=window_sizes
+        )
+        for col in last_k_columns
+    ]
+)
 
 v1 = GroupBy(
     sources=[source],
     keys=["user_id"],  # Aggregate by user
     online=True,
-    version=1,
+    version=2,
     aggregations=aggregations,
     step_days=30,
     env_vars=EnvironmentVariables(
@@ -117,34 +135,50 @@ source2 = Source(
 window_sizes = [Window(length=days, time_unit=TimeUnit.DAYS) for days in [1, 3, 7, 10]]
 
 # Event type columns for aggregations
-event_columns = ["view_event", "click_event", "purchase_event", "favorite_event", "add_to_cart_event"]
+event_columns = [
+    "view_event",
+    "click_event",
+    "purchase_event",
+    "favorite_event",
+    "add_to_cart_event",
+]
 device_columns = ["is_mobile", "is_desktop", "is_tablet"]
 last_k_columns = ["user_event_struct"]
 
 aggregations = []
 
 # Event type aggregations - Sum and Average over various windows
-aggregations.extend([
-    Aggregation(input_column=col, operation=Operation.SUM, windows=window_sizes)
-    for col in event_columns
-])
+aggregations.extend(
+    [
+        Aggregation(input_column=col, operation=Operation.SUM, windows=window_sizes)
+        for col in event_columns
+    ]
+)
 
-aggregations.extend([
-    Aggregation(input_column=col, operation=Operation.AVERAGE, windows=window_sizes)
-    for col in event_columns
-])
+aggregations.extend(
+    [
+        Aggregation(input_column=col, operation=Operation.AVERAGE, windows=window_sizes)
+        for col in event_columns
+    ]
+)
 
 # Device type aggregations - Sum over various windows
-aggregations.extend([
-    Aggregation(input_column=col, operation=Operation.SUM, windows=window_sizes)
-    for col in device_columns
-])
+aggregations.extend(
+    [
+        Aggregation(input_column=col, operation=Operation.SUM, windows=window_sizes)
+        for col in device_columns
+    ]
+)
 
 # Last K aggregations - Keep track of recent activity patterns
-aggregations.extend([
-    Aggregation(input_column=col, operation=Operation.LAST_K(128), windows=window_sizes)
-    for col in last_k_columns
-])
+aggregations.extend(
+    [
+        Aggregation(
+            input_column=col, operation=Operation.LAST_K(128), windows=window_sizes
+        )
+        for col in last_k_columns
+    ]
+)
 
 v2 = GroupBy(
     sources=[source2],

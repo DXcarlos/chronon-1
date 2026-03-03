@@ -1,8 +1,15 @@
 from gen_thrift.api.ttypes import Team
 
-from ai.chronon.repo.cluster import generate_dataproc_cluster_config, generate_emr_cluster_config
+from ai.chronon.repo.cluster import (
+    generate_dataproc_cluster_config,
+    generate_emr_cluster_config,
+)
 from ai.chronon.repo.constants import RunMode
-from ai.chronon.types import ClusterConfigProperties, ConfigProperties, EnvironmentVariables
+from ai.chronon.types import (
+    ClusterConfigProperties,
+    ConfigProperties,
+    EnvironmentVariables,
+)
 
 default = Team(
     description="Default team",
@@ -29,12 +36,7 @@ test = Team(
         common={
             "GCP_BIGTABLE_INSTANCE_ID": "test-instance"  # example, custom bigtable instance
         },
-        modeEnvironments={
-            RunMode.BACKFILL: {
-            },
-            RunMode.UPLOAD: {
-            }
-        }
+        modeEnvironments={RunMode.BACKFILL: {}, RunMode.UPLOAD: {}},
     ),
 )
 
@@ -58,10 +60,8 @@ gcp = Team(
             "HUB_URL": "http://localhost:3903",
         },
         modeEnvironments={
-            RunMode.UPLOAD: {
-                "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster"
-            }
-        }
+            RunMode.UPLOAD: {"SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster"}
+        },
     ),
     conf=ConfigProperties(
         common={
@@ -94,16 +94,19 @@ gcp = Team(
             "spark.executor.memory": "512m",
             "spark.executor.cores": "1",
         },
-        modeConfigs={
-        }
+        modeConfigs={},
     ),
     clusterConf=ClusterConfigProperties(
         modeClusterConfigs={
             RunMode.UPLOAD: {
-                "dataproc.config": generate_dataproc_cluster_config(2, "canary-443022", "gs://zipline-artifacts-canary",
-                                                                    idle_timeout="300s",
-                                                                    worker_host_type="n2-highmem-4",
-                                                                    master_host_type="n2-highmem-8")
+                "dataproc.config": generate_dataproc_cluster_config(
+                    2,
+                    "canary-443022",
+                    "gs://zipline-artifacts-canary",
+                    idle_timeout="300s",
+                    worker_host_type="n2-highmem-4",
+                    master_host_type="n2-highmem-8",
+                )
             }
         }
     ),
@@ -126,10 +129,7 @@ aws = Team(
             "HUB_URL": "http://localhost:3903",
             "ENABLE_KINESIS": "true",
         },
-        modeEnvironments={
-            RunMode.UPLOAD: {
-            }
-        }
+        modeEnvironments={RunMode.UPLOAD: {}},
     ),
     conf=ConfigProperties(
         common={
@@ -156,10 +156,7 @@ aws = Team(
             "spark.executor.cores": "1",
             "taskmanager.memory.process.size": "4G",
         },
-        modeConfigs={
-            RunMode.BACKFILL: {
-            }
-        }
+        modeConfigs={RunMode.BACKFILL: {}},
     ),
     clusterConf=ClusterConfigProperties(
         common={
@@ -169,7 +166,7 @@ aws = Team(
                 security_group_name="zipline-canary-sg",
                 instance_type="m5.xlarge",
                 idle_timeout=300,
-                release_label="emr-7.12.0"
+                release_label="emr-7.12.0",
             )
         }
     ),

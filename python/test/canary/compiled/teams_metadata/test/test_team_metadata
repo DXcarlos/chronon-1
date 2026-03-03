@@ -1,0 +1,34 @@
+{
+  "executionInfo": {
+    "conf": {
+      "common": {
+        "spark.chronon.partition.column": "ds"
+      }
+    },
+    "env": {
+      "common": {
+        "CUSTOMER_ID": "dev",
+        "FRONTEND_URL": "http://localhost:3000",
+        "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+        "HUB_URL": "http://localhost:3903",
+        "VERSION": "latest"
+      },
+      "modeEnvironments": {
+        "backfill": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        },
+        "upload": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      }
+    }
+  }
+}

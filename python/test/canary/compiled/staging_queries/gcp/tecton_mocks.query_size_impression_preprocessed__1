@@ -1,0 +1,128 @@
+{
+  "engineType": 1,
+  "metaData": {
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo__user_activities__with_offset_0\", \"spec\": \"demo.`user-activities`/_PARTITIONTIME={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_demo__dim_listings__with_offset_0\", \"spec\": \"demo.`dim_listings`/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "executionInfo": {
+      "clusterConf": {
+        "modeClusterConfigs": {
+          "upload": {
+            "dataproc.config": "{\"gceClusterConfig\": {\"subnetworkUri\": \"default\", \"serviceAccount\": \"dataproc@canary-443022.iam.gserviceaccount.com\", \"serviceAccountScopes\": [\"https://www.googleapis.com/auth/cloud-platform\", \"https://www.googleapis.com/auth/monitoring\", \"https://www.googleapis.com/auth/cloud.useraccounts.readonly\", \"https://www.googleapis.com/auth/devstorage.read_write\", \"https://www.googleapis.com/auth/logging.write\"], \"metadata\": {\"hive-version\": \"3.1.2\", \"SPARK_BQ_CONNECTOR_URL\": \"gs://spark-lib/bigquery/spark-3.5-bigquery-0.42.1.jar\", \"artifact_prefix\": \"gs://zipline-artifacts-canary\"}, \"tags\": []}, \"masterConfig\": {\"numInstances\": 1, \"machineTypeUri\": \"n2-highmem-8\", \"diskConfig\": {\"bootDiskType\": \"pd-standard\", \"bootDiskSizeGb\": 1024}}, \"workerConfig\": {\"numInstances\": 2, \"machineTypeUri\": \"n2-highmem-4\", \"diskConfig\": {\"bootDiskType\": \"pd-standard\", \"bootDiskSizeGb\": 64, \"numLocalSsds\": 2}}, \"softwareConfig\": {\"imageVersion\": \"2.2.66-debian12\", \"optionalComponents\": [\"FLINK\", \"JUPYTER\"], \"properties\": {\"dataproc:dataproc.logging.stackdriver.enable\": \"true\", \"dataproc:jobs.file-backed-output.enable\": \"true\", \"dataproc:dataproc.logging.stackdriver.job.driver.enable\": \"true\", \"dataproc:dataproc.logging.stackdriver.job.yarn.container.enable\": \"true\"}}, \"initializationActions\": [{\"executable_file\": \"gs://zipline-artifacts-canary/scripts/copy_java_security.sh\"}], \"endpointConfig\": {\"enableHttpPortAccess\": true}, \"lifecycleConfig\": {\"idleDeleteTtl\": \"300s\"}}"
+          }
+        }
+      },
+      "conf": {
+        "common": {
+          "spark.chronon.coalesce.factor": "10",
+          "spark.chronon.partition.column": "ds",
+          "spark.chronon.partition.format": "yyyy-MM-dd",
+          "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
+          "spark.chronon.table.gcs.connector_output_dataset": "data",
+          "spark.chronon.table.gcs.connector_output_project": "canary-443022",
+          "spark.chronon.table.gcs.temporary_gcs_bucket": "zipline-warehouse-canary",
+          "spark.chronon.table_write.format": "iceberg",
+          "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
+          "spark.default.parallelism": "10",
+          "spark.driver.cores": "1",
+          "spark.driver.memory": "1g",
+          "spark.executor.cores": "1",
+          "spark.executor.memory": "1g",
+          "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
+          "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+          "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
+          "spark.sql.catalog.default_iceberg.gcp.bigquery.project-id": "canary-443022",
+          "spark.sql.catalog.default_iceberg.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+          "spark.sql.catalog.default_iceberg.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+          "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
+          "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
+          "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
+          "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
+          "spark.sql.catalog.spark_catalog.io-impl": "org.apache.iceberg.io.ResolvingFileIO",
+          "spark.sql.catalog.spark_catalog.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+          "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+          "spark.sql.shuffle.partitions": "10"
+        }
+      },
+      "env": {
+        "common": {
+          "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
+          "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+          "CLOUD_PROVIDER": "gcp",
+          "CUSTOMER_ID": "canary",
+          "ENABLE_PUBSUB": "true",
+          "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+          "FRONTEND_URL": "http://localhost:3000",
+          "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "HUB_URL": "http://localhost:3903",
+          "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
+          "VERSION": "0.1.0+dev.varantzanoyan",
+          "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
+        },
+        "modeEnvironments": {
+          "upload": {
+            "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+            "CLOUD_PROVIDER": "gcp",
+            "CUSTOMER_ID": "canary",
+            "ENABLE_PUBSUB": "true",
+            "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+            "FRONTEND_URL": "http://localhost:3000",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "HUB_URL": "http://localhost:3903",
+            "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
+            "VERSION": "0.1.0+dev.varantzanoyan",
+            "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
+          }
+        }
+      },
+      "offlineSchedule": "@daily"
+    },
+    "name": "gcp.tecton_mocks.query_size_impression_preprocessed__1",
+    "outputNamespace": "data",
+    "sourceFile": "staging_queries/gcp/tecton_mocks.py",
+    "team": "gcp",
+    "version": "1"
+  },
+  "query": "\n    WITH\n    -- Step 1: Mock top_n_queries (Tecton's CSV file source)\n    -- Contains common search queries for standardization\n    top_queries AS (\n        SELECT query FROM UNNEST([\n            'vintage', 'sneakers', 'denim', 'accessories', 'leather',\n            'shoes', 'jacket', 'dress', 'bag', 'jewelry'\n        ]) AS query\n    ),\n\n    -- Step 2: Mock product_search_create from user-activities\n    -- Simulate searches using view/click events\n    raw_searches AS (\n        SELECT\n            event_id as depop_search_id,\n            user_id,\n            session_id,\n            -- Mock query text based on event type\n            CASE\n                WHEN event_type = 'view' THEN 'vintage'\n                WHEN event_type = 'click' THEN 'sneakers'\n                WHEN event_type = 'favorite' THEN 'denim'\n                ELSE 'accessories'\n            END as query_raw,\n            TIMESTAMP_MILLIS(event_time_ms) as search_timestamp,\n            -- Mock results array (single listing)\n            [listing_id] as results,\n            1 as page,\n            20 as `limit`,\n            DATE(_PARTITIONTIME) as ds\n        FROM demo.`user-activities`\n        WHERE\n            TIMESTAMP_TRUNC(_PARTITIONTIME, DAY) BETWEEN {{ start_date }} AND {{ end_date }}\n            AND listing_id IS NOT NULL\n            AND user_id IS NOT NULL\n            AND session_id IS NOT NULL\n    ),\n\n    -- Step 3: Filter searches (Tecton's filter_product_search_create)\n    -- Remove searches with null/empty required fields\n    filtered_searches AS (\n        SELECT *\n        FROM raw_searches\n        WHERE\n            depop_search_id IS NOT NULL\n            AND depop_search_id != ''\n            AND session_id IS NOT NULL\n            AND page IS NOT NULL\n            AND results IS NOT NULL\n            AND ARRAY_LENGTH(results) > 0\n    ),\n\n    -- Step 4: Standardize queries (Tecton's standardise_product_search_create_query)\n    -- Join with top queries, impute missing with 'IMPUTATION-TEXT'\n    standardized_searches AS (\n        SELECT\n            s.*,\n            COALESCE(t.query, 'IMPUTATION-TEXT') as query\n        FROM filtered_searches s\n        LEFT JOIN top_queries t\n          ON s.query_raw = t.query\n    ),\n\n    -- Step 5: Get search results with rank (Tecton's get_search_results_with_rank)\n    -- Explode results array and add rank position\n    search_impressions AS (\n        SELECT\n            depop_search_id,\n            user_id,\n            session_id,\n            query,\n            search_timestamp,\n            DATE(search_timestamp) as date,\n            listing_id as product_id,\n            pos as rank_in_page,\n            -- Calculate overall rank: (page - 1) * limit + position\n            ((page - 1) * `limit`) + pos + 1 as rank,\n            ds\n        FROM standardized_searches,\n        UNNEST(results) AS listing_id WITH OFFSET pos\n    ),\n\n    -- Step 6: Get product dimensions with size (Tecton's product_create + get_product_size)\n    -- Mock size based on listing_id modulo (S/M/L/XL)\n    products_with_size AS (\n        SELECT\n            listing_id as product_id,\n            merchant_id as seller_id,\n            -- Mock size data (Tecton extracts from variants field)\n            CASE\n                WHEN MOD(listing_id, 4) = 0 THEN 'S'\n                WHEN MOD(listing_id, 4) = 1 THEN 'M'\n                WHEN MOD(listing_id, 4) = 2 THEN 'L'\n                ELSE 'XL'\n            END as size,\n            ROW_NUMBER() OVER (PARTITION BY listing_id ORDER BY updated_at_ts ASC) as rn\n        FROM demo.`dim_listings`\n        WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ),\n\n    -- Deduplicate products (keep first create row)\n    products_deduped AS (\n        SELECT\n            product_id,\n            seller_id,\n            COALESCE(size, 'UNDEFINED') as size\n        FROM products_with_size\n        WHERE rn = 1\n    ),\n\n    -- Step 7: Join size onto search impressions\n    impressions_with_size AS (\n        SELECT\n            i.query,\n            i.user_id,\n            i.date,\n            i.search_timestamp,\n            i.product_id,\n            i.rank,\n            p.size,\n            p.seller_id,\n            i.ds\n        FROM search_impressions i\n        LEFT JOIN products_deduped p\n          ON i.product_id = p.product_id\n    ),\n\n    -- Step 8: Remove self-interactions (Tecton's remove_self_interactions)\n    -- Filter out cases where searcher = seller\n    filtered_impressions AS (\n        SELECT *\n        FROM impressions_with_size\n        WHERE\n            seller_id IS NOT NULL\n            AND user_id IS NOT NULL\n            AND CAST(user_id AS INT64) != seller_id\n    ),\n\n    -- Step 9: Get most common size per (query, user, date)\n    -- Tecton's get_array_attribute_with_largest_count_over_group\n    size_counts AS (\n        SELECT\n            query,\n            user_id,\n            date,\n            size,\n            COUNT(*) as size_count,\n            MAX(search_timestamp) as search_timestamp,\n            ds\n        FROM filtered_impressions\n        GROUP BY query, user_id, date, size, ds\n    ),\n\n    -- Deduplicate to get single most common size per group\n    -- Break ties by picking earliest alphabetically\n    most_common_size AS (\n        SELECT\n            query,\n            user_id,\n            date,\n            search_timestamp,\n            size,\n            ds,\n            ROW_NUMBER() OVER (\n                PARTITION BY query, user_id, date\n                ORDER BY size_count DESC, size ASC\n            ) as rn\n        FROM size_counts\n    )\n\n    -- Final output: query, search_timestamp, size\n    SELECT\n        CAST(query AS STRING) as query,\n        CAST(search_timestamp AS TIMESTAMP) as search_timestamp,\n        CAST(size AS STRING) as size,\n        ds\n    FROM most_common_size\n    WHERE rn = 1\n    ",
+  "tableDependencies": [
+    {
+      "endOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "startOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "tableInfo": {
+        "partitionColumn": "_PARTITIONTIME",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
+        "table": "demo.`user-activities`"
+      }
+    },
+    {
+      "endOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "startOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "tableInfo": {
+        "partitionColumn": "ds",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
+        "table": "demo.`dim_listings`"
+      }
+    }
+  ]
+}
