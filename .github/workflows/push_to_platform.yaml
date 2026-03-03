@@ -68,7 +68,7 @@ jobs:
           gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
             --jq '.jobs[] | select(.conclusion == "failure" and .name != "on_fail_notify_slack") | "\(.id) \(.name)"' | \
           while read -r JOB_ID JOB_NAME; do
-            gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs/${JOB_ID}/logs" \
+            gh api "repos/${{ github.repository }}/actions/jobs/${JOB_ID}/logs" \
               > "/tmp/failed-logs/${JOB_ID}.log" 2>/dev/null || true
           done
           gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
