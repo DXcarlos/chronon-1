@@ -1,7 +1,6 @@
 package ai.chronon.integrations.cloud_gcp
 import ai.chronon.api.Builders.MetaData
 import ai.chronon.api.JobStatusType
-import ai.chronon.spark.submission.JobSubmitterConstants
 import ai.chronon.spark.submission.JobSubmitterConstants._
 import ai.chronon.spark.submission.{JobSubmitter, JobType, FlinkJob => TypeFlinkJob, SparkJob => TypeSparkJob}
 import com.google.api.gax.rpc.ApiException
@@ -653,6 +652,10 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
       }.recover { case ex: Exception =>
         logger.error(s"Failed to create cluster $clusterName asynchronously", ex)
       }
+    } else {
+      logger.error(s"Cluster $clusterName does not exist and no cluster configuration provided to create it.")
+      throw new IllegalArgumentException(
+        s"Cluster $clusterName does not exist and no cluster configuration provided to create it. Please provide one.")
     }
   }
 

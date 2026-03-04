@@ -1178,4 +1178,162 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     )
     println(jobId)
   }
+
+  it should "return cluster name when cluster is RUNNING" in {
+    val mockClusterControllerClient = mock[ClusterControllerClient]
+    val mockCluster = Cluster
+      .newBuilder()
+      .setStatus(ClusterStatus.newBuilder().setState(ClusterStatus.State.RUNNING))
+      .build()
+
+    when(mockClusterControllerClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(mockCluster)
+
+    val submitterWithClusterClient = new DataprocSubmitter(
+      jobControllerClient = mock[JobControllerClient],
+      gcsClient = mock[GCSClient],
+      region = "test-region",
+      projectId = "test-project",
+      clusterControllerClient = Some(mockClusterControllerClient)
+    )
+
+    val result = submitterWithClusterClient.ensureClusterReady(
+      "test-cluster",
+      None
+    )(scala.concurrent.ExecutionContext.global)
+
+    assert(result.isDefined)
+    assertEquals(result.get, "test-cluster")
+  }
+
+  it should "return None when cluster is in CREATING state" in {
+    val mockClusterControllerClient = mock[ClusterControllerClient]
+    val mockCluster = Cluster
+      .newBuilder()
+      .setStatus(ClusterStatus.newBuilder().setState(ClusterStatus.State.CREATING))
+      .build()
+
+    when(mockClusterControllerClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(mockCluster)
+
+    val submitterWithClusterClient = new DataprocSubmitter(
+      jobControllerClient = mock[JobControllerClient],
+      gcsClient = mock[GCSClient],
+      region = "test-region",
+      projectId = "test-project",
+      clusterControllerClient = Some(mockClusterControllerClient)
+    )
+
+    val result = submitterWithClusterClient.ensureClusterReady(
+      "test-cluster",
+      None
+    )(scala.concurrent.ExecutionContext.global)
+
+    assert(result.isEmpty)
+  }
+
+  it should "throw IllegalStateException when cluster is in ERROR state and no config provided" in {
+    val mockClusterControllerClient = mock[ClusterControllerClient]
+    val mockCluster = Cluster
+      .newBuilder()
+      .setStatus(ClusterStatus.newBuilder().setState(ClusterStatus.State.ERROR))
+      .build()
+
+    when(mockClusterControllerClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(mockCluster)
+
+    val submitterWithClusterClient = new DataprocSubmitter(
+      jobControllerClient = mock[JobControllerClient],
+      gcsClient = mock[GCSClient],
+      region = "test-region",
+      projectId = "test-project",
+      clusterControllerClient = Some(mockClusterControllerClient)
+    )
+
+    val exception = intercept[IllegalStateException] {
+      submitterWithClusterClient.ensureClusterReady(
+        "test-cluster",
+        None
+      )(scala.concurrent.ExecutionContext.global)
+    }
+
+    assert(exception.getMessage.contains("cannot be used for job submission"))
+  }
+
+  it should "throw IllegalArgumentException when getOrCreateCluster is called with no config" in {
+    val mockDataprocClient = mock[ClusterControllerClient]
+
+    when(mockDataprocClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(null)
+
+    val exception = intercept[Exception] {
+      DataprocSubmitter.getOrCreateCluster(
+        "test-cluster",
+        None,
+        "test-project",
+        "test-region",
+        mockDataprocClient
+      )
+    }
+
+    assert(exception.getMessage.contains("does not exist and no cluster config provided"))
+  }
+
+  it should "throw IllegalArgumentException when getOrCreateCluster is called with config missing dataproc.config key" in {
+    val mockDataprocClient = mock[ClusterControllerClient]
+
+    when(mockDataprocClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(null)
+
+    val exception = intercept[Exception] {
+      DataprocSubmitter.getOrCreateCluster(
+        "test-cluster",
+        Some(Map("other-key" -> "value")),
+        "test-project",
+        "test-region",
+        mockDataprocClient
+      )
+    }
+
+    assert(exception.getMessage.contains("does not exist and no cluster config provided"))
+  }
+
+  it should "create cluster when config is properly provided" in {
+    val mockDataprocClient = mock[ClusterControllerClient]
+
+    when(mockDataprocClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(null)
+
+    val mockOperationFuture = mock[OperationFuture[Cluster, ClusterOperationMetadata]]
+    val mockRunningCluster = Cluster
+      .newBuilder()
+      .setStatus(ClusterStatus.newBuilder().setState(ClusterStatus.State.RUNNING))
+      .build()
+
+    when(mockDataprocClient.createClusterAsync(any[CreateClusterRequest]))
+      .thenReturn(mockOperationFuture)
+    when(mockOperationFuture.get(anyLong(), any[TimeUnit]))
+      .thenReturn(mockRunningCluster)
+    when(mockDataprocClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(null)
+      .thenReturn(mockRunningCluster)
+
+    val clusterConfigStr = """{
+      "masterConfig": {
+        "numInstances": 1,
+        "machineTypeUri": "n1-standard-4"
+      }
+    }"""
+
+    val result = DataprocSubmitter.getOrCreateCluster(
+      "new-cluster",
+      Some(Map("dataproc.config" -> clusterConfigStr)),
+      "test-project",
+      "test-region",
+      mockDataprocClient
+    )
+
+    assertEquals(result, "new-cluster")
+    verify(mockDataprocClient).createClusterAsync(any[CreateClusterRequest])
+  }
 }
