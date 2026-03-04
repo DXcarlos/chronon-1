@@ -1336,4 +1336,103 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     assertEquals(result, "new-cluster")
     verify(mockDataprocClient).createClusterAsync(any[CreateClusterRequest])
   }
+
+  it should "surface async cluster creation failure on subsequent ensureClusterReady call and clear failure state" in {
+    val mockClusterControllerClient = mock[ClusterControllerClient]
+
+    // getCluster returns null (cluster doesn't exist)
+    when(mockClusterControllerClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(null)
+
+    val submitterWithClusterClient = new DataprocSubmitter(
+      jobControllerClient = mock[JobControllerClient],
+      gcsClient = mock[GCSClient],
+      region = "test-region",
+      projectId = "test-project",
+      clusterControllerClient = Some(mockClusterControllerClient)
+    )
+
+    val clusterConfigStr = """{
+      "masterConfig": {
+        "numInstances": 1,
+        "machineTypeUri": "n1-standard-4"
+      }
+    }"""
+    val clusterConf = Some(Map("dataproc.config" -> clusterConfigStr))
+
+    // Simulate failure being stored by directly putting in the map
+    val failuresField = submitterWithClusterClient.getClass.getDeclaredField("clusterCreationFailures")
+    failuresField.setAccessible(true)
+    val failuresMap = failuresField
+      .get(submitterWithClusterClient)
+      .asInstanceOf[java.util.concurrent.ConcurrentHashMap[String, Exception]]
+    failuresMap.put("test-cluster", new RuntimeException("Previous async creation failed"))
+
+    // First call after failure: should throw the stored exception and clear it
+    val firstException = intercept[RuntimeException] {
+      submitterWithClusterClient.ensureClusterReady(
+        "test-cluster",
+        clusterConf
+      )(scala.concurrent.ExecutionContext.global)
+    }
+
+    assert(firstException.getMessage.contains("async creation previously failed"))
+
+    // Verify failure was cleared - map should be empty now
+    assert(failuresMap.isEmpty)
+
+    // Second call: should attempt creation again (return None, triggering async creation)
+    val result = submitterWithClusterClient.ensureClusterReady(
+      "test-cluster",
+      clusterConf
+    )(scala.concurrent.ExecutionContext.global)
+
+    // Should return None since cluster doesn't exist yet (async creation triggered)
+    assert(result.isEmpty)
+  }
+
+  it should "clear cluster creation failure state when cluster becomes ready" in {
+    val mockClusterControllerClient = mock[ClusterControllerClient]
+    val mockRunningCluster = Cluster
+      .newBuilder()
+      .setStatus(ClusterStatus.newBuilder().setState(ClusterStatus.State.RUNNING))
+      .build()
+
+    val submitterWithClusterClient = new DataprocSubmitter(
+      jobControllerClient = mock[JobControllerClient],
+      gcsClient = mock[GCSClient],
+      region = "test-region",
+      projectId = "test-project",
+      clusterControllerClient = Some(mockClusterControllerClient)
+    )
+
+    // Simulate a previous failure by directly putting in the map
+    val failuresField = submitterWithClusterClient.getClass.getDeclaredField("clusterCreationFailures")
+    failuresField.setAccessible(true)
+    val failuresMap = failuresField
+      .get(submitterWithClusterClient)
+      .asInstanceOf[java.util.concurrent.ConcurrentHashMap[String, Exception]]
+    failuresMap.put("test-cluster", new RuntimeException("Previous failure"))
+
+    // Now cluster is running
+    when(mockClusterControllerClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(mockRunningCluster)
+
+    // This should clear the failure and return the cluster name
+    val result = submitterWithClusterClient.ensureClusterReady(
+      "test-cluster",
+      None
+    )(scala.concurrent.ExecutionContext.global)
+
+    assert(result.isDefined)
+    assertEquals(result.get, "test-cluster")
+
+    // Verify failure was cleared - calling again should not throw
+    val secondResult = submitterWithClusterClient.ensureClusterReady(
+      "test-cluster",
+      None
+    )(scala.concurrent.ExecutionContext.global)
+
+    assert(secondResult.isDefined)
+  }
 }

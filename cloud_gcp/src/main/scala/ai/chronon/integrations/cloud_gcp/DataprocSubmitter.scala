@@ -11,6 +11,7 @@ import com.google.protobuf.util.JsonFormat
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
+import java.util.concurrent.ConcurrentHashMap
 
 case class MoreThanOneRunningFlinkJob(message: String) extends Exception(message)
 
@@ -27,6 +28,9 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
                         override val dqMetricsDataset: String = "",
                         flinkHealthCheckFn: Option[String] => Boolean = _ => true)
     extends JobSubmitter {
+
+  // Track async cluster creation failures so we can surface them on subsequent calls
+  private val clusterCreationFailures = new ConcurrentHashMap[String, Exception]()
 
   def listRunningGroupByFlinkJobs(groupByName: String): List[String] = {
     val groupByNameDataprocLabel = DataprocUtils.formatDataprocLabel(groupByName)
@@ -616,11 +620,21 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
         try {
           val cluster = ccClient.getCluster(projectId, region, clusterName)
           if (cluster == null) {
+            // Check if there was a previous async cluster creation failure
+            Option(clusterCreationFailures.remove(clusterName)).foreach { ex =>
+              logger.error(s"Previous async cluster creation for $clusterName failed. Clearing failure state to allow retry.", ex)
+              throw new RuntimeException(
+                s"Cluster $clusterName async creation previously failed: ${ex.getMessage}",
+                ex
+              )
+            }
             triggerAsyncClusterCreation(clusterName, clusterConf, ccClient)
             None
           } else {
             cluster.getStatus.getState match {
               case ClusterStatus.State.RUNNING | ClusterStatus.State.UPDATING =>
+                // Clear any old failure state on successful ready
+                clusterCreationFailures.remove(clusterName)
                 Some(clusterName)
               case ClusterStatus.State.UNKNOWN | ClusterStatus.State.CREATING | ClusterStatus.State.STARTING |
                   ClusterStatus.State.REPAIRING =>
@@ -633,6 +647,14 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
           }
         } catch {
           case _: com.google.api.gax.rpc.NotFoundException =>
+            // Check if there was a previous async cluster creation failure
+            Option(clusterCreationFailures.remove(clusterName)).foreach { ex =>
+              logger.error(s"Previous async cluster creation for $clusterName failed. Clearing failure state to allow retry.", ex)
+              throw new RuntimeException(
+                s"Cluster $clusterName async creation previously failed: ${ex.getMessage}",
+                ex
+              )
+            }
             triggerAsyncClusterCreation(clusterName, clusterConf, ccClient)
             None
           case ex: Exception =>
@@ -648,9 +670,24 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
     if (clusterConf.isDefined && clusterConf.get.contains("dataproc.config")) {
       logger.info(s"Cluster $clusterName not found. Triggering creation asynchronously.")
       Future {
-        DataprocSubmitter.getOrCreateCluster(clusterName, clusterConf, projectId, region, ccClient)
-      }.recover { case ex: Exception =>
-        logger.error(s"Failed to create cluster $clusterName asynchronously", ex)
+        try {
+          DataprocSubmitter.getOrCreateCluster(clusterName, clusterConf, projectId, region, ccClient)
+          // Clear any previous failure for this cluster on success
+          clusterCreationFailures.remove(clusterName)
+        } catch {
+          case ex: Exception =>
+            logger.error(s"Failed to create cluster $clusterName asynchronously", ex)
+            clusterCreationFailures.put(clusterName, ex)
+            // Emit metric for cluster creation failure
+            try {
+              import ai.chronon.online.metrics.Metrics
+              val ctx = Metrics.Context(Metrics.Environment.Orchestrator)
+              ctx.increment("cluster.creation.async.failure", Map("cluster" -> clusterName, "region" -> region))
+            } catch {
+              case _: Exception => // Ignore metrics errors
+            }
+            throw ex // Re-throw so ExecutionContext's exception handler can see it
+        }
       }
     } else {
       logger.error(s"Cluster $clusterName does not exist and no cluster configuration provided to create it.")
