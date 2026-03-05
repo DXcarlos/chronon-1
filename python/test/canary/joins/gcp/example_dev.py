@@ -28,7 +28,7 @@ source = EventSource(
 )
 
 # [{"user_id": "user_1", "listing_id": 1}]
-v1 = Join(
+features_v0 = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[
@@ -50,14 +50,13 @@ v1 = Join(
     enable_stats_compute=True,
 )
 
-
-v2 = Join(
+features_v1 = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[
         # User behavioral features (aggregated over time windows)
         JoinPart(
-            group_by=user_activities.v2,
+            group_by=user_activities.v1,
         ),
         # Listing dimension attributes (point-in-time lookup)
         JoinPart(
@@ -71,6 +70,7 @@ v2 = Join(
             name="click_through_rate_7d",
             expression="user_id_click_event_sum_7d / NULLIF(user_id_view_event_sum_7d, 0)",
         ),
+        Derivation(name="*", expression="*"),
     ],
     version=1,
     online=True,

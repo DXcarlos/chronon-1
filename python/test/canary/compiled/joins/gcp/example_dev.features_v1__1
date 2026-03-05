@@ -1,4 +1,14 @@
 {
+  "derivations": [
+    {
+      "expression": "user_id_click_event_sum_7d / NULLIF(user_id_view_event_sum_7d, 0)",
+      "name": "click_through_rate_7d"
+    },
+    {
+      "expression": "*",
+      "name": "*"
+    }
+  ],
   "joinParts": [
     {
       "groupBy": {
@@ -846,6 +856,7 @@
   },
   "metaData": {
     "columnHashes": {
+      "click_through_rate_7d": "84b477dfeb348ef31391fcd83988a6df",
       "listing_id": "47aa3759ce41fc6ccf91367592e35f6d",
       "listing_id_brief_description": "7d445defa77854b8d6ae94ae180f195f",
       "listing_id_currency": "a7d9bc3b7f1787df899659e6f0e56679",
@@ -1021,7 +1032,7 @@
       "onlineSchedule": "@daily",
       "stepDays": 5
     },
-    "name": "gcp.example_dev.v1__1",
+    "name": "gcp.example_dev.features_v1__1",
     "online": 1,
     "outputNamespace": "data",
     "production": 0,

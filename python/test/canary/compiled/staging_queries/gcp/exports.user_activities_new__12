@@ -81,11 +81,11 @@
       "offlineSchedule": "@daily",
       "stepDays": 10
     },
-    "name": "gcp.exports.user_activities_new__9",
+    "name": "gcp.exports.user_activities_new__12",
     "outputNamespace": "data",
     "sourceFile": "staging_queries/gcp/exports.py",
     "team": "gcp",
-    "version": "9"
+    "version": "12"
   },
   "query": "\n    SELECT \n        *,\n        TIMESTAMP_TRUNC(_PARTITIONTIME, DAY) as ds\n    FROM demo.`user-activities`\n    WHERE \n    _PARTITIONTIME BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [

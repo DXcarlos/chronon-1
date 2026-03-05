@@ -1,10 +1,4 @@
 {
-  "derivations": [
-    {
-      "expression": "user_id_click_event_sum_7d / NULLIF(user_id_view_event_sum_7d, 0)",
-      "name": "click_through_rate_7d"
-    }
-  ],
   "joinParts": [
     {
       "groupBy": {
@@ -29,6 +23,10 @@
               {
                 "length": 10,
                 "timeUnit": 1
+              },
+              {
+                "length": 15,
+                "timeUnit": 1
               }
             ]
           },
@@ -51,6 +49,10 @@
               },
               {
                 "length": 10,
+                "timeUnit": 1
+              },
+              {
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -75,6 +77,10 @@
               {
                 "length": 10,
                 "timeUnit": 1
+              },
+              {
+                "length": 15,
+                "timeUnit": 1
               }
             ]
           },
@@ -98,6 +104,10 @@
               {
                 "length": 10,
                 "timeUnit": 1
+              },
+              {
+                "length": 15,
+                "timeUnit": 1
               }
             ]
           },
@@ -120,6 +130,10 @@
               },
               {
                 "length": 10,
+                "timeUnit": 1
+              },
+              {
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -144,6 +158,10 @@
               {
                 "length": 10,
                 "timeUnit": 1
+              },
+              {
+                "length": 15,
+                "timeUnit": 1
               }
             ]
           },
@@ -166,6 +184,10 @@
               },
               {
                 "length": 10,
+                "timeUnit": 1
+              },
+              {
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -190,6 +212,10 @@
               {
                 "length": 10,
                 "timeUnit": 1
+              },
+              {
+                "length": 15,
+                "timeUnit": 1
               }
             ]
           },
@@ -212,6 +238,10 @@
               },
               {
                 "length": 10,
+                "timeUnit": 1
+              },
+              {
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -236,6 +266,10 @@
               {
                 "length": 10,
                 "timeUnit": 1
+              },
+              {
+                "length": 15,
+                "timeUnit": 1
               }
             ]
           },
@@ -258,6 +292,10 @@
               },
               {
                 "length": 10,
+                "timeUnit": 1
+              },
+              {
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -282,6 +320,10 @@
               {
                 "length": 10,
                 "timeUnit": 1
+              },
+              {
+                "length": 15,
+                "timeUnit": 1
               }
             ]
           },
@@ -304,6 +346,10 @@
               },
               {
                 "length": 10,
+                "timeUnit": 1
+              },
+              {
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -330,6 +376,10 @@
               {
                 "length": 10,
                 "timeUnit": 1
+              },
+              {
+                "length": 15,
+                "timeUnit": 1
               }
             ]
           }
@@ -339,63 +389,77 @@
         ],
         "metaData": {
           "columnHashes": {
-            "add_to_cart_event_average_10d": "cc601bc35a1b6fe9be4ed59fd2d3ed43",
-            "add_to_cart_event_average_1d": "cc601bc35a1b6fe9be4ed59fd2d3ed43",
-            "add_to_cart_event_average_3d": "cc601bc35a1b6fe9be4ed59fd2d3ed43",
-            "add_to_cart_event_average_7d": "cc601bc35a1b6fe9be4ed59fd2d3ed43",
-            "add_to_cart_event_sum_10d": "cc601bc35a1b6fe9be4ed59fd2d3ed43",
-            "add_to_cart_event_sum_1d": "cc601bc35a1b6fe9be4ed59fd2d3ed43",
-            "add_to_cart_event_sum_3d": "cc601bc35a1b6fe9be4ed59fd2d3ed43",
-            "add_to_cart_event_sum_7d": "cc601bc35a1b6fe9be4ed59fd2d3ed43",
-            "click_event_average_10d": "449903e3906874e77fc14a0edb310286",
-            "click_event_average_1d": "449903e3906874e77fc14a0edb310286",
-            "click_event_average_3d": "449903e3906874e77fc14a0edb310286",
-            "click_event_average_7d": "449903e3906874e77fc14a0edb310286",
-            "click_event_sum_10d": "449903e3906874e77fc14a0edb310286",
-            "click_event_sum_1d": "449903e3906874e77fc14a0edb310286",
-            "click_event_sum_3d": "449903e3906874e77fc14a0edb310286",
-            "click_event_sum_7d": "449903e3906874e77fc14a0edb310286",
-            "favorite_event_average_10d": "f40fcb809e66ab72cc7aac4cb6ea4191",
-            "favorite_event_average_1d": "f40fcb809e66ab72cc7aac4cb6ea4191",
-            "favorite_event_average_3d": "f40fcb809e66ab72cc7aac4cb6ea4191",
-            "favorite_event_average_7d": "f40fcb809e66ab72cc7aac4cb6ea4191",
-            "favorite_event_sum_10d": "f40fcb809e66ab72cc7aac4cb6ea4191",
-            "favorite_event_sum_1d": "f40fcb809e66ab72cc7aac4cb6ea4191",
-            "favorite_event_sum_3d": "f40fcb809e66ab72cc7aac4cb6ea4191",
-            "favorite_event_sum_7d": "f40fcb809e66ab72cc7aac4cb6ea4191",
-            "is_desktop_sum_10d": "70acae400cfe0b11d450d6030f4b4ca2",
-            "is_desktop_sum_1d": "70acae400cfe0b11d450d6030f4b4ca2",
-            "is_desktop_sum_3d": "70acae400cfe0b11d450d6030f4b4ca2",
-            "is_desktop_sum_7d": "70acae400cfe0b11d450d6030f4b4ca2",
-            "is_mobile_sum_10d": "b6d6b2e45f406ba8fe9e1281a9438a8b",
-            "is_mobile_sum_1d": "b6d6b2e45f406ba8fe9e1281a9438a8b",
-            "is_mobile_sum_3d": "b6d6b2e45f406ba8fe9e1281a9438a8b",
-            "is_mobile_sum_7d": "b6d6b2e45f406ba8fe9e1281a9438a8b",
-            "is_tablet_sum_10d": "6acb74af79e2c695a2958fa1d7d5a4b8",
-            "is_tablet_sum_1d": "6acb74af79e2c695a2958fa1d7d5a4b8",
-            "is_tablet_sum_3d": "6acb74af79e2c695a2958fa1d7d5a4b8",
-            "is_tablet_sum_7d": "6acb74af79e2c695a2958fa1d7d5a4b8",
-            "purchase_event_average_10d": "36db22f889cab9d6b14f9f3d49c1cf52",
-            "purchase_event_average_1d": "36db22f889cab9d6b14f9f3d49c1cf52",
-            "purchase_event_average_3d": "36db22f889cab9d6b14f9f3d49c1cf52",
-            "purchase_event_average_7d": "36db22f889cab9d6b14f9f3d49c1cf52",
-            "purchase_event_sum_10d": "36db22f889cab9d6b14f9f3d49c1cf52",
-            "purchase_event_sum_1d": "36db22f889cab9d6b14f9f3d49c1cf52",
-            "purchase_event_sum_3d": "36db22f889cab9d6b14f9f3d49c1cf52",
-            "purchase_event_sum_7d": "36db22f889cab9d6b14f9f3d49c1cf52",
-            "user_event_struct_last128_10d": "911b47e9498601feea483b5baaba9f31",
-            "user_event_struct_last128_1d": "911b47e9498601feea483b5baaba9f31",
-            "user_event_struct_last128_3d": "911b47e9498601feea483b5baaba9f31",
-            "user_event_struct_last128_7d": "911b47e9498601feea483b5baaba9f31",
-            "user_id": "60769edea3dddeced3ac191e743769ac",
-            "view_event_average_10d": "560a2cd85dc709b64f955718239d03cb",
-            "view_event_average_1d": "560a2cd85dc709b64f955718239d03cb",
-            "view_event_average_3d": "560a2cd85dc709b64f955718239d03cb",
-            "view_event_average_7d": "560a2cd85dc709b64f955718239d03cb",
-            "view_event_sum_10d": "560a2cd85dc709b64f955718239d03cb",
-            "view_event_sum_1d": "560a2cd85dc709b64f955718239d03cb",
-            "view_event_sum_3d": "560a2cd85dc709b64f955718239d03cb",
-            "view_event_sum_7d": "560a2cd85dc709b64f955718239d03cb"
+            "add_to_cart_event_average_10d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_average_15d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_average_1d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_average_3d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_average_7d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_10d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_15d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_1d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_3d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_7d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "click_event_average_10d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_average_15d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_average_1d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_average_3d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_average_7d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_10d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_15d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_1d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_3d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_7d": "065495ee7af5b8775822b3e84565045f",
+            "favorite_event_average_10d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_average_15d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_average_1d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_average_3d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_average_7d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_10d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_15d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_1d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_3d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_7d": "97ad491be9d1f2108934109ef991d189",
+            "is_desktop_sum_10d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_desktop_sum_15d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_desktop_sum_1d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_desktop_sum_3d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_desktop_sum_7d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_mobile_sum_10d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_mobile_sum_15d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_mobile_sum_1d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_mobile_sum_3d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_mobile_sum_7d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_tablet_sum_10d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "is_tablet_sum_15d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "is_tablet_sum_1d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "is_tablet_sum_3d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "is_tablet_sum_7d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "purchase_event_average_10d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_average_15d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_average_1d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_average_3d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_average_7d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_10d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_15d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_1d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_3d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_7d": "ab4ac08904115a3bf7ac60090ff32092",
+            "user_event_struct_last128_10d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_event_struct_last128_15d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_event_struct_last128_1d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_event_struct_last128_3d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_event_struct_last128_7d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_id": "ae36296bed90c6ad175714deefa05347",
+            "view_event_average_10d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_average_15d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_average_1d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_average_3d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_average_7d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_10d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_15d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_1d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_3d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_7d": "30484f6e3e7c08c3e45c032a7557914b"
           },
           "executionInfo": {
             "clusterConf": {
@@ -475,13 +539,13 @@
             },
             "historicalBackfill": 0,
             "onlineSchedule": "@daily",
-            "stepDays": 4
+            "stepDays": 10
           },
-          "name": "gcp.user_activities.v2__1",
+          "name": "gcp.user_activities.v1__2",
           "online": 1,
           "outputNamespace": "data",
           "team": "gcp",
-          "version": "1"
+          "version": "2"
         },
         "sources": [
           {
@@ -492,7 +556,7 @@
                   "click_event": "IF(event_type = 'click', 1, 0)",
                   "favorite_event": "IF(event_type = 'favorite', 1, 0)",
                   "is_desktop": "IF(device_type = 'desktop', 1, 0)",
-                  "is_mobile": "IF(device_type = 'mobile_device', 1, 0)",
+                  "is_mobile": "IF(device_type = 'mobile', 1, 0)",
                   "is_tablet": "IF(device_type = 'tablet', 1, 0)",
                   "listing_id": "listing_id",
                   "purchase_event": "IF(event_type = 'purchase', 1, 0)",
@@ -500,9 +564,9 @@
                   "user_id": "user_id",
                   "view_event": "IF(event_type = 'view', 1, 0)"
                 },
-                "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
+                "timeColumn": "event_time_ms"
               },
-              "table": "data.gcp_exports_user_activities_new__9",
+              "table": "data.gcp_exports_user_activities__0",
               "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
             }
           }
@@ -782,9 +846,100 @@
   },
   "metaData": {
     "columnHashes": {
-      "click_through_rate_7d": "c157997a63c34b55d7e33f752bdc9db4"
+      "listing_id": "47aa3759ce41fc6ccf91367592e35f6d",
+      "listing_id_brief_description": "7d445defa77854b8d6ae94ae180f195f",
+      "listing_id_currency": "a7d9bc3b7f1787df899659e6f0e56679",
+      "listing_id_headline": "4ed73e13e0c394e445c4906b63d01b8a",
+      "listing_id_inventory_count": "b68673a19b32f38f45874dc0078e0f7a",
+      "listing_id_is_active": "616642f4d27a8e00d7250f7f91cb1646",
+      "listing_id_is_expensive": "38ee87f5b11a42d891ec52616a2d7b52",
+      "listing_id_is_in_stock": "6c5685ed65e91bcb3fe9ce2cb53ddbcd",
+      "listing_id_listing_id": "15395806521d79e682aa3274a46c5104",
+      "listing_id_long_description": "e3fda2158f5d126aef5ebbfdfc848174",
+      "listing_id_main_image_path": "ce9bc184baf01f9c7818e88e25b446d0",
+      "listing_id_merchant_id": "69baf448f70fdb4997071c81e8474a34",
+      "listing_id_price_cents": "905a32e196759066f782c617b83c2cbf",
+      "listing_id_primary_category": "0bd33fd7f627e669247b61302962627c",
+      "listing_id_secondary_image_paths": "1001bcbe2b97f447bb20a64c6d8ab297",
+      "listing_id_tags": "b4a3e64fad103c2caf6fcadb2e68f1dd",
+      "listing_id_weight_grams": "7d01ad6aa1db30922ff461f2d0d62ee7",
+      "merchant__listing_id_listing_id": "74857a06805db28ecb0d7e350f031dfd",
+      "merchant__listing_id_primary_category": "c4a356b0561263aa879220c3829eb41f",
+      "row_id": "596506e0a4fef5508ebdcda7e6eb1072",
+      "ts": "d1ae44a8f84a262685dbf1bdb9f8d46e",
+      "user_id": "80c458b68b34de93d3c4c555ef2b2ddc",
+      "user_id_add_to_cart_event_average_10d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_average_15d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_average_1d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_average_3d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_average_7d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_10d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_15d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_1d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_3d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_7d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_click_event_average_10d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_average_15d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_average_1d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_average_3d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_average_7d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_10d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_15d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_1d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_3d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_7d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_favorite_event_average_10d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_average_15d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_average_1d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_average_3d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_average_7d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_10d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_15d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_1d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_3d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_7d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_is_desktop_sum_10d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_desktop_sum_15d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_desktop_sum_1d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_desktop_sum_3d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_desktop_sum_7d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_mobile_sum_10d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_mobile_sum_15d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_mobile_sum_1d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_mobile_sum_3d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_mobile_sum_7d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_tablet_sum_10d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_is_tablet_sum_15d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_is_tablet_sum_1d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_is_tablet_sum_3d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_is_tablet_sum_7d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_purchase_event_average_10d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_average_15d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_average_1d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_average_3d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_average_7d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_10d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_15d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_1d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_3d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_7d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_user_event_struct_last128_10d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_user_event_struct_last128_15d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_user_event_struct_last128_1d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_user_event_struct_last128_3d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_user_event_struct_last128_7d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_view_event_average_10d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_average_15d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_average_1d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_average_3d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_average_7d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_10d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_15d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_1d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_3d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_7d": "fffe33a5913643faa801e729d55a5b53"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_user_activities_new__9_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities_new__9/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_merchants__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_merchants__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -866,7 +1021,7 @@
       "onlineSchedule": "@daily",
       "stepDays": 5
     },
-    "name": "gcp.example_dev.v2__1",
+    "name": "gcp.example_dev.features_v0__1",
     "online": 1,
     "outputNamespace": "data",
     "production": 0,
