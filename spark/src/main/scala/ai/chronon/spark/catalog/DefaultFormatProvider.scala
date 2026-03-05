@@ -6,7 +6,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.slf4j.{Logger, LoggerFactory}
 
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
 /** Default format provider implementation based on default Chronon supported open source library versions.
   */
@@ -62,9 +62,8 @@ class DefaultFormatProvider(val sparkSession: SparkSession) extends FormatProvid
       case Success(format) =>
         logger.info(s"Delta check: Successfully read the format of table: $tableName as $format")
         format == "delta"
-      case _ =>
-        // the describe detail calls fails for Delta Lake tables
-        logger.info(s"Delta check: Unable to read the format of the table $tableName using DESCRIBE DETAIL")
+      case Failure(e) =>
+        logger.info(s"Delta check: Unable to read the format of the table $tableName using DESCRIBE DETAIL: ${e.getMessage}")
         false
     }
   }

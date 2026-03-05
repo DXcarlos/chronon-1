@@ -21,6 +21,8 @@ import software.amazon.awssdk.services.ec2.model.{DescribeSecurityGroupsRequest,
 import software.amazon.awssdk.services.emr.EmrClient
 import software.amazon.awssdk.services.emr.model.{Unit => _, _}
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.PutObjectRequest
+import software.amazon.awssdk.core.sync.RequestBody
 import scala.jdk.CollectionConverters._
 
 class EmrSubmitter(customerId: String,
@@ -198,24 +200,80 @@ class EmrSubmitter(customerId: String,
                                mainClass: String,
                                jarUri: String,
                                jobProperties: Map[String, String],
+                               databricksHost: Option[String],
                                args: String*): StepConfig = {
-    // TODO: see if we can use the spark.files or --files instead of doing this ourselves
     // Copy files from s3 to cluster
     val awsS3CpArgs = filesToMount.map(file => s"aws s3 cp $file /mnt/zipline/")
-    // Escape single quotes for safe shell interpolation inside bash -c '...'
-    val confArgs = jobProperties
-      .map { case (k, v) =>
-        val escapedKey = k.replace("'", "'\\''")
-        val escapedValue = v.replace("'", "'\\''")
-        s"--conf '${escapedKey}=${escapedValue}'"
-      }
-      .mkString(" ")
-    val sparkSubmitArgs =
-      List(s"spark-submit $confArgs --class $mainClass $jarUri ${args.mkString(" ")}")
+
+    // Upload spark conf as a shell script to S3 to avoid EMR's 10,280 char per-arg limit.
+    // The script defines a bash array of --conf args that gets expanded at runtime on the cluster,
+    // keeping EMR step args small while preserving the cluster's spark-defaults.conf.
+    // When DATABRICKS_HOST is present, token entries are stripped from the S3 file and instead
+    // fetched at runtime from Secrets Manager so the token never gets written to disk.
+    // Falls back to inline --conf args when no S3 client is available.
+    val (sparkSubmitCmd, extraS3CpArgs) = s3Client match {
+      case Some(client) if jobProperties.nonEmpty && filesToMount.nonEmpty =>
+        val isTokenKey = (k: String) =>
+          k.matches("spark\\.sql\\.catalog\\..*\\.token") || k.contains("DATABRICKS_OAUTH_TOKEN")
+
+        // Separate token entries from safe conf — token values never written to S3
+        val (tokenConf, safeProps) = databricksHost match {
+          case Some(_) =>
+            val tokenKeys = jobProperties.keys.filter(isTokenKey).toSeq
+            val tokenLines = tokenKeys.map(k => s"""  --conf "$k=$$DATABRICKS_OAUTH_TOKEN"""")
+            (tokenLines, jobProperties.filterNot { case (k, _) => isTokenKey(k) })
+          case None => (Seq.empty, jobProperties)
+        }
+
+        val confLines = safeProps.map { case (k, v) =>
+          val escapedKey = k.replace("'", "'\\''")
+          val escapedValue = v.replace("'", "'\\''")
+          s"  --conf '${escapedKey}=${escapedValue}'"
+        }
+        // Token entries go inside the array with $DATABRICKS_OAUTH_TOKEN (resolved at runtime)
+        val allConfLines = confLines ++ tokenConf
+        val scriptContent = s"SPARK_CONF_ARGS=(\n${allConfLines.mkString("\n")}\n)"
+
+        val confFileName = s"spark-conf-${java.util.UUID.randomUUID()}.sh"
+        val basePath = filesToMount.head.substring(0, filesToMount.head.lastIndexOf('/'))
+        val confS3Path = s"$basePath/$confFileName"
+        val bucket = basePath.stripPrefix("s3://").split("/").head
+        val key = s"${basePath.stripPrefix(s"s3://$bucket/")}/$confFileName"
+
+        client.putObject(
+          PutObjectRequest.builder().bucket(bucket).key(key).build(),
+          RequestBody.fromString(scriptContent))
+
+        // Token fetch runs in bash -c before sourcing conf, so the variable is available
+        val fetchPreamble = databricksHost match {
+          case Some(host) =>
+            val secretName = s"$customerId-zipline-databricks-sp"
+            val region = if (awsRegion.nonEmpty) awsRegion else "us-east-1"
+            s"""SECRET_JSON=$$(aws secretsmanager get-secret-value --secret-id '$secretName' --query 'SecretString' --output text --region '$region'); """ +
+              s"""DB_CLIENT_ID=$$(echo "$$SECRET_JSON" | jq -r '.client_id'); """ +
+              s"""DB_CLIENT_SECRET=$$(echo "$$SECRET_JSON" | jq -r '.client_secret'); """ +
+              s"""DATABRICKS_OAUTH_TOKEN=$$(curl -s -X POST '${host.stripSuffix("/")}/oidc/v1/token' -H 'Content-Type: application/x-www-form-urlencoded' -u "$$DB_CLIENT_ID:$$DB_CLIENT_SECRET" -d 'grant_type=client_credentials&scope=all-apis' | jq -r '.access_token'); """
+          case None => ""
+        }
+
+        (s"""${fetchPreamble}source /mnt/zipline/$confFileName && spark-submit "$${SPARK_CONF_ARGS[@]}" --class $mainClass $jarUri ${args.mkString(" ")}""",
+         List(s"aws s3 cp $confS3Path /mnt/zipline/$confFileName"))
+
+      case _ =>
+        val inline = jobProperties
+          .map { case (k, v) =>
+            val escapedKey = k.replace("'", "'\\''")
+            val escapedValue = v.replace("'", "'\\''")
+            s"--conf '${escapedKey}=${escapedValue}'"
+          }
+          .mkString(" ")
+        (s"spark-submit $inline --class $mainClass $jarUri ${args.mkString(" ")}", Nil)
+    }
+
     val finalArgs = List(
       "bash",
       "-c",
-      (awsS3CpArgs ++ sparkSubmitArgs).mkString("; \n")
+      (awsS3CpArgs ++ extraS3CpArgs ++ List(sparkSubmitCmd)).mkString("; \n")
     )
     logger.debug(s"Step config args: $finalArgs")
     StepConfig
@@ -496,6 +554,7 @@ class EmrSubmitter(customerId: String,
                                           submissionProperties(MainClass),
                                           submissionProperties(JarURI),
                                           jobProperties,
+                                          submissionProperties.get("DATABRICKS_HOST"),
                                           userArgs: _*)
 
         val request = AddJobFlowStepsRequest
@@ -625,6 +684,7 @@ object EmrSubmitter {
       EmrClient.builder().build(),
       Ec2Client.builder().build(),
       eksFlinkSubmitter = Some(new EksFlinkSubmitter(k8sConfig)),
+      s3Client = Some(S3Client.builder().build()),
       awsRegion = awsRegion
     )
   }
