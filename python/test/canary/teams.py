@@ -256,6 +256,7 @@ aws_databricks = Team(
             "spark.chronon.table_write.format": "iceberg",
             "spark.chronon.partition.column": "ds",
             "spark.chronon.partition.format": "yyyy-MM-dd",
+            "spark.chronon.partition.expression": "CAST(updated_at_ts AS DATE)",
 
             # Cross-catalog persist: materialize before write to avoid DV lineage issue
             "spark.chronon.cross_catalog.persist": "true",

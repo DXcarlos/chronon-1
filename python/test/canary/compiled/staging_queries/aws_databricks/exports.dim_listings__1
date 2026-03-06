@@ -1,7 +1,7 @@
 {
   "engineType": 0,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_workspace_poc_dim_listings_with_offset_0\", \"spec\": \"workspace.poc.dim_listings/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_workspace_poc_dim_listings_nop_with_offset_0\", \"spec\": \"workspace.poc.dim_listings_nop/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -13,6 +13,7 @@
           "spark.chronon.coalesce.factor": "10",
           "spark.chronon.cross_catalog.persist": "true",
           "spark.chronon.partition.column": "ds",
+          "spark.chronon.partition.expression": "CAST(updated_at_ts AS DATE)",
           "spark.chronon.partition.format": "yyyy-MM-dd",
           "spark.chronon.table_write.format": "iceberg",
           "spark.databricks.delta.deletionVectors.enabled": "false",
@@ -51,13 +52,13 @@
       },
       "offlineSchedule": "@daily"
     },
-    "name": "aws_databricks.exports.dim_listings__0",
+    "name": "aws_databricks.exports.dim_listings__1",
     "outputNamespace": "workspace_iceberg.poc",
     "sourceFile": "staging_queries/aws_databricks/exports.py",
     "team": "aws_databricks",
-    "version": "0"
+    "version": "1"
   },
-  "query": "\n    SELECT\n        *\n    FROM workspace.poc.dim_listings\n    WHERE\n    ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "query": "\n    SELECT\n        *, date_format(CAST(updated_at_ts AS DATE), 'yyyy-MM-dd') AS ds\n    FROM workspace.poc.dim_listings_nop\n    WHERE\n    CAST(updated_at_ts AS DATE) BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [
     {
       "endOffset": {
@@ -74,7 +75,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "workspace.poc.dim_listings"
+        "table": "workspace.poc.dim_listings_nop"
       }
     }
   ]
