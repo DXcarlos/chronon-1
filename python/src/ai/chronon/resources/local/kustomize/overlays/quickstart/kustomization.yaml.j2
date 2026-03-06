@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+commonLabels:
+  app.kubernetes.io/instance: chronon-quickstart
+
+resources:
+  - ../../base
+
+# Pull Chronon images from the configured remote registry
+images:
+  - name: chronon-fetcher-k8s
+    newName: "{{ image_prefix }}chronon-fetcher-k8s"
+    newTag: "{{ config.images.tag }}"
+  - name: chronon-frontend
+    newName: "{{ image_prefix }}chronon-frontend"
+    newTag: "{{ config.images.tag }}"
+  - name: chronon-spark-k8s
+    newName: "{{ image_prefix }}chronon-spark-k8s"
+    newTag: "{{ config.images.tag }}"
+  - name: chronon-spark-base
+    newName: "{{ image_prefix }}chronon-spark-base"
+    newTag: "{{ config.images.tag }}"

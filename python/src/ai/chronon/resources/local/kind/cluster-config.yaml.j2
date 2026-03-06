@@ -1,0 +1,33 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: {{ cluster_name }}
+
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      # Hub API
+      - containerPort: 30800
+        hostPort: 8080
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Frontend
+      - containerPort: 30300
+        hostPort: 3000
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Spark History Server
+      - containerPort: 30180
+        hostPort: 18080
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Prometheus (when observability.type: local)
+      - containerPort: 30900
+        hostPort: 9090
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"

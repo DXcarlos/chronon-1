@@ -1,0 +1,82 @@
+# OTel Collector exporting to GCP Cloud Monitoring
+# Requires a k8s Secret named {{ observability.gcp_credentials_secret }}
+# containing a GCP service account key at key "credentials.json"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: chronon
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    exporters:
+      googlecloud:
+        project: {{ observability.gcp_project }}
+        metric:
+          prefix: chronon
+    service:
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          exporters: [googlecloud]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: chronon
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: grpc
+      port: 4317
+      targetPort: 4317
+    - name: http
+      port: 4318
+      targetPort: 4318
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: chronon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.91.0
+          args: ["--config=/etc/otel/otel-collector-config.yaml"]
+          ports:
+            - containerPort: 4317
+            - containerPort: 4318
+          env:
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /etc/gcp/credentials.json
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+            - name: gcp-credentials
+              mountPath: /etc/gcp
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config
+        - name: gcp-credentials
+          secret:
+            secretName: {{ observability.gcp_credentials_secret }}

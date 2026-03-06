@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fetcher
+  namespace: chronon
+spec:
+  selector:
+    app: fetcher
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+    - name: metrics
+      port: 8905
+      targetPort: 8905
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fetcher
+  namespace: chronon
+  labels:
+    app: fetcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fetcher
+  template:
+    metadata:
+      labels:
+        app: fetcher
+    spec:
+      containers:
+        - name: fetcher
+          image: chronon-fetcher-k8s:latest
+          imagePullPolicy: {{ pull_policy }}
+          ports:
+            - containerPort: 9000
+            - containerPort: 8905
+          env:
+            - name: CHRONON_ONLINE_CLASS
+              value: "{{ online_class }}"
+{% if redis_host %}
+            - name: REDIS_HOST
+              value: "{{ redis_host }}"
+            - name: REDIS_PORT
+              value: "6379"
+{% endif %}
+            - name: JVM_OPTS
+              value: >-
+{% if metrics_enabled %}
+                -Dai.chronon.metrics.enabled=true
+                -Dai.chronon.metrics.reader=http
+                -Dai.chronon.metrics.exporter.url=http://otel-collector:4318
+{% else %}
+                -Dai.chronon.metrics.enabled=false
+{% endif %}
+                --add-opens=java.base/java.lang=ALL-UNNAMED
+                --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
+                --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+                --add-opens=java.base/java.io=ALL-UNNAMED
+                --add-opens=java.base/java.net=ALL-UNNAMED
+                --add-opens=java.base/java.nio=ALL-UNNAMED
+                --add-opens=java.base/java.util=ALL-UNNAMED
+                --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 5

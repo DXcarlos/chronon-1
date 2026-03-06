@@ -16,3 +16,6 @@ sqlglot
 # Schedule validation
 croniter
 urllib3==2.6.3
+# Local K8s config generation
+PyYAML
+Jinja2

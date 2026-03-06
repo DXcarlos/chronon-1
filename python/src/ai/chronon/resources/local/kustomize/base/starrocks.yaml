@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: starrocks-fe
+  namespace: chronon
+spec:
+  selector:
+    app: starrocks-fe
+  ports:
+    - name: http
+      port: 8030
+      targetPort: 8030
+    - name: rpc
+      port: 9020
+      targetPort: 9020
+    - name: query
+      port: 9030
+      targetPort: 9030
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: starrocks-fe
+  namespace: chronon
+spec:
+  selector:
+    matchLabels:
+      app: starrocks-fe
+  serviceName: starrocks-fe
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: starrocks-fe
+    spec:
+      containers:
+        - name: starrocks-fe
+          image: starrocks/fe-ubuntu:3.3.7
+          env:
+            - name: HOST_TYPE
+              value: FQDN
+          ports:
+            - containerPort: 8030
+            - containerPort: 9020
+            - containerPort: 9030
+          volumeMounts:
+            - name: fe-data
+              mountPath: /opt/starrocks/fe/meta
+  volumeClaimTemplates:
+    - metadata:
+        name: fe-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

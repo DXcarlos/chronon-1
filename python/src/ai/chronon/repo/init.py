@@ -12,6 +12,8 @@ from rich.syntax import Syntax
 from ai.chronon.cli.theme import console, print_success
 from ai.chronon.repo.constants import VALID_CLOUDS
 
+_K8S_STACK_FILENAME = "zipline-stack.yaml"
+
 
 def _detect_shell_config():
     """Detect the user's shell and return (shell_name, config_file_path).
@@ -50,9 +52,67 @@ def _apply_pythonpath(target_path):
     os.environ["PYTHONPATH"] = f"{target_path}:{current}" if current else target_path
 
 
+def _copy_resource_tree(src_traversable, dest_dir: str) -> None:
+    """Recursively copy a package resource tree to a filesystem directory."""
+    os.makedirs(dest_dir, exist_ok=True)
+    for item in src_traversable.iterdir():
+        dest_path = os.path.join(dest_dir, item.name)
+        if item.is_dir():
+            _copy_resource_tree(item, dest_path)
+        else:
+            with item.open("rb") as f_in, open(dest_path, "wb") as f_out:
+                f_out.write(f_in.read())
+
+
+def _init_k8s():
+    """Write zipline-stack.yaml and scaffold Chronon configs to the current directory."""
+    cwd = os.getcwd()
+
+    # Write zipline-stack.yaml
+    dest = os.path.join(cwd, _K8S_STACK_FILENAME)
+    if os.path.exists(dest):
+        choice = Prompt.ask(
+            f"[bold yellow]Warning:[/] {dest} already exists. Overwrite?",
+            choices=["y", "n"],
+            default="n",
+        )
+        if choice == "n":
+            return
+
+    src = files("ai.chronon").joinpath("resources", "local", _K8S_STACK_FILENAME)
+    with src.open("r") as f:
+        content = f.read()
+    with open(dest, "w") as f:
+        f.write(content)
+    print_success(f"Created {dest}")
+
+    # Copy quickstart scaffold into ./zipline/
+    scaffold_src = files("ai.chronon").joinpath("resources", "local", "scaffold")
+    scaffold_dest = os.path.join(cwd, "zipline")
+    if os.path.exists(scaffold_dest) and os.listdir(scaffold_dest):
+        choice = Prompt.ask(
+            f"[bold yellow]Warning:[/] {scaffold_dest} is not empty. Overwrite scaffold?",
+            choices=["y", "n"],
+            default="n",
+        )
+        if choice == "n":
+            console.print("Skipping scaffold copy.")
+            scaffold_dest = None
+    if scaffold_dest is not None:
+        _copy_resource_tree(scaffold_src, scaffold_dest)
+        print_success(f"Scaffold written to {scaffold_dest}/")
+
+    console.print("\nEdit [bold]zipline-stack.yaml[/] then run:")
+    console.print("  [bold]zipline admin generate[/]")
+    console.print("\nTo compile the Chronon configs:")
+    console.print("  [bold]zipline compile[/]")
+
+
 @click.command(name="init")
 @click.argument(
-    "cloud", type=click.Choice(VALID_CLOUDS, case_sensitive=False), envvar="CLOUD_PROVIDER"
+    "cloud",
+    type=click.Choice([*VALID_CLOUDS, "k8s"], case_sensitive=False),
+    envvar="CLOUD_PROVIDER",
 )
 @click.option(
     "--chronon-root",
@@ -64,8 +124,13 @@ def _apply_pythonpath(target_path):
 def main(ctx, cloud, chronon_root):
     """Initialize a new Zipline project with scaffolding.
 
-    CLOUD is the cloud provider to use (gcp, aws, or azure).
+    CLOUD is the cloud provider (gcp, aws, azure) or 'k8s' to generate
+    a zipline-stack.yaml for local kind development.
     """
+    if cloud.lower() == "k8s":
+        _init_k8s()
+        return
+
     template_path = files("ai.chronon").joinpath("resources", cloud.lower())
     target_path = os.path.abspath(chronon_root)
 

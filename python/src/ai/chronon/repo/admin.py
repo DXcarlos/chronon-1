@@ -28,6 +28,7 @@ from ai.chronon.repo.constants import (
     VALID_CLOUDS,
     get_public_spark_jars_for_admin,
 )
+from ai.chronon.repo.local_env import generate
 from ai.chronon.repo.registry_client import (
     DOCKER_HUB_REGISTRY,
     ImageTarget,
@@ -86,6 +87,9 @@ def _parse_registry(registry):
 )
 def admin():
     pass
+
+
+admin.add_command(generate)
 
 
 @admin.command("install")

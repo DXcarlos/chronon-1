@@ -1,0 +1,29 @@
+# zipline-stack.yaml — configuration for zipline admin generate
+# Edit this file then run: zipline admin generate
+
+version: "1"
+
+cluster:
+  name: chronon          # kind cluster name
+  type: kind             # only "kind" supported; extensible to eks/gke/aks
+
+online_store:
+  type: redis            # redis | local_kv
+  host: redis            # k8s service name (only used when type: redis)
+  port: 6379
+
+observability:
+  type: local            # none | local | gcp | aws | azure
+  # gcp options:
+  # gcp_project: my-project
+  # gcp_credentials_secret: gcp-credentials   # k8s secret name
+  # aws options:
+  # aws_region: us-east-1
+  # aws_credentials_secret: aws-credentials
+  # azure options:
+  # azure_connection_string_secret: azure-monitor-secret
+
+images:
+  registry: local        # local | ghcr.io/zipline-ai | <custom-registry>
+  tag: latest
+  pull_policy: IfNotPresent   # IfNotPresent | Always | Never

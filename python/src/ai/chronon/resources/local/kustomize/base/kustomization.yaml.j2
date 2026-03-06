@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: chronon
+
+resources:
+  - namespace.yaml
+  - spark-rbac.yaml
+  - postgres.yaml
+  - minio.yaml
+  - starrocks.yaml
+  - loki.yaml
+  - promtail.yaml
+  - spark-history-server.yaml
+  - celeborn.yaml
+{% if online_store.type == "redis" %}
+  - redis.yaml
+{% endif %}
+{% if otel_file %}
+  - {{ otel_file }}
+{% endif %}
+  - hub.yaml
+  - eval.yaml
+  - frontend.yaml
+  - fetcher.yaml

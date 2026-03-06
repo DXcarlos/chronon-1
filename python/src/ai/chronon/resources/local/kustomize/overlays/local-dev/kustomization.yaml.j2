@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+commonLabels:
+  app.kubernetes.io/instance: chronon-local-dev
+
+resources:
+  - ../../base
+
+# Pin all Chronon images to the configured tag (images loaded via kind load docker-image)
+images:
+  - name: chronon-fetcher-k8s
+    newTag: "{{ config.images.tag }}"
+  - name: chronon-frontend
+    newTag: "{{ config.images.tag }}"
+  - name: chronon-spark-k8s
+    newTag: "{{ config.images.tag }}"
+  - name: chronon-spark-base
+    newTag: "{{ config.images.tag }}"

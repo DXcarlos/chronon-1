@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: celeborn-master
+  namespace: chronon
+spec:
+  selector:
+    app: celeborn-master
+  ports:
+    - name: rpc
+      port: 9097
+      targetPort: 9097
+    - name: http
+      port: 9098
+      targetPort: 9098
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: celeborn-master
+  namespace: chronon
+spec:
+  selector:
+    matchLabels:
+      app: celeborn-master
+  serviceName: celeborn-master
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: celeborn-master
+    spec:
+      containers:
+        - name: celeborn-master
+          image: apache/celeborn:0.5.1-scala_2.12
+          args: ["bash", "/opt/celeborn/sbin/start-master.sh"]
+          ports:
+            - containerPort: 9097
+            - containerPort: 9098
+          env:
+            - name: CELEBORN_MASTER_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
