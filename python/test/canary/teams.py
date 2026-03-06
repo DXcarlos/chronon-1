@@ -220,8 +220,8 @@ aws_databricks = Team(
     env=EnvironmentVariables(
         common={
             "CLOUD_PROVIDER": "aws",
-            "CUSTOMER_ID": "dev",
-            "VERSION": "latest",
+            "CUSTOMER_ID": "canary",
+            "VERSION": "0.1.0+dev.kumarteja",
             "AWS_REGION": "us-west-2",
             "SPARK_CLUSTER_NAME": "zipline-canary-emr",
             "ARTIFACT_PREFIX": "s3://zipline-artifacts-dev",

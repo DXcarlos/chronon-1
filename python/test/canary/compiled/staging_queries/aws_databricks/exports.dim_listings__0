@@ -40,7 +40,7 @@
           "ARTIFACT_PREFIX": "s3://zipline-artifacts-dev",
           "AWS_REGION": "us-west-2",
           "CLOUD_PROVIDER": "aws",
-          "CUSTOMER_ID": "dev",
+          "CUSTOMER_ID": "canary",
           "DATABRICKS_HOST": "https://dbc-050d6f00-dcb3.cloud.databricks.com",
           "FRONTEND_URL": "http://localhost:3000",
           "HUB_URL": "http://localhost:3903",
