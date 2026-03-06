@@ -122,8 +122,9 @@ aws = Team(
             "WAREHOUSE_PREFIX": "s3://zipline-warehouse-dev",
             "FLINK_STATE_URI": "s3://zipline-warehouse-canary/flink-state",
             "CHRONON_ONLINE_ARGS": " -Ztasks=1",
-            "FRONTEND_URL": "http://localhost:3000",
-            "HUB_URL": "http://localhost:3903",
+            "FRONTEND_URL": "https://canary-aws.zipline.ai/",
+            "HUB_URL": "https://canary-orch-aws.zipline.ai/",
+            "EVAL_URL": "https://canary-eval-aws.zipline.ai/",
             "ENABLE_KINESIS": "true",
         },
         modeEnvironments={
