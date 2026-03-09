@@ -30,13 +30,13 @@ spec:
                 -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5090 \
                 -Xms1g \
                 -Xmx2g \
-{% if metrics_enabled %}
+{%- if metrics_enabled %}
                 -Dai.chronon.metrics.enabled=true \
                 -Dai.chronon.metrics.reader=http \
                 -Dai.chronon.metrics.exporter.url=http://otel-collector:4318 \
-{% else %}
+{%- else %}
                 -Dai.chronon.metrics.enabled=false \
-{% endif %}
+{%- endif %}
                 --add-opens=java.base/java.lang=ALL-UNNAMED \
                 --add-opens=java.base/java.lang.invoke=ALL-UNNAMED \
                 --add-opens=java.base/java.lang.reflect=ALL-UNNAMED \
