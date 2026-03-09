@@ -1,3 +1,7 @@
+# OpenTelemetry Collector + Prometheus for local metrics
+# otel-collector receives OTLP (gRPC/HTTP) and exposes a Prometheus scrape endpoint.
+# Prometheus scrapes that endpoint and serves the UI on NodePort 30909 (host: 9091).
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -12,9 +16,11 @@ data:
             endpoint: 0.0.0.0:4317
           http:
             endpoint: 0.0.0.0:4318
+
     exporters:
       prometheus:
         endpoint: 0.0.0.0:9464
+
     service:
       pipelines:
         metrics:
@@ -22,29 +28,27 @@ data:
           exporters: [prometheus]
 ---
 apiVersion: v1
-kind: Service
+kind: ConfigMap
 metadata:
-  name: otel-collector
+  name: prometheus-config
   namespace: chronon
-spec:
-  selector:
-    app: otel-collector
-  ports:
-    - name: grpc
-      port: 4317
-      targetPort: 4317
-    - name: http
-      port: 4318
-      targetPort: 4318
-    - name: prometheus
-      port: 9464
-      targetPort: 9464
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+
+    scrape_configs:
+      - job_name: 'otel-collector'
+        static_configs:
+          - targets: ['otel-collector:9464']
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: otel-collector
   namespace: chronon
+  labels:
+    app: otel-collector
 spec:
   replicas: 1
   selector:
@@ -57,53 +61,90 @@ spec:
     spec:
       containers:
         - name: otel-collector
-          image: otel/opentelemetry-collector:0.91.0
+          image: otel/opentelemetry-collector:latest
           args: ["--config=/etc/otel/otel-collector-config.yaml"]
           ports:
             - containerPort: 4317
+              name: otlp-grpc
             - containerPort: 4318
+              name: otlp-http
             - containerPort: 9464
+              name: prom-scrape
           volumeMounts:
             - name: config
               mountPath: /etc/otel
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 4317
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 4317
+            initialDelaySeconds: 10
+            periodSeconds: 30
       volumes:
         - name: config
           configMap:
             name: otel-collector-config
 ---
 apiVersion: v1
-kind: ConfigMap
+kind: Service
 metadata:
-  name: prometheus-config
+  name: otel-collector
   namespace: chronon
-data:
-  prometheus.yml: |
-    global:
-      scrape_interval: 15s
-    scrape_configs:
-      - job_name: otel-collector
-        static_configs:
-          - targets: ['otel-collector:9464']
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+    - name: prom-scrape
+      port: 9464
+      targetPort: 9464
 ---
+# NodePort for local access
 apiVersion: v1
 kind: Service
 metadata:
-  name: prometheus
+  name: otel-collector-nodeport
   namespace: chronon
 spec:
   type: NodePort
   selector:
-    app: prometheus
+    app: otel-collector
   ports:
-    - port: 9090
-      targetPort: 9090
-      nodePort: 30900
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      nodePort: 30417
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      nodePort: 30418
+    - name: prom-scrape
+      port: 9464
+      targetPort: 9464
+      nodePort: 30964
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus
   namespace: chronon
+  labels:
+    app: prometheus
 spec:
   replicas: 1
   selector:
@@ -116,14 +157,63 @@ spec:
     spec:
       containers:
         - name: prometheus
-          image: prom/prometheus:v2.49.1
+          image: prom/prometheus:latest
           args: ["--config.file=/etc/prometheus/prometheus.yml"]
           ports:
             - containerPort: 9090
+              name: http
           volumeMounts:
             - name: config
               mountPath: /etc/prometheus
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 30
       volumes:
         - name: config
           configMap:
             name: prometheus-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: chronon
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+---
+# NodePort for local access (host port 9091 to avoid clashing with any local Prometheus)
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-nodeport
+  namespace: chronon
+spec:
+  type: NodePort
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+      nodePort: 30909

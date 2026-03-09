@@ -1,9 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-commonLabels:
-  app.kubernetes.io/instance: chronon-quickstart
-
 resources:
   - ../../base
 
@@ -21,3 +18,9 @@ images:
   - name: chronon-spark-base
     newName: "{{ image_prefix }}chronon-spark-base"
     newTag: "{{ config.images.tag }}"
+
+# Labels specific to quickstart mode (includeSelectors: false avoids immutable selector issues)
+labels:
+  - pairs:
+      app.kubernetes.io/instance: quickstart
+    includeSelectors: false

@@ -70,7 +70,6 @@ def _copy_static_base_files(output_dir: Path) -> None:
         "redis.yaml",
         "eval.yaml",
         "frontend.yaml",
-        "celeborn.yaml",
     ]
     src_base = _RESOURCES_DIR / "kustomize" / "base"
     dest_base = output_dir / "kustomize" / "base"

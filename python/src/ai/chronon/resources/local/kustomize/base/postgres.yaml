@@ -1,3 +1,131 @@
+# PostgreSQL deployment for Iceberg JDBC catalog and Hub execution-info database
+# Stores Iceberg table metadata and Hub execution info
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: chronon
+data:
+  init-hub-db.sql: |
+    -- Create execution-info database for Hub service
+    CREATE DATABASE "execution-info";
+    CREATE USER locker_user WITH PASSWORD 'locker_pass';
+    GRANT ALL PRIVILEGES ON DATABASE "execution-info" TO locker_user;
+    -- Connect to execution-info and grant schema permissions
+    \c "execution-info"
+    GRANT ALL ON SCHEMA public TO locker_user;
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: chronon
+type: Opaque
+stringData:
+  postgres-user: "chronon"
+  postgres-password: "chronon"
+  postgres-db: "iceberg_catalog"
+  # Hub database credentials
+  hub-db-user: "locker_user"
+  hub-db-password: "locker_pass"
+  hub-db-name: "execution-info"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: chronon
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: chronon
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: postgres-password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: postgres-db
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - chronon
+                - -d
+                - iceberg_catalog
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - chronon
+                - -d
+                - iceberg_catalog
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: init-scripts
+          configMap:
+            name: postgres-init
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -7,50 +135,22 @@ spec:
   selector:
     app: postgres
   ports:
-    - port: 5432
+    - name: postgres
+      port: 5432
       targetPort: 5432
 ---
-apiVersion: apps/v1
-kind: StatefulSet
+# NodePort service for local access
+apiVersion: v1
+kind: Service
 metadata:
-  name: postgres
+  name: postgres-nodeport
   namespace: chronon
 spec:
+  type: NodePort
   selector:
-    matchLabels:
-      app: postgres
-  serviceName: postgres
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      containers:
-        - name: postgres
-          image: postgres:15
-          env:
-            - name: POSTGRES_DB
-              value: chronon
-            - name: POSTGRES_USER
-              value: chronon
-            - name: POSTGRES_PASSWORD
-              value: chronon
-          ports:
-            - containerPort: 5432
-          volumeMounts:
-            - name: data
-              mountPath: /var/lib/postgresql/data
-          readinessProbe:
-            exec:
-              command: ["pg_isready", "-U", "chronon"]
-            initialDelaySeconds: 5
-            periodSeconds: 5
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 1Gi
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      nodePort: 30432

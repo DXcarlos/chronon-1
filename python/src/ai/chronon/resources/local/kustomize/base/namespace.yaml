@@ -1,6 +1,8 @@
+# Chronon namespace for all local development resources
 apiVersion: v1
 kind: Namespace
 metadata:
   name: chronon
   labels:
-    app.kubernetes.io/managed-by: zipline
+    app.kubernetes.io/name: chronon
+    app.kubernetes.io/component: infrastructure

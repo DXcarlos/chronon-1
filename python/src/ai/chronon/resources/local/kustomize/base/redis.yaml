@@ -1,3 +1,100 @@
+# Redis running in single-shard cluster mode for local development.
+# JedisCluster (used by RedisKVStoreFactory) requires cluster mode even with a single node.
+#
+# Init container starts Redis as a daemon, initialises the cluster (assigns all 16384 hash
+# slots to the single node), then exits — persisting nodes.conf on a shared emptyDir volume.
+# The main container then starts Redis reading that pre-initialised nodes.conf.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: chronon
+data:
+  redis.conf: |
+    cluster-enabled yes
+    cluster-config-file /redis-data/nodes.conf
+    cluster-node-timeout 5000
+    cluster-announce-ip redis.chronon.svc.cluster.local
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: chronon
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-config
+        - name: redis-data
+          emptyDir: {}
+      initContainers:
+        - name: redis-cluster-init
+          image: redis:7-alpine
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # 1. Start redis in background
+              redis-server --cluster-enabled yes \
+                --cluster-config-file /redis-data/nodes.conf \
+                --daemonize yes
+
+              # 2. Wait for it to live
+              until redis-cli ping 2>/dev/null; do sleep 0.5; done
+
+              # 3. MANUALLY add slots (This avoids the 3-node error)
+              # This assigns all 16384 slots to the local node
+              redis-cli cluster addslots $(seq 0 16383)
+
+              # 4. Save the config and shut down so the main container can take over
+              redis-cli save
+              redis-cli shutdown
+          volumeMounts:
+            - name: redis-data
+              mountPath: /redis-data
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          ports:
+            - containerPort: 6379
+              name: redis
+          volumeMounts:
+            - name: redis-config
+              mountPath: /etc/redis
+            - name: redis-data
+              mountPath: /redis-data
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -9,41 +106,20 @@ spec:
   ports:
     - port: 6379
       targetPort: 6379
+      name: redis
 ---
-apiVersion: apps/v1
-kind: StatefulSet
+# NodePort service for local access
+apiVersion: v1
+kind: Service
 metadata:
-  name: redis
+  name: redis-nodeport
   namespace: chronon
 spec:
+  type: NodePort
   selector:
-    matchLabels:
-      app: redis
-  serviceName: redis
-  replicas: 1
-  template:
-    metadata:
-      labels:
-        app: redis
-    spec:
-      containers:
-        - name: redis
-          image: redis:7
-          ports:
-            - containerPort: 6379
-          volumeMounts:
-            - name: data
-              mountPath: /data
-          readinessProbe:
-            exec:
-              command: ["redis-cli", "ping"]
-            initialDelaySeconds: 5
-            periodSeconds: 5
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 1Gi
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      nodePort: 30637

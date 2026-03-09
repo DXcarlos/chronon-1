@@ -69,3 +69,5 @@ quickstart = Team(
         },
     ),
 )
+
+default = quickstart

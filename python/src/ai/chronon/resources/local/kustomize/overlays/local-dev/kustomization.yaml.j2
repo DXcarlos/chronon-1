@@ -1,9 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-commonLabels:
-  app.kubernetes.io/instance: chronon-local-dev
-
 resources:
   - ../../base
 
@@ -17,3 +14,41 @@ images:
     newTag: "{{ config.images.tag }}"
   - name: chronon-spark-base
     newTag: "{{ config.images.tag }}"
+
+# Patches for local development mode
+patches:
+  # spark-history-server uses chronon-spark-base which must be loaded with Never
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+    target:
+      kind: Deployment
+      name: spark-history-server
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+    target:
+      kind: Deployment
+      name: hub
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+    target:
+      kind: Deployment
+      name: eval
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+    target:
+      kind: Deployment
+      name: frontend
+
+# Labels specific to local-dev mode (includeSelectors: false avoids immutable selector issues)
+labels:
+  - pairs:
+      app.kubernetes.io/instance: local-dev
+    includeSelectors: false

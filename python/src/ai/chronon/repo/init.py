@@ -106,6 +106,8 @@ def _init_k8s():
     console.print("  [bold]zipline admin generate[/]")
     console.print("\nTo compile the Chronon configs:")
     console.print("  [bold]zipline compile[/]")
+    console.print("\nTo seed test data for the scaffold:")
+    console.print("  [bold]pip install zipline-seedkit && zipline-seedkit[/]")
 
 
 @click.command(name="init")

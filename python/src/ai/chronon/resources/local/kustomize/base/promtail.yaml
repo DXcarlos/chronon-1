@@ -1,3 +1,84 @@
+# Promtail DaemonSet for collecting pod logs from chronon namespace
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promtail-config
+  namespace: chronon
+data:
+  promtail.yaml: |
+    server:
+      http_listen_port: 9080
+      grpc_listen_port: 0
+
+    positions:
+      filename: /tmp/positions.yaml
+
+    clients:
+      - url: http://loki.chronon.svc.cluster.local:3100/loki/api/v1/push
+
+    scrape_configs:
+      - job_name: chronon-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - chronon
+
+        relabel_configs:
+          # Match pods on current node only (HOSTNAME is set via Downward API)
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            action: keep
+            regex: ${HOSTNAME}
+
+          # Build the path: /var/log/pods/{namespace}_{pod}_{uid}/*/*.log
+          # First, store namespace
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: __tmp_namespace
+          # Store pod name
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: __tmp_pod
+          # Store pod uid
+          - source_labels: [__meta_kubernetes_pod_uid]
+            target_label: __tmp_uid
+          # Combine into __path__
+          - source_labels: [__tmp_namespace, __tmp_pod, __tmp_uid]
+            separator: _
+            target_label: __path__
+            regex: (.*)
+            replacement: /var/log/pods/$1/*/*.log
+
+          # Extract namespace and pod name as labels
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+          # Extract chronon-job-id pod label → chronon_job_id
+          - source_labels: [__meta_kubernetes_pod_label_chronon_job_id]
+            target_label: chronon_job_id
+
+          # Extract spark-role pod label → spark_role
+          - source_labels: [__meta_kubernetes_pod_label_spark_role]
+            target_label: spark_role
+
+          # Keep job label for consistency
+          - target_label: job
+            replacement: chronon-pods
+
+        pipeline_stages:
+          # Parse CRI log format
+          - cri: {}
+          # Parse JSON log lines to extract structured fields
+          - json:
+              expressions:
+                workflowId: workflowId
+                stepId: stepId
+          # Attach extracted fields as structured metadata (not indexed labels)
+          - structured_metadata:
+              workflowId:
+              stepId:
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -10,55 +91,29 @@ metadata:
   name: promtail
 rules:
   - apiGroups: [""]
-    resources: ["pods", "nodes", "namespaces"]
+    resources: ["pods"]
     verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: promtail
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: promtail
 subjects:
   - kind: ServiceAccount
     name: promtail
     namespace: chronon
-roleRef:
-  kind: ClusterRole
-  name: promtail
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: promtail-config
-  namespace: chronon
-data:
-  config.yaml: |
-    server:
-      http_listen_port: 9080
-      grpc_listen_port: 0
-    positions:
-      filename: /tmp/positions.yaml
-    clients:
-      - url: http://loki:3100/loki/api/v1/push
-    scrape_configs:
-      - job_name: kubernetes-pods
-        kubernetes_sd_configs:
-          - role: pod
-        relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_label_app]
-            target_label: app
-          - source_labels: [__meta_kubernetes_namespace]
-            target_label: namespace
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: pod
-          - source_labels: [__meta_kubernetes_pod_container_name]
-            target_label: container
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: promtail
   namespace: chronon
+  labels:
+    app: promtail
 spec:
   selector:
     matchLabels:
@@ -71,29 +126,43 @@ spec:
       serviceAccountName: promtail
       containers:
         - name: promtail
-          image: grafana/promtail:2.9.0
-          args: ["-config.file=/etc/promtail/config.yaml"]
+          image: grafana/promtail:2.9.3
+          args:
+            - -config.file=/etc/promtail/promtail.yaml
+            - -config.expand-env=true
+          ports:
+            - containerPort: 9080
+              name: http
           env:
             - name: HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
           volumeMounts:
+            - name: config
+              mountPath: /etc/promtail
             - name: varlog
               mountPath: /var/log
               readOnly: true
-            - name: varlibdockercontainers
-              mountPath: /var/lib/docker/containers
-              readOnly: true
-            - name: config
-              mountPath: /etc/promtail
+            - name: positions
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       volumes:
-        - name: varlog
-          hostPath:
-            path: /var/log
-        - name: varlibdockercontainers
-          hostPath:
-            path: /var/lib/docker/containers
         - name: config
           configMap:
             name: promtail-config
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: positions
+          emptyDir: {}

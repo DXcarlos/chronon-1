@@ -1,18 +1,5 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: fetcher
-  namespace: chronon
-spec:
-  selector:
-    app: fetcher
-  ports:
-    - name: api
-      port: 9000
-      targetPort: 9000
-    - name: metrics
-      port: 8905
-      targetPort: 8905
+# fetcher service deployment
+# Provides the Chronon Fetcher API for online feature serving
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -35,38 +22,120 @@ spec:
         - name: fetcher
           image: chronon-fetcher-k8s:latest
           imagePullPolicy: {{ pull_policy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              exec java \
+                -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5090 \
+                -Xms1g \
+                -Xmx2g \
+{% if metrics_enabled %}
+                -Dai.chronon.metrics.enabled=true \
+                -Dai.chronon.metrics.reader=http \
+                -Dai.chronon.metrics.exporter.url=http://otel-collector:4318 \
+{% else %}
+                -Dai.chronon.metrics.enabled=false \
+{% endif %}
+                --add-opens=java.base/java.lang=ALL-UNNAMED \
+                --add-opens=java.base/java.lang.invoke=ALL-UNNAMED \
+                --add-opens=java.base/java.lang.reflect=ALL-UNNAMED \
+                --add-opens=java.base/java.io=ALL-UNNAMED \
+                --add-opens=java.base/java.net=ALL-UNNAMED \
+                --add-opens=java.base/java.nio=ALL-UNNAMED \
+                --add-opens=java.base/java.util=ALL-UNNAMED \
+                --add-opens=java.base/java.util.concurrent=ALL-UNNAMED \
+                --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED \
+                --add-opens=java.base/sun.nio.ch=ALL-UNNAMED \
+                --add-opens=java.base/sun.nio.cs=ALL-UNNAMED \
+                --add-opens=java.base/sun.security.action=ALL-UNNAMED \
+                --add-opens=java.base/sun.util.calendar=ALL-UNNAMED \
+                --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED \
+                -Dserver.port=9200 \
+                -Donline.jar=$ONLINE_JAR \
+                -Donline.class=$CHRONON_ONLINE_CLASS \
+                -cp "/opt/chronon/service.jar:/opt/chronon/online.jar" \
+                ai.chronon.service.ChrononServiceLauncher \
+                run "ai.chronon.service.FetcherVerticle"
           ports:
-            - containerPort: 9000
-            - containerPort: 8905
+            - containerPort: 9200
+              name: http
+            - containerPort: 5090
+              name: debug
           env:
+            - name: CHRONON_EVAL_WAREHOUSE_PATH
+              value: "s3a://warehouse/"
+            - name: CHRONON_EVAL_WAREHOUSE_CATALOG
+              value: "iceberg"
+            - name: CHRONON_EVAL_CATALOG_TYPE
+              value: "jdbc"
+            - name: CHRONON_EVAL_ICEBERG_CATALOG_URI
+              value: "jdbc:postgresql://postgres:5432/iceberg_catalog"
+            - name: CHRONON_EVAL_ICEBERG_CATALOG_USER
+              value: "chronon"
+            - name: CHRONON_EVAL_ICEBERG_CATALOG_PASSWORD
+              value: "chronon"
+            - name: AWS_ACCESS_KEY_ID
+              value: "minioadmin"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "minioadmin"
+            - name: AWS_ENDPOINT_URL
+              value: "http://minio:9000"
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: ONLINE_JAR
+              value: "/opt/chronon/online.jar"
             - name: CHRONON_ONLINE_CLASS
               value: "{{ online_class }}"
 {% if redis_host %}
             - name: REDIS_HOST
               value: "{{ redis_host }}"
-            - name: REDIS_PORT
-              value: "6379"
 {% endif %}
-            - name: JVM_OPTS
-              value: >-
-{% if metrics_enabled %}
-                -Dai.chronon.metrics.enabled=true
-                -Dai.chronon.metrics.reader=http
-                -Dai.chronon.metrics.exporter.url=http://otel-collector:4318
-{% else %}
-                -Dai.chronon.metrics.enabled=false
-{% endif %}
-                --add-opens=java.base/java.lang=ALL-UNNAMED
-                --add-opens=java.base/java.lang.invoke=ALL-UNNAMED
-                --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
-                --add-opens=java.base/java.io=ALL-UNNAMED
-                --add-opens=java.base/java.net=ALL-UNNAMED
-                --add-opens=java.base/java.nio=ALL-UNNAMED
-                --add-opens=java.base/java.util=ALL-UNNAMED
-                --add-opens=java.base/java.util.concurrent=ALL-UNNAMED
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "3Gi"
+              cpu: "2000m"
           readinessProbe:
             httpGet:
-              path: /health
-              port: 9000
+              path: /ping
+              port: 9200
             initialDelaySeconds: 10
             periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 9200
+            initialDelaySeconds: 30
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fetcher
+  namespace: chronon
+spec:
+  selector:
+    app: fetcher
+  ports:
+    - name: http
+      port: 9200
+      targetPort: 9200
+---
+# NodePort service for local access
+apiVersion: v1
+kind: Service
+metadata:
+  name: fetcher-nodeport
+  namespace: chronon
+spec:
+  type: NodePort
+  selector:
+    app: fetcher
+  ports:
+    - name: http
+      port: 9200
+      targetPort: 9200
+      nodePort: 31999

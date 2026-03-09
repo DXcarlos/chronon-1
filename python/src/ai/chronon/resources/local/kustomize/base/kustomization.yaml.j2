@@ -3,6 +3,7 @@ kind: Kustomization
 
 namespace: chronon
 
+# Core infrastructure resources
 resources:
   - namespace.yaml
   - spark-rbac.yaml
@@ -12,7 +13,6 @@ resources:
   - loki.yaml
   - promtail.yaml
   - spark-history-server.yaml
-  - celeborn.yaml
 {% if online_store.type == "redis" %}
   - redis.yaml
 {% endif %}
@@ -23,3 +23,22 @@ resources:
   - eval.yaml
   - frontend.yaml
   - fetcher.yaml
+
+# Common labels for all resources
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: chronon-quickstart
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+
+# Image references - overlays will customize these
+images:
+  - name: chronon-spark-base
+    newName: chronon-spark-base
+    newTag: latest
+  - name: chronon-spark-k8s
+    newName: chronon-spark-k8s
+    newTag: latest
+  - name: chronon-frontend
+    newName: chronon-frontend
+    newTag: latest

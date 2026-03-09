@@ -1,3 +1,98 @@
+# MinIO deployment for local S3-compatible object storage
+# Used for: Iceberg data, Spark event logs, checkpoints
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: chronon
+type: Opaque
+stringData:
+  root-user: "minioadmin"
+  root-password: "minioadmin"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: chronon
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: chronon
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9001"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: root-password
+          ports:
+            - containerPort: 9000
+              name: api
+            - containerPort: 9001
+              name: console
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-data
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -14,48 +109,58 @@ spec:
       port: 9001
       targetPort: 9001
 ---
-apiVersion: apps/v1
-kind: StatefulSet
+# NodePort service for local access
+apiVersion: v1
+kind: Service
 metadata:
-  name: minio
+  name: minio-nodeport
   namespace: chronon
 spec:
+  type: NodePort
   selector:
-    matchLabels:
-      app: minio
-  serviceName: minio
-  replicas: 1
+    app: minio
+  ports:
+    - name: api
+      port: 9000
+      targetPort: 9000
+      nodePort: 30900
+    - name: console
+      port: 9001
+      targetPort: 9001
+      nodePort: 30901
+---
+# Job to create default buckets
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-setup
+  namespace: chronon
+spec:
   template:
-    metadata:
-      labels:
-        app: minio
     spec:
+      restartPolicy: OnFailure
       containers:
-        - name: minio
-          image: minio/minio:latest
-          args: ["server", "/data", "--console-address", ":9001"]
-          env:
-            - name: MINIO_ROOT_USER
-              value: minioadmin
-            - name: MINIO_ROOT_PASSWORD
-              value: minioadmin
-          ports:
-            - containerPort: 9000
-            - containerPort: 9001
-          volumeMounts:
-            - name: data
-              mountPath: /data
-          readinessProbe:
-            httpGet:
-              path: /minio/health/ready
-              port: 9000
-            initialDelaySeconds: 10
-            periodSeconds: 5
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 5Gi
+        - name: mc
+          image: minio/mc:RELEASE.2024-01-16T16-06-34Z
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Wait for MinIO to be ready
+              until mc alias set local http://minio:9000 minioadmin minioadmin; do
+                echo "Waiting for MinIO..."
+                sleep 2
+              done
+
+              # Create buckets
+              mc mb --ignore-existing local/chronon-data
+              mc mb --ignore-existing local/chronon-spark-logs
+              mc mb --ignore-existing local/chronon-checkpoints
+              mc mb --ignore-existing local/warehouse
+              mc mb --ignore-existing local/staging
+
+              # Create event-logs directory with placeholder (required for Spark event logging)
+              echo "" | mc pipe local/chronon-spark-logs/event-logs/.keep
+
+              echo "Buckets created successfully"
+              mc ls local/
