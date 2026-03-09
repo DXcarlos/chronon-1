@@ -18,6 +18,18 @@ spec:
       labels:
         app: fetcher
     spec:
+      initContainers:
+        - name: wait-for-redis
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until redis-cli -h redis -p 6379 cluster info 2>/dev/null | grep -q "cluster_state:ok"; do
+                echo "Waiting for Redis cluster..."
+                sleep 2
+              done
+              echo "Redis cluster is ready"
       containers:
         - name: fetcher
           image: chronon-fetcher-k8s:latest

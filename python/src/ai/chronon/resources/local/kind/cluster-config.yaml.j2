@@ -6,8 +6,18 @@ nodes:
   - role: control-plane
     extraPortMappings:
       # Hub API
-      - containerPort: 30800
-        hostPort: 8080
+      - containerPort: 30903
+        hostPort: 3903
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Eval service
+      - containerPort: 30904
+        hostPort: 3904
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Fetcher
+      - containerPort: 31999
+        hostPort: 9200
         listenAddress: "127.0.0.1"
         protocol: TCP
       # Frontend
@@ -20,9 +30,39 @@ nodes:
         hostPort: 18080
         listenAddress: "127.0.0.1"
         protocol: TCP
-      # Prometheus (when observability.type: local)
+      # MinIO API
       - containerPort: 30900
-        hostPort: 9090
+        hostPort: 9000
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # MinIO Console
+      - containerPort: 30901
+        hostPort: 9001
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Prometheus
+      - containerPort: 30909
+        hostPort: 9091
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Postgres
+      - containerPort: 30432
+        hostPort: 5432
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Redis
+      - containerPort: 30637
+        hostPort: 6379
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # Loki
+      - containerPort: 30310
+        hostPort: 3100
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      # StarRocks MySQL
+      - containerPort: 30930
+        hostPort: 9030
         listenAddress: "127.0.0.1"
         protocol: TCP
     kubeadmConfigPatches:

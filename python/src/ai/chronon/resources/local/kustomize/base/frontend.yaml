@@ -19,6 +19,17 @@ spec:
         app: frontend
     spec:
       initContainers:
+        - name: wait-for-starrocks
+          image: mysql:8.0
+          command:
+            - sh
+            - -c
+            - |
+              until mysqladmin ping -h starrocks -P 9030 -u root --silent 2>/dev/null; do
+                echo "Waiting for StarRocks..."
+                sleep 3
+              done
+              echo "StarRocks is ready"
         - name: wait-for-hub
           image: busybox:1.36
           command:
