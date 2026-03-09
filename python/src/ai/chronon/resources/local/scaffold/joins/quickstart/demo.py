@@ -1,7 +1,7 @@
-from group_bys.quickstart import dim_listings, dim_merchants, user_activities
+from group_bys.quickstart import dim_listings, user_activities
 from staging_queries.quickstart import exports
 
-from ai.chronon.join import Derivation, Join, JoinPart
+from ai.chronon.join import Join, JoinPart
 from ai.chronon.query import Query, selects
 from ai.chronon.source import EventSource
 

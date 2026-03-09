@@ -1,12 +1,12 @@
 from ai.chronon.repo.constants import RunMode
-from ai.chronon.types import ClusterConfigProperties, ConfigProperties, EnvironmentVariables
+from ai.chronon.types import ConfigProperties, EnvironmentVariables
 
 try:
     from gen_thrift.api.ttypes import Team
-except ImportError:
+except ImportError as err:
     raise ImportError(
         "gen_thrift not found. Run 'zipline compile' to generate the thrift types first."
-    )
+    ) from err
 
 quickstart = Team(
     description="Local kind cluster — quickstart team",
