@@ -442,12 +442,15 @@ def _upload_engine_jars_to_store(client, registry, release, cloud, artifact_stor
     """Extract JARs from the engine image and upload to a blob store."""
     results = []
     engine_repo = f"ziplineai/engine-{cloud}"
-    label = f"engine JARs ({engine_repo}:{release})"
+
+    # Engine images on Docker Hub are tagged with a "v" prefix (e.g. v1.0.19), unlike hub/frontend images.
+    engine_release = release if release.startswith("v") or release == "latest" else f"v{release}"
+    label = f"engine JARs ({engine_repo}:{engine_release})"
 
     try:
-        manifest = client.resolve_single_platform(registry, engine_repo, release)
+        manifest = client.resolve_single_platform(registry, engine_repo, engine_release)
     except RegistryError as e:
-        console.print(f"[{STYLE_ERROR}]Error resolving {engine_repo}:{release}:[/]\n{traceback.format_exc()}")
+        console.print(f"[{STYLE_ERROR}]Error resolving {engine_repo}:{engine_release}:[/]\n{traceback.format_exc()}")
         results.append(("engine-jars", artifact_store, "", f"FAILED: {e}"))
         return results
 
