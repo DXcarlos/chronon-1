@@ -70,6 +70,7 @@
           "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "canary",
           "ENABLE_PUBSUB": "true",
+          "EVAL_URL": "http://localhost:3904",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
           "FRONTEND_URL": "http://localhost:3000",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -87,6 +88,7 @@
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "canary",
             "ENABLE_PUBSUB": "true",
+            "EVAL_URL": "http://localhost:3904",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
             "FRONTEND_URL": "http://localhost:3000",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -122,7 +124,8 @@
                 "metaData": {
                   "executionInfo": {
                     "historicalBackfill": 0,
-                    "onlineSchedule": "@daily"
+                    "onlineSchedule": "@daily",
+                    "stepDays": 10
                   },
                   "name": "gcp.dim_listings.v1__0",
                   "online": 1,

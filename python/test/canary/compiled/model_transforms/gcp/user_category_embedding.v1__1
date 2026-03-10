@@ -9,22 +9,7 @@
           "params": [
             {
               "dataType": {
-                "kind": 13,
-                "name": "event_category_pair",
-                "params": [
-                  {
-                    "dataType": {
-                      "kind": 7
-                    },
-                    "name": "event_type"
-                  },
-                  {
-                    "dataType": {
-                      "kind": 7
-                    },
-                    "name": "primary_category"
-                  }
-                ]
+                "kind": 7
               },
               "name": "elem"
             }
@@ -56,9 +41,9 @@
           "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
           "spark.default.parallelism": "10",
           "spark.driver.cores": "1",
-          "spark.driver.memory": "1g",
+          "spark.driver.memory": "512m",
           "spark.executor.cores": "1",
-          "spark.executor.memory": "1g",
+          "spark.executor.memory": "512m",
           "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
           "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
           "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
@@ -82,6 +67,7 @@
           "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "canary",
           "ENABLE_PUBSUB": "true",
+          "EVAL_URL": "http://localhost:3904",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
           "FRONTEND_URL": "http://localhost:3000",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -89,7 +75,7 @@
           "GCP_REGION": "us-central1",
           "HUB_URL": "http://localhost:3903",
           "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-          "VERSION": "0.1.0+dev.varantzanoyan",
+          "VERSION": "latest",
           "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
         },
         "modeEnvironments": {
@@ -99,6 +85,7 @@
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "canary",
             "ENABLE_PUBSUB": "true",
+            "EVAL_URL": "http://localhost:3904",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
             "FRONTEND_URL": "http://localhost:3000",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -106,7 +93,7 @@
             "GCP_REGION": "us-central1",
             "HUB_URL": "http://localhost:3903",
             "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-            "VERSION": "0.1.0+dev.varantzanoyan",
+            "VERSION": "latest",
             "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
           }
         }
@@ -128,7 +115,7 @@
         }
       },
       "inputMapping": {
-        "instance": "named_struct('content',\n            array_join(\n                transform(\n                    user_id_event_category_pair_last100_7d,\n                    x -> concat(x.event_type, ':', x.primary_category)\n                ),\n                '; '\n            )\n        )"
+        "instance": "named_struct('content', array_join(user_id_event_category_pair_last100_7d, ', '))"
       },
       "metaData": {
         "executionInfo": {
@@ -152,9 +139,9 @@
               "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
               "spark.default.parallelism": "10",
               "spark.driver.cores": "1",
-              "spark.driver.memory": "1g",
+              "spark.driver.memory": "512m",
               "spark.executor.cores": "1",
-              "spark.executor.memory": "1g",
+              "spark.executor.memory": "512m",
               "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
               "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
               "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
@@ -178,6 +165,7 @@
               "CLOUD_PROVIDER": "gcp",
               "CUSTOMER_ID": "canary",
               "ENABLE_PUBSUB": "true",
+              "EVAL_URL": "http://localhost:3904",
               "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
               "FRONTEND_URL": "http://localhost:3000",
               "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -185,7 +173,7 @@
               "GCP_REGION": "us-central1",
               "HUB_URL": "http://localhost:3903",
               "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-              "VERSION": "0.1.0+dev.varantzanoyan",
+              "VERSION": "latest",
               "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
             },
             "modeEnvironments": {
@@ -195,6 +183,7 @@
                 "CLOUD_PROVIDER": "gcp",
                 "CUSTOMER_ID": "canary",
                 "ENABLE_PUBSUB": "true",
+                "EVAL_URL": "http://localhost:3904",
                 "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                 "FRONTEND_URL": "http://localhost:3000",
                 "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -202,19 +191,19 @@
                 "GCP_REGION": "us-central1",
                 "HUB_URL": "http://localhost:3903",
                 "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-                "VERSION": "0.1.0+dev.varantzanoyan",
+                "VERSION": "latest",
                 "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
               }
             }
           }
         },
-        "name": "gcp.user_category_embedding.user_category_embedding_model__1",
+        "name": "gcp.user_category_embedding.v1__1",
         "outputNamespace": "data",
         "team": "gcp",
         "version": "1"
       },
       "outputMapping": {
-        "user_category_embedding": "gcp_user_category_embedding_user_category_embedding_model__1__embeddings.values"
+        "user_category_embedding": "gcp_user_category_embedding_v1__1__embeddings.values"
       },
       "valueSchema": {
         "kind": 13,
@@ -269,8 +258,7 @@
     }
   ],
   "passthroughFields": [
-    "user_id",
-    "user_id_event_category_pair_last100_7d"
+    "user_id"
   ],
   "sources": [
     {
@@ -396,9 +384,7 @@
                       },
                       "query": {
                         "selects": {
-                          "event_category_pair": "STRUCT(event_type, listing_id_primary_category as primary_category)",
-                          "event_type": "event_type",
-                          "primary_category": "listing_id_primary_category",
+                          "event_category_pair": "CONCAT(event_type, ':', listing_id_primary_category)",
                           "user_id": "user_id"
                         },
                         "timeColumn": "ts"
@@ -443,7 +429,7 @@
         },
         "query": {
           "wheres": [
-            "user_id_event_category_pair_last100_7d IS NOT NULL AND SIZE(user_id_event_category_pair_last100_7d) > 0"
+            "user_id_event_category_pair_last100_7d IS NOT NULL"
           ]
         }
       }

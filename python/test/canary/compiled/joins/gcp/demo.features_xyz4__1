@@ -492,9 +492,9 @@
                 "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
                 "spark.default.parallelism": "10",
                 "spark.driver.cores": "1",
-                "spark.driver.memory": "1g",
+                "spark.driver.memory": "512m",
                 "spark.executor.cores": "1",
-                "spark.executor.memory": "1g",
+                "spark.executor.memory": "512m",
                 "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
                 "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
                 "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
@@ -518,6 +518,7 @@
                 "CLOUD_PROVIDER": "gcp",
                 "CUSTOMER_ID": "canary",
                 "ENABLE_PUBSUB": "true",
+                "EVAL_URL": "http://localhost:3904",
                 "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                 "FRONTEND_URL": "http://localhost:3000",
                 "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -525,7 +526,7 @@
                 "GCP_REGION": "us-central1",
                 "HUB_URL": "http://localhost:3903",
                 "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-                "VERSION": "0.1.0+dev.varantzanoyan",
+                "VERSION": "latest",
                 "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
               },
               "modeEnvironments": {
@@ -535,6 +536,7 @@
                   "CLOUD_PROVIDER": "gcp",
                   "CUSTOMER_ID": "canary",
                   "ENABLE_PUBSUB": "true",
+                  "EVAL_URL": "http://localhost:3904",
                   "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                   "FRONTEND_URL": "http://localhost:3000",
                   "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -542,14 +544,14 @@
                   "GCP_REGION": "us-central1",
                   "HUB_URL": "http://localhost:3903",
                   "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-                  "VERSION": "0.1.0+dev.varantzanoyan",
+                  "VERSION": "latest",
                   "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
                 }
               }
             },
             "historicalBackfill": 0,
             "onlineSchedule": "@daily",
-            "stepDays": 10
+            "stepDays": 30
           },
           "name": "gcp.user_activities.v1__2",
           "online": 1,
@@ -629,9 +631,9 @@
                 "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
                 "spark.default.parallelism": "10",
                 "spark.driver.cores": "1",
-                "spark.driver.memory": "1g",
+                "spark.driver.memory": "512m",
                 "spark.executor.cores": "1",
-                "spark.executor.memory": "1g",
+                "spark.executor.memory": "512m",
                 "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
                 "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
                 "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
@@ -655,6 +657,7 @@
                 "CLOUD_PROVIDER": "gcp",
                 "CUSTOMER_ID": "canary",
                 "ENABLE_PUBSUB": "true",
+                "EVAL_URL": "http://localhost:3904",
                 "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                 "FRONTEND_URL": "http://localhost:3000",
                 "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -662,7 +665,7 @@
                 "GCP_REGION": "us-central1",
                 "HUB_URL": "http://localhost:3903",
                 "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-                "VERSION": "0.1.0+dev.varantzanoyan",
+                "VERSION": "latest",
                 "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
               },
               "modeEnvironments": {
@@ -672,6 +675,7 @@
                   "CLOUD_PROVIDER": "gcp",
                   "CUSTOMER_ID": "canary",
                   "ENABLE_PUBSUB": "true",
+                  "EVAL_URL": "http://localhost:3904",
                   "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                   "FRONTEND_URL": "http://localhost:3000",
                   "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -679,7 +683,7 @@
                   "GCP_REGION": "us-central1",
                   "HUB_URL": "http://localhost:3903",
                   "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-                  "VERSION": "0.1.0+dev.varantzanoyan",
+                  "VERSION": "latest",
                   "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
                 }
               }
@@ -756,9 +760,9 @@
                 "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
                 "spark.default.parallelism": "10",
                 "spark.driver.cores": "1",
-                "spark.driver.memory": "1g",
+                "spark.driver.memory": "512m",
                 "spark.executor.cores": "1",
-                "spark.executor.memory": "1g",
+                "spark.executor.memory": "512m",
                 "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
                 "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
                 "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
@@ -782,6 +786,7 @@
                 "CLOUD_PROVIDER": "gcp",
                 "CUSTOMER_ID": "canary",
                 "ENABLE_PUBSUB": "true",
+                "EVAL_URL": "http://localhost:3904",
                 "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                 "FRONTEND_URL": "http://localhost:3000",
                 "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -789,7 +794,7 @@
                 "GCP_REGION": "us-central1",
                 "HUB_URL": "http://localhost:3903",
                 "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-                "VERSION": "0.1.0+dev.varantzanoyan",
+                "VERSION": "latest",
                 "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
               },
               "modeEnvironments": {
@@ -799,6 +804,7 @@
                   "CLOUD_PROVIDER": "gcp",
                   "CUSTOMER_ID": "canary",
                   "ENABLE_PUBSUB": "true",
+                  "EVAL_URL": "http://localhost:3904",
                   "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                   "FRONTEND_URL": "http://localhost:3000",
                   "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -806,7 +812,7 @@
                   "GCP_REGION": "us-central1",
                   "HUB_URL": "http://localhost:3903",
                   "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-                  "VERSION": "0.1.0+dev.varantzanoyan",
+                  "VERSION": "latest",
                   "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
                 }
               }
@@ -972,9 +978,9 @@
           "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
           "spark.default.parallelism": "10",
           "spark.driver.cores": "1",
-          "spark.driver.memory": "1g",
+          "spark.driver.memory": "512m",
           "spark.executor.cores": "1",
-          "spark.executor.memory": "1g",
+          "spark.executor.memory": "512m",
           "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
           "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
           "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
@@ -999,6 +1005,7 @@
           "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "canary",
           "ENABLE_PUBSUB": "true",
+          "EVAL_URL": "http://localhost:3904",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
           "FRONTEND_URL": "http://localhost:3000",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -1006,7 +1013,7 @@
           "GCP_REGION": "us-central1",
           "HUB_URL": "http://localhost:3903",
           "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-          "VERSION": "0.1.0+dev.varantzanoyan",
+          "VERSION": "latest",
           "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
         },
         "modeEnvironments": {
@@ -1016,6 +1023,7 @@
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "canary",
             "ENABLE_PUBSUB": "true",
+            "EVAL_URL": "http://localhost:3904",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
             "FRONTEND_URL": "http://localhost:3000",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -1023,7 +1031,7 @@
             "GCP_REGION": "us-central1",
             "HUB_URL": "http://localhost:3903",
             "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-            "VERSION": "0.1.0+dev.varantzanoyan",
+            "VERSION": "latest",
             "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
           }
         }

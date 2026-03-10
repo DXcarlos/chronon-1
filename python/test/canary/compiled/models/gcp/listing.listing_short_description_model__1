@@ -2,12 +2,14 @@
   "inferenceSpec": {
     "modelBackend": 0,
     "modelBackendParams": {
-      "model_name": "gemini-embedding-001",
-      "model_type": "publisher"
+      "maxOutputTokens": "128",
+      "model_name": "gemini-1.5-flash-001",
+      "model_type": "publisher",
+      "temperature": "0.4"
     }
   },
   "inputMapping": {
-    "instance": "named_struct('content',\n            array_join(\n                transform(\n                    user_id_event_category_pair_last100_7d,\n                    x -> concat(x.event_type, ':', x.primary_category)\n                ),\n                '; '\n            )\n        )"
+    "instance": "named_struct('contents', array(named_struct('role', 'user', 'parts', array(named_struct('text', CONCAT('Write a concise short product description (2-3 sentences) for an online store listing. Long description: ', listing_id_long_description))))))"
   },
   "metaData": {
     "executionInfo": {
@@ -31,9 +33,9 @@
           "spark.chronon.table_write.prefix": "gs://zipline-warehouse-canary/data/tables/",
           "spark.default.parallelism": "10",
           "spark.driver.cores": "1",
-          "spark.driver.memory": "1g",
+          "spark.driver.memory": "512m",
           "spark.executor.cores": "1",
-          "spark.executor.memory": "1g",
+          "spark.executor.memory": "512m",
           "spark.sql.catalog.default_iceberg": "org.apache.iceberg.spark.SparkCatalog",
           "spark.sql.catalog.default_iceberg.catalog-impl": "org.apache.iceberg.gcp.bigquery.BigQueryMetastoreCatalog",
           "spark.sql.catalog.default_iceberg.gcp.bigquery.location": "us-central1",
@@ -57,6 +59,7 @@
           "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "canary",
           "ENABLE_PUBSUB": "true",
+          "EVAL_URL": "http://localhost:3904",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
           "FRONTEND_URL": "http://localhost:3000",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -64,7 +67,7 @@
           "GCP_REGION": "us-central1",
           "HUB_URL": "http://localhost:3903",
           "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-          "VERSION": "0.1.0+dev.varantzanoyan",
+          "VERSION": "latest",
           "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
         },
         "modeEnvironments": {
@@ -74,6 +77,7 @@
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "canary",
             "ENABLE_PUBSUB": "true",
+            "EVAL_URL": "http://localhost:3904",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
             "FRONTEND_URL": "http://localhost:3000",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -81,20 +85,20 @@
             "GCP_REGION": "us-central1",
             "HUB_URL": "http://localhost:3903",
             "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-            "VERSION": "0.1.0+dev.varantzanoyan",
+            "VERSION": "latest",
             "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
           }
         }
       }
     },
-    "name": "gcp.user_category_embedding.user_category_embedding_model__1",
+    "name": "gcp.listing.listing_short_description_model__1",
     "outputNamespace": "data",
-    "sourceFile": "models/gcp/user_category_embedding.py",
+    "sourceFile": "models/gcp/listing.py",
     "team": "gcp",
     "version": "1"
   },
   "outputMapping": {
-    "user_category_embedding": "gcp_user_category_embedding_user_category_embedding_model__1__embeddings.values"
+    "short_description": "gcp_listing_listing_short_description_model__1__candidates[0].content.parts[0].text"
   },
   "valueSchema": {
     "kind": 13,
@@ -102,47 +106,64 @@
     "params": [
       {
         "dataType": {
-          "kind": 13,
-          "name": "embeddings",
+          "kind": 12,
           "params": [
             {
               "dataType": {
                 "kind": 13,
-                "name": "statistics",
+                "name": "candidate",
                 "params": [
                   {
                     "dataType": {
-                      "kind": 0
+                      "kind": 13,
+                      "name": "content_inner",
+                      "params": [
+                        {
+                          "dataType": {
+                            "kind": 12,
+                            "params": [
+                              {
+                                "dataType": {
+                                  "kind": 13,
+                                  "name": "part",
+                                  "params": [
+                                    {
+                                      "dataType": {
+                                        "kind": 7
+                                      },
+                                      "name": "text"
+                                    }
+                                  ]
+                                },
+                                "name": "elem"
+                              }
+                            ]
+                          },
+                          "name": "parts"
+                        },
+                        {
+                          "dataType": {
+                            "kind": 7
+                          },
+                          "name": "role"
+                        }
+                      ]
                     },
-                    "name": "truncated"
+                    "name": "content"
                   },
                   {
                     "dataType": {
-                      "kind": 3
+                      "kind": 7
                     },
-                    "name": "token_count"
+                    "name": "finishReason"
                   }
                 ]
               },
-              "name": "statistics"
-            },
-            {
-              "dataType": {
-                "kind": 12,
-                "params": [
-                  {
-                    "dataType": {
-                      "kind": 6
-                    },
-                    "name": "elem"
-                  }
-                ]
-              },
-              "name": "values"
+              "name": "elem"
             }
           ]
         },
-        "name": "embeddings"
+        "name": "candidates"
       }
     ]
   }

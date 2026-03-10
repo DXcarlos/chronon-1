@@ -93,6 +93,7 @@
                 "CLOUD_PROVIDER": "gcp",
                 "CUSTOMER_ID": "canary",
                 "ENABLE_PUBSUB": "true",
+                "EVAL_URL": "http://localhost:3904",
                 "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                 "FRONTEND_URL": "http://localhost:3000",
                 "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -110,6 +111,7 @@
                   "CLOUD_PROVIDER": "gcp",
                   "CUSTOMER_ID": "canary",
                   "ENABLE_PUBSUB": "true",
+                  "EVAL_URL": "http://localhost:3904",
                   "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                   "FRONTEND_URL": "http://localhost:3000",
                   "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -123,7 +125,8 @@
               }
             },
             "historicalBackfill": 0,
-            "onlineSchedule": "@daily"
+            "onlineSchedule": "@daily",
+            "stepDays": 10
           },
           "name": "gcp.dim_listings.v1__0",
           "online": 1,
@@ -175,15 +178,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -198,15 +205,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -221,15 +232,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -244,15 +259,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -267,15 +286,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -290,15 +313,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -313,15 +340,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -336,15 +367,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -359,15 +394,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -382,15 +421,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -405,15 +448,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -428,15 +475,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -451,15 +502,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -476,15 +531,19 @@
                 "timeUnit": 1
               },
               {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
                 "length": 7,
                 "timeUnit": 1
               },
               {
-                "length": 14,
+                "length": 10,
                 "timeUnit": 1
               },
               {
-                "length": 30,
+                "length": 15,
                 "timeUnit": 1
               }
             ]
@@ -495,63 +554,77 @@
         ],
         "metaData": {
           "columnHashes": {
-            "add_to_cart_event_average_14d": "ac7d8c6d6a4d0ddd7fdbab6517207fa0",
-            "add_to_cart_event_average_1d": "ac7d8c6d6a4d0ddd7fdbab6517207fa0",
-            "add_to_cart_event_average_30d": "ac7d8c6d6a4d0ddd7fdbab6517207fa0",
-            "add_to_cart_event_average_7d": "ac7d8c6d6a4d0ddd7fdbab6517207fa0",
-            "add_to_cart_event_sum_14d": "ac7d8c6d6a4d0ddd7fdbab6517207fa0",
-            "add_to_cart_event_sum_1d": "ac7d8c6d6a4d0ddd7fdbab6517207fa0",
-            "add_to_cart_event_sum_30d": "ac7d8c6d6a4d0ddd7fdbab6517207fa0",
-            "add_to_cart_event_sum_7d": "ac7d8c6d6a4d0ddd7fdbab6517207fa0",
-            "click_event_average_14d": "1d544b33eebdfc17a3a5afe87b81eb53",
-            "click_event_average_1d": "1d544b33eebdfc17a3a5afe87b81eb53",
-            "click_event_average_30d": "1d544b33eebdfc17a3a5afe87b81eb53",
-            "click_event_average_7d": "1d544b33eebdfc17a3a5afe87b81eb53",
-            "click_event_sum_14d": "1d544b33eebdfc17a3a5afe87b81eb53",
-            "click_event_sum_1d": "1d544b33eebdfc17a3a5afe87b81eb53",
-            "click_event_sum_30d": "1d544b33eebdfc17a3a5afe87b81eb53",
-            "click_event_sum_7d": "1d544b33eebdfc17a3a5afe87b81eb53",
-            "favorite_event_average_14d": "9236810c6ed256e2ce111114fcdf2468",
-            "favorite_event_average_1d": "9236810c6ed256e2ce111114fcdf2468",
-            "favorite_event_average_30d": "9236810c6ed256e2ce111114fcdf2468",
-            "favorite_event_average_7d": "9236810c6ed256e2ce111114fcdf2468",
-            "favorite_event_sum_14d": "9236810c6ed256e2ce111114fcdf2468",
-            "favorite_event_sum_1d": "9236810c6ed256e2ce111114fcdf2468",
-            "favorite_event_sum_30d": "9236810c6ed256e2ce111114fcdf2468",
-            "favorite_event_sum_7d": "9236810c6ed256e2ce111114fcdf2468",
-            "is_desktop_sum_14d": "751be38cbc62b37986a93da55ea3bb53",
-            "is_desktop_sum_1d": "751be38cbc62b37986a93da55ea3bb53",
-            "is_desktop_sum_30d": "751be38cbc62b37986a93da55ea3bb53",
-            "is_desktop_sum_7d": "751be38cbc62b37986a93da55ea3bb53",
-            "is_mobile_sum_14d": "736a00d8d3e5cc6458f666ceb2840ddf",
-            "is_mobile_sum_1d": "736a00d8d3e5cc6458f666ceb2840ddf",
-            "is_mobile_sum_30d": "736a00d8d3e5cc6458f666ceb2840ddf",
-            "is_mobile_sum_7d": "736a00d8d3e5cc6458f666ceb2840ddf",
-            "is_tablet_sum_14d": "c9f1e7cc6f8dee7506aa0d04fab1fe02",
-            "is_tablet_sum_1d": "c9f1e7cc6f8dee7506aa0d04fab1fe02",
-            "is_tablet_sum_30d": "c9f1e7cc6f8dee7506aa0d04fab1fe02",
-            "is_tablet_sum_7d": "c9f1e7cc6f8dee7506aa0d04fab1fe02",
-            "purchase_event_average_14d": "903c18bce150f38415fb70a46f0eaba5",
-            "purchase_event_average_1d": "903c18bce150f38415fb70a46f0eaba5",
-            "purchase_event_average_30d": "903c18bce150f38415fb70a46f0eaba5",
-            "purchase_event_average_7d": "903c18bce150f38415fb70a46f0eaba5",
-            "purchase_event_sum_14d": "903c18bce150f38415fb70a46f0eaba5",
-            "purchase_event_sum_1d": "903c18bce150f38415fb70a46f0eaba5",
-            "purchase_event_sum_30d": "903c18bce150f38415fb70a46f0eaba5",
-            "purchase_event_sum_7d": "903c18bce150f38415fb70a46f0eaba5",
-            "user_event_struct_last128_14d": "9615edd561708d3aa83e1efae33be4a0",
-            "user_event_struct_last128_1d": "9615edd561708d3aa83e1efae33be4a0",
-            "user_event_struct_last128_30d": "9615edd561708d3aa83e1efae33be4a0",
-            "user_event_struct_last128_7d": "9615edd561708d3aa83e1efae33be4a0",
-            "user_id": "006bbceaf919145938ec06d702ad51b9",
-            "view_event_average_14d": "f597dd2f8e5d672fbac0445fb935469b",
-            "view_event_average_1d": "f597dd2f8e5d672fbac0445fb935469b",
-            "view_event_average_30d": "f597dd2f8e5d672fbac0445fb935469b",
-            "view_event_average_7d": "f597dd2f8e5d672fbac0445fb935469b",
-            "view_event_sum_14d": "f597dd2f8e5d672fbac0445fb935469b",
-            "view_event_sum_1d": "f597dd2f8e5d672fbac0445fb935469b",
-            "view_event_sum_30d": "f597dd2f8e5d672fbac0445fb935469b",
-            "view_event_sum_7d": "f597dd2f8e5d672fbac0445fb935469b"
+            "add_to_cart_event_average_10d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_average_15d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_average_1d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_average_3d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_average_7d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_10d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_15d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_1d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_3d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "add_to_cart_event_sum_7d": "32ec23d93c92f423c4b2ec6697b5df0d",
+            "click_event_average_10d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_average_15d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_average_1d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_average_3d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_average_7d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_10d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_15d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_1d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_3d": "065495ee7af5b8775822b3e84565045f",
+            "click_event_sum_7d": "065495ee7af5b8775822b3e84565045f",
+            "favorite_event_average_10d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_average_15d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_average_1d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_average_3d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_average_7d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_10d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_15d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_1d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_3d": "97ad491be9d1f2108934109ef991d189",
+            "favorite_event_sum_7d": "97ad491be9d1f2108934109ef991d189",
+            "is_desktop_sum_10d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_desktop_sum_15d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_desktop_sum_1d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_desktop_sum_3d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_desktop_sum_7d": "d443a56dfeb0b96c72199149db79c70f",
+            "is_mobile_sum_10d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_mobile_sum_15d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_mobile_sum_1d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_mobile_sum_3d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_mobile_sum_7d": "c69ddfd43fd7a941b4d01229a1b708e1",
+            "is_tablet_sum_10d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "is_tablet_sum_15d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "is_tablet_sum_1d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "is_tablet_sum_3d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "is_tablet_sum_7d": "6acbc0374f55e24d7b4bdda896f0817c",
+            "purchase_event_average_10d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_average_15d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_average_1d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_average_3d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_average_7d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_10d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_15d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_1d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_3d": "ab4ac08904115a3bf7ac60090ff32092",
+            "purchase_event_sum_7d": "ab4ac08904115a3bf7ac60090ff32092",
+            "user_event_struct_last128_10d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_event_struct_last128_15d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_event_struct_last128_1d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_event_struct_last128_3d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_event_struct_last128_7d": "e696c70c42721e16b6450d4ee954d6ce",
+            "user_id": "ae36296bed90c6ad175714deefa05347",
+            "view_event_average_10d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_average_15d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_average_1d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_average_3d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_average_7d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_10d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_15d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_1d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_3d": "30484f6e3e7c08c3e45c032a7557914b",
+            "view_event_sum_7d": "30484f6e3e7c08c3e45c032a7557914b"
           },
           "executionInfo": {
             "clusterConf": {
@@ -600,6 +673,7 @@
                 "CLOUD_PROVIDER": "gcp",
                 "CUSTOMER_ID": "canary",
                 "ENABLE_PUBSUB": "true",
+                "EVAL_URL": "http://localhost:3904",
                 "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                 "FRONTEND_URL": "http://localhost:3000",
                 "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -617,6 +691,7 @@
                   "CLOUD_PROVIDER": "gcp",
                   "CUSTOMER_ID": "canary",
                   "ENABLE_PUBSUB": "true",
+                  "EVAL_URL": "http://localhost:3904",
                   "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
                   "FRONTEND_URL": "http://localhost:3000",
                   "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -633,11 +708,11 @@
             "onlineSchedule": "@daily",
             "stepDays": 30
           },
-          "name": "gcp.user_activities.v1__1",
+          "name": "gcp.user_activities.v1__2",
           "online": 1,
           "outputNamespace": "data",
           "team": "gcp",
-          "version": "1"
+          "version": "2"
         },
         "sources": [
           {
@@ -656,7 +731,7 @@
                   "user_id": "user_id",
                   "view_event": "IF(event_type = 'view', 1, 0)"
                 },
-                "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
+                "timeColumn": "event_time_ms"
               },
               "table": "data.gcp_exports_user_activities__0",
               "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
@@ -707,62 +782,76 @@
       "row_id": "596506e0a4fef5508ebdcda7e6eb1072",
       "ts": "d1ae44a8f84a262685dbf1bdb9f8d46e",
       "user_id": "80c458b68b34de93d3c4c555ef2b2ddc",
-      "user_id_add_to_cart_event_average_14d": "9a69a159117eb15389ce17f93363a8cb",
-      "user_id_add_to_cart_event_average_1d": "9a69a159117eb15389ce17f93363a8cb",
-      "user_id_add_to_cart_event_average_30d": "9a69a159117eb15389ce17f93363a8cb",
-      "user_id_add_to_cart_event_average_7d": "9a69a159117eb15389ce17f93363a8cb",
-      "user_id_add_to_cart_event_sum_14d": "9a69a159117eb15389ce17f93363a8cb",
-      "user_id_add_to_cart_event_sum_1d": "9a69a159117eb15389ce17f93363a8cb",
-      "user_id_add_to_cart_event_sum_30d": "9a69a159117eb15389ce17f93363a8cb",
-      "user_id_add_to_cart_event_sum_7d": "9a69a159117eb15389ce17f93363a8cb",
-      "user_id_click_event_average_14d": "6d5df9cd495943195fd26343e889a08b",
-      "user_id_click_event_average_1d": "6d5df9cd495943195fd26343e889a08b",
-      "user_id_click_event_average_30d": "6d5df9cd495943195fd26343e889a08b",
-      "user_id_click_event_average_7d": "6d5df9cd495943195fd26343e889a08b",
-      "user_id_click_event_sum_14d": "6d5df9cd495943195fd26343e889a08b",
-      "user_id_click_event_sum_1d": "6d5df9cd495943195fd26343e889a08b",
-      "user_id_click_event_sum_30d": "6d5df9cd495943195fd26343e889a08b",
-      "user_id_click_event_sum_7d": "6d5df9cd495943195fd26343e889a08b",
-      "user_id_favorite_event_average_14d": "41973df600d5d46659f60ac0c808f438",
-      "user_id_favorite_event_average_1d": "41973df600d5d46659f60ac0c808f438",
-      "user_id_favorite_event_average_30d": "41973df600d5d46659f60ac0c808f438",
-      "user_id_favorite_event_average_7d": "41973df600d5d46659f60ac0c808f438",
-      "user_id_favorite_event_sum_14d": "41973df600d5d46659f60ac0c808f438",
-      "user_id_favorite_event_sum_1d": "41973df600d5d46659f60ac0c808f438",
-      "user_id_favorite_event_sum_30d": "41973df600d5d46659f60ac0c808f438",
-      "user_id_favorite_event_sum_7d": "41973df600d5d46659f60ac0c808f438",
-      "user_id_is_desktop_sum_14d": "248157ff361a5b1aee3aab6d459e2315",
-      "user_id_is_desktop_sum_1d": "248157ff361a5b1aee3aab6d459e2315",
-      "user_id_is_desktop_sum_30d": "248157ff361a5b1aee3aab6d459e2315",
-      "user_id_is_desktop_sum_7d": "248157ff361a5b1aee3aab6d459e2315",
-      "user_id_is_mobile_sum_14d": "29bd4cafff87531f073912d981f5df7b",
-      "user_id_is_mobile_sum_1d": "29bd4cafff87531f073912d981f5df7b",
-      "user_id_is_mobile_sum_30d": "29bd4cafff87531f073912d981f5df7b",
-      "user_id_is_mobile_sum_7d": "29bd4cafff87531f073912d981f5df7b",
-      "user_id_is_tablet_sum_14d": "4e93d18e08e8e6d0f51cc4fd54840a4c",
-      "user_id_is_tablet_sum_1d": "4e93d18e08e8e6d0f51cc4fd54840a4c",
-      "user_id_is_tablet_sum_30d": "4e93d18e08e8e6d0f51cc4fd54840a4c",
-      "user_id_is_tablet_sum_7d": "4e93d18e08e8e6d0f51cc4fd54840a4c",
-      "user_id_purchase_event_average_14d": "06b4654ea4a2b6fce7f1e5d0ecbab540",
-      "user_id_purchase_event_average_1d": "06b4654ea4a2b6fce7f1e5d0ecbab540",
-      "user_id_purchase_event_average_30d": "06b4654ea4a2b6fce7f1e5d0ecbab540",
-      "user_id_purchase_event_average_7d": "06b4654ea4a2b6fce7f1e5d0ecbab540",
-      "user_id_purchase_event_sum_14d": "06b4654ea4a2b6fce7f1e5d0ecbab540",
-      "user_id_purchase_event_sum_1d": "06b4654ea4a2b6fce7f1e5d0ecbab540",
-      "user_id_purchase_event_sum_30d": "06b4654ea4a2b6fce7f1e5d0ecbab540",
-      "user_id_purchase_event_sum_7d": "06b4654ea4a2b6fce7f1e5d0ecbab540",
-      "user_id_user_event_struct_last128_14d": "d3568d09600aa635e00f5bbe12ed46f4",
-      "user_id_user_event_struct_last128_1d": "d3568d09600aa635e00f5bbe12ed46f4",
-      "user_id_user_event_struct_last128_30d": "d3568d09600aa635e00f5bbe12ed46f4",
-      "user_id_user_event_struct_last128_7d": "d3568d09600aa635e00f5bbe12ed46f4",
-      "user_id_view_event_average_14d": "bcc46a7a6a6ee73aa8bebbcaaf039347",
-      "user_id_view_event_average_1d": "bcc46a7a6a6ee73aa8bebbcaaf039347",
-      "user_id_view_event_average_30d": "bcc46a7a6a6ee73aa8bebbcaaf039347",
-      "user_id_view_event_average_7d": "bcc46a7a6a6ee73aa8bebbcaaf039347",
-      "user_id_view_event_sum_14d": "bcc46a7a6a6ee73aa8bebbcaaf039347",
-      "user_id_view_event_sum_1d": "bcc46a7a6a6ee73aa8bebbcaaf039347",
-      "user_id_view_event_sum_30d": "bcc46a7a6a6ee73aa8bebbcaaf039347",
-      "user_id_view_event_sum_7d": "bcc46a7a6a6ee73aa8bebbcaaf039347"
+      "user_id_add_to_cart_event_average_10d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_average_15d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_average_1d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_average_3d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_average_7d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_10d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_15d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_1d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_3d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_add_to_cart_event_sum_7d": "9169e1bd87d54afb1878f3ca66f85112",
+      "user_id_click_event_average_10d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_average_15d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_average_1d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_average_3d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_average_7d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_10d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_15d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_1d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_3d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_click_event_sum_7d": "4f6a535a97106f8dfbf40f8b947808f6",
+      "user_id_favorite_event_average_10d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_average_15d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_average_1d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_average_3d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_average_7d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_10d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_15d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_1d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_3d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_favorite_event_sum_7d": "59163319cd845d0c6e63efbbffe98647",
+      "user_id_is_desktop_sum_10d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_desktop_sum_15d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_desktop_sum_1d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_desktop_sum_3d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_desktop_sum_7d": "0b5c1c9c79cad47c9569669218fab87d",
+      "user_id_is_mobile_sum_10d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_mobile_sum_15d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_mobile_sum_1d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_mobile_sum_3d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_mobile_sum_7d": "38de992b030422b35d156c6bd88e8b8b",
+      "user_id_is_tablet_sum_10d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_is_tablet_sum_15d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_is_tablet_sum_1d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_is_tablet_sum_3d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_is_tablet_sum_7d": "591cf4abe8395672ed904c5aadd9603f",
+      "user_id_purchase_event_average_10d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_average_15d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_average_1d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_average_3d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_average_7d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_10d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_15d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_1d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_3d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_purchase_event_sum_7d": "c46ae83248ef63258a89b9c155784bf2",
+      "user_id_user_event_struct_last128_10d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_user_event_struct_last128_15d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_user_event_struct_last128_1d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_user_event_struct_last128_3d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_user_event_struct_last128_7d": "1fa8c39f1d96b6e7a79c4474a1afdf50",
+      "user_id_view_event_average_10d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_average_15d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_average_1d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_average_3d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_average_7d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_10d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_15d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_1d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_3d": "fffe33a5913643faa801e729d55a5b53",
+      "user_id_view_event_sum_7d": "fffe33a5913643faa801e729d55a5b53"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
@@ -812,6 +901,7 @@
           "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "canary",
           "ENABLE_PUBSUB": "true",
+          "EVAL_URL": "http://localhost:3904",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
           "FRONTEND_URL": "http://localhost:3000",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -829,6 +919,7 @@
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "canary",
             "ENABLE_PUBSUB": "true",
+            "EVAL_URL": "http://localhost:3904",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
             "FRONTEND_URL": "http://localhost:3000",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",

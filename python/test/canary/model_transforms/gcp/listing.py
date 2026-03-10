@@ -16,6 +16,13 @@ source = JoinSource(
     )
 )
 
+source_with_long_desc = JoinSource(
+    join=demo.v1,
+    query=Query(
+        wheres=["listing_id_long_description IS NOT NULL AND listing_id_long_description != ''"]
+    )
+)
+
 # [{"listing_id": "1"}]
 v1 = ModelTransforms(
     sources=[source],
@@ -28,4 +35,15 @@ v1 = ModelTransforms(
         ("listing_id_headline", DataType.STRING),
         ("listing_id_long_description", DataType.STRING),
     ]
+)
+
+v2 = ModelTransforms(
+    sources=[source_with_long_desc],
+    models=[listing.listing_short_description_model],
+    passthrough_fields=["user_id", "listing_id", "listing_id_headline"],
+    version=1,
+    output_namespace="data",
+    key_fields=[
+        ("listing_id_long_description", DataType.STRING),
+    ],
 )

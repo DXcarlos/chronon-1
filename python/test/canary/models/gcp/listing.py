@@ -36,6 +36,37 @@ item_description_model = Model(
     ]
 )
 
+# Generates a short product description from long_description using Gemini text generation.
+# Input instance format follows Gemini's contents API (role/parts structure).
+# value_fields mirrors the Gemini predict response schema:
+#   predictions[i].candidates[0].content.parts[0].text
+# Verify against: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini
+part = DataType.STRUCT("part", ("text", DataType.STRING))
+content_inner = DataType.STRUCT("content_inner", ("parts", DataType.LIST(part)), ("role", DataType.STRING))
+candidate = DataType.STRUCT("candidate", ("content", content_inner), ("finishReason", DataType.STRING))
+
+listing_short_description_model = Model(
+    version="1",
+    inference_spec=InferenceSpec(
+        model_backend=ModelBackend.VERTEXAI,
+        model_backend_params={
+            "model_name": "gemini-1.5-flash-001",
+            "model_type": "publisher",
+            "maxOutputTokens": "128",
+            "temperature": "0.4",
+        },
+    ),
+    input_mapping={
+        "instance": "named_struct('contents', array(named_struct('role', 'user', 'parts', array(named_struct('text', CONCAT('Write a concise short product description (2-3 sentences) for an online store listing. Long description: ', listing_id_long_description))))))",
+    },
+    output_mapping={
+        "short_description": "gcp_listing_listing_short_description_model__1__candidates[0].content.parts[0].text",
+    },
+    value_fields=[
+        ("candidates", DataType.LIST(candidate)),
+    ],
+)
+
 # This model is currently un-used but shows how to create an image embedding from a GCS path
 item_img_model = Model(
     version="001",

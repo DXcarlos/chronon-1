@@ -7,12 +7,6 @@
         "dataType": {
           "kind": 7
         },
-        "name": "listing_id_headline"
-      },
-      {
-        "dataType": {
-          "kind": 7
-        },
         "name": "listing_id_long_description"
       }
     ]
@@ -97,23 +91,25 @@
         }
       }
     },
-    "name": "gcp.listing.v1__2",
+    "name": "gcp.listing.v2__1",
     "outputNamespace": "data",
     "sourceFile": "model_transforms/gcp/listing.py",
     "team": "gcp",
-    "version": "2"
+    "version": "1"
   },
   "models": [
     {
       "inferenceSpec": {
         "modelBackend": 0,
         "modelBackendParams": {
-          "model_name": "gemini-embedding-001",
-          "model_type": "publisher"
+          "maxOutputTokens": "128",
+          "model_name": "gemini-1.5-flash-001",
+          "model_type": "publisher",
+          "temperature": "0.4"
         }
       },
       "inputMapping": {
-        "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))"
+        "instance": "named_struct('contents', array(named_struct('role', 'user', 'parts', array(named_struct('text', CONCAT('Write a concise short product description (2-3 sentences) for an online store listing. Long description: ', listing_id_long_description))))))"
       },
       "metaData": {
         "executionInfo": {
@@ -195,13 +191,13 @@
             }
           }
         },
-        "name": "gcp.listing.item_description_model__1",
+        "name": "gcp.listing.listing_short_description_model__1",
         "outputNamespace": "data",
         "team": "gcp",
         "version": "1"
       },
       "outputMapping": {
-        "item_embedding": "gcp_listing_item_description_model__1__embeddings.values"
+        "short_description": "gcp_listing_listing_short_description_model__1__candidates[0].content.parts[0].text"
       },
       "valueSchema": {
         "kind": 13,
@@ -209,47 +205,64 @@
         "params": [
           {
             "dataType": {
-              "kind": 13,
-              "name": "embeddings",
+              "kind": 12,
               "params": [
                 {
                   "dataType": {
                     "kind": 13,
-                    "name": "statistics",
+                    "name": "candidate",
                     "params": [
                       {
                         "dataType": {
-                          "kind": 0
+                          "kind": 13,
+                          "name": "content_inner",
+                          "params": [
+                            {
+                              "dataType": {
+                                "kind": 12,
+                                "params": [
+                                  {
+                                    "dataType": {
+                                      "kind": 13,
+                                      "name": "part",
+                                      "params": [
+                                        {
+                                          "dataType": {
+                                            "kind": 7
+                                          },
+                                          "name": "text"
+                                        }
+                                      ]
+                                    },
+                                    "name": "elem"
+                                  }
+                                ]
+                              },
+                              "name": "parts"
+                            },
+                            {
+                              "dataType": {
+                                "kind": 7
+                              },
+                              "name": "role"
+                            }
+                          ]
                         },
-                        "name": "truncated"
+                        "name": "content"
                       },
                       {
                         "dataType": {
-                          "kind": 3
+                          "kind": 7
                         },
-                        "name": "token_count"
+                        "name": "finishReason"
                       }
                     ]
                   },
-                  "name": "statistics"
-                },
-                {
-                  "dataType": {
-                    "kind": 12,
-                    "params": [
-                      {
-                        "dataType": {
-                          "kind": 6
-                        },
-                        "name": "elem"
-                      }
-                    ]
-                  },
-                  "name": "values"
+                  "name": "elem"
                 }
               ]
             },
-            "name": "embeddings"
+            "name": "candidates"
           }
         ]
       }
@@ -258,7 +271,7 @@
   "passthroughFields": [
     "user_id",
     "listing_id",
-    "listing_id_is_active"
+    "listing_id_headline"
   ],
   "sources": [
     {
@@ -810,7 +823,7 @@
         },
         "query": {
           "wheres": [
-            "(listing_id_headline IS NOT NULL AND listing_id_headline != '') OR (listing_id_long_description IS NOT NULL AND listing_id_long_description != '')"
+            "listing_id_long_description IS NOT NULL AND listing_id_long_description != ''"
           ]
         }
       }

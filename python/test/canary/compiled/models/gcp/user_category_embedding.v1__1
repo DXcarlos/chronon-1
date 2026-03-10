@@ -1,62 +1,15 @@
 {
-  "aggregations": [
-    {
-      "argMap": {},
-      "inputColumn": "add_cart",
-      "operation": 7,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {},
-      "inputColumn": "view",
-      "operation": 7,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {},
-      "inputColumn": "purchase",
-      "operation": 7,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        }
-      ]
-    },
-    {
-      "argMap": {},
-      "inputColumn": "favorite",
-      "operation": 7,
-      "windows": [
-        {
-          "length": 1,
-          "timeUnit": 1
-        }
-      ]
+  "inferenceSpec": {
+    "modelBackend": 0,
+    "modelBackendParams": {
+      "model_name": "gemini-embedding-001",
+      "model_type": "publisher"
     }
-  ],
-  "keyColumns": [
-    "listing_id"
-  ],
+  },
+  "inputMapping": {
+    "instance": "named_struct('content', array_join(user_id_event_category_pair_last100_7d, ', '))"
+  },
   "metaData": {
-    "columnHashes": {
-      "add_cart_sum_1d": "ed104cb5e34d9ac3c193cda31fec5db4",
-      "favorite_sum_1d": "ecce467f5cef9f4f6742ce4a0650499b",
-      "listing_id": "63b9f4d87c1cc4fb39f6f5230ae29034",
-      "purchase_sum_1d": "8461cac7c35b38bae99562beb4060578",
-      "view_sum_1d": "d4bc995b2e1955c153a0d1d78927f07c"
-    },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -68,7 +21,7 @@
       "conf": {
         "common": {
           "spark.chronon.coalesce.factor": "10",
-          "spark.chronon.partition.column": "_DATE",
+          "spark.chronon.partition.column": "ds",
           "spark.chronon.partition.format": "yyyy-MM-dd",
           "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
           "spark.chronon.table.gcs.connector_output_dataset": "data",
@@ -100,7 +53,7 @@
       "env": {
         "common": {
           "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
-          "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
+          "CHRONON_ONLINE_ARGS": " -Ztasks=4",
           "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "canary",
           "ENABLE_PUBSUB": "true",
@@ -118,7 +71,7 @@
         "modeEnvironments": {
           "upload": {
             "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
-            "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "canary",
             "ENABLE_PUBSUB": "true",
@@ -134,36 +87,65 @@
             "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
           }
         }
-      },
-      "historicalBackfill": 0,
-      "onlineSchedule": "@daily"
+      }
     },
-    "name": "gcp.item_event_canary.actions_pubsub_v2__0",
-    "online": 1,
+    "name": "gcp.user_category_embedding.v1__1",
     "outputNamespace": "data",
-    "sourceFile": "group_bys/gcp/item_event_canary.py",
+    "sourceFile": "models/gcp/user_category_embedding.py",
     "team": "gcp",
-    "version": "0"
+    "version": "1"
   },
-  "sources": [
-    {
-      "events": {
-        "query": {
-          "selects": {
-            "add_cart": "IF(event_type = 'backend_add_to_cart', 1, 0)",
-            "favorite": "IF(event_type = 'backend_favorite_item2', 1, 0)",
-            "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
-            "purchase": "IF(event_type = 'backend_cart_payment', 1, 0)",
-            "view": "IF(event_type = 'view_listing', 1, 0)"
-          },
-          "timeColumn": "timestamp",
-          "wheres": [
-            "event_type in ('backend_add_to_cart', 'view_listing', 'backend_cart_payment', 'backend_favorite_item2')"
+  "outputMapping": {
+    "user_category_embedding": "gcp_user_category_embedding_v1__1__embeddings.values"
+  },
+  "valueSchema": {
+    "kind": 13,
+    "name": "model_value_schema",
+    "params": [
+      {
+        "dataType": {
+          "kind": 13,
+          "name": "embeddings",
+          "params": [
+            {
+              "dataType": {
+                "kind": 13,
+                "name": "statistics",
+                "params": [
+                  {
+                    "dataType": {
+                      "kind": 0
+                    },
+                    "name": "truncated"
+                  },
+                  {
+                    "dataType": {
+                      "kind": 3
+                    },
+                    "name": "token_count"
+                  }
+                ]
+              },
+              "name": "statistics"
+            },
+            {
+              "dataType": {
+                "kind": 12,
+                "params": [
+                  {
+                    "dataType": {
+                      "kind": 6
+                    },
+                    "name": "elem"
+                  }
+                ]
+              },
+              "name": "values"
+            }
           ]
         },
-        "table": "data.item_events_parquet_compat_partitioned",
-        "topic": "pubsub://test-item-event-data/serde=pubsub_schema/project=canary-443022/schemaId=item-event/tasks=4/subscription=test-item-event-data-sub"
+        "name": "embeddings"
       }
-    }
-  ]
+    ]
+  }
 }

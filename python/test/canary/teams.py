@@ -58,6 +58,7 @@ gcp = Team(
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
             "FRONTEND_URL": "http://localhost:3000",
             "HUB_URL": "http://localhost:3903",
+            "EVAL_URL": "http://localhost:3904",
         },
         modeEnvironments={
             RunMode.UPLOAD: {"SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster"}
