@@ -284,6 +284,7 @@ aws_databricks = Team(
             "WAREHOUSE_PREFIX": "s3://zipline-warehouse-dev",
             "FRONTEND_URL": "http://localhost:3000",
             "HUB_URL": "http://localhost:3903",
+            "EVAL_URL": "http://localhost:3904",
         },
     ),
     conf=ConfigProperties(
