@@ -9,7 +9,7 @@ import ai.chronon.online.{
   ModelPlatform,
   PredictRequest,
   PredictResponse,
-  TrainingRequest,
+  TrainingRequest
 }
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
