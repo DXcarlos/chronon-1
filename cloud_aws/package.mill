@@ -30,6 +30,7 @@ trait CloudAwsModule extends Cross.Module[String] with build.BaseModule {
     mvn"software.amazon.awssdk:ec2:2.30.13",
     mvn"software.amazon.awssdk:emr:2.30.13",
     mvn"software.amazon.awssdk:emrserverless:2.30.13",
+    mvn"software.amazon.awssdk:bedrockruntime:2.30.13",
     mvn"software.amazon.awssdk:s3:2.30.13",
     mvn"software.amazon.awssdk:regions:2.30.13",
     mvn"software.amazon.awssdk:aws-core:2.30.13",

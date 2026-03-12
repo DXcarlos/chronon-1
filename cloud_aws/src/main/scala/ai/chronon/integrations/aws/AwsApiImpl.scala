@@ -1,5 +1,6 @@
 package ai.chronon.integrations.aws
 
+import ai.chronon.api.ModelBackend
 import ai.chronon.online._
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
@@ -10,6 +11,7 @@ import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient
 import java.net.URI
 import java.time.Duration
 import java.util
+import java.util.concurrent.ConcurrentHashMap
 
 /** Implementation of Chronon's API interface for AWS. This is a work in progress and currently just covers the
   * DynamoDB based KV store implementation.
@@ -117,6 +119,26 @@ class AwsApiImpl(conf: Map[String, String]) extends Api(conf) {
 
   override def genEnhancedStatsKvStore(tableBaseName: String): KVStore =
     new DynamoDBStatsKVStoreImpl(ddbClient, conf)
+
+  override def generateModelPlatformProvider: ModelPlatformProvider =
+    new ModelPlatformProvider {
+      override def getPlatform(modelBackend: ModelBackend, backendParams: Map[String, String]): ModelPlatform =
+        modelBackend match {
+          case ModelBackend.SageMaker =>
+            val region = getOptional(AwsRegion, conf)
+              .getOrElse(throw new IllegalArgumentException(s"$AwsRegion env var not set"))
+            val cacheKey = s"Bedrock:$region"
+            Option(modelPlatformCache.get(cacheKey)) match {
+              case Some(p) => p
+              case None =>
+                val p = new BedrockPlatform(region)
+                val existing = modelPlatformCache.putIfAbsent(cacheKey, p)
+                if (existing != null) existing else p
+            }
+          case _ =>
+            throw new UnsupportedOperationException(s"$modelBackend not supported by AwsApiImpl")
+        }
+    }
 }
 
 object AwsApiImpl {
@@ -129,6 +151,9 @@ object AwsApiImpl {
   private[aws] val DynamoConnectionTimeout = "DYNAMO_CONNECTION_TIMEOUT"
   private[aws] val DynamoApiCallTimeout = "DYNAMO_API_CALL_TIMEOUT"
   private[aws] val DynamoApiCallAttemptTimeout = "DYNAMO_API_CALL_ATTEMPT_TIMEOUT"
+  private[aws] val AwsRegion = "AWS_DEFAULT_REGION"
+
+  private val modelPlatformCache = new ConcurrentHashMap[String, ModelPlatform]()
 
   private[aws] def getOptional(key: String, conf: Map[String, String]): Option[String] =
     sys.env
