@@ -26,6 +26,11 @@ from .helpers.templates import cleanup_test_configs, generate_test_configs, get_
 
 logger = logging.getLogger(__name__)
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "nightly: mark test as part of nightly E2E suite")
+    config.addinivalue_line("markers", "integration: mark test as an integration test")
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--hub-url",
@@ -66,6 +71,12 @@ def version() -> str:
 def chronon_root() -> str:
     """Absolute path to the canary config root."""
     return os.path.join(os.path.dirname(os.path.dirname(__file__)), "canary")
+
+
+@pytest.fixture(scope="session")
+def warehouse_bucket() -> str | None:
+    """S3 warehouse bucket name (env: WAREHOUSE_BUCKET). Required for nightly tests."""
+    return os.environ.get("WAREHOUSE_BUCKET")
 
 
 # ---------------------------------------------------------------------------
