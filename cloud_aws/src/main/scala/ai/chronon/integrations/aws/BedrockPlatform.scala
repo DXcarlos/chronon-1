@@ -10,7 +10,6 @@ import ai.chronon.online.{
   PredictRequest,
   PredictResponse,
   TrainingRequest,
-  metrics
 }
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
@@ -111,50 +110,6 @@ class BedrockPlatform(region: String, clientOverride: Option[BedrockRuntimeAsync
 
   override def getJobStatus(operation: ModelOperation, id: String): Future[ModelJobStatus] =
     Future.failed(new UnsupportedOperationException("Job status not supported for Bedrock"))
-}
-
-object BedrockPlatform {
-  import ai.chronon.api.{Builders => B, ModelBackend}
-  import scala.concurrent.Await
-  import scala.concurrent.duration._
-  import scala.util.{Failure, Success}
-
-  def main(args: Array[String]): Unit = {
-    val region = "us-west-2"
-    val modelName = "amazon.titan-embed-text-v1"
-
-    val platform = new BedrockPlatform(region)
-    val titanModel = B.Model(
-      metaData = B.MetaData(name = "titan_embed_model"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.SageMaker,
-        modelBackendParams = Map("model_name" -> modelName, "model_type" -> "bedrock")
-      )
-    )
-
-    val inputRequests = Seq(
-      Map("instance" -> Map("inputText" -> "Hello, world!").asInstanceOf[AnyRef]),
-      Map("instance" -> Map("inputText" -> "Another example for Bedrock.").asInstanceOf[AnyRef])
-    )
-
-    val predictRequest = PredictRequest(titanModel, inputRequests)
-    println(s"Making prediction request to Bedrock ($modelName) in region $region...")
-    val predictionFuture = platform.predict(predictRequest)
-
-    val response = Await.result(predictionFuture, 30.seconds)
-    response.outputs match {
-      case Success(results) =>
-        println("Predictions successful:")
-        results.zipWithIndex.foreach { case (result, index) =>
-          println(s"  Input $index: $result")
-        }
-      case Failure(exception) =>
-        println(s"Prediction failed: ${exception.getMessage}")
-        exception.printStackTrace()
-    }
-
-    println("BedrockPlatform smoke test completed.")
-  }
 }
 
 object BedrockUtils {
