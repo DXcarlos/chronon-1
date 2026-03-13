@@ -194,8 +194,10 @@ class EnhancedDatasetKVStoreImpl(dataClient: BigtableDataClient,
     * Returns timestamps for the start of each date in the range.
     */
   private def generateDateRange(startTs: Long, endTs: Long): List[Long] = {
+    // Cap endTs to now to avoid querying future date rows that don't exist in Bigtable
+    val effectiveEndTs = math.min(endTs, System.currentTimeMillis())
     val startZoned = Instant.ofEpochMilli(startTs).atZone(ZoneOffset.UTC)
-    val endZoned = Instant.ofEpochMilli(endTs).atZone(ZoneOffset.UTC)
+    val endZoned = Instant.ofEpochMilli(effectiveEndTs).atZone(ZoneOffset.UTC)
 
     val startDate = startZoned.toLocalDate
     val endDate = endZoned.toLocalDate
