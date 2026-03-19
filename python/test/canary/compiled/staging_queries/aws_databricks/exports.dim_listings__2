@@ -1,7 +1,7 @@
 {
   "engineType": 0,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_workspace_poc_dim_listings_nop_with_offset_0\", \"spec\": \"workspace.poc.dim_listings_nop/updated_at_ts={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_workspace_poc_dim_listings_v2_with_offset_0\", \"spec\": \"workspace.poc.dim_listings_v2/updated_at_ts={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -60,7 +60,7 @@
     "team": "aws_databricks",
     "version": "2"
   },
-  "query": "\n    SELECT\n        *, DATE_FORMAT(updated_at_ts, 'yyyy-MM-dd') AS ds\n    FROM workspace.poc.dim_listings_nop\n    WHERE\n    DATE_FORMAT(updated_at_ts, 'yyyy-MM-dd') BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "query": "\n    SELECT\n        *\n    FROM workspace.poc.dim_listings_v2\n    WHERE\n    DATE_FORMAT(updated_at_ts, 'yyyy-MM-dd') BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [
     {
       "endOffset": {
@@ -77,8 +77,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "workspace.poc.dim_listings_nop",
-        "timePartitioned": 1
+        "table": "workspace.poc.dim_listings_v2"
       }
     }
   ]
