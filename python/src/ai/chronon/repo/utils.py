@@ -594,7 +594,14 @@ def blob_exists(remote_uri: str) -> bool:
             bucket_name, blob_name = parts[0], parts[1] if len(parts) > 1 else ""
             client = storage.Client()
             blob = client.bucket(bucket_name).blob(blob_name)
-            return blob.exists()
+            try:
+                return blob.exists()
+            except Exception as e:
+                LOG.warning(
+                    f"GCS exists check failed for {remote_uri}; falling back to list-based check: {e}"
+                )
+                matches = client.list_blobs(bucket_name, prefix=blob_name, max_results=1)
+                return any(candidate.name == blob_name for candidate in matches)
         elif remote_uri.startswith("s3://"):
             import boto3
             from botocore.exceptions import ClientError

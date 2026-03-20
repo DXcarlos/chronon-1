@@ -114,9 +114,6 @@ gcp_team = Team(
 - `spark.sql.catalog.spark_catalog.warehouse` — GCS path for the Iceberg warehouse
 - `spark.sql.catalog.spark_catalog.gcp.bigquery.location` — BigQuery region
 - `spark.sql.catalog.spark_catalog.gcp.bigquery.project-id` — GCP project ID
-- `spark.chronon.table.gcs.temporary_gcs_bucket` — GCS bucket for temporary data
-- `spark.chronon.table.gcs.connector_output_dataset` — BigQuery dataset for connector output
-- `spark.chronon.table.gcs.connector_output_project` — GCP project for connector output
 
 ### Open Catalog (Snowflake Polaris / REST)
 
