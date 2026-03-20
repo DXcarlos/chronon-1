@@ -63,6 +63,9 @@ import scala.util.Try
 class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String, String] = Map.empty) extends KVStore {
   import DynamoDBKVStoreConstants._
 
+  private val tablePrefix = conf.getOrElse("kv.tablePrefix", "")
+  private val registryTableName = DynamoDBKVStoreConstants.batchTableRegistry(tablePrefix)
+
   protected val metricsContext: Metrics.Context = Metrics.Context(Metrics.Environment.KVStore).withSuffix("dynamodb")
 
   // TTLCache: resolves logical batch dataset names to physical date-suffixed table names
@@ -70,7 +73,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
     f = { dataset =>
       val keyMap = Map(partitionKeyColumn -> AttributeValue.builder.b(SdkBytes.fromByteArray(dataset.getBytes)).build)
       val request = GetItemRequest.builder
-        .tableName(batchTableRegistry)
+        .tableName(registryTableName)
         .key(keyMap.toJava)
         .build
       val item = dynamoDbClient.getItem(request).join().item().toScala
@@ -322,18 +325,18 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
   }
 
   /** Bulk loads data from S3 Ion files into DynamoDB using the ImportTable API.
-    *
-    * The Ion files are expected to have been written by IonWriter during GroupByUpload.
-    * The S3 location is determined by IonWriter.resolveS3Location using:
-    *   - Root path from config: spark.chronon.table_write.upload.root_path
-    *   - Dataset name: sourceOfflineTable (e.g., namespace.groupby_v1__upload)
-    *   - Partition column and value: ds={partition}
-    *
-    * Full path: s3://{spark.chronon.table_write.upload.root_path}/{sourceOfflineTable}/ds={partition}/
-    *
-    * Creates a date-suffixed physical table (e.g. MY_GROUPBY_BATCH_2026_02_17) and registers the
-    * mapping from logical dataset name to physical table in CHRONON_BATCH_TABLE_REGISTRY.
-    */
+   *
+   * The Ion files are expected to have been written by IonWriter during GroupByUpload.
+   * The S3 location is determined by IonWriter.resolveS3Location using:
+   *   - Root path from config: spark.chronon.table_write.upload.root_path
+   *   - Dataset name: sourceOfflineTable (e.g., namespace.groupby_v1__upload)
+   *   - Partition column and value: ds={partition}
+   *
+   * Full path: s3://{spark.chronon.table_write.upload.root_path}/{sourceOfflineTable}/ds={partition}/
+   *
+   * Creates a date-suffixed physical table (e.g. MY_GROUPBY_BATCH_2026_02_17) and registers the
+   * mapping from logical dataset name to physical table in CHRONON_BATCH_TABLE_REGISTRY.
+   */
   override def bulkPut(sourceOfflineTable: String, destinationOnlineDataSet: String, partition: String): Unit = {
     val rootPath = conf.get(IonPathConfig.UploadLocationKey)
     val partitionColumn = conf.getOrElse(IonPathConfig.PartitionColumnKey, IonPathConfig.DefaultPartitionColumn)
@@ -380,10 +383,10 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
       waitForImportCompletion(importArn, physicalTableName)
 
       // Register the physical table name in the batch table registry
-      create(batchTableRegistry)
+      create(registryTableName)
       val registryKey = logicalTableName.sanitize.toUpperCase + batchSuffix
       Await.result(
-        multiPut(Seq(KVStore.PutRequest(registryKey.getBytes, physicalTableName.getBytes, batchTableRegistry))),
+        multiPut(Seq(KVStore.PutRequest(registryKey.getBytes, physicalTableName.getBytes, registryTableName))),
         30.seconds
       )
       logger.info(s"Registry updated: $registryKey -> $physicalTableName")
@@ -480,7 +483,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
   }
 
   protected def handleDynamoDbOperation[T](context: Context, dataset: String, startTs: Long)(
-      completableFuture: CompletableFuture[T]): Future[T] = {
+    completableFuture: CompletableFuture[T]): Future[T] = {
     FutureConverters.toScala(completableFuture).transform {
       case Success(result) =>
         context.distribution("latency", System.currentTimeMillis() - startTs)
@@ -551,7 +554,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
 }
 
 object DynamoDBKVStoreConstants {
-  val batchTableRegistry = "CHRONON_BATCH_TABLE_REGISTRY"
+  def batchTableRegistry(prefix: String = ""): String = prefix + "CHRONON_BATCH_TABLE_REGISTRY"
   val batchSuffix = "_BATCH"
 
   // Optional field that indicates if this table is meant to be time sorted in Dynamo or not
@@ -569,14 +572,14 @@ object DynamoDBKVStoreConstants {
   case class TileKeyComponents(baseKeyBytes: Array[Byte], tileSizeMillis: Long, tileStartTimestampMillis: Long)
 
   /** Unwraps a TileKey to extract the entity key for use as DynamoDB partition key.
-    *
-    * Streaming tables have two serialization layers:
-    *   - Outer: Thrift (TileKey struct with dataset, keyBytes, tileSizeMs, tileStartTs)
-    *   - Inner: Avro (entity key, e.g. customer_id, stored in TileKey.keyBytes)
-    *
-    * This method deserializes only the Thrift layer. The returned baseKeyBytes
-    * remain Avro-encoded and are used directly as the DynamoDB partition key.
-    */
+   *
+   * Streaming tables have two serialization layers:
+   *   - Outer: Thrift (TileKey struct with dataset, keyBytes, tileSizeMs, tileStartTs)
+   *   - Inner: Avro (entity key, e.g. customer_id, stored in TileKey.keyBytes)
+   *
+   * This method deserializes only the Thrift layer. The returned baseKeyBytes
+   * remain Avro-encoded and are used directly as the DynamoDB partition key.
+   */
   def extractTileKeyComponents(keyBytes: Array[Byte]): TileKeyComponents = {
     val tileKey = TilingUtils.deserializeTileKey(keyBytes)
     val baseKeyBytes = tileKey.keyBytes.toScala.map(_.toByte).toArray

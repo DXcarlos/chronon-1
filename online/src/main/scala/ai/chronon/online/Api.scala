@@ -249,18 +249,20 @@ abstract class Api(userConf: Map[String, String]) extends Serializable {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   def setupLogging(): Unit = {}
 
+  protected def getTablePrefix: String = userConf.getOrElse("kv.tablePrefix", "")
+
   /** logged responses should be made available to an offline log table in Hive
-    *  with columns
-    *     key_bytes, value_bytes, ts_millis, join_name, schema_hash and ds (date string)
-    *  partitioned by `join_name` and `ds`
-    *  Note the camel case to snake case conversion: Hive doesn't like camel case.
-    *  The key bytes and value bytes will be transformed by chronon to human readable columns for each join.
-    *    <team_namespace>.<join_name>_logged
-    *  To measure consistency - a Side-by-Side comparison table will be created at
-    *    <team_namespace>.<join_name>_comparison
-    *  Consistency summary will be available in
-    *    <logTable>_consistency_summary
-    */
+   *  with columns
+   *     key_bytes, value_bytes, ts_millis, join_name, schema_hash and ds (date string)
+   *  partitioned by `join_name` and `ds`
+   *  Note the camel case to snake case conversion: Hive doesn't like camel case.
+   *  The key bytes and value bytes will be transformed by chronon to human readable columns for each join.
+   *    <team_namespace>.<join_name>_logged
+   *  To measure consistency - a Side-by-Side comparison table will be created at
+   *    <team_namespace>.<join_name>_comparison
+   *  Consistency summary will be available in
+   *    <logTable>_consistency_summary
+   */
   def logResponse(resp: LoggableResponse): Unit
 
   // not sure if thread safe - TODO: double check
@@ -269,7 +271,7 @@ abstract class Api(userConf: Map[String, String]) extends Serializable {
   def buildFetcher(debug: Boolean = false, callerName: String = null, disableErrorThrows: Boolean = false): Fetcher =
     new Fetcher(
       genKvStore,
-      Constants.MetadataDataset,
+      Constants.MetadataDataset(getTablePrefix),
       logFunc = responseConsumer,
       debug = debug,
       externalSourceRegistry = externalRegistry,
@@ -283,7 +285,7 @@ abstract class Api(userConf: Map[String, String]) extends Serializable {
   final def buildJavaFetcher(callerName: String = null, disableErrorThrows: Boolean = false): JavaFetcher = {
     new JavaFetcher(
       genKvStore,
-      Constants.MetadataDataset,
+      Constants.MetadataDataset(getTablePrefix),
       timeoutMillis,
       responseConsumer,
       externalRegistry,
@@ -314,40 +316,40 @@ case object SubmitTrainingJob extends ModelOperation
 case class ModelJobStatus(jobStatusType: JobStatusType, message: String)
 
 /** Defines the interface that model platforms meant to be used in Chronon ModelSources / Transforms must implement.
-  */
+ */
 trait ModelPlatform extends Serializable {
 
   /** Trigger one/more online predictions for a given model.
-    * The mapping from the input keys (using Spark expression eval) as well as the output mapping (also using Spark
-    * expression eval) is done outside the ModelPlatform implementation.
-    *
-    * Currently, this supports both online batch inference calls and Spark job driven batch inference calls. In the
-    * future we might carve out the bulk batch predictions into a separate `batchPredict` method. The current approach
-    * is chosen to maximize compatibility with prospective model backend platforms that might not support both modes.
-    */
+   * The mapping from the input keys (using Spark expression eval) as well as the output mapping (also using Spark
+   * expression eval) is done outside the ModelPlatform implementation.
+   *
+   * Currently, this supports both online batch inference calls and Spark job driven batch inference calls. In the
+   * future we might carve out the bulk batch predictions into a separate `batchPredict` method. The current approach
+   * is chosen to maximize compatibility with prospective model backend platforms that might not support both modes.
+   */
   def predict(predictRequest: PredictRequest): Future[PredictResponse]
 
   /** Used to trigger a model training job for a given model and training source. The implementation
-    * will use the training source and input transforms to generate a training dataset to feed model training.
-    * The Model's TrainingSpec can be used to configure model parameters such as hyperparameters, compute resources, etc.
-    */
+   * will use the training source and input transforms to generate a training dataset to feed model training.
+   * The Model's TrainingSpec can be used to configure model parameters such as hyperparameters, compute resources, etc.
+   */
   def submitTrainingJob(trainingRequest: TrainingRequest): Future[String]
 
   /** Create an endpoint for a given model - this is a prerequisite for deploying models
-    */
+   */
   def createEndpoint(endpointConfig: EndpointConfig): Future[String]
 
   /** Initiates a model deployment to a given endpoint. A deployment id is returned that can be used to track the deployment status.
-    */
+   */
   def deployModel(deployModelRequest: DeployModelRequest): Future[String]
 
   /** Looks up the status of a long-running job (e.g., model deployment, training job etc) by its ID.
-    */
+   */
   def getJobStatus(operation: ModelOperation, id: String): Future[ModelJobStatus]
 }
 
 /** Helps construct and cache ModelPlatform instances based on the model backend type and parameters.
-  */
+ */
 trait ModelPlatformProvider extends Serializable {
   def getPlatform(modelBackend: ModelBackend, backendParams: Map[String, String]): ModelPlatform
 }

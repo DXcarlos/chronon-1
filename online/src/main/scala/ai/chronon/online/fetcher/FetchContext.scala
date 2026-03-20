@@ -1,5 +1,5 @@
 package ai.chronon.online.fetcher
-import ai.chronon.api.Constants.MetadataDataset
+import ai.chronon.api.Constants
 import ai.chronon.api.ScalaJavaConversions.JMapOps
 import ai.chronon.online.metrics.FlexibleExecutionContext
 import ai.chronon.online.{FlagStore, FlagStoreConstants, KVStore}
@@ -7,7 +7,7 @@ import ai.chronon.online.{FlagStore, FlagStoreConstants, KVStore}
 import scala.concurrent.ExecutionContext
 
 case class FetchContext(kvStore: KVStore,
-                        metadataDataset: String = MetadataDataset,
+                        metadataDataset: String = Constants.MetadataDataset(),
                         timeoutMillis: Long = 10000,
                         debug: Boolean = false,
                         flagStore: FlagStore = null,

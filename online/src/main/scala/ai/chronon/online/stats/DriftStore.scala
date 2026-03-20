@@ -15,8 +15,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 class DriftStore(kvStore: KVStore,
-                 summaryDataset: String = Constants.TiledSummaryDataset,
-                 metadataDataset: String = Constants.MetadataDataset) {
+                 summaryDataset: String = Constants.TiledSummaryDataset(),
+                 metadataDataset: String = Constants.MetadataDataset()) {
 
   private val fetchContext = FetchContext(kvStore, metadataDataset, timeoutMillis = 1000L)
   private val metadataStore = new MetadataStore(fetchContext)

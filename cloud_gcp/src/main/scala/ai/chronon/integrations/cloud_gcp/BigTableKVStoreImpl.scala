@@ -2,7 +2,7 @@ package ai.chronon.integrations.cloud_gcp
 
 import ai.chronon.api.Constants.{ContinuationKey, ListEntityType, ListLimit, MetadataDataset}
 import ai.chronon.api.Extensions.{GroupByOps, StringOps, WindowOps, WindowUtils}
-import ai.chronon.api.{GroupBy, MetaData, PartitionSpec, TilingUtils}
+import ai.chronon.api.{Constants, GroupBy, MetaData, PartitionSpec, TilingUtils}
 import ai.chronon.online.KVStore
 import ai.chronon.online.KVStore.{GetRequest, ListRequest, ListResponse, ListValue}
 import ai.chronon.online.metrics.Metrics
@@ -28,35 +28,37 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 
 /** BigTable based KV store implementation. We store a few kinds of data in our KV store:
-  * 1) Entity data - An example is thrift serialized Groupby / Join configs. If entities are updated / rewritten, we
-  * serve the latest version.
-  * 2) Timeseries data - This is either our batch IRs or streaming tiles for feature fetching.
-  *
-  * We have multi use-case tables for the _BATCH and _STREAMING time series tile data.
-  * To ensure that data from different groupBys are isolated from each other, we prefix the key with the dataset name:
-  * Row key: dataset#key
-  *
-  * In case of time series data that is likely to see many data points per day (e.g. streaming tiles), we
-  * bucket the data by day to ensure that we don't need to filter a Row with thousands of cells (and also worry about the per Row size / cell count limits).
-  * This also helps as GC in BigTable can take ~1 week. Without this day based bucketing we might have cells spanning a week.
-  *
-  * This row key structure looks like (tile size included in case of streaming tiles to support tile layering):
-  * Row key: dataset#key#timestamp_rounded_to_day[#tileSize]
-  *
-  * Values are written to individual cells with timestamp of the time series point being the cell timestamp.
-  *
-  * Tables created via this client have a default TTL of 5 days and a max cell count of 10k. This is to ensure we don't
-  * store data indefinitely and also to cap the amount of data we store.
-  */
+ * 1) Entity data - An example is thrift serialized Groupby / Join configs. If entities are updated / rewritten, we
+ * serve the latest version.
+ * 2) Timeseries data - This is either our batch IRs or streaming tiles for feature fetching.
+ *
+ * We have multi use-case tables for the _BATCH and _STREAMING time series tile data.
+ * To ensure that data from different groupBys are isolated from each other, we prefix the key with the dataset name:
+ * Row key: dataset#key
+ *
+ * In case of time series data that is likely to see many data points per day (e.g. streaming tiles), we
+ * bucket the data by day to ensure that we don't need to filter a Row with thousands of cells (and also worry about the per Row size / cell count limits).
+ * This also helps as GC in BigTable can take ~1 week. Without this day based bucketing we might have cells spanning a week.
+ *
+ * This row key structure looks like (tile size included in case of streaming tiles to support tile layering):
+ * Row key: dataset#key#timestamp_rounded_to_day[#tileSize]
+ *
+ * Values are written to individual cells with timestamp of the time series point being the cell timestamp.
+ *
+ * Tables created via this client have a default TTL of 5 days and a max cell count of 10k. This is to ensure we don't
+ * store data indefinitely and also to cap the amount of data we store.
+ */
 class BigTableKVStoreImpl(dataClient: BigtableDataClient,
                           adminClient: BigtableTableAdminClient,
                           maybeBigQueryClient: scala.Option[BigQuery] = None,
                           conf: Map[String, String] = Map.empty)
-    extends KVStore {
+  extends KVStore {
 
   @transient override lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   import BigTableKVStore._
+
+  private val tablePrefix = conf.getOrElse("kv.tablePrefix", "")
 
   // We keep data around for a 5 day TTL. This gives us a little buffer in case of incidents while still capping our storage
   private val DataTTL = Duration.ofDays(5)
@@ -80,7 +82,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
   override def create(dataset: String): Unit = create(dataset, Map.empty)
 
   override def create(dataset: String, props: Map[String, Any]): Unit = {
-    val tableName = physicalTableName(dataset)
+    val tableName = physicalTableName(dataset, tablePrefix)
     try {
       if (!adminClient.exists(tableName)) {
         // we can explore split points if we need custom tablet partitioning. For now though, we leave this to BT
@@ -109,8 +111,8 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
 
     val futures = requestsByType.map { case (FeaturesDataset, reqs) =>
       multiGetFeatures(reqs)
-    // TODO: Add case (MetricsDataset, reqs) => multiGetMetrics(reqs)
-    // TODO: Add case (EnhancedStatsDataset, reqs) => multiGetEnhancedStats(reqs)
+      // TODO: Add case (MetricsDataset, reqs) => multiGetMetrics(reqs)
+      // TODO: Add case (EnhancedStatsDataset, reqs) => multiGetEnhancedStats(reqs)
     }.toSeq
 
     Future.sequence(futures).map(_.flatten)
@@ -144,7 +146,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
                                requests: Seq[KVStore.GetRequest],
                                startTsMillis: scala.Option[Long],
                                endTsMillis: scala.Option[Long]): Future[Seq[KVStore.GetResponse]] = {
-    val targetId = mapDatasetToTable(dataset)
+    val targetId = mapDatasetToTable(dataset, tablePrefix)
     val datasetMetricsContext = tableToContext.getOrElseUpdate(
       targetId.toString,
       metricsContext.copy(dataset = targetId.toString)
@@ -278,7 +280,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
     val maybeListEntityType = request.props.get(ListEntityType)
     val maybeStartKey = request.props.get(ContinuationKey)
 
-    val targetId = mapDatasetToTable(request.dataset)
+    val targetId = mapDatasetToTable(request.dataset, tablePrefix)
     val datasetMetricsContext = tableToContext.getOrElseUpdate(
       targetId.toString,
       metricsContext.copy(dataset = targetId.toString)
@@ -353,8 +355,8 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
 
     val futures = requestsByType.map { case (FeaturesDataset, reqs) =>
       multiPutFeatures(reqs)
-    // TODO: Add case (MetricsDataset, reqs) => multiPutMetrics(reqs)
-    // TODO: Add case (EnhancedStatsDataset, reqs) => multiPutEnhancedStats(reqs)
+      // TODO: Add case (MetricsDataset, reqs) => multiPutMetrics(reqs)
+      // TODO: Add case (EnhancedStatsDataset, reqs) => multiPutEnhancedStats(reqs)
     }.toSeq
 
     Future.sequence(futures).map(_.flatten)
@@ -363,7 +365,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
   private def multiPutFeatures(requests: Seq[KVStore.PutRequest]): Future[Seq[Boolean]] = {
     val resultFutures = {
       requests.map { request =>
-        val tableId = mapDatasetToTable(request.dataset)
+        val tableId = mapDatasetToTable(request.dataset, tablePrefix)
         val datasetMetricsContext = tableToContext.getOrElseUpdate(
           tableId.toString,
           metricsContext.copy(dataset = tableId.toString)
@@ -377,7 +379,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
             val tileKey = TilingUtils.deserializeTileKey(request.keyBytes)
             val baseKeyBytes = tileKey.keyBytes.asScala.map(_.toByte).toSeq
             (buildTiledRowKey(baseKeyBytes, request.dataset, ts, tileKey.tileSizeMillis),
-             tileKey.tileStartTimestampMillis)
+              tileKey.tileStartTimestampMillis)
           case _ =>
             (buildRowKey(request.keyBytes, request.dataset), timestampInPutRequest)
         }
@@ -387,8 +389,8 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
         val cellValue = ByteString.copyFrom(request.valueBytes)
         // if we have prior cells with the same timestamp, we queue up a delete operation before the put
         mutation.deleteCells(ColumnFamilyString,
-                             ColumnFamilyQualifier,
-                             TimestampRange.create(timestampMicros, timestampMicros + 1000))
+          ColumnFamilyQualifier,
+          TimestampRange.create(timestampMicros, timestampMicros + 1000))
         mutation.setCell(ColumnFamilyString, ColumnFamilyQualifier, timestampMicros, cellValue)
 
         val startTs = System.currentTimeMillis()
@@ -412,7 +414,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
 
   private def multiDelete(deleteRequests: Seq[DeleteRequest]): Future[Seq[Boolean]] = {
     val resultFutures = deleteRequests.map { req =>
-      val tableId = mapDatasetToTable(req.dataset)
+      val tableId = mapDatasetToTable(req.dataset, tablePrefix)
       val datasetMetricsContext = tableToContext.getOrElseUpdate(
         tableId.toString,
         metricsContext.copy(dataset = tableId.toString)
@@ -558,8 +560,8 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
       val totalRetryTimeout = Duration.ofHours(6)
       logger.info(s"We will wait for $totalRetryTimeout for the job to complete")
       val completedJob = job.waitFor(retryConfig,
-                                     RetryOption.initialRetryDelay(initialRetryDelay),
-                                     RetryOption.totalTimeout(totalRetryTimeout))
+        RetryOption.initialRetryDelay(initialRetryDelay),
+        RetryOption.totalTimeout(totalRetryTimeout))
       if (completedJob == null) {
         // job no longer exists
         logger.error(s"Job corresponding to $jobId no longer exists")
@@ -568,7 +570,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
       } else if (completedJob.getStatus.getError != null) {
         logger.error(s"Job failed with error: ${completedJob.getStatus.getError}")
         metricsContext.increment("bulkPut.failures",
-                                 Map("exception" -> s"${completedJob.getStatus.getError.getReason}"))
+          Map("exception" -> s"${completedJob.getStatus.getError.getReason}"))
         throw new RuntimeException(s"Export job failed with error: ${completedJob.getStatus.getError}")
       } else {
         logger.info("Export job completed successfully")
@@ -587,6 +589,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
     // Intentionally getting and deleting non-existent keys below to warm up.
 
     val testKey = "warmup_key"
+    val metadataDataset = Constants.PrefixedMetadataDataset(tablePrefix)
     logger.info(s"Warming up KVStore with key prefix $testKey")
     try {
       val getFutures = this.multiGet(
@@ -595,7 +598,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
           .map(i =>
             GetRequest(
               keyBytes = s"${testKey}_$i".getBytes,
-              dataset = MetadataDataset
+              dataset = metadataDataset
             ))
           .toSeq
       )
@@ -604,7 +607,7 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
           .map(i =>
             DeleteRequest(
               keyBytes = s"${testKey}_$i".getBytes,
-              dataset = MetadataDataset
+              dataset = metadataDataset
             ))
           .toSeq
       )
@@ -649,11 +652,11 @@ object BigTableKVStore {
   }
 
   /** row key (with tiling) convention:
-    * <dataset>#<entity-key>#<start_date>#<tile_size>
-    *
-    *  row key (without tiling) convention:
-    *  <dataset>#<entity_key>#<start_date>
-    */
+   * <dataset>#<entity-key>#<start_date>#<tile_size>
+   *
+   *  row key (without tiling) convention:
+   *  <dataset>#<entity_key>#<start_date>
+   */
   def buildTiledRowKey(baseKeyBytes: Seq[Byte], dataset: String, ts: Long, tileSizeMs: Long): Array[Byte] = {
     val baseRowKey = s"$dataset#".getBytes(Charset.forName("UTF-8")) ++ baseKeyBytes
     val dayTs = ts - (ts % 1.day.toMillis)
@@ -674,13 +677,13 @@ object BigTableKVStore {
   }
 
   // Returns the physical table name string used by the admin client (exists/create)
-  def physicalTableName(dataset: String): String = {
-    if (dataset.endsWith("_BATCH")) "GROUPBY_BATCH"
-    else if (dataset.endsWith("_STREAMING")) "GROUPBY_STREAMING"
-    else dataset
+  def physicalTableName(dataset: String, prefix: String = ""): String = {
+    if (dataset.endsWith("_BATCH")) prefix + "GROUPBY_BATCH"
+    else if (dataset.endsWith("_STREAMING")) prefix + "GROUPBY_STREAMING"
+    else prefix + dataset
   }
 
-  def mapDatasetToTable(dataset: String): BTTableId = BTTableId.of(physicalTableName(dataset))
+  def mapDatasetToTable(dataset: String, prefix: String = ""): BTTableId = BTTableId.of(physicalTableName(dataset, prefix))
 
   def getTableType(dataset: String): TableType = {
     dataset match {

@@ -37,9 +37,14 @@ object Constants {
   val ChrononDynamicTable = "chronon_dynamic_table"
   val ChrononOOCTable: String = "chronon_ooc_table"
   val ChrononLogTable: String = "chronon_log_table"
-  val MetadataDataset = "CHRONON_METADATA"
+
+  def PrefixedMetadataDataset(prefix: String = ""): String = prefix + "CHRONON_METADATA"
+  private val MetadataDataset: String = "CHRONON_METADATA"
+
   val SchemaPublishEvent = "SCHEMA_PUBLISH_EVENT"
-  val ConsistencyMetricsDataset = "CHRONON_CONSISTENCY_METRICS_STATS_BATCH"
+
+  def PrefixedConsistencyMetricsDataset(prefix: String): String = prefix + "CHRONON_CONSISTENCY_METRICS_STATS_BATCH"
+  private val ConsistencyMetricsDataset: String = "CHRONON_CONSISTENCY_METRICS_STATS_BATCH"
   val TimeField: StructField = StructField(TimeColumn, LongType)
   val ReversalField: StructField = StructField(ReversalColumn, BooleanType)
   val MutationTimeField: StructField = StructField(MutationTimeColumn, LongType)
@@ -57,7 +62,9 @@ object Constants {
   val ContextualSourceValues: String = "contextual_values"
   val ChrononRunDs: String = "CHRONON_RUN_DS"
 
+  def PrefixedTiledSummaryDataset(prefix: String): String = prefix + "DATA_QUALITY_METRICS"
   val TiledSummaryDataset: String = "DATA_QUALITY_METRICS"
+
   val EnhancedStatsDataset: String = "ENHANCED_STATS"
 
   val DefaultDriftTileSize: Window = new Window(30, TimeUnit.MINUTES)

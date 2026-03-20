@@ -121,8 +121,8 @@ class MetadataStore(fetchContext: FetchContext) {
     logger.info(s"uploading join conf to dataset: ${fetchContext.metadataDataset} by key:${joinConfKeyForKvStore}")
     fetchContext.kvStore.put(
       PutRequest(joinConfKeyForKvStore.getBytes(Constants.UTF8),
-                 ThriftJsonCodec.toJsonStr(join).getBytes(Constants.UTF8),
-                 fetchContext.metadataDataset))
+        ThriftJsonCodec.toJsonStr(join).getBytes(Constants.UTF8),
+        fetchContext.metadataDataset))
   }
 
   def putModelTransformsConf(modelTransforms: ModelTransforms): Future[Boolean] = {
@@ -218,8 +218,8 @@ class MetadataStore(fetchContext: FetchContext) {
   }
 
   private def buildJoinPartCodec(
-      joinPart: JoinPartOps,
-      servingInfo: GroupByServingInfoParsed): (Iterable[StructField], Iterable[StructField]) = {
+                                  joinPart: JoinPartOps,
+                                  servingInfo: GroupByServingInfoParsed): (Iterable[StructField], Iterable[StructField]) = {
     val keySchema = servingInfo.keyCodec.chrononSchema.asInstanceOf[StructType]
     val joinKeyFields = joinPart.leftToRight
       .map { case (leftKey, rightKey) =>
@@ -397,8 +397,8 @@ class MetadataStore(fetchContext: FetchContext) {
             .incrementException(metaData.failed.get)
           Failure(
             new RuntimeException(s"Couldn't fetch group by serving info for $batchDataset, " +
-                                   "please make sure a batch upload was successful",
-                                 metaData.failed.get))
+              "please make sure a batch upload was successful",
+              metaData.failed.get))
         } else {
           import ai.chronon.online.metrics
           val groupByServingInfo = ThriftJsonCodec
@@ -417,23 +417,23 @@ class MetadataStore(fetchContext: FetchContext) {
     )
 
   def put(
-      kVPairs: Map[String, Seq[String]],
-      datasetName: String = MetadataDataset,
-      batchSize: Int = CONF_BATCH_SIZE
-  ): Future[Seq[Boolean]] = {
+           kVPairs: Map[String, Seq[String]],
+           datasetName: String = MetadataDataset(),
+           batchSize: Int = CONF_BATCH_SIZE
+         ): Future[Seq[Boolean]] = {
     val puts = kVPairs.map {
       case (k, v) => {
         logger.info(s"""Putting metadata for
-             |dataset: $datasetName
-             |key: $k
-             |conf: $v""".stripMargin)
+                       |dataset: $datasetName
+                       |key: $k
+                       |conf: $v""".stripMargin)
         val kBytes = k.getBytes()
         // The value is a single string by default
         val vBytes = v.head.getBytes()
         PutRequest(keyBytes = kBytes,
-                   valueBytes = vBytes,
-                   dataset = datasetName,
-                   tsMillis = Some(System.currentTimeMillis()))
+          valueBytes = vBytes,
+          dataset = datasetName,
+          tsMillis = Some(System.currentTimeMillis()))
       }
     }.toSeq
     val putsBatches = puts.grouped(batchSize).toSeq
