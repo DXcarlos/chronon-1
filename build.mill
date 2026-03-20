@@ -89,7 +89,7 @@ object Constants {
   )
 
   // Version definitions
-  val sparkVersion = "3.5.3"
+  val sparkVersion = "3.5.7"
   def sparkDeps = Seq(
     mvn"org.apache.spark::spark-core:$sparkVersion",
     mvn"org.apache.spark::spark-sql:$sparkVersion",
