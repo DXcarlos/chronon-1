@@ -231,7 +231,7 @@ class JoinUtilsTest extends BaseJoinTest {
     createDatabase(namespace)
     // left table
     val itemQueries = List(Column("item", api.StringType, 100))
-    val itemQueriesTable = "joinUtil.item_queries_table"
+    val itemQueriesTable = s"$namespace.item_queries_table"
     DataFrameGen
       .events(spark, itemQueries, 1000, partitions = 100)
       .save(itemQueriesTable)
@@ -247,7 +247,7 @@ class JoinUtilsTest extends BaseJoinTest {
     createDatabase(namespace)
     // left table
     val itemQueries = List(Column("item", api.StringType, 100))
-    val itemQueriesTable = "joinUtil.queries_table"
+    val itemQueriesTable = s"$namespace.queries_table"
     DataFrameGen
       .events(spark, itemQueries, 1000, partitions = 50)
       .save(itemQueriesTable)

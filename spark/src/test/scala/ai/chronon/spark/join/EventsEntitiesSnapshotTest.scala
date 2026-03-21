@@ -128,8 +128,12 @@ class EventsEntitiesSnapshotTest extends BaseJoinTest {
     val dropStart = tableUtils.partitionSpec.minus(today, new Window(55, TimeUnit.DAYS))
     val dropEnd = tableUtils.partitionSpec.minus(today, new Window(45, TimeUnit.DAYS))
 
-    // Delete data in the specified partition range (equivalent to dropping partitions in Iceberg)
-    spark.sql(s"DELETE FROM $namespace.test_user_transaction_features WHERE ds >= '$dropStart' AND ds <= '$dropEnd'")
+    // Drop partitions in the specified range
+    tableUtils.partitions(s"$namespace.test_user_transaction_features")
+      .filter(p => p >= dropStart && p <= dropEnd)
+      .foreach { p =>
+        spark.sql(s"ALTER TABLE $namespace.test_user_transaction_features DROP IF EXISTS PARTITION (ds='$p')")
+      }
     println(tableUtils.partitions(s"$namespace.test_user_transaction_features"))
 
     def resetUDFs(): Unit = {
@@ -215,8 +219,8 @@ class EventsEntitiesSnapshotTest extends BaseJoinTest {
     val endMinus1 = tableUtils.partitionSpec.minus(end, new Window(1, TimeUnit.DAYS))
     val endMinus2 = tableUtils.partitionSpec.minus(end, new Window(2, TimeUnit.DAYS))
 
-    // Delete specific partition data (equivalent to dropping single partitions in Iceberg)
-    spark.sql(s"DELETE FROM $namespace.test_user_transaction_features WHERE ds = '$endMinus1'")
+    // Drop the specific partition
+    spark.sql(s"ALTER TABLE $namespace.test_user_transaction_features DROP IF EXISTS PARTITION (ds='$endMinus1')")
     println(tableUtils.partitions(s"$namespace.test_user_transaction_features"))
 
     resetUDFs()

@@ -20,6 +20,7 @@ import java.nio.file.Files
 abstract class SparkTestBase extends AnyFlatSpec with BeforeAndAfterAll {
 
   protected lazy val icebergWarehouse = Files.createTempDirectory("iceberg-test").toString
+  protected lazy val hiveWarehouse = Files.createTempDirectory("hive-warehouse-test").toString
 
   /**
    * Override this method to provide additional Spark configurations.
@@ -30,7 +31,7 @@ abstract class SparkTestBase extends AnyFlatSpec with BeforeAndAfterAll {
   private[spark] lazy val DefaultSparkConfs = Map(
     "spark.sql.extensions" -> "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
     "spark.sql.catalog.spark_catalog" -> "org.apache.iceberg.spark.SparkSessionCatalog",
-    "spark.sql.warehouse.dir" -> s"${System.getProperty("java.io.tmpdir")}/warehouse",
+    "spark.sql.warehouse.dir" -> hiveWarehouse,
     "spark.sql.catalog.spark_catalog.type" -> "hadoop",
     "spark.sql.catalog.spark_catalog.warehouse" -> icebergWarehouse,
     "spark.driver.bindAddress" -> "127.0.0.1",
