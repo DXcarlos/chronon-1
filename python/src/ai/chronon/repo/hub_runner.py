@@ -957,6 +957,93 @@ def eval_table(
         sys.exit(1)
 
 
+# zipline hub list-tables demo
+# list tables in a schema using eval API
+@hub.command()
+@click.argument("schema_name")
+@repo_option
+@click.option(
+    "--team",
+    required=False,
+    help="Optional team name to use for executionInfo. If not specified, uses default team metadata.",
+)
+@hub_url_option
+@use_auth_option
+@format_option
+@click.option(
+    "--eval-url",
+    help="Eval server address (e.g. http://localhost:3904).",
+    type=str,
+    default=None,
+)
+@click.option(
+    "--engine-type",
+    help="Engine type for listing tables.",
+    type=str,
+    default="SPARK",
+    show_default=True,
+)
+@jsonify_exceptions_if_json_format
+def list_tables(schema_name, repo, team, hub_url, use_auth, format, eval_url, engine_type):
+    """List tables in a schema.
+
+    SCHEMA_NAME is the schema/database to list tables from (e.g. demo).
+    """
+    team_execution_info, default_execution_info = None, None
+    team = team or os.environ.get("TEAM")
+    if team:
+        team_metadata_path = f"compiled/teams_metadata/{team}/{team}_team_metadata"
+        file_path = os.path.join(repo, team_metadata_path)
+        with open(file_path, "r") as f:
+            team_execution_info = json.load(f).get("executionInfo")
+    else:
+        file_path = os.path.join(repo, DEFAULT_TEAM_METADATA_CONF)
+        with open(file_path, "r") as f:
+            default_execution_info = json.load(f).get("executionInfo")
+    execution_info = team_execution_info or default_execution_info
+    common_env = execution_info["env"]["common"]
+    common_env.update(os.environ)
+    hub_conf = HubConfig(
+        **{k: common_env.get(k.upper()) for k in HubConfig.__dataclass_fields__.keys()}
+    )
+    scope = ""
+    if hub_conf.auth_scope is not None:
+        scope = hub_conf.auth_scope
+    elif hub_conf.cloud_provider == "azure" and hub_conf.customer_id is not None:
+        scope = f"api://{hub_conf.customer_id}-zipline-auth"
+
+    zipline_hub = ZiplineHub(
+        base_url=hub_url or hub_conf.hub_url,
+        sa_name=hub_conf.sa_name,
+        use_auth=use_auth,
+        eval_url=eval_url or hub_conf.eval_url,
+        cloud_provider=hub_conf.cloud_provider,
+        scope=scope,
+        format=format,
+    )
+
+    response_json = zipline_hub.call_list_tables_api(
+        schema_name=schema_name,
+        engine_type=engine_type,
+        execution_info=execution_info,
+    )
+
+    success = response_json.get("success")
+    if format == Format.JSON:
+        print(json.dumps(response_json, indent=4))
+        sys.exit(0 if success else 1)
+
+    if success:
+        print_success("List tables finished successfully.", format=format)
+        tables = response_json.get("tables") or []
+        for table in tables:
+            print_info(table, format=format)
+    else:
+        print_error("List tables failed.", format=format)
+        format_print(response_json.get("message"), format=format)
+        sys.exit(1)
+
+
 def get_hub_conf(conf_path, root_dir="."):
     """
     Get the hub configuration from the config file or environment variables.
