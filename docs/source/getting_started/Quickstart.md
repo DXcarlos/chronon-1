@@ -50,6 +50,8 @@ The Zipline extension for VS Code and Cursor adds action buttons directly to you
 
 Install it from the **VS Code Marketplace** or the **Cursor extension store** by searching for **"Zipline"**.
 
+> **Don't use VS Code or Cursor?** All of the same operations are available via the [`zipline` CLI](/docs/reference/cli). The extension is a convenience layer — everything it does maps directly to a CLI command, and each section below links to the relevant command reference. The CLI experience requires more manual steps but works in any environment.
+
 ---
 
 ## Using the AI Agent
@@ -92,15 +94,19 @@ The agent will read the existing GroupBy, add `"10d"` to every `windows` list, a
 
 The Zipline extension adds a set of action buttons to the editor when you have a compiled config file open. Here is what each button does:
 
-<!-- TODO: add screenshot of VS Code extension buttons here -->
+![Zipline VS Code extension buttons](../../images/vscode_extension_buttons.png)
 
 ### Eval
 
 Validates your configuration against your data warehouse. Checks that all source tables exist, column names and types match, query syntax is valid, and dependencies resolve correctly. This is fast — it does not run any Spark jobs. Use it constantly during development.
 
+CLI equivalent: [`zipline hub eval`](/docs/reference/cli#hub-eval)
+
 ### Backfill
 
 Runs a historical backfill for the selected config over a date range you specify. For a `Join`, this produces the wide training dataset with point-in-time correct feature values. For a `GroupBy`, it populates the offline snapshot table.
+
+CLI equivalent: [`zipline hub backfill`](/docs/reference/cli#hub-backfill)
 
 ### Deploy
 
@@ -110,14 +116,20 @@ There are two deploy modes:
 
 **Scheduled deploy (merge-triggered)** is the production path. When you merge a PR, Zipline automatically ingests all new and changed configs and schedules their associated recurring jobs. You do not need to manually trigger anything after merging — scheduling is handled for you.
 
+You can also manually schedule a deploy from a branch without merging. This is useful for running a dev version of a pipeline in parallel with production — for example, to do end-to-end A/B testing of a new feature version before promoting it to main. When doing this, make sure the version in your branch config is different from the one on main so the two pipelines run independently and don't overwrite each other's data.
+
 For experiments from a branch, the recommended flow is:
 1. Author your features on a branch and run `Eval` to validate them.
 2. Use **Adhoc deploy** to run the pipeline and test online serving from your branch.
 3. When you're satisfied, open a PR. After it merges, Zipline automatically schedules production runs.
 
+CLI equivalents: [`zipline hub run-adhoc`](/docs/reference/cli#hub-run-adhoc) (adhoc) · [`zipline hub schedule`](/docs/reference/cli#hub-schedule) (manual schedule deploy)
+
 ### Fetch
 
 Fetches feature values for a given primary key from the online KV store. Use this after an adhoc or scheduled deploy to verify that online serving is returning the values you expect.
+
+CLI equivalent: [`zipline hub fetch`](/docs/reference/cli#hub-fetch)
 
 ### Go to Hub
 
@@ -131,4 +143,5 @@ Opens the Zipline Hub UI for the selected config. From the Hub you can monitor j
 - [Authoring Joins](/docs/authoring_features/Join) — combining GroupBys into training datasets
 - [Eval](/docs/running_on_zipline_hub/Eval) — detailed guide to configuration validation
 - [Deploy](/docs/running_on_zipline_hub/Deploy) — understanding scheduled vs. adhoc deployment
+- [CLI Reference](/docs/reference/cli) — full reference for all `zipline` commands
 - [Local Sandbox](/docs/getting_started/Local_Sandbox) — explore Chronon locally without a Zipline subscription

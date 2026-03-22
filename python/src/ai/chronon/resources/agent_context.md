@@ -2183,6 +2183,15 @@ zipline compile --chronon-root <path_to_config_root> --force
 # Validate a feature configuration (after compiling)
 zipline hub eval --conf compiled/group_bys/team/config_name.v1
 
+# Run a one-off adhoc job from the current branch (for testing before merge)
+zipline hub run-adhoc --conf compiled/group_bys/team/config_name.v1
+
+# Schedule a pipeline from a branch (without merging)
+# Use this to run a dev version in parallel with prod for end-to-end A/B testing.
+# IMPORTANT: the config version on your branch must differ from the one on main,
+# so the branch pipeline writes to a separate table and doesn't collide with prod.
+zipline hub schedule --conf compiled/joins/team/join_name.v2
+
 # Get help
 zipline --help
 zipline hub --help
