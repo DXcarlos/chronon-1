@@ -8,6 +8,7 @@ from ai.chronon.repo.admin import admin
 from ai.chronon.repo.compile import compile
 from ai.chronon.repo.hub_runner import hub
 from ai.chronon.repo.init import main as init_cmd
+from ai.chronon.repo.init_agent import init_agent
 from ai.chronon.repo.run import main as run_main
 
 CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
@@ -28,6 +29,7 @@ zipline.add_command(compile)
 zipline.add_command(run_main)
 zipline.add_command(hub)
 zipline.add_command(admin)
+zipline.add_command(init_agent)
 
 admin.add_command(init_cmd)
 

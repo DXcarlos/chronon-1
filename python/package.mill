@@ -54,6 +54,9 @@ object `package` extends PythonModule with RuffModule with PublishModule {
     super.pyproject() + """|
          |[project.scripts]
          |zipline = "ai.chronon.repo.zipline:main"
+         |
+         |[tool.setuptools.package-data]
+         |"ai.chronon.resources" = ["*.md", "*.sh"]
          |""".stripMargin
   }
 
