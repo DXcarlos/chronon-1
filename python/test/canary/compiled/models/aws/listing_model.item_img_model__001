@@ -98,9 +98,9 @@
         }
       }
     },
-    "name": "aws.listing.item_img_model__001",
+    "name": "aws.listing_model.item_img_model__001",
     "outputNamespace": "data",
-    "sourceFile": "models/aws/listing.py",
+    "sourceFile": "models/aws/listing_model.py",
     "team": "aws",
     "version": "001"
   },

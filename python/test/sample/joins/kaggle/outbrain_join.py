@@ -14,7 +14,7 @@
 #     limitations under the License.
 
 from group_bys.kaggle.clicks import ad_streaming
-from group_bys.kaggle.outbrain import ad_doc, ad_platform, ad_uuid
+from group_bys.kaggle.outbrain_group_bys import ad_doc, ad_platform, ad_uuid
 from sources.kaggle.outbrain import outbrain_left_events
 
 from ai.chronon.join import Join, JoinPart

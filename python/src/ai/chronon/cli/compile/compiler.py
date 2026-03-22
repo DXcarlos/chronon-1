@@ -1,6 +1,10 @@
+import glob
 import os
 import shutil
 import traceback
+from collections import defaultdict
+
+import click
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -30,7 +34,47 @@ class Compiler:
     def __init__(self, compile_context: CompileContext):
         self.compile_context = compile_context
 
+    def _check_duplicate_filenames(self):
+        """
+        Fail if any (team, relative_path) appears in more than one config type directory.
+        E.g., group_bys/gcp/foo.py and joins/gcp/foo.py would cause eval to break.
+        """
+        # Map (team, rel_path_within_team) -> list of config folder names where it appears
+        seen: Dict[tuple, List[str]] = defaultdict(list)
+
+        for config_info in self.compile_context.config_infos:
+            if config_info.folder_name == "teams_metadata":
+                continue
+            input_dir = self.compile_context.input_dir(config_info.cls)
+            if not os.path.exists(input_dir):
+                continue
+            for f in glob.glob(os.path.join(input_dir, "**/*.py"), recursive=True):
+                if os.path.basename(f) == "__init__.py":
+                    continue
+                rel = os.path.relpath(f, input_dir)  # e.g. "gcp/foo.py"
+                parts = rel.split(os.sep)
+                if len(parts) < 2:
+                    continue  # skip files directly under config root with no team subdir
+                team = parts[0]
+                path_within_team = os.path.splitext(os.sep.join(parts[1:]))[0]  # e.g. "foo"
+                seen[(team, path_within_team)].append(config_info.folder_name)
+
+        duplicates = {k: v for k, v in seen.items() if len(v) > 1}
+        if duplicates:
+            lines = [
+                f"  '{stem}' in team '{team}': found in {', '.join(folders)}"
+                for (team, stem), folders in sorted(duplicates.items())
+            ]
+            raise click.ClickException(
+                "Duplicate filenames detected across config types. "
+                "A filename may not be reused within the same team across "
+                "joins, group_bys, staging_queries, models, and model_transforms:\n"
+                + "\n".join(lines)
+            )
+
     def compile(self, dry_run=False, validate_all=False) -> Dict[ConfType, CompileResult]:
+        self._check_duplicate_filenames()
+
         # Clean staging directory at the start to ensure fresh compilation
         staging_dir = self.compile_context.staging_output_dir()
         if os.path.exists(staging_dir):

@@ -79,9 +79,9 @@
         }
       }
     },
-    "name": "gcp.listing.item_img_model__001",
+    "name": "gcp.listing_model.item_img_model__001",
     "outputNamespace": "data",
-    "sourceFile": "models/gcp/listing.py",
+    "sourceFile": "models/gcp/listing_model.py",
     "team": "gcp",
     "version": "001"
   },

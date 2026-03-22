@@ -1,12 +1,16 @@
 import os
 import json
+import tempfile
 from unittest.mock import MagicMock, patch
 
+import click
+import pytest
 from click.testing import CliRunner
 from gen_thrift.api.ttypes import GroupBy, MetaData
 
 from ai.chronon.cli.compile import parse_configs
 from ai.chronon.cli.compile.compile_context import CompileContext
+from ai.chronon.cli.compile.compiler import Compiler
 from ai.chronon.repo.compile import __compile, compile
 
 
@@ -111,3 +115,133 @@ def test_compile_with_json_format(canary):
 
     assert "results" in output_json, f"Output missing 'results' field: {output_json}"
     assert isinstance(output_json["results"], dict), f"'results' should be a dict, got: {type(output_json['results'])}"
+
+
+# ---------------------------------------------------------------------------
+# Duplicate filename detection tests
+# ---------------------------------------------------------------------------
+
+def _make_compiler_with_dirs(root, dirs):
+    """
+    Build a Compiler whose config_infos point at the given dirs dict
+    {folder_name: [relative_file_paths]}.  Files are created on disk;
+    CompileContext internals are mocked so no real compilation runs.
+    """
+    for folder, files in dirs.items():
+        for rel in files:
+            path = os.path.join(root, folder, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            open(path, "w").close()
+
+    ctx = MagicMock(spec=CompileContext)
+    ctx.config_infos = []
+
+    from gen_thrift.api.ttypes import GroupBy, Join, StagingQuery, Model, ModelTransforms, MetaData
+    from ai.chronon.cli.compile.compile_context import ConfigInfo
+    from gen_thrift.api.ttypes import ConfType
+
+    folder_to_cls = {
+        "group_bys": GroupBy,
+        "joins": Join,
+        "staging_queries": StagingQuery,
+        "models": Model,
+        "model_transforms": ModelTransforms,
+        "teams_metadata": MetaData,
+    }
+    for folder in dirs:
+        cls = folder_to_cls[folder]
+        ci = ConfigInfo(folder_name=folder, cls=cls, config_type=None)
+        ctx.config_infos.append(ci)
+        ctx.input_dir = lambda c, f=folder, r=root: os.path.join(r, f)
+
+    # Make input_dir dispatch by class
+    cls_to_folder = {v: k for k, v in folder_to_cls.items()}
+    ctx.input_dir = lambda cls: os.path.join(root, cls_to_folder[cls])
+
+    return Compiler(ctx)
+
+
+def test_duplicate_filename_across_config_types_raises():
+    with tempfile.TemporaryDirectory() as root:
+        compiler = _make_compiler_with_dirs(root, {
+            "group_bys": ["gcp/foo.py"],
+            "joins":     ["gcp/foo.py"],
+        })
+        with pytest.raises(click.ClickException) as exc_info:
+            compiler._check_duplicate_filenames()
+        assert "foo" in str(exc_info.value.format_message())
+        assert "gcp" in str(exc_info.value.format_message())
+
+
+def test_duplicate_filename_different_teams_ok():
+    with tempfile.TemporaryDirectory() as root:
+        compiler = _make_compiler_with_dirs(root, {
+            "group_bys": ["gcp/foo.py"],
+            "joins":     ["aws/foo.py"],
+        })
+        compiler._check_duplicate_filenames()  # should not raise
+
+
+def test_duplicate_filename_different_stems_ok():
+    with tempfile.TemporaryDirectory() as root:
+        compiler = _make_compiler_with_dirs(root, {
+            "group_bys": ["gcp/foo.py"],
+            "joins":     ["gcp/bar.py"],
+        })
+        compiler._check_duplicate_filenames()  # should not raise
+
+
+def test_duplicate_filename_same_type_ok():
+    """Same filename in the same config type (different team dirs) is fine."""
+    with tempfile.TemporaryDirectory() as root:
+        compiler = _make_compiler_with_dirs(root, {
+            "group_bys": ["gcp/foo.py", "aws/foo.py"],
+        })
+        compiler._check_duplicate_filenames()  # should not raise
+
+
+def test_duplicate_filename_nested_path():
+    """Conflict only triggers when the full relative-within-team path matches."""
+    with tempfile.TemporaryDirectory() as root:
+        compiler = _make_compiler_with_dirs(root, {
+            "group_bys": ["gcp/subdir/foo.py"],
+            "joins":     ["gcp/subdir/foo.py"],
+        })
+        with pytest.raises(click.ClickException):
+            compiler._check_duplicate_filenames()
+
+
+def test_duplicate_filename_nested_vs_top_level_ok():
+    """gcp/subdir/foo.py and gcp/foo.py are different paths — no conflict."""
+    with tempfile.TemporaryDirectory() as root:
+        compiler = _make_compiler_with_dirs(root, {
+            "group_bys": ["gcp/subdir/foo.py"],
+            "joins":     ["gcp/foo.py"],
+        })
+        compiler._check_duplicate_filenames()  # should not raise
+
+
+def test_duplicate_filename_multiple_types_error_message():
+    """Error message lists all conflicting config types."""
+    with tempfile.TemporaryDirectory() as root:
+        compiler = _make_compiler_with_dirs(root, {
+            "group_bys":      ["gcp/foo.py"],
+            "joins":          ["gcp/foo.py"],
+            "staging_queries": ["gcp/foo.py"],
+        })
+        with pytest.raises(click.ClickException) as exc_info:
+            compiler._check_duplicate_filenames()
+        msg = exc_info.value.format_message()
+        assert "group_bys" in msg
+        assert "joins" in msg
+        assert "staging_queries" in msg
+
+
+def test_duplicate_filename_teams_metadata_ignored():
+    """teams_metadata directory is excluded from the duplicate check."""
+    with tempfile.TemporaryDirectory() as root:
+        compiler = _make_compiler_with_dirs(root, {
+            "group_bys":    ["gcp/foo.py"],
+            "teams_metadata": ["gcp/foo.py"],
+        })
+        compiler._check_duplicate_filenames()  # should not raise
