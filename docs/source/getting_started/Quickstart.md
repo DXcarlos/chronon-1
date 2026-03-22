@@ -31,14 +31,16 @@ This will prompt you to select your agent:
 Which AI agent would you like to set up? (claude, codex, cursor, gemini, windsurf, copilot):
 ```
 
-The context file is installed in the standard location for that tool — for example, `.claude/skills/zipline/skill.md` for Claude Code or `.cursor/rules/zipline.mdc` for Cursor. The command prints the exact path on success.
+The context file is installed in the standard global location for that tool — for example, `~/.claude/skills/zipline/skill.md` for Claude Code or `~/.cursor/skills/zipline/SKILL.md` for Cursor. The command prints the exact path on success.
 
 To install for a specific agent without the prompt:
 
 ```bash
 zipline init-agent --agent claude    # Claude Code
-zipline init-agent --agent cursor    # Cursor
 zipline init-agent --agent codex     # Codex
+zipline init-agent --agent cursor    # Cursor
+zipline init-agent --agent gemini    # Gemini CLI
+zipline init-agent --agent windsurf  # Windsurf
 zipline init-agent --agent copilot   # GitHub Copilot
 ```
 
