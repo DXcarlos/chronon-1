@@ -592,16 +592,17 @@ def schedule_all(
         changed = compile_pending_changes.get("changed", [])
         deleted = compile_pending_changes.get("deleted", [])
         errors = compile_pending_changes.get("errors", [])
-        has_changes = bool(added or changed or deleted)
+        has_changes = bool(added or changed or deleted or errors)
 
         if has_changes:
             print_error(
                 "Compilation resulted in changes detected in dry run mode",
                 format=format,
             )
-            print_error(
-                f"  Errors: {json.dumps(errors, indent=4)}", format=format
-            )
+            if errors:
+                print_error(
+                    f"  Errors: {json.dumps(errors, indent=4)}", format=format
+                )
             if added:
                 print_error(
                     f"  Added: {', '.join([c.name for c in added])}", format=format
