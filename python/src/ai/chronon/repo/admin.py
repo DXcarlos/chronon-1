@@ -463,13 +463,19 @@ def _upload_scripts_to_store(scripts_dir, cloud, release, artifact_store):
             for script_file in files:
                 local_path = os.path.join(root, script_file)
                 rel_path = os.path.relpath(local_path, scripts_cloud_dir)
-                remote_path = f"{artifact_store.rstrip('/')}/release/{release}/scripts/{cloud}/{rel_path}"
+                remote_path = f"{artifact_store.rstrip('/')}/release/{release}/scripts/{rel_path}"
+                remote_root_path = f"{artifact_store.rstrip('/')}/scripts/{rel_path}"
                 try:
                     upload_to_blob_store(local_path, remote_path)
-                    if update_latest:
-                        latest_path = (f"{artifact_store.rstrip('/')}/release/latest/scripts/{cloud}/{rel_path}")
-                        upload_to_blob_store(local_path, latest_path)
                     results.append(("script", remote_path, "", "ok"))
+
+                    upload_to_blob_store(local_path, remote_root_path)
+                    results.append(("script", remote_root_path, "", "ok"))
+                    if update_latest:
+                        latest_path = (f"{artifact_store.rstrip('/')}/release/latest/scripts/{rel_path}")
+                        upload_to_blob_store(local_path, latest_path)
+                        results.append(("script", latest_path, "", "ok"))
+
                 except Exception as e:
                     console.print(f"[{STYLE_ERROR}]Error uploading {script_file}:[/]\n{traceback.format_exc()}")
                     results.append(("script", remote_path, "", f"FAILED: {e}"))
