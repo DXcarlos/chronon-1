@@ -60,7 +60,7 @@ class Compiler:
             )
 
         # Check for confirmation before finalizing files
-        if not self.compile_context.force:
+        if not self.compile_context.force and not dry_run:
             if self.compile_context.format != Format.JSON:
                 self.compile_context.validator.check_pending_changes_confirmation(
                     self.compile_context.compile_status
@@ -109,6 +109,24 @@ class Compiler:
                 shutil.rmtree(staging_dir)
 
         return compile_results
+
+    def get_all_errors(self):
+        """Get all compilation errors across all class trackers."""
+        all_errors = {}
+        for cls, tracker in self.compile_context.compile_status.cls_to_tracker.items():
+            if tracker.files_to_errors:
+                all_errors[cls] = tracker.files_to_errors
+        # convert all_errors to a list
+        all_errors_list = []
+        for cls, file_errors in all_errors.items():
+            for file, errors in file_errors.items():
+                for error in errors:
+                    all_errors_list.append({
+                        "class": cls,
+                        "file": file,
+                        "error": str(error),
+                    })
+        return all_errors_list
 
     def has_compilation_errors(self) -> bool:
         """Check if there are any compilation errors across all class trackers."""

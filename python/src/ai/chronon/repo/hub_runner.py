@@ -591,12 +591,16 @@ def schedule_all(
         added = compile_pending_changes.get("added", [])
         changed = compile_pending_changes.get("changed", [])
         deleted = compile_pending_changes.get("deleted", [])
+        errors = compile_pending_changes.get("errors", [])
         has_changes = bool(added or changed or deleted)
 
         if has_changes:
             print_error(
                 "Compilation resulted in changes detected in dry run mode",
                 format=format,
+            )
+            print_error(
+                f"  Errors: {json.dumps(errors, indent=4)}", format=format
             )
             if added:
                 print_error(
@@ -612,6 +616,15 @@ def schedule_all(
                     f"  Deleted: {', '.join([c.name for c in deleted])}",
                     format=format,
                 )
+
+            if format == Format.JSON:
+                print(json.dumps({
+                    "status": "Compilation changes detected",
+                    "errors": errors,
+                    "added": [c.name for c in added],
+                    "changed": [c.name for c in changed],
+                    "deleted": [c.name for c in deleted],
+                }, indent=4))
             sys.exit(1)
         else:
             print_success("No compilation changes detected.", format=format)
@@ -1063,7 +1076,6 @@ def print_wf_url(
     workflow_url = f"{frontend_url.rstrip('/')}/{hub_conf_type}/{conf_name}/{_mode_string()}?workflowId={workflow_id}"
 
     print_url("🔗 Workflow", workflow_url, format=format)
-
 
 if __name__ == "__main__":
     hub()

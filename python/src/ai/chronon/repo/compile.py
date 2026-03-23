@@ -85,7 +85,8 @@ def __compile(
     )
     compiler = Compiler(compile_context)
     results = compiler.compile(dry_run, validate_all)
-    if format == Format.JSON:
+    has_errors = compiler.has_compilation_errors()
+    if format == Format.JSON and (not has_errors or force):
         print(
             json.dumps(
                 {
@@ -99,10 +100,12 @@ def __compile(
                 indent=4,
             )
         )
-    has_errors = compiler.has_compilation_errors()
 
-    if has_errors and not ignore_python_errors:
+    if has_errors and not ignore_python_errors and not dry_run:
         sys.exit(1)
+
+    # add 'errors' to pending_changes
+    compiler.compile_context.validator.pending_changes['errors'] = compiler.get_all_errors()
 
     return results, has_errors, compiler.compile_context.validator.pending_changes
 
