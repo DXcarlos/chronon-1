@@ -105,7 +105,8 @@ def __compile(
         sys.exit(1)
 
     # add 'errors' to pending_changes
-    compiler.compile_context.validator.pending_changes['errors'] = compiler.get_all_errors()
+    if has_errors:
+        compiler.compile_context.validator.pending_changes['errors'] = compiler.get_all_errors()
 
     return results, has_errors, compiler.compile_context.validator.pending_changes
 
