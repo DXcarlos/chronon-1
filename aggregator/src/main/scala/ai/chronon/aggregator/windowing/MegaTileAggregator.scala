@@ -129,13 +129,14 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
       if (window != null && window.millis > tailBufferMillis) {
         val hopIndex = tailHopIndices(i)
         val queryTail = TsUtils.round(queryTs - windowMillis, hopSizes(hopIndex))
+        val alignedCollapsed = alignedCollapsedBoundary(batchEndTs - windowMillis, i)
         val hopIrs = batchIr.tailHops(hopIndex)
         val relevantHops = mutable.ArrayBuffer[Any](ir(i))
         var idx: Int = 0
         while (idx < hopIrs.length) {
           val hopIr = hopIrs(idx)
           val hopStart = hopIr.last.asInstanceOf[Long]
-          if ((batchEndTs - windowMillis) + tailBufferMillis > hopStart && hopStart >= queryTail) {
+          if (alignedCollapsed > hopStart && hopStart >= queryTail) {
             relevantHops += hopIr(baseIrIndices(i))
           }
           idx += 1

@@ -212,7 +212,8 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
             val hopStartTimeStamp = hopIr.getTs
 
             // Only want to inspect tail hops that fall within the tailBuffer (default 2d), and after the queryTail
-            if ((batchEndTs - windowMillis) + tailBufferMillis > hopStartTimeStamp && hopStartTimeStamp >= queryTail) {
+            val alignedCollapsed = alignedCollapsedBoundary(batchEndTs - windowMillis, i)
+            if (alignedCollapsed > hopStartTimeStamp && hopStartTimeStamp >= queryTail) {
               val tailHop = hopIr(baseIrIndices(i))
               if (tailHop != null) {
                 hasNonNullTailHop_ = true

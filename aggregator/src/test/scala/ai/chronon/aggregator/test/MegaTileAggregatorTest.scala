@@ -42,7 +42,7 @@ class MegaTileAggregatorTest extends AnyFlatSpec {
       new SawtoothOnlineAggregator(batchEnd, aggregations, schema, tailBufferMillis = TailBufferMillis)
     var batchIr = onlineAgg.init
     batchEvents.foreach(row => batchIr = onlineAgg.update(batchIr, row))
-    val finalBatchIr = onlineAgg.normalizeBatchIr(batchIr)
+    val finalBatchIr = onlineAgg.finalizeSnapshot(batchIr)
 
     // 2. Simulate Flink: bucket ALL events into small tiles per tier
     //    (In production Flink sees all events; eviction handles retention)
@@ -271,7 +271,9 @@ class MegaTileAggregatorTest extends AnyFlatSpec {
       Builders.Aggregation(Operation.COUNT, "num", AllWindows),
       Builders.Aggregation(Operation.AVERAGE, "amount", AllWindows),
       Builders.Aggregation(Operation.MIN, "num", AllWindows),
-      Builders.Aggregation(Operation.MAX, "num", AllWindows)
+      Builders.Aggregation(Operation.MAX, "num", AllWindows),
+      Builders.Aggregation(Operation.LAST, "num", AllWindows),
+      Builders.Aggregation(Operation.FIRST, "num", AllWindows)
     )
 
     val queryTimes = Array(batchEnd + 14 * 3600 * 1000L).filter(_ <= maxTs)

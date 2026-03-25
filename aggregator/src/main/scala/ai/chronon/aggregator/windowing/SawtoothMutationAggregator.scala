@@ -75,6 +75,15 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
     update(batchEndTs: Long, batchIr: BatchIr, row: Row, batchTails)
   }
 
+  // Align the collapsed boundary to the next hop boundary so that no hop bucket
+  // straddles the collapsed/tail split. Without this, shared tail hops across windows
+  // with different collapsed boundaries can cause double-counting.
+  protected def alignedCollapsedBoundary(batchTail: Long, colIndex: Int): Long = {
+    val hopSize = hopSizes(tailHopIndices(colIndex))
+    val start = batchTail + tailBufferMillis
+    ((start + hopSize - 1) / hopSize) * hopSize
+  }
+
   // downstream assumption: this needs to mutate batchIr in place.
   def update(batchEndTs: Long, batchIr: BatchIr, row: Row, batchTails: Array[Option[Long]]): BatchIr = {
     val rowTs = row.ts
@@ -90,7 +99,7 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
     var i = 0
     while (i < windowedAggregator.length) {
       if (batchEndTs > rowTs && batchTails(i).forall(rowTs > _)) { // relevant for the window
-        if (batchTails(i).forall(rowTs >= _ + tailBufferMillis)) { // update collapsed part
+        if (batchTails(i).forall(tail => rowTs >= alignedCollapsedBoundary(tail, i))) { // update collapsed part
           windowedAggregator.columnAggregators(i).update(batchIr.collapsed, row)
         } else { // update tailHops part
           val hopIndex = tailHopIndices(i)
@@ -164,13 +173,14 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
       if (window != null) { // no hops for unwindowed
         val hopIndex = tailHopIndices(i)
         val queryTail = TsUtils.round(queryTs - windowMillis, hopSizes(hopIndex))
+        val alignedCollapsed = alignedCollapsedBoundary(batchEndTs - windowMillis, i)
         val hopIrs = batchIr.tailHops(hopIndex)
         val relevantHops = mutable.ArrayBuffer[Any](ir(i))
         var idx: Int = 0
         while (idx < hopIrs.length) {
           val hopIr = hopIrs(idx)
           val hopStart = hopIr.last.asInstanceOf[Long]
-          if ((batchEndTs - windowMillis) + tailBufferMillis > hopStart && hopStart >= queryTail) {
+          if (alignedCollapsed > hopStart && hopStart >= queryTail) {
             relevantHops += hopIr(baseIrIndices(i))
           }
           idx += 1
