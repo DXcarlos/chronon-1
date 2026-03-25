@@ -433,9 +433,9 @@ object GroupByUpload {
 
     // Emit null count metrics
     if (maybeContext.isDefined) {
-      logger.info(s"Emitting data quality metrics for ${nullCounts.keys.mkString(", ")} ")
+      logger.info(s"David: Emitting data quality metrics for ${nullCounts.keys.mkString(", ")} ")
       nullCounts.foreach { case (field, count) =>
-        maybeContext.get.gauge(s"NullCount.$field.$endDs", count)
+        maybeContext.get.gauge(s"DavidNullCount.$field.$endDs", count)
       }
       Thread.sleep(Constants.ScrapeWaitSeconds.seconds.toMillis)
     }

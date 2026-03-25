@@ -71,6 +71,7 @@ gcp = Team(
                 "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
                 "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
             }),
+            "spark.driver.extraJavaOptions": "-Dai.chronon.metrics.enabled=true -Dai.chronon.metrics.reader=grpc -Dai.chronon.metrics.exporter.url=http://0.0.0.0:4317",
 
             "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
             "spark.chronon.table_write.format": "iceberg",
