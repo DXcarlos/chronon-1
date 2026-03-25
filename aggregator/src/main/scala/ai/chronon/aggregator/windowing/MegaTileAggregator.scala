@@ -118,7 +118,7 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
   }
 
   // Like mergeTailHops but skips NO BATCH columns (window <= tailBuffer)
-  private def mergeTailHopsForBatchColumns(ir: Array[Any],
+  private[windowing] def mergeTailHopsForBatchColumns(ir: Array[Any],
                                            queryTs: Long,
                                            batchEndTs: Long,
                                            batchIr: FinalBatchIr): Array[Any] = {
