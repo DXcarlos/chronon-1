@@ -242,7 +242,6 @@ for cloud_name in "${CLOUDS[@]}"; do
             --build-arg VERSION="$VERSION" \
             -f docker/engine/Dockerfile \
             -t "ziplineai/engine-$cloud_name:$VERSION" \
-            -t "ziplineai/engine-$cloud_name:latest" \
             --load \
             .
         echo "✓ Built ziplineai/engine-$cloud_name:$VERSION locally"
