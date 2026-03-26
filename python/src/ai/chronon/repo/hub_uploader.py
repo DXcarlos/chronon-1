@@ -2,6 +2,7 @@ import glob
 import hashlib
 import json
 import os
+from collections import defaultdict
 
 from ai.chronon.cli.formatter import Format, format_print
 from ai.chronon.cli.theme import print_info, print_step, print_success
@@ -79,42 +80,56 @@ def compute_and_upload_diffs(
         local_repo_confs: dict[str, Conf],
         format: Format = Format.TEXT,
 ) -> dict[str, Conf]:
-    # Determine which confs are different from the ZiplineHub
-    # Call Zipline hub with `names_and_hashes` as the argument to get back
-    names_to_hashes = {name: local_conf.hash for name, local_conf in local_repo_confs.items()}
-    print_step(f"🧮 Computed hashes for {len(names_to_hashes)} local files.", format=format)
+    # Group confs by confType so that diff/sync requests are scoped per type.
+    # This avoids collisions when a GROUP_BY and JOIN share the same compiled name.
+    confs_by_type = defaultdict(dict)
+    for name, conf in local_repo_confs.items():
+        confs_by_type[conf.confType][name] = conf
 
-    changed_conf_names: list[str] = zipline_hub.call_diff_api(names_to_hashes)["diff"]
+    total_count = len(local_repo_confs)
+    print_step(f"🧮 Computed hashes for {total_count} local files.", format=format)
 
-    if not changed_conf_names:
+    all_diffed_confs = {}
+    names_to_hashes_by_type = {}
+
+    for conf_type, type_confs in confs_by_type.items():
+        conf_type_name = conf_type.name if hasattr(conf_type, "name") else str(conf_type)
+        names_to_hashes = {name: c.hash for name, c in type_confs.items()}
+        names_to_hashes_by_type[conf_type] = names_to_hashes
+
+        changed_conf_names: list[str] = zipline_hub.call_diff_api(
+            names_to_hashes, conf_type=conf_type_name
+        )["diff"]
+
+        if changed_conf_names:
+            diffed = {k: type_confs[k] for k in changed_conf_names}
+            all_diffed_confs.update(diffed)
+
+    if not all_diffed_confs:
         print_success(
             f"Remote contains all local files. No need to upload '{branch}'.", format=format
         )
-        diffed_confs = {}
     else:
-        unchanged = len(names_to_hashes) - len(changed_conf_names)
+        unchanged = total_count - len(all_diffed_confs)
         print_info(
-            f"🔍 Detected {len(changed_conf_names)} changes on local branch '{branch}'. {unchanged} unchanged.",
+            f"🔍 Detected {len(all_diffed_confs)} changes on local branch '{branch}'. {unchanged} unchanged.",
             format=format,
         )
 
-        # a list of names for diffed hashes on branch
-        diffed_confs = {k: local_repo_confs[k] for k in changed_conf_names}
-
-        conf_names_str = "\n    - ".join(diffed_confs.keys())
+        conf_names_str = "\n    - ".join(all_diffed_confs.keys())
         format_print(f"    - {conf_names_str}", format=format)
 
-        diff_confs = []
-        for _, conf in diffed_confs.items():
-            diff_confs.append(conf.__dict__)
-
-        # Make PUT request to ZiplineHub
+        diff_confs = [conf.__dict__ for conf in all_diffed_confs.values()]
         zipline_hub.call_upload_api(branch=branch, diff_confs=diff_confs)
         print_step(
-            f"⬆️ Uploaded {len(diffed_confs)} changed confs to branch '{branch}'.", format=format
+            f"⬆️ Uploaded {len(all_diffed_confs)} changed confs to branch '{branch}'.", format=format
         )
 
-    zipline_hub.call_sync_api(branch=branch, names_to_hashes=names_to_hashes)
+    # Sync each type separately so the scoped upsert only touches confs of that type
+    for conf_type, names_to_hashes in names_to_hashes_by_type.items():
+        conf_type_name = conf_type.name if hasattr(conf_type, "name") else str(conf_type)
+        zipline_hub.call_sync_api(branch=branch, names_to_hashes=names_to_hashes,
+                                   conf_type=conf_type_name)
 
-    print_success(f"{len(names_to_hashes)} hashes updated on branch '{branch}'.", format=format)
-    return diffed_confs
+    print_success(f"{total_count} hashes updated on branch '{branch}'.", format=format)
+    return all_diffed_confs

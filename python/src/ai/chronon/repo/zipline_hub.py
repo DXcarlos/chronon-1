@@ -304,10 +304,12 @@ class ZiplineHub:
 
         return response.signed_jwt
 
-    def call_diff_api(self, names_to_hashes: dict[str, str]) -> Optional[list[str]]:
+    def call_diff_api(self, names_to_hashes: dict[str, str], conf_type: str = None) -> Optional[list[str]]:
         url = f"{self.base_url}/upload/v2/diff"
 
         diff_request = {"namesToHashes": names_to_hashes}
+        if conf_type:
+            diff_request["confType"] = conf_type
         try:
             response = requests.post(
                 url, json=diff_request, headers=self.additional_headers(self.base_url)
@@ -415,13 +417,15 @@ class ZiplineHub:
             print_error(f"Error calling workflow cancel API: {self._get_error_details(e)}", format=self.format)
             raise e
 
-    def call_sync_api(self, branch: str, names_to_hashes: dict[str, str]) -> Optional[list[str]]:
+    def call_sync_api(self, branch: str, names_to_hashes: dict[str, str], conf_type: str = None) -> Optional[list[str]]:
         url = f"{self.base_url}/upload/v2/sync"
 
         sync_request = {
             "namesToHashes": names_to_hashes,
             "branch": branch,
         }
+        if conf_type:
+            sync_request["confType"] = conf_type
 
         try:
             response = requests.post(
