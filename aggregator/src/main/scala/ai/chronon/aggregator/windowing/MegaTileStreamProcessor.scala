@@ -11,10 +11,11 @@ import scala.collection.mutable
   * eviction, and IR packing. No Flink imports — testable in isolation.
   *
   * State layout:
-  *   - Small window tiles: per-tier Map[tileStart -> base IR], only for tiers with isNoBatch columns.
-  *     On emission, small-window columns are built from tiles via buildMegaTileIr (correct per-column scoping).
+  *   - Small window tiles: per-tier Map[tileStart -> base IR]. Source of truth.
+  *   - cachedSmallWindowIr: running sawtooth approximation of small-window columns.
+  *     Updated incrementally on each event (over-inclusive at the tail).
+  *     Rebuilt from tiles on eviction to correct the tail (shed aged-out data).
   *   - Large window today/yesterday IRs: per-day accumulators for large/unwindowed columns.
-  *     Incremental update on each event.
   *   - Day transitions are watermark-driven (advanceWatermark), not event-driven,
   *     to prevent future-timestamped events from prematurely rotating state.
   */
@@ -43,9 +44,13 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
 
   // ---- Mutable state ----
 
-  // Small window tiles: per small-window tier only
+  // Small window tiles: per small-window tier only. Source of truth for eviction rebuilds.
   val tiles: Map[Long, mutable.Map[Long, Array[Any]]] =
     smallWindowTiers.map(hop => hop -> mutable.Map.empty[Long, Array[Any]]).toMap
+
+  // Sawtooth running sum for small-window columns. Updated on every event (over-inclusive).
+  // Rebuilt from tiles on eviction to correct the tail.
+  var cachedSmallWindowIr: Array[Any] = windowedAgg.init
 
   // Large window per-day accumulators (only large/unwindowed column positions populated)
   var largeTodayIr: Array[Any] = windowedAgg.init
@@ -67,10 +72,9 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
     var todayDirty = false
     var yesterdayDirty = false
 
-    // Update tiles for small-window tiers.
-    // Tiles are the source of truth for small-window columns; on emission,
-    // buildMegaTileIr scopes each column to its effective window.
+    // Update tiles + cachedSmallWindowIr for small-window tiers
     if (hasSmallWindows) {
+      var tilesUpdated = false
       val tileStarts = megaTileAgg.tileStartsForEvent(eventTs)
       for ((hopSize, tileStart) <- tileStarts) {
         if (smallWindowTiers.contains(hopSize)) {
@@ -81,9 +85,23 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
             val ir = tierTiles.getOrElseUpdate(tileStart, baseAgg.init)
             baseAgg.update(ir, row)
             if (tileStart < earliestTileStart) earliestTileStart = tileStart
-            todayDirty = true
+            tilesUpdated = true
           }
         }
+      }
+
+      // Sawtooth: merge event into running IR for all small-window columns.
+      // Over-inclusive at the tail (6h col accumulates same events as 2d col).
+      // Eviction rebuilds from tiles to correct per-column scoping.
+      if (tilesUpdated) {
+        var col = 0
+        while (col < windowedAgg.length) {
+          if (isNoBatch(col)) {
+            windowedAgg.columnAggregators(col).update(cachedSmallWindowIr, row)
+          }
+          col += 1
+        }
+        todayDirty = true
       }
     }
 
@@ -107,7 +125,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
     // else: > 2 days late → dropped for large windows (tiles may still capture it above)
 
     EmitResult(
-      todayEntry = if (todayDirty) packTodayEntry(eventTs) else null,
+      todayEntry = if (todayDirty) packTodayEntry() else null,
       todayStart = todayStart,
       yesterdayEntry = if (yesterdayDirty) packYesterdayEntry() else null,
       yesterdayStart = yesterdayStart
@@ -129,8 +147,10 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
   }
 
   /**
-    * Evict stale tiles. Called on timer (watermark-driven interval = minSmallWindowTileSize).
-    * Returns an EmitResult with updated today entry.
+    * Evict stale tiles and rebuild cachedSmallWindowIr from remaining tiles.
+    * Called on timer at every minSmallWindowTileSize interval (watermark-driven).
+    * The rebuild corrects the sawtooth over-inclusiveness by scoping each
+    * column to its effectiveStart via buildMegaTileIr.
     */
   def onEviction(timerTs: Long): EmitResult = {
     if (!hasSmallWindows || earliestTileStart == Long.MaxValue) {
@@ -147,6 +167,10 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
       staleKeys.foreach(tierTiles.remove)
     }
 
+    // Rebuild cachedSmallWindowIr from tiles — corrects sawtooth tail.
+    // buildMegaTileIr scopes each column to its effectiveStart.
+    cachedSmallWindowIr = megaTileAgg.buildMegaTileIr(tiles, now = timerTs, batchEnd = todayStart)
+
     // Update earliestTileStart from remaining tiles
     earliestTileStart = Long.MaxValue
     for ((_, tierTiles) <- tiles; ts <- tierTiles.keys) {
@@ -154,7 +178,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
     }
 
     EmitResult(
-      todayEntry = packTodayEntry(timerTs),
+      todayEntry = packTodayEntry(),
       todayStart = todayStart,
       yesterdayEntry = null,
       yesterdayStart = todayStart - DayMillis
@@ -162,23 +186,15 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
   }
 
   /**
-    * Pack today's KV entry.
-    * Small-window columns are built from tiles via buildMegaTileIr (correct per-column scoping).
-    * Large-window columns come from the running daily accumulator.
+    * Pack today's KV entry from cached state.
+    * Small-window columns: cachedSmallWindowIr (sawtooth, corrected on eviction).
+    * Large-window columns: largeTodayIr (always fresh).
     */
-  def packTodayEntry(now: Long): Array[Any] = {
-    val todayStart = currentDayStart
-    // Build small-window columns from tiles (correct per-column effective window)
-    val smallIr = if (hasSmallWindows) megaTileAgg.buildMegaTileIr(tiles, now, batchEnd = todayStart) else null
-
+  def packTodayEntry(): Array[Any] = {
     val entry = new Array[Any](windowedAgg.length)
     var col = 0
     while (col < windowedAgg.length) {
-      if (isNoBatch(col)) {
-        entry(col) = if (smallIr != null) smallIr(col) else null
-      } else {
-        entry(col) = largeTodayIr(col)
-      }
+      entry(col) = if (isNoBatch(col)) cachedSmallWindowIr(col) else largeTodayIr(col)
       col += 1
     }
     entry

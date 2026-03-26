@@ -102,18 +102,32 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
     val streamingEvents = allEvents.sortBy(_.ts)
     val sortedQueries = queryTimes.sorted
 
-    // Track last eviction time and KV store state
-    var lastEvictionTs = 0L
     val evictionInterval = processor.minSmallWindowTileSize
+    // Next eviction fires at the next tile boundary after the first event
+    var nextEvictionTs = Long.MaxValue
     val kvStore = mutable.Map[Long, Array[Any]]() // dayStart -> mega tile entry
 
     var eventIdx = 0
     val resultsByQueryTs = mutable.Map[Long, Array[Any]]()
 
+    // Helper: fire all pending evictions up to a given timestamp
+    def firePendingEvictions(upToTs: Long): Unit = {
+      if (!processor.hasSmallWindows) return
+      while (nextEvictionTs <= upToTs) {
+        processor.advanceWatermark(nextEvictionTs)
+        val evictResult = processor.onEviction(nextEvictionTs)
+        if (evictResult.todayEntry != null) kvStore(evictResult.todayStart) = evictResult.todayEntry
+        nextEvictionTs += evictionInterval
+      }
+    }
+
     for (queryTs <- sortedQueries) {
       // Process all streaming events up to queryTs
       while (eventIdx < streamingEvents.length && streamingEvents(eventIdx).ts <= queryTs) {
         val event = streamingEvents(eventIdx)
+
+        // Fire eviction timers that should have fired before this event
+        firePendingEvictions(event.ts)
 
         // Advance watermark to event time (simulating in-order processing)
         processor.advanceWatermark(event.ts)
@@ -123,29 +137,23 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
         if (result.todayEntry != null) kvStore(result.todayStart) = result.todayEntry
         if (result.yesterdayEntry != null) kvStore(result.yesterdayStart) = result.yesterdayEntry
 
-        // Simulate eviction timer at regular intervals
-        if (processor.hasSmallWindows && event.ts - lastEvictionTs >= evictionInterval) {
-          val evictResult = processor.onEviction(event.ts)
-          if (evictResult.todayEntry != null) kvStore(evictResult.todayStart) = evictResult.todayEntry
-          lastEvictionTs = event.ts
+        // Initialize eviction schedule from first event
+        if (nextEvictionTs == Long.MaxValue && processor.hasSmallWindows) {
+          nextEvictionTs = TsUtils.round(event.ts, evictionInterval) + evictionInterval
         }
 
         eventIdx += 1
       }
 
+      // Fire pending evictions up to query time
+      firePendingEvictions(queryTs)
+
       // Advance watermark to query time (may trigger day transition for idle periods)
       processor.advanceWatermark(queryTs)
 
-      // Final eviction at query time for consistency
-      if (processor.hasSmallWindows) {
-        val evictResult = processor.onEviction(queryTs)
-        if (evictResult.todayEntry != null) kvStore(evictResult.todayStart) = evictResult.todayEntry
-      }
-
-      // Snapshot current state for the query
+      // Read today's entry from processor cached state (sawtooth-corrected by eviction)
       val (todayStart, yesterdayStart) = merger.streamingDayKeys(queryTs)
-      // Always get fresh today entry from processor state (not stale KV cache)
-      val todayIr = processor.packTodayEntry(queryTs)
+      val todayIr = processor.packTodayEntry()
       val yesterdayIr = kvStore.getOrElse(yesterdayStart, null)
 
       resultsByQueryTs(queryTs) = merger.merge(finalBatchIr, todayIr, yesterdayIr, todayStart, queryTs, batchEnd)
