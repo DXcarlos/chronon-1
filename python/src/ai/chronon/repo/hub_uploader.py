@@ -16,7 +16,8 @@ from gen_thrift.api.ttypes import Conf
 
 def build_local_repo_hashmap(root_dir: str):
     compiled_dir = os.path.join(root_dir, "compiled")
-    # Returns a map of name -> (tbinary, file_hash)
+    # Returns a map of (name, confType) -> Conf to avoid collisions when a conf name
+    # is shared across different types (e.g. a join and a model with the same filename).
     results = {}
 
     # Iterate through each object type folder (staging_queries, group_bys, joins etc)
@@ -44,18 +45,15 @@ def build_local_repo_hashmap(root_dir: str):
                 json_obj = json.loads(thrift_json)
                 name = json_obj["metaData"]["name"]
 
-                # Load the json into the appropriate object type based on folder
-                # binary = json2binary(thrift_json, obj_class)
-
+                conf_type = FOLDER_NAME_TO_CONF_TYPE[folder_name]
                 md5_hash = hashlib.md5(thrift_json.encode()).hexdigest()
-                # md5_hash = hashlib.md5(thrift_json.encode()).hexdigest() + "123"
-                # results[name] = (binary, md5_hash, FOLDER_NAME_TO_CONF_TYPE[folder_name])
-                results[name] = Conf(
+                # Key includes the folder name prefix (e.g. "joins#gcp.demo.v1__1") so that
+                # same-named confs of different types can coexist in the map.
+                results[f"{folder_name}#{name}"] = Conf(
                     name=name,
                     hash=md5_hash,
-                    # contents=binary,
                     contents=thrift_json,
-                    confType=FOLDER_NAME_TO_CONF_TYPE[folder_name],
+                    confType=conf_type,
                     localPath=json_file
                 )
 
@@ -70,21 +68,20 @@ def build_local_repo_hashmap(root_dir: str):
                 + "your thrift version before rerunning your command."
             )
             raise RuntimeError(error_msg)
-
     return results
 
 
 def compute_and_upload_diffs(
         branch: str,
         zipline_hub: ZiplineHub,
-        local_repo_confs: dict[str, Conf],
+        local_repo_confs: dict[tuple, Conf],
         format: Format = Format.TEXT,
 ) -> dict[str, Conf]:
-    # Group confs by confType so that diff/sync requests are scoped per type.
-    # This avoids collisions when a GROUP_BY and JOIN share the same compiled name.
+    # Group by confType — within a single type, names are guaranteed unique.
+    # local_repo_confs is keyed by (name, confType) to prevent same-name cross-type collisions.
     confs_by_type = defaultdict(dict)
-    for name, conf in local_repo_confs.items():
-        confs_by_type[conf.confType][name] = conf
+    for key, conf in local_repo_confs.items():
+        confs_by_type[conf.confType][conf.name] = conf
 
     total_count = len(local_repo_confs)
     print_step(f"🧮 Computed hashes for {total_count} local files.", format=format)

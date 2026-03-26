@@ -24,7 +24,7 @@ from ai.chronon.cli.theme import (
     status_spinner,
 )
 from ai.chronon.click_helpers import handle_compile, handle_conf_not_found, handle_dry_run_compile
-from ai.chronon.repo import hub_uploader, utils
+from ai.chronon.repo import FOLDER_NAME_TO_CLASS, hub_uploader, utils
 from ai.chronon.repo.auth import get_user_email
 from ai.chronon.repo.constants import VALID_CLOUDS, RunMode
 from ai.chronon.repo.utils import print_possible_confs, upload_to_blob_store
@@ -835,12 +835,20 @@ def eval(
 
     # get conf name
     conf_name = utils.get_metadata_name_from_conf(repo, conf)
+    # Prefix with folder type if we can infer it from the conf path (e.g. "joins#gcp.demo.v1__1").
+    # This matches the prefixed keys in conf_hash_map so the server can resolve the right conf
+    # when same-named confs of different types are present.
+    conf_path_parts = os.path.normpath(conf).split(os.sep)
+    folder_prefix = next(
+        (f for f in FOLDER_NAME_TO_CLASS if f in conf_path_parts), None
+    )
+    typed_conf_name = f"{folder_prefix}#{conf_name}" if folder_prefix else conf_name
     if generate_test_config:
         parameters["generateTestDataSkeleton"] = "true"
     response_json = zipline_hub.call_eval_api(
-        conf_name=conf_name,
+        conf_name=typed_conf_name,
         conf_hash_map={
-            conf.name: conf.hash for conf in conf_name_to_hash_dict.values()
+            key: conf.hash for key, conf in conf_name_to_hash_dict.items()
         },
         parameters=parameters,
     )
