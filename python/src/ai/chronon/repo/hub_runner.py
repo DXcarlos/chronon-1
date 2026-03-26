@@ -394,6 +394,9 @@ def submit_workflow(
 
     # get conf name
     conf_name = utils.get_metadata_name_from_conf(repo, conf)
+    conf_path_parts = os.path.normpath(conf).split(os.sep)
+    folder_prefix = next((f for f in FOLDER_NAME_TO_CLASS if f in conf_path_parts), None)
+    conf_key = f"{folder_prefix}#{conf_name}" if folder_prefix else conf_name
 
     with status_spinner(f"Submitting {mode} workflow...", format=format):
         response_json = zipline_hub.call_workflow_start_api(
@@ -403,7 +406,7 @@ def submit_workflow(
             user=get_user_email(),
             start=start_ds,
             end=end_ds,
-            conf_hash=conf_name_to_hash_dict[conf_name].hash,
+            conf_hash=conf_name_to_hash_dict[conf_key].hash,
             skip_long_running=False,
         )
 
@@ -445,6 +448,9 @@ def submit_schedule(
 
     # get conf name
     conf_name = utils.get_metadata_name_from_conf(repo, conf)
+    conf_path_parts = os.path.normpath(conf).split(os.sep)
+    folder_prefix = next((f for f in FOLDER_NAME_TO_CLASS if f in conf_path_parts), None)
+    conf_key = f"{folder_prefix}#{conf_name}" if folder_prefix else conf_name
     schedule_modes = get_schedule_modes(os.path.join(repo, conf))
     modes = {
         RunMode.BACKFILL.value.upper(): schedule_modes.offline_schedule,
@@ -456,7 +462,7 @@ def submit_schedule(
             modes=modes,
             branch=branch,
             conf_name=conf_name,
-            conf_hash=conf_name_to_obj_dict[conf_name].hash,
+            conf_hash=conf_name_to_obj_dict[conf_key].hash,
         )
 
     if format == Format.JSON:
