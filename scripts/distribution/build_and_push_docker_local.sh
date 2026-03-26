@@ -298,7 +298,6 @@ if [[ "$BUILD_FETCHER" == true ]]; then
             --platform "$PLATFORM" \
             -f docker/fetcher/Dockerfile \
             -t "ziplineai/chronon-fetcher:$VERSION" \
-            -t "ziplineai/chronon-fetcher:latest" \
             --load \
             .
         echo "✓ Built ziplineai/chronon-fetcher:$VERSION locally"
