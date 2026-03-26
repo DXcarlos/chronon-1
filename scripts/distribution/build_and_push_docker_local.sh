@@ -14,7 +14,8 @@ function print_usage() {
     echo "  --skip-build         Skip building JARs (use existing ones)"
     echo "  --skip-push          Build images but don't push to Docker Hub"
     echo "  --build-fetcher      Also build and push the fetcher image"
-    echo "  --platform <platform> Target platform (default: linux/amd64)"
+    echo "  --platform <platform> Target platform (default: linux/amd64,linux/arm64 for push, linux/amd64 for local)"
+    echo "                       Examples: linux/amd64, linux/arm64, linux/amd64,linux/arm64"
     echo "  -h, --help           Show this help message"
     echo ""
     echo "Examples:"
@@ -28,7 +29,7 @@ VERSION=""
 SKIP_BUILD=false
 SKIP_PUSH=false
 BUILD_FETCHER=false
-PLATFORM="linux/amd64"
+PLATFORM=""  # Will be set based on push/local mode
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -85,6 +86,19 @@ fi
 if [[ "$CLOUD" != "gcp" && "$CLOUD" != "aws" && "$CLOUD" != "azure" && "$CLOUD" != "all" ]]; then
     echo "Error: --cloud must be one of: gcp, aws, azure, all"
     exit 1
+fi
+
+# Set platform based on push/local mode if not explicitly provided
+if [[ -z "$PLATFORM" ]]; then
+    if [[ "$SKIP_PUSH" == false ]]; then
+        PLATFORM="linux/amd64,linux/arm64"
+        echo "Using multi-platform build: $PLATFORM"
+    else
+        PLATFORM="linux/amd64"
+        echo "Using single-platform build for local: $PLATFORM"
+    fi
+else
+    echo "Using specified platform: $PLATFORM"
 fi
 
 SCRIPT_DIRECTORY=$(dirname -- "$(realpath -- "$0")")
