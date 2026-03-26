@@ -290,7 +290,6 @@ if [[ "$BUILD_FETCHER" == true ]]; then
             --platform "$PLATFORM" \
             -f docker/fetcher/Dockerfile \
             -t "ziplineai/chronon-fetcher:$VERSION" \
-            -t "ziplineai/chronon-fetcher:latest" \
             --push \
             .
         echo "✓ Pushed ziplineai/chronon-fetcher:$VERSION to Docker Hub"
