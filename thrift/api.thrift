@@ -277,6 +277,11 @@ enum Accuracy {
     SNAPSHOT = 1
 }
 
+enum OnlineStrategy {
+    DEFAULT = 0,
+    STREAMING_MEGATILES = 1
+}
+
 enum EngineType {
     SPARK = 0,
     BIGQUERY = 1,
@@ -377,6 +382,7 @@ struct GroupBy {
     5: optional Accuracy accuracy
     // support for offline only for now
     7: optional list<Derivation> derivations
+    8: optional OnlineStrategy onlineStrategy
 }
 
 struct JoinPart {

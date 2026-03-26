@@ -552,9 +552,13 @@ object Extensions {
       }
     }
 
+    def isMegaTilingEnabled: Boolean =
+      groupBy.onlineStrategy == OnlineStrategy.STREAMING_MEGATILES
+
     def semanticHash: String = {
       val newGroupBy = groupBy.deepCopy()
       newGroupBy.unsetMetaData()
+      newGroupBy.unsetOnlineStrategy() // online-only, doesn't affect batch
       ThriftJsonCodec.md5Digest(newGroupBy)
     }
 
