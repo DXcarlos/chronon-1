@@ -48,3 +48,7 @@ checkouts = get_native_partition_export("checkouts", "ts")
 dim_listings = get_select_star_export("dim_listings", "ds")
 dim_merchants = get_select_star_export("dim_merchants", "ds")
 dim_users = get_select_star_export("dim_users", "ds")
+
+# Sparse input table — only has partitions on 01-01, 01-05, 01-10, 01-15, 01-20
+# Used to test backfill with missing input partitions
+user_activities_sparse = get_select_star_export("user_activities_raw_sparse", "ds")

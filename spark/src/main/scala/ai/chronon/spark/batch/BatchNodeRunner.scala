@@ -688,15 +688,16 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
         .map { tps => tps.name -> tps.missingPartitions }
 
       if (inputTableToMissingPartitions.nonEmpty) {
-        throw new RuntimeException(
-          "The following input tables are missing partitions for the requested range:\n" +
+        logger.warn(
+          "The following input tables are missing partitions for the requested range (proceeding anyway):\n" +
             inputTableToMissingPartitions
               .map { case (tableName, missing) =>
                 s"Table: $tableName, Missing Partitions: ${missing.mkString(", ")}"
               }
               .mkString("\n")
         )
-      } else {
+      }
+      {
 
         try {
           run(metadata, node.content, Option(range))
