@@ -5,7 +5,7 @@ import os
 from collections import defaultdict
 
 from ai.chronon.cli.formatter import Format, format_print
-from ai.chronon.cli.theme import print_info, print_step, print_success
+from ai.chronon.cli.theme import print_info, print_step, print_success, print_warning
 from ai.chronon.repo import (
     FOLDER_NAME_TO_CLASS,
     FOLDER_NAME_TO_CONF_TYPE,
@@ -91,19 +91,31 @@ def compute_and_upload_diffs(
 
     all_diffed_confs = {}
     names_to_hashes_by_type = {}
+    server_supports_type_scoped = False
 
     for conf_type, type_confs in confs_by_type.items():
         conf_type_name = conf_type.name if hasattr(conf_type, "name") else str(conf_type)
         names_to_hashes = {name: c.hash for name, c in type_confs.items()}
         names_to_hashes_by_type[conf_type] = names_to_hashes
 
-        changed_conf_names: list[str] = zipline_hub.call_diff_api(
-            names_to_hashes, conf_type=conf_type_name
-        )["diff"]
+        diff_response = zipline_hub.call_diff_api(names_to_hashes, conf_type=conf_type_name)
+        # Any truthy value from the server means it supports type-scoped uploads
+        server_supports_type_scoped = server_supports_type_scoped or bool(
+            diff_response.get("supportsTypeScopedUpload")
+        )
 
+        changed_conf_names: list[str] = diff_response["diff"]
         if changed_conf_names:
             diffed = {k: type_confs[k] for k in changed_conf_names}
             all_diffed_confs.update(diffed)
+
+    if not server_supports_type_scoped:
+        print_warning(
+            "The Zipline Hub service does not support type-scoped uploads. "
+            "Upgrade the orchestration service to enable it. "
+            "Falling back to legacy sync — conf name collisions across types may occur.",
+            format=format,
+        )
 
     if not all_diffed_confs:
         print_success(
@@ -125,11 +137,16 @@ def compute_and_upload_diffs(
             f"⬆️ Uploaded {len(all_diffed_confs)} changed confs to branch '{branch}'.", format=format
         )
 
-    # Sync each type separately so the scoped upsert only touches confs of that type
-    for conf_type, names_to_hashes in names_to_hashes_by_type.items():
-        conf_type_name = conf_type.name if hasattr(conf_type, "name") else str(conf_type)
-        zipline_hub.call_sync_api(branch=branch, names_to_hashes=names_to_hashes,
-                                   conf_type=conf_type_name)
+    if server_supports_type_scoped:
+        # Sync per type so the scoped upsert only touches confs of that type
+        for conf_type, names_to_hashes in names_to_hashes_by_type.items():
+            conf_type_name = conf_type.name if hasattr(conf_type, "name") else str(conf_type)
+            zipline_hub.call_sync_api(branch=branch, names_to_hashes=names_to_hashes,
+                                       conf_type=conf_type_name)
+    else:
+        # Legacy path: single sync call with all confs combined
+        all_names_to_hashes = {n: h for m in names_to_hashes_by_type.values() for n, h in m.items()}
+        zipline_hub.call_sync_api(branch=branch, names_to_hashes=all_names_to_hashes)
 
     print_success(f"{total_count} hashes updated on branch '{branch}'.", format=format)
     return all_diffed_confs
