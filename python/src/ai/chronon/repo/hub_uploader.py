@@ -14,7 +14,7 @@ from ai.chronon.repo.zipline_hub import ZiplineHub
 from gen_thrift.api.ttypes import Conf
 
 
-def build_local_repo_hashmap(root_dir: str):
+def build_local_repo_hashmap(root_dir: str) -> dict[str, Conf]:
     compiled_dir = os.path.join(root_dir, "compiled")
     # Returns a map of (name, confType) -> Conf to avoid collisions when a conf name
     # is shared across different types (e.g. a join and a model with the same filename).
@@ -74,11 +74,11 @@ def build_local_repo_hashmap(root_dir: str):
 def compute_and_upload_diffs(
         branch: str,
         zipline_hub: ZiplineHub,
-        local_repo_confs: dict[tuple, Conf],
+        local_repo_confs: dict[str, Conf],
         format: Format = Format.TEXT,
 ) -> dict[str, Conf]:
     # Group by confType — within a single type, names are guaranteed unique.
-    # local_repo_confs is keyed by (name, confType) to prevent same-name cross-type collisions.
+    # local_repo_confs is keyed by 'confType#name' to prevent same-name cross-type collisions.
     confs_by_type = defaultdict(dict)
     for _key, conf in local_repo_confs.items():
         confs_by_type[conf.confType][conf.name] = conf
