@@ -80,7 +80,7 @@ def compute_and_upload_diffs(
     # Group by confType — within a single type, names are guaranteed unique.
     # local_repo_confs is keyed by (name, confType) to prevent same-name cross-type collisions.
     confs_by_type = defaultdict(dict)
-    for key, conf in local_repo_confs.items():
+    for _key, conf in local_repo_confs.items():
         confs_by_type[conf.confType][conf.name] = conf
 
     total_count = len(local_repo_confs)
