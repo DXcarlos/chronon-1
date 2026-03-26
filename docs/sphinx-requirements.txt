@@ -3,3 +3,4 @@ myst-parser
 sphinx-book-theme
 build
 sphinx_design
+requests>=2.33.0 # not directly required, pinned by Snyk to avoid a vulnerability
