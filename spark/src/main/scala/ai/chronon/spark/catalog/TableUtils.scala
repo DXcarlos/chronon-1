@@ -63,8 +63,6 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     sparkSession.conf.get("spark.chronon.backfill.bloomfilter.threshold", "1000000").toLong
   val checkLeftTimeRange: Boolean =
     sparkSession.conf.get("spark.chronon.join.backfill.check.left_time_range", "false").toBoolean
-  private val isBenchmarkMode = sparkSession.conf.get("spark.chronon.backfill.benchmarkMode.enabled", "true").toBoolean
-
   // TODO: This should be at the level of groupBy in theory
   val skewFreeMode: Boolean = sparkSession.conf
     .get("spark.chronon.join.backfill.mode.skewFree", "true")
@@ -288,17 +286,6 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       dfRearranged
     }
 
-    val crossCatalogPersist =
-      sparkSession.conf.get("spark.chronon.cross_catalog.persist", "false").toBoolean
-
-    // When reading from one catalog (e.g. Delta via UCSingleCatalog) and writing to another
-    // (e.g. Iceberg via REST), we must materialize the DataFrame before the write so that
-    // DeltaSparkSessionExtension's PreprocessTableWithDVsStrategy doesn't see TahoeFileIndex
-    // in the write plan as a temporary fix until this PR is merged https://github.com/delta-io/delta/pull/5804
-    if (!isBenchmarkMode || crossCatalogPersist) {
-      finalizedDf.cache()
-    }
-
     logger.info(s"Writing to $tableName ...")
     finalizedDf.write
       .mode(saveMode)
@@ -308,11 +295,6 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       // Handles dynamic partition overwrite.
       .insertInto(tableName)
     logger.info(s"Finished writing to $tableName")
-
-    if (!isBenchmarkMode || crossCatalogPersist) {
-      logger.info(s"Table $tableName has been written with ${finalizedDf.count()} rows.")
-      finalizedDf.unpersist()
-    }
   }
 
   // retains only the invocations from chronon code.

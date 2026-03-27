@@ -44,9 +44,9 @@ class CosmosKVStoreTest extends AnyFlatSpec with BeforeAndAfterAll {
     database = cosmosClient.getDatabase(databaseName)
 
     val conf = Map(
-      "cosmos.endpoint" -> endpoint,
-      "cosmos.key" -> key,
-      "cosmos.database" -> databaseName,
+      "COSMOS_ENDPOINT" -> endpoint,
+      "COSMOS_KEY" -> key,
+      "COSMOS_DATABASE" -> databaseName,
       "emulator-mode" -> "true"
     )
 

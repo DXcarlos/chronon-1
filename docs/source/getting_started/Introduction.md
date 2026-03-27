@@ -9,7 +9,7 @@ Chronon is an open source end-to-end feature platform that allows Machine Learni
 
 It's currently used to power all major ML applications within Airbnb, as well as major use cases at Stripe. Airbnb and Stripe jointly manage and maintain the project, and welcome your usage and contributions!
 
-![Overview](../../images/chronon_high_level.png)
+![](../../images/chronon_high_level.svg)
 
 
 ## Key Features
@@ -76,4 +76,4 @@ v1 = GroupBy(
 )
 ```
 
-To run this and other features and see the complete flow from generating training data to online serving, continue along to the [Quickstart Tutorial](./Tutorial.md), or for more documentation on how to author and use features, see the [Creating Training Data](https://chronon.ai/authoring_features/GroupBy.html) section.
+To run this and other features and see the complete flow from generating training data to online serving, continue along to the [Quickstart Tutorial](./Tutorial.md), or for more documentation on how to author and use features, see the [Creating Training Data](/docs/authoring_features/GroupBy) section.

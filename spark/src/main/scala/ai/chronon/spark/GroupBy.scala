@@ -762,8 +762,8 @@ object GroupBy {
           val latestValid: String = Option(source.query.endPartition).getOrElse(latestAvailable.orNull)
           SourceDataProfile(latestValid, latestValid, latestValid)
         } else {
-          val minQuery = tableUtils.partitionSpec.before(queryStart)
-          val windowStart: String = window.map(tableUtils.partitionSpec.minus(minQuery, _)).orNull
+          val minQuery = sourcePartitionSpec.before(queryStart)
+          val windowStart: String = window.map(sourcePartitionSpec.minus(minQuery, _)).orNull
           lazy val sourceStart = Option(source.query.startPartition).orNull
           SourceDataProfile(windowStart, sourceStart, effectiveEnd)
         }
@@ -878,8 +878,9 @@ object GroupBy {
     val tableProps = Option(groupByConf.metaData.tableProperties)
       .map(_.toScala)
       .orNull
+    // CLI dates are always in yyyy-MM-dd format; translate to the configured partition spec
     val groupByUnfilledRangesOpt = Option(
-      Seq(PartitionRange(startPartition, endPartition)(tableUtils.partitionSpec))
+      Seq(PartitionRange(startPartition, endPartition)(PartitionSpec.daily).translate(tableUtils.partitionSpec))
     ) // TODO(tchow): possilbly revert if orchestrator is not yet available.
 
     if (groupByUnfilledRangesOpt.isEmpty) {

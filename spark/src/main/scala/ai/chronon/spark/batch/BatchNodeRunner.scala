@@ -526,15 +526,20 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     val allOutputTablePartitions = tableUtils.partitions(metadata.executionInfo.outputTableInfo.table,
                                                          tablePartitionSpec = Option(outputTablePartitionSpec))
 
-    val outputTablePartitionsJson = PartitionRange.collapsedPrint(allOutputTablePartitions)(range.partitionSpec)
+    // allOutputTablePartitions are in tableUtils.partitionSpec format (translated by tableUtils.partitions);
+    // range is in PartitionSpec.daily (from CLI). Translate range for consistent comparison.
+    val translatedRange = range.translate(tableUtils.partitionSpec)
+
+    val outputTablePartitionsJson =
+      PartitionRange.collapsedPrint(allOutputTablePartitions)(tableUtils.partitionSpec)
     logger.info(s"Output table partitions for '${metadata.name}': $outputTablePartitionsJson")
 
     // Check if range is inside allOutputTablePartitions
-    if (!range.partitions.forall(p => allOutputTablePartitions.contains(p))) {
-      val missingPartitions = range.partitions.filterNot(p => allOutputTablePartitions.contains(p))
+    if (!translatedRange.partitions.forall(p => allOutputTablePartitions.contains(p))) {
+      val missingPartitions = translatedRange.partitions.filterNot(p => allOutputTablePartitions.contains(p))
       logger.error(
         s"After job completion, output table ${metadata.executionInfo.outputTableInfo.table} is missing partitions: ${missingPartitions
-            .mkString(", ")} from the requested range: $range. All output partitions: ${allOutputTablePartitions}"
+            .mkString(", ")} from the requested range: $translatedRange. All output partitions: ${allOutputTablePartitions}"
       )
     }
 
@@ -547,7 +552,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       partitions = allOutputTablePartitions,
       semanticHash = Option(node.semanticHash).filter(_.nonEmpty)
     )
-    val kvStoreUpdates = kvPartitionsStore.put(outputTable, kvPartitions)(range.partitionSpec)
+    val kvStoreUpdates = kvPartitionsStore.put(outputTable, kvPartitions)(tableUtils.partitionSpec)
     Await.result(kvStoreUpdates, Duration.Inf)
     logger.info(s"Successfully completed batch node runner for '${metadata.name}'")
 
@@ -599,14 +604,12 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
                                                        tablePartitionSpec = Some(inputPartitionSpec),
                                                        timePartitioned = isTimePartitioned)
 
+        // existingPartitions are already translated to tableUtils.partitionSpec by tableUtils.partitions()
         val missingPartitionsAcrossDeps = deps.flatMap { td =>
-          val inputPartSpec = Option(td.getTableInfo)
-            .map(_.partitionSpec(tableUtils.partitionSpec))
-            .getOrElse(tableUtils.partitionSpec)
-
+          // Translate required partitions to tableUtils.partitionSpec to match existingPartitions
           val requiredInputPartitions = DependencyResolver
             .computeInputRange(range, td)
-            .map(_.translate(inputPartSpec))
+            .map(_.translate(tableUtils.partitionSpec))
             .toSeq
             .flatMap(_.partitions)
             .toSet
@@ -615,7 +618,8 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           missingPartitions
         }.toSet
 
-        val existingTranslated = existingPartitions.map(p => inputPartitionSpec.translate(p, range.partitionSpec))
+        // existingPartitions are in tableUtils.partitionSpec; translate to range.partitionSpec for KV store
+        val existingTranslated = existingPartitions.map(p => tableUtils.partitionSpec.translate(p, range.partitionSpec))
 
         // Collect semanticHash values from all dependencies for this table
         val semanticHashes = deps.flatMap { td =>

@@ -19,6 +19,11 @@ trait KinesisConnectorModule extends Cross.Module[String] with build.BaseModule 
     mvn"io.dropwizard.metrics:metrics-core:4.2.19",
     mvn"com.google.protobuf:protobuf-java-util:3.25.1",
     mvn"com.google.protobuf:protobuf-java:3.25.1",
+    // Used for programmatic .proto string -> Descriptor conversion
+    mvn"io.confluent:kafka-protobuf-provider:7.8.0"
+      .exclude("com.fasterxml.jackson.core" -> "jackson-core")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
+      .exclude("com.fasterxml.jackson.core" -> "jackson-annotations"),
     mvn"io.netty:netty-codec-http2:4.1.129.Final",
     mvn"org.apache.flink:flink-connector-kinesis:4.2.0-1.17",
     mvn"software.amazon.glue:schema-registry-serde:1.1.27"

@@ -1,23 +1,36 @@
 package ai.chronon.flink_connectors.pubsub
 
 import ai.chronon.api.StructType
-import com.google.pubsub.v1.SchemaName
 import ai.chronon.online.TopicInfo
-import ai.chronon.online.serde.{AvroCodec, AvroConversions, AvroSerDe, Mutation, SerDe}
+import ai.chronon.online.serde.{AvroCodec, AvroSerDe, Mutation, ProtobufSerDe, SerDe}
 import com.google.api.gax.rpc.NotFoundException
 import com.google.cloud.pubsub.v1.SchemaServiceClient
-import org.apache.avro.Schema
+import com.google.pubsub.v1.SchemaName
+import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema
 
+/** SerDe that fetches schemas from GCP Pub/Sub Schema Registry and auto-detects the format (Avro or Protobuf).
+  *
+  * Configure via topic string:
+  *   pubsub://topic-name/serde=pubsub_schema/project=my-project/schemaId=my-schema/[proto3_default_as_null=false]
+  *
+  * Parameters:
+  *   - project: GCP project name (required)
+  *   - schemaId: Schema ID in Pub/Sub Schema Registry (required)
+  *   - proto3_default_as_null: For protobuf schemas, treat proto3 default values as null (optional, defaults to false)
+  */
 class PubSubSchemaSerDe(topicInfo: TopicInfo) extends SerDe {
   import PubSubSchemaSerDe._
+
+  private val proto3DefaultAsNull: Boolean =
+    topicInfo.params.getOrElse(Proto3DefaultAsNullKey, "false").toBoolean
 
   protected[flink_connectors] def buildPubsubSchemaClient(): SchemaServiceClient = {
     SchemaServiceClient.create()
   }
 
-  lazy val (avroSchemaStr, chrononSchema) = retrieveTopicSchema(topicInfo)
+  private lazy val delegate: SerDe = buildSerDe(topicInfo)
 
-  private def retrieveTopicSchema(topicInfo: TopicInfo): (String, StructType) = {
+  private def buildSerDe(topicInfo: TopicInfo): SerDe = {
     val schemaClient = buildPubsubSchemaClient()
     val projectName = topicInfo.params.getOrElse(ProjectKey, throw new IllegalArgumentException(s"$ProjectKey not set"))
     val schemaId = topicInfo.params.getOrElse(SchemaIdKey, throw new IllegalArgumentException(s"$SchemaIdKey not set"))
@@ -34,26 +47,27 @@ class PubSubSchemaSerDe(topicInfo: TopicInfo) extends SerDe {
         schemaClient.close()
       }
 
-    require(schema.getType == com.google.pubsub.v1.Schema.Type.AVRO,
-            s"Unsupported schema type: ${schema.getType}. Only Avro is supported.")
-    val avroSchema: Schema = AvroCodec.of(schema.getDefinition).schema
-    val chrononSchema: StructType = AvroConversions.toChrononSchema(avroSchema).asInstanceOf[StructType]
-    (schema.getDefinition, chrononSchema)
+    schema.getType match {
+      case com.google.pubsub.v1.Schema.Type.AVRO =>
+        val avroSchema = AvroCodec.of(schema.getDefinition).schema
+        new AvroSerDe(avroSchema)
+      case com.google.pubsub.v1.Schema.Type.PROTOCOL_BUFFER =>
+        val protobufSchema = new ProtobufSchema(schema.getDefinition)
+        val descriptor = protobufSchema.toDescriptor()
+        new ProtobufSerDe(descriptor, proto3DefaultAsNull)
+      case other =>
+        throw new IllegalArgumentException(
+          s"Unsupported schema type: $other. Supported types are AVRO and PROTOCOL_BUFFER.")
+    }
   }
 
-  override def schema: StructType = chrononSchema
+  override def schema: StructType = delegate.schema
 
-  lazy val avroSerDe = {
-    val avroSchema = AvroCodec.of(avroSchemaStr).schema
-    new AvroSerDe(avroSchema)
-  }
-
-  override def fromBytes(bytes: Array[Byte]): Mutation = {
-    avroSerDe.fromBytes(bytes)
-  }
+  override def fromBytes(bytes: Array[Byte]): Mutation = delegate.fromBytes(bytes)
 }
 
 object PubSubSchemaSerDe {
   val ProjectKey = "project"
   val SchemaIdKey = "schemaId"
+  val Proto3DefaultAsNullKey = "proto3_default_as_null"
 }

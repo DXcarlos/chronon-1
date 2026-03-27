@@ -35,7 +35,7 @@ Before running expensive backfill jobs, use eval to quickly validate your config
 The most common use case - validate your configuration without running any computations:
 
 ```bash
-zipline hub eval --conf compiled/joins/{team}/{your_conf}
+zipline hub eval compiled/joins/{team}/{your_conf}
 ```
 
 This will show you the output schema, lineage, and catch configuration errors early. Example output:
@@ -70,12 +70,12 @@ For deeper validation, provide sample data to see actual computation output:
 
 ```bash
 # 1. Generate a test data skeleton
-zipline hub eval --conf compiled/joins/{team}/{your_conf} --generate-skeleton
+zipline hub eval compiled/joins/{team}/{your_conf} --generate-test-config
 
 # 2. Fill in test-data.yaml with sample data (use !epoch for timestamps)
 
 # 3. Run eval with test data
-zipline hub eval --conf compiled/joins/{team}/{your_conf} --test-data-path test-data.yaml
+zipline hub eval compiled/joins/{team}/{your_conf} --test-data-path test-data.yaml
 ```
 
 This will show you the actual computed results with your sample data, helping you validate:
@@ -87,7 +87,7 @@ This will show you the actual computed results with your sample data, helping yo
 ## Backfill
 
 ```sh
-zipline hub backfill --conf compiled/{group_bys|staging_queries|joins}/{team}/{your_conf} --start-ds {YYYY-MM-dd} --end-ds {YYYY-MM-dd}
+zipline hub backfill compiled/{group_bys|staging_queries|joins}/{team}/{your_conf} --start-ds {YYYY-MM-dd} --end-ds {YYYY-MM-dd}
 ```
 
 This will give you a URL to track the progress of your backfill.
@@ -109,7 +109,7 @@ Running `schedule` from a branch will tell Zipline to run the regular jobs assoc
 This is helpful when you want to run an extended A/B test or experiment with the data pipeline. However, if you want to skip this step you can deploy the config to production simply by merging your PR.
 
 ```sh
-zipline hub schedule --conf compiled/{group_bys|staging_queries|joins}/{team}/{your_conf}
+zipline hub schedule compiled/{group_bys|staging_queries|joins}/{team}/{your_conf}
 ```
 
 This will run:

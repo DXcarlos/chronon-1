@@ -1,8 +1,11 @@
 package ai.chronon.integrations.aws
 
+import ai.chronon.api.JobStatusType
 import ai.chronon.spark.submission.JobSubmitterConstants.MaxRetainedCheckpoints
 import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
 import org.scalatest.flatspec.AnyFlatSpec
+
+import java.time.Instant
 
 class EksFlinkSubmitterTest extends AnyFlatSpec {
 
@@ -40,20 +43,30 @@ class EksFlinkSubmitterTest extends AnyFlatSpec {
     assertFalse(cfg.contains("pipeline.jars"))
   }
 
-  // No TM memory in jobProperties defaults to TaskManager64G (conservative production default)
-  it should "default to 64G tier when no TM memory is specified" in {
+  it should "default to 16G tier when no TM memory is specified" in {
     val cfg = config()
-    assertEquals("64G", cfg("taskmanager.memory.process.size"))
-    assertEquals("4", cfg("taskmanager.numberOfTaskSlots"))
+    assertEquals("16G", cfg("taskmanager.memory.process.size"))
+    assertEquals("1", cfg("taskmanager.numberOfTaskSlots"))
     assertEquals("4G", cfg("jobmanager.memory.process.size"))
-    assertEquals("1G", cfg("taskmanager.memory.network.min"))
-    assertEquals("2G", cfg("taskmanager.memory.network.max"))
+    assertEquals("256m", cfg("taskmanager.memory.network.min"))
+    assertEquals("512m", cfg("taskmanager.memory.network.max"))
     assertEquals("0.5f", cfg("taskmanager.memory.managed.fraction"))
     assertEquals("512m", cfg("taskmanager.memory.jvm-metaspace.size"))
-    assertEquals("1G", cfg("taskmanager.memory.task.off-heap.size"))
+    assertEquals("256m", cfg("taskmanager.memory.task.off-heap.size"))
   }
 
-  it should "use SmallTaskManager defaults for sub-32G TM memory (e.g. 8G)" in {
+  it should "apply 16G tier settings when explicitly specified" in {
+    val cfg = config(Map("taskmanager.memory.process.size" -> "16G"))
+    assertEquals("16G", cfg("taskmanager.memory.process.size"))
+    assertEquals("1", cfg("taskmanager.numberOfTaskSlots"))
+    assertEquals("256m", cfg("taskmanager.memory.network.min"))
+    assertEquals("512m", cfg("taskmanager.memory.network.max"))
+    assertEquals("0.5f", cfg("taskmanager.memory.managed.fraction"))
+    assertEquals("512m", cfg("taskmanager.memory.jvm-metaspace.size"))
+    assertEquals("256m", cfg("taskmanager.memory.task.off-heap.size"))
+  }
+
+  it should "use SmallTaskManager defaults for sub-16G TM memory (e.g. 8G)" in {
     val cfg = config(Map("taskmanager.memory.process.size" -> "8G"))
     assertEquals("1", cfg("taskmanager.numberOfTaskSlots"))
     // jobProperties wins — 8G flows through untouched
@@ -176,6 +189,79 @@ class EksFlinkSubmitterTest extends AnyFlatSpec {
     )
     assertEquals(Some("http://localhost:3000/flink/my-deployment/"),
       emr.getFlinkUrl("flink:zipline-flink:my-deployment"))
+  }
+
+  "EksFlinkSubmitter.resolveStatus" should "return RUNNING when lifecycleState is STABLE" in {
+    assertEquals(JobStatusType.RUNNING,
+      submitter.resolveStatus("d", "STABLE", "READY", Some(Instant.now())))
+  }
+
+  it should "return FAILED when lifecycleState is FAILED" in {
+    assertEquals(JobStatusType.FAILED,
+      submitter.resolveStatus("d", "FAILED", "MISSING", Some(Instant.now())))
+  }
+
+  it should "return FAILED when lifecycleState is SUSPENDED" in {
+    assertEquals(JobStatusType.FAILED,
+      submitter.resolveStatus("d", "SUSPENDED", "READY", Some(Instant.now())))
+  }
+
+  it should "return UNKNOWN for an unrecognised lifecycleState" in {
+    assertEquals(JobStatusType.UNKNOWN,
+      submitter.resolveStatus("d", "SOMETHING_NEW", "READY", Some(Instant.now())))
+  }
+
+  // --- DEPLOYED/UPGRADING family ---
+
+  it should "return PENDING when DEPLOYED with READY jmStatus and within timeout" in {
+    val recentTs = Some(Instant.now())
+    assertEquals(JobStatusType.PENDING,
+      submitter.resolveStatus("d", "DEPLOYED", "READY", recentTs))
+  }
+
+  it should "return PENDING when UPGRADING with READY jmStatus and within timeout" in {
+    val recentTs = Some(Instant.now())
+    assertEquals(JobStatusType.PENDING,
+      submitter.resolveStatus("d", "UPGRADING", "READY", recentTs))
+  }
+
+  it should "return FAILED immediately when jmDeploymentStatus is ERROR regardless of age" in {
+    // Brand new deployment — should still fail immediately on ERROR
+    val recentTs = Some(Instant.now())
+    assertEquals(JobStatusType.FAILED,
+      submitter.resolveStatus("d", "DEPLOYED", "ERROR", recentTs))
+  }
+
+  it should "return PENDING when jmDeploymentStatus is MISSING and deployment is new" in {
+    // MISSING is normal immediately after creation — must not be treated as failure yet
+    val recentTs = Some(Instant.now())
+    assertEquals(JobStatusType.PENDING,
+      submitter.resolveStatus("d", "DEPLOYED", "MISSING", recentTs))
+  }
+
+  it should "return FAILED when jmDeploymentStatus is MISSING and deployment has timed out" in {
+    val oldTs = Some(Instant.now().minusSeconds(EksFlinkSubmitter.DeploymentPendingTimeout.toSeconds + 60))
+    assertEquals(JobStatusType.FAILED,
+      submitter.resolveStatus("d", "DEPLOYED", "MISSING", oldTs))
+  }
+
+  it should "return FAILED when DEPLOYED with READY jmStatus but deployment has timed out" in {
+    // Covers the unschedulable TM scenario — JM is up (READY) but TMs never join
+    val oldTs = Some(Instant.now().minusSeconds(EksFlinkSubmitter.DeploymentPendingTimeout.toSeconds + 60))
+    assertEquals(JobStatusType.FAILED,
+      submitter.resolveStatus("d", "DEPLOYED", "READY", oldTs))
+  }
+
+  it should "return FAILED when UPGRADING with READY jmStatus but deployment has timed out" in {
+    val oldTs = Some(Instant.now().minusSeconds(EksFlinkSubmitter.DeploymentPendingTimeout.toSeconds + 60))
+    assertEquals(JobStatusType.FAILED,
+      submitter.resolveStatus("d", "UPGRADING", "READY", oldTs))
+  }
+
+  it should "return PENDING when no creationTimestamp is available" in {
+    // No timestamp — cannot determine timeout, conservatively stay PENDING
+    assertEquals(JobStatusType.PENDING,
+      submitter.resolveStatus("d", "DEPLOYED", "READY", None))
   }
 
   "EksFlinkSubmitter.createFlinkIngress" should "throw IllegalArgumentException when host cannot be extracted" in {

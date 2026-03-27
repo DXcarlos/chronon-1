@@ -60,7 +60,7 @@ Please note that these validations will also be executed as a prerequisite check
 
 ```
 # run the analyzer
-zipline run --mode=analyze --conf=compiled/joins/<path_to_conf_file> --skew-detection
+zipline run compiled/joins/<path_to_conf_file> --mode=analyze --skew-detection
 ```
 
 Optional parameters:
@@ -78,7 +78,7 @@ Optional parameters:
 You can run the compiled configs (either `Join`/`GroupBy`/`StagingQuery`) with `backfill` mode to generate data.
 
 ```sh
-zipline run --mode=backfill --conf=compiled/joins/team/join.v1 --start-ds=2022-07-02 --end-ds=2022-07-10
+zipline run compiled/joins/team/join.v1 --mode=backfill --start-ds=2022-07-02 --end-ds=2022-07-10
 ```
 
 This runs a spark job which will compute the data.
@@ -88,7 +88,7 @@ Most of the time, backfilling a `Join` is what you want because this backfills a
 To backfill a `GroupBy` directly, you must specify the `--start-partition` flag to control where the backfill starts:
 
 ```sh
-zipline run --mode=backfill --conf=compiled/group_bys/team/group_by.v1 --start-partition=2022-07-02 --end-ds=2022-07-10
+zipline run compiled/group_bys/team/group_by.v1 --mode=backfill --start-partition=2022-07-02 --end-ds=2022-07-10
 ```
 
 Backfilling `GroupBy` is usually an analytics use-case, as online uploads have their own flow (see [Serve](#serve) below).
@@ -129,12 +129,12 @@ Once you have marked a particular Chronon definition as online and compiled it, 
 The following command will generate a table with key-value bytes that's ready for upload to your KV store:
 
 ```bash
-zipline run --mode upload --conf compiled/group_bys/your_group_by.v1 --ds 2023-12-01
+zipline run compiled/group_bys/your_group_by.v1 --mode upload --ds 2023-12-01
 ```
 
 and then to actually upload to your KV store: 
 ```bash
-zipline run --mode upload-to-kv --conf compiled/group_bys/your_group_by.v1 --ds 2023-12-01
+zipline run compiled/group_bys/your_group_by.v1 --mode upload-to-kv --ds 2023-12-01
 ```
 
 The next step is to move the data from these tables into your KV store. For this, you need to use your internal implementation of KV store integration. This should already be what your Airflow jobs are configured to run, so you can always rely on that, or if your Chronon team has provided you with a manual upload command to run you can use that.
@@ -144,7 +144,7 @@ The next step is to move the data from these tables into your KV store. For this
 If your GroupBy is a streaming GroupBy, you will want to also run the streaming job that will aggregate and push intermediate data to the KV store. Flink is the preferred streaming engine, though Spark streaming is also supported but not recommended.
 
 ```sh
-zipline run --mode streaming deploy --conf compiled/group_bys/your_group_by.v1  --version-check --disable-cloud-logging [--latest-savepoint| --no-savepoint | --custom-savepoint]
+zipline run compiled/group_bys/your_group_by.v1 --mode streaming deploy --version-check --disable-cloud-logging [--latest-savepoint| --no-savepoint | --custom-savepoint]
 ```
 
 Only one of the three savepoint options below can be specified:
@@ -164,12 +164,12 @@ run a metadata upload of the `Join` config to the KV store. This will be used by
 how to deserialize the batch (and streaming) data and provide the feature values.
 
 ```bash
-zipline run --mode metadata-upload --conf compiled/joins/your_join.v1 --ds 2023-12-01
+zipline run compiled/joins/your_join.v1 --mode metadata-upload --ds 2023-12-01
 ```
 
 Chronon also supports uploading `GroupBy` metadata on its own, in case you want to fetch directly from a `GroupBy` without a `Join`. The process is similar - just run the following command to upload the `GroupBy` metadata so that the fetcher knows
 ```bash
-zipline run --mode metadata-upload --conf compiled/group_bys/your_group_by.v1 --ds 2023-12-01
+zipline run compiled/group_bys/your_group_by.v1 --mode metadata-upload --ds 2023-12-01
 ```
 
 ### Fetching results
@@ -177,7 +177,7 @@ zipline run --mode metadata-upload --conf compiled/group_bys/your_group_by.v1 --
 You can fetch features for your uploaded conf by its name and with a json of keys. Json types needs to match the key types. So a string should be quoted, an int/long shouldn't be quoted. Note that the json key cannot contain spaces - or it should be properly quoted. Similarly, when a join has multiple keys, there should be no space around the comma. For example, `-k '{"user_id":123,"merchant_id":456}'`. The fetch would return partial results if only some keys are provided. It would also output an error message indicating the missing keys, which is useful in case of typos.
 
 ```bash
-zipline run --mode=fetch --conf compiled/joins/your_join.v1 -k '{"user_or_visitor":"u_106386039"}' --name <JOIN_NAME>
+zipline run compiled/joins/your_join.v1 --mode=fetch -k '{"user_or_visitor":"u_106386039"}' --name <JOIN_NAME>
 ```
 
 Note that this is simply the test workflow for fetching. For production serving, see the [Serving documentation](./Serve.md).

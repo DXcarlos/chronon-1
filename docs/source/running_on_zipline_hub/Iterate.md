@@ -13,7 +13,7 @@ This doc will explain the process
 
 ## Overview
 
-![Versioning](../../images/versioning.png)
+![](../../images/versioning.svg)
 
 The basic steps to make a change to an existing entity in Chronon are:
 
@@ -39,7 +39,7 @@ Often a user may wish to continue to iterate on a dev version. **This can happen
 
 Note that if you're using `zipline hub backfill` to re-run a range that has already been computed, you'll need to be sure to include the `--force-recompute` flag for the change to trigger.
 
-For example: `zipline hub backfill --conf compiled/joins/{team}/{conf} --start-ds {start} --end-ds {end} --force-recompute`
+For example: `zipline hub backfill compiled/joins/{team}/{conf} --start-ds {start} --end-ds {end} --force-recompute`
 
 Note: if you make a schema changing diff and run `backfill` for a certain range, the existing table for your version will be recreated and only the backfilled range will exist after the job completes. For example, if you had 1 year in your table, then made a change and ran for 1 day, you'd only see 1 day after the job completes. This does not, however, mean that existing computation for the longer range is lost. Chronon stores compute in internal cache tables and continues to reuse it where possible. In this case, this means that if you ran the `backfill` command for the full year, it would still reuse any unchanged computation from the initial table.
 

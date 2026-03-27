@@ -36,6 +36,7 @@ cs
 
 # Documentation builds
 docs/build/
+docs/source/reference/
 
 # Python distribution and packaging
 python/dist/

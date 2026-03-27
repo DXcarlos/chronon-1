@@ -2,7 +2,8 @@ package ai.chronon.flink_connectors.kinesis
 
 import ai.chronon.api.StructType
 import ai.chronon.online.TopicInfo
-import ai.chronon.online.serde.{AvroCodec, AvroSerDe, JsonSchemaSerDe, LocalSchemaSerDe, Mutation, SerDe}
+import ai.chronon.online.serde.{AvroCodec, AvroSerDe, JsonSchemaSerDe, LocalSchemaSerDe, Mutation, ProtobufSerDe, SerDe}
+import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema
 import org.apache.avro.Schema
 import org.slf4j.LoggerFactory
 import software.amazon.awssdk.auth.credentials.{
@@ -19,10 +20,10 @@ import software.amazon.awssdk.services.glue.model.{
   SchemaVersionNumber
 }
 
-/** SerDe that fetches schemas from AWS Glue Schema Registry and auto-detects the format (Avro or JSON).
+/** SerDe that fetches schemas from AWS Glue Schema Registry and auto-detects the format (Avro, JSON, or Protobuf).
   *
   * Configure via topic string:
-  *   kinesis://stream-name/serde=glue_registry/registry_name=my-registry/schema_name=my-schema/[region=us-west-2]/[version_number=1]
+  *   kinesis://stream-name/serde=glue_registry/registry_name=my-registry/schema_name=my-schema/[region=us-west-2]/[version_number=1]/[proto3_default_as_null=false]
   *
   * Parameters:
   *   - registry_name: Name of the Glue Schema Registry (required)
@@ -30,11 +31,15 @@ import software.amazon.awssdk.services.glue.model.{
   *   - region: AWS region (optional, uses AWS default region provider chain if not set)
   *   - version_number: Specific schema version (optional, defaults to latest)
   *   - aws_access_key_id / aws_secret_access_key: Explicit credentials (optional, both required if either is set)
+  *   - proto3_default_as_null: For protobuf schemas, treat proto3 default values as null (optional, defaults to false)
   */
 class GlueSchemaSerDe(topicInfo: TopicInfo) extends SerDe {
   import GlueSchemaSerDe._
 
   @transient private lazy val logger = LoggerFactory.getLogger(getClass)
+
+  private val proto3DefaultAsNull: Boolean =
+    topicInfo.params.getOrElse(Proto3DefaultAsNullKey, "false").toBoolean
 
   (topicInfo.params.get(AccessKeyIdKey), topicInfo.params.get(SecretAccessKeyKey)) match {
     case (Some(_), Some(_)) | (None, None) => // valid combinations
@@ -68,9 +73,9 @@ class GlueSchemaSerDe(topicInfo: TopicInfo) extends SerDe {
     if (v != null && v.trim.nonEmpty) Some(v) else None
   }
 
-  private lazy val delegate: SerDe = retrieveSchema(topicInfo)
+  private lazy val delegate: SerDe = buildSerDe(topicInfo)
 
-  private def retrieveSchema(topicInfo: TopicInfo): SerDe = {
+  private def buildSerDe(topicInfo: TopicInfo): SerDe = {
     // In dev environments, LOCAL_SCHEMA_DIR can be set to bypass Glue and load schemas from the local filesystem.
     // This allows using the same topic config (serde=glue_registry/...) in both dev and prod.
     localSchemaDirOverride match {
@@ -130,8 +135,13 @@ class GlueSchemaSerDe(topicInfo: TopicInfo) extends SerDe {
         new AvroSerDe(avroSchema)
       case "JSON" =>
         new JsonSchemaSerDe(schemaDefinition, schemaName)
+      case "PROTOBUF" =>
+        val protobufSchema = new ProtobufSchema(schemaDefinition)
+        val descriptor = protobufSchema.toDescriptor()
+        new ProtobufSerDe(descriptor, proto3DefaultAsNull)
       case other =>
-        throw new IllegalArgumentException(s"Unsupported schema format: $other. Supported formats are AVRO and JSON.")
+        throw new IllegalArgumentException(
+          s"Unsupported schema format: $other. Supported formats are AVRO, JSON, and PROTOBUF.")
     }
   }
 
@@ -149,4 +159,5 @@ object GlueSchemaSerDe {
   val SchemaNameKey = "schema_name"
 
   val VersionNumberKey = "version_number"
+  val Proto3DefaultAsNullKey = "proto3_default_as_null"
 }

@@ -40,7 +40,7 @@ A few things to call out so you can customize:
 - Update the example_config.json (specifically confirm the path to the mongo-online-impl assembly jar matches your setup)
 
 If you'd like some real data to query from the feature service, make sure to run through the relevant steps of the 
-[Quickstart - Online Flows](https://chronon.ai/getting_started/Tutorial.html#online-flows) tutorial. 
+[Quickstart - Online Flows](https://zipline.ai/docs/getting_started/Tutorial#online-flows) tutorial. 
 
 Some examples to curl the webservice:
 ```bash

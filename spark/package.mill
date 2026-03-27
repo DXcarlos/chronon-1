@@ -12,7 +12,7 @@ trait SparkModule extends Cross.Module[String] with build.BaseModule {
   def moduleDeps = Seq(build.aggregator(crossValue), build.api(crossValue), build.online(crossValue))
 
   def compileMvnDeps = build.Constants.sparkDeps ++ Seq(
-    mvn"io.delta::delta-spark:3.2.0",
+    mvn"io.delta::delta-spark:3.3.2",
   )
 
   def mvnDeps = build.Constants.commonDeps ++
@@ -39,7 +39,7 @@ trait SparkModule extends Cross.Module[String] with build.BaseModule {
     override def testFramework = "org.scalatest.tools.Framework"
 
     def mvnDeps = super.mvnDeps() ++ build.Constants.sparkDeps ++ build.Constants.testDeps ++ Seq(
-      mvn"io.delta::delta-spark:3.2.0",
+      mvn"io.delta::delta-spark:3.3.2",
       // Fix parquet version conflict - need 1.11.0+ for BROTLI field
 //      mvn"org.apache.parquet:parquet-common:1.15.2",
 //      mvn"org.apache.parquet:parquet-column:1.11.0",

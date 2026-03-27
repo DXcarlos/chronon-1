@@ -7,7 +7,7 @@ order: 1
 
 All the jobs that Chronon runs are driven by the configs in the Chronon repo. The orchestrator (Airflow by default) is configured to read the files in the repo and kick off a number of jobs to drive data and metadata flows. This is illustrated below:
 
-![Overview](../../images/control_plane.png)
+![](../../images/control_plane.svg)
 
 At a high level, the flow is `config (GroupBy/Join/StagingQuery) -> control plane action -> data plane action/result`. The production DAGs run these actions based on certain triggers for each config type (i.e. upstream data landing), however, these control plane actions can also be triggered manually using the `run.py` CLI utility.
 
@@ -25,5 +25,5 @@ The table below gives further details on each of these control plane tasks, and 
 
 Here are a few code pointers that can be followed to get an even deeper understanding of each of these actions and their effect:
 
-1. [run.py](https://github.com/zipline-ai/chronon/blob/main/api/python/ai/chronon/repo/run.py) - this is a CLI utility that can be used to trigger control plane flows directly, however, it is also called by production DAGs for executing scheduled actions.
+1. [run.py](https://github.com/zipline-ai/chronon/blob/main/python/src/ai/chronon/repo/run.py) - this is a CLI utility that can be used to trigger control plane flows directly, however, it is also called by production DAGs for executing scheduled actions.
 2. [Driver.scala](https://github.com/zipline-ai/chronon/blob/main/spark/src/main/scala/ai/chronon/spark/Driver.scala) - this is the driver on the Scala side which drives the corresponding data plane actions. Run.py calls Driver.scala to run Spark jobs.

@@ -10,6 +10,14 @@ object `package` extends Cross[OnlineModule](build.Constants.scalaVersions) with
 trait OnlineModule extends Cross.Module[String] with build.BaseModule {
   def moduleDeps = Seq(build.aggregator(crossValue), build.api(crossValue))
 
+  // Vendored avro-fastserde with constructor splitting fix for large schemas (>500 schema vars).
+  // Upstream PR pending: https://github.com/linkedin/avro-util
+  def fastserdeJarFile = Task.Source(moduleDir / "avro-fastserde-0.4.39-SNAPSHOT.jar")
+
+  override def unmanagedClasspath = Task {
+    super.unmanagedClasspath() ++ Seq(fastserdeJarFile())
+  }
+
   def compileMvnDeps = Seq(
     mvn"org.apache.spark::spark-hive:${build.Constants.sparkVersion}",
     mvn"org.apache.hadoop:hadoop-client-api:3.3.6",
@@ -23,7 +31,10 @@ trait OnlineModule extends Cross.Module[String] with build.BaseModule {
       .exclude("com.fasterxml.jackson.core" -> "jackson-core")
       .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
       .exclude("com.fasterxml.jackson.core" -> "jackson-annotations"),
-    mvn"com.linkedin.avroutil1:avro-fastserde:0.4.25",
+    // Transitive deps for vendored avro-fastserde jar
+    mvn"com.linkedin.avroutil1:helper-all:0.4.25",
+    mvn"com.sun.codemodel:codemodel:2.6",
+    mvn"org.apache.commons:commons-lang3:3.4",
     mvn"org.rogach::scallop:5.1.0",
     // Scala reflection dependencies
     mvn"org.scala-lang:scala-reflect:${scalaVersion()}",
@@ -39,6 +50,8 @@ trait OnlineModule extends Cross.Module[String] with build.BaseModule {
     mvn"org.apache.logging.log4j:log4j-core:2.25.3",
     // Additional from Bazel
     mvn"net.jodah:typetools:0.6.3",
+    // Protobuf support for ProtobufSerDe
+    mvn"com.google.protobuf:protobuf-java:${build.Constants.protobufVersion}",
   )
   
   object test extends build.BaseTestModule {

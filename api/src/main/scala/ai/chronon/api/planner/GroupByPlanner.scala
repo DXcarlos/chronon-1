@@ -44,6 +44,14 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
   private def semanticGroupBy(groupBy: GroupBy): GroupBy = {
     val semanticGroupBy = groupBy.deepCopy()
     semanticGroupBy.unsetMetaData()
+    // Topics themselves don't affect the sem hash, we yank them out to allow users to change / fix misconfigured topics
+    // without it requiring them to run the full chain of jobs
+    Option(semanticGroupBy.sources).foreach { sources =>
+      sources.forEach { source =>
+        if (source.isSetEvents) source.getEvents.unsetTopic()
+        else if (source.isSetEntities) source.getEntities.unsetMutationTopic()
+      }
+    }
     semanticGroupBy
   }
 

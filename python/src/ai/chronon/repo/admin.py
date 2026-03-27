@@ -1,4 +1,4 @@
-"""Zipline admin CLI commands for loading images into customer registries and verifying deployments."""
+"""Zipline admin CLI commands for loading images into customer registries and diagnosing deployments."""
 
 import json
 import logging
@@ -54,18 +54,13 @@ def _safe_extractall(tar, dest):
     tar.extractall(dest)
 
 
-_CLOUDS_WITH_EVAL = ("gcp", "azure")
-
-
 def _app_images(cloud):
     """Return the list of (image_type, repo) tuples for application images (excludes engine)."""
-    images = [
+    return [
         ("hub", f"ziplineai/hub-{cloud}"),
+        ("eval", f"ziplineai/eval-{cloud}"),
         ("frontend", "ziplineai/web-ui"),
     ]
-    if cloud in _CLOUDS_WITH_EVAL:
-        images.insert(1, ("eval", f"ziplineai/eval-{cloud}"))
-    return images
 
 
 def _parse_registry(registry):
@@ -82,7 +77,7 @@ def _parse_registry(registry):
 
 
 @click.group(
-    help="Administrative commands for initializing repos, loading images, and verifying deployments."
+    help="Administrative commands for initializing repos, loading images, and diagnosing deployments."
 )
 def admin():
     pass
@@ -841,14 +836,12 @@ def _print_summary(results, release, cloud, registry):
         if is_local:
             console.print("\nImages available in local Docker daemon:")
             console.print(f"  ziplineai/hub-{cloud}:{release}")
-            if cloud in _CLOUDS_WITH_EVAL:
-                console.print(f"  ziplineai/eval-{cloud}:{release}")
+            console.print(f"  ziplineai/eval-{cloud}:{release}")
             console.print(f"  ziplineai/web-ui:{release}")
         else:
             console.print("\nFor terraform.tfvars:")
             console.print(f'  hub_image      = "{registry}/ziplineai/hub-{cloud}:{release}"')
-            if cloud in _CLOUDS_WITH_EVAL:
-                console.print(f'  eval_image     = "{registry}/ziplineai/eval-{cloud}:{release}"')
+            console.print(f'  eval_image     = "{registry}/ziplineai/eval-{cloud}:{release}"')
             console.print(f'  frontend_image = "{registry}/ziplineai/web-ui:{release}"')
             console.print(f'  engine_image   = "{registry}/ziplineai/engine-{cloud}:{release}"')
     else:
@@ -856,10 +849,10 @@ def _print_summary(results, release, cloud, registry):
         raise SystemExit(1)
 
 
-@admin.command("verify")
+@admin.command("doctor")
 @click.argument("hub_url")
 @click.option("--expected-version", default=None, help="Expected Zipline version (optional).")
-def verify(hub_url, expected_version):
+def doctor(hub_url, expected_version):
     """Check that a Zipline hub is reachable and healthy.
 
     HUB_URL is the URL of the running Zipline hub (e.g. https://hub.example.com).
@@ -909,7 +902,7 @@ def verify(hub_url, expected_version):
     except Exception as e:
         results.append(("Upload API", f"{hub_url}/upload/v2/diff", "FAIL", str(e)))
 
-    table = Table(title=f"Zipline Deployment Verification: {hub_url}")
+    table = Table(title=f"Zipline Deployment Diagnostics: {hub_url}")
     table.add_column("Check", style="cyan")
     table.add_column("Endpoint", style="white")
     table.add_column("Status", style="green")

@@ -15,6 +15,7 @@ import ai.chronon.online.KVStore.TimedValue
 import ai.chronon.online.metrics.Metrics.Context
 import ai.chronon.online.metrics.Metrics
 import ai.chronon.online.metrics.TTLCache
+import software.amazon.awssdk.awscore.AwsRequestOverrideConfiguration
 import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
 import software.amazon.awssdk.services.dynamodb.model.{
@@ -22,7 +23,6 @@ import software.amazon.awssdk.services.dynamodb.model.{
   AttributeValue,
   BillingMode,
   CreateTableRequest,
-  DeleteTableRequest,
   DescribeImportRequest,
   DescribeTableRequest,
   GetItemRequest,
@@ -49,7 +49,7 @@ import software.amazon.awssdk.services.dynamodb.model.{
 }
 
 import java.nio.charset.Charset
-import java.time.Instant
+import java.time.{Duration, Instant}
 import java.util
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
@@ -342,7 +342,9 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
     val path = IonWriter.resolvePartitionPath(sourceOfflineTable, partitionColumn, partition, rootPath)
     val s3Source = toS3BucketSource(path)
     val logicalTableName = destinationOnlineDataSet
-    val physicalTableName = logicalTableName.sanitize.toUpperCase + "_" + partition.replace("-", "_")
+    val timestamp = Instant.now().toEpochMilli
+    val physicalTableName =
+      logicalTableName.sanitize.toUpperCase + "_" + partition.replace("-", "_") + "_" + timestamp
     logger.info(
       s"Starting DynamoDB import for table: $physicalTableName (logical: $logicalTableName) from S3: $s3Source")
 
@@ -364,11 +366,8 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
       .inputFormat(InputFormat.ION)
       .inputCompressionType(InputCompressionType.NONE)
       .tableCreationParameters(tableParams)
+      .overrideConfiguration(DynamoDBKVStoreConstants.ControlPlaneApiOverride)
       .build()
-
-    // If the table already exists (e.g. from a previous failed/successful import attempt),
-    // delete it first so ImportTable can recreate it. This makes bulkPut idempotent.
-    deleteTableIfExists(physicalTableName)
 
     try {
       val startTs = System.currentTimeMillis()
@@ -410,22 +409,6 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
       .build()
   }
 
-  private def deleteTableIfExists(tableName: String): Unit = {
-    val describeRequest = DescribeTableRequest.builder().tableName(tableName).build()
-    try {
-      dynamoDbClient.describeTable(describeRequest).join()
-      logger.warn(s"Table $tableName already exists from a previous attempt. Deleting before re-import.")
-      val deleteRequest = DeleteTableRequest.builder().tableName(tableName).build()
-      dynamoDbClient
-        .deleteTable(deleteRequest)
-        .thenCompose(_ => dynamoDbClient.waiter().waitUntilTableNotExists(describeRequest))
-        .join()
-      logger.info(s"Table $tableName deleted successfully.")
-    } catch {
-      case e: java.util.concurrent.CompletionException if e.getCause.isInstanceOf[ResourceNotFoundException] =>
-    }
-  }
-
   private def waitForImportCompletion(importArn: String, tableName: String): Unit = {
     val maxWaitTimeMs = 30 * 60 * 1000L // 30 minutes
     val pollIntervalMs = 10 * 1000L // 10 seconds
@@ -437,7 +420,11 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
       Thread.sleep(pollIntervalMs)
 
       try {
-        val describeRequest = DescribeImportRequest.builder().importArn(importArn).build()
+        val describeRequest = DescribeImportRequest
+          .builder()
+          .importArn(importArn)
+          .overrideConfiguration(DynamoDBKVStoreConstants.ControlPlaneApiOverride)
+          .build()
         val describeResponse = dynamoDbClient.describeImport(describeRequest).join()
         lastDescription = describeResponse.importTableDescription()
         status = lastDescription.importStatus()
@@ -565,6 +552,14 @@ object DynamoDBKVStoreConstants {
 
   // Streaming tables use TileKey wrapping for tiled data.
   def isStreamingTable(dataset: String): Boolean = dataset.endsWith("_STREAMING")
+
+  // Control plane operations (ImportTable, DeleteTable, DescribeImport) are slower than
+  // data plane operations (GetItem, PutItem). Use higher timeouts to avoid intermittent failures.
+  val ControlPlaneApiOverride: AwsRequestOverrideConfiguration = AwsRequestOverrideConfiguration
+    .builder()
+    .apiCallTimeout(Duration.ofSeconds(30))
+    .apiCallAttemptTimeout(Duration.ofSeconds(10))
+    .build()
 
   case class TileKeyComponents(baseKeyBytes: Array[Byte], tileSizeMillis: Long, tileStartTimestampMillis: Long)
 

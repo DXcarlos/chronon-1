@@ -46,9 +46,6 @@ BigQueryConfiguration = Configuration(
         "spark.sql.catalog.spark_catalog.warehouse",
         "spark.sql.catalog.spark_catalog.gcp.bigquery.location",
         "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id",
-        "spark.chronon.table.gcs.temporary_gcs_bucket",
-        "spark.chronon.table.gcs.connector_output_dataset",
-        "spark.chronon.table.gcs.connector_output_project"
     ]
 )
 

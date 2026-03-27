@@ -19,7 +19,7 @@ Eval provides fast configuration validation without running expensive production
 The most common use case - validate your configuration without running any computations:
 
 ```bash
-zipline hub eval --conf compiled/joins/{team}/{your_conf}
+zipline hub eval compiled/joins/{team}/{your_conf}
 ```
 
 This will show you the output schema, lineage, and catch configuration errors early. Example output:
@@ -54,12 +54,12 @@ For deeper validation, provide sample data to see actual computation output:
 
 ```bash
 # 1. Generate a test data skeleton
-zipline hub eval --conf compiled/joins/{team}/{your_conf} --generate-skeleton
+zipline hub eval compiled/joins/{team}/{your_conf} --generate-test-config
 
 # 2. Fill in test-data.yaml with sample data (use !epoch for timestamps)
 
 # 3. Run eval with test data
-zipline hub eval --conf compiled/joins/{team}/{your_conf} --test-data-path test-data.yaml
+zipline hub eval compiled/joins/{team}/{your_conf} --test-data-path test-data.yaml
 ```
 
 This will show you the actual computed results with your sample data, helping you validate:
@@ -195,7 +195,7 @@ docker run -d \
 curl http://localhost:3904/ping
 
 # Run eval against local service
-zipline hub eval --conf compiled/joins/{team}/{your_conf} --eval-url http://localhost:3904
+zipline hub eval compiled/joins/{team}/{your_conf} --eval-url http://localhost:3904
 ```
 
 ## Recommended Workflow
@@ -203,12 +203,12 @@ zipline hub eval --conf compiled/joins/{team}/{your_conf} --eval-url http://loca
 1. **During development**: Use quick schema validation
    ```bash
    zipline compile
-   zipline hub eval --conf compiled/joins/{team}/{your_conf}
+   zipline hub eval compiled/joins/{team}/{your_conf}
    ```
 
 2. **Before submitting PR**: Test with sample data
    ```bash
-   zipline hub eval --conf compiled/joins/{team}/{your_conf} --test-data-path test-data.yaml
+   zipline hub eval compiled/joins/{team}/{your_conf} --test-data-path test-data.yaml
    ```
 
 3. **In CI/CD**: Use local-eval with preloaded Iceberg warehouse
@@ -218,5 +218,5 @@ zipline hub eval --conf compiled/joins/{team}/{your_conf} --eval-url http://loca
 
 4. **After PR approval**: Run backfill
    ```bash
-   zipline hub backfill --conf compiled/joins/{team}/{your_conf} --start-ds 2024-01-01 --end-ds 2024-01-02
+   zipline hub backfill compiled/joins/{team}/{your_conf} --start-ds 2024-01-01 --end-ds 2024-01-02
    ```

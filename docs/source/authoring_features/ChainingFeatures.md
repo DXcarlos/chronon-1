@@ -83,10 +83,9 @@ enriched_listings = Join(
 )
 
 ```
-### Configuration Example
-[Chaining GroupBy](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/sample_team/sample_chaining_group_by.py)
-
-[Chaining Join](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/joins/sample_team/sample_chaining_join.py)
+### Configuration Examples
+- [Chaining GroupBy](https://github.com/zipline-ai/chronon/blob/main/python/test/sample/group_bys/sample_team/sample_chaining_group_by.py)
+- [Chaining Join](https://github.com/zipline-ai/chronon/blob/main/python/test/sample/joins/sample_team/sample_chaining_join.py)
 
 ## Clarifications
 - The goal of chaining is to use output of a Join as input to downstream computations like GroupBy or a Join. As of today we support the case 1 and case 2 in future plan

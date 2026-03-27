@@ -109,7 +109,7 @@ class CosmosKVStoreImpl(
     val isEmulator = props.get(PropEmulatorMode).exists(_.toString.toBoolean) ||
       CosmosKVStoreConstants.isEmulator(
         sys.env.getOrElse(CosmosKVStoreConstants.EnvCosmosEndpoint,
-                          props.getOrElse(CosmosKVStoreConstants.PropCosmosEndpoint, "").toString)
+                          props.getOrElse(CosmosKVStoreConstants.EnvCosmosEndpoint, "").toString)
       )
 
     if (isEmulator) {
@@ -804,11 +804,11 @@ class CosmosKVStoreImpl(
         "--end-ds",
         partition,
         "--cosmos-endpoint",
-        conf.getOrElse(PropCosmosEndpoint, sys.env(EnvCosmosEndpoint)),
+        CosmosKVStoreFactory.getOrElseThrow(EnvCosmosEndpoint, conf),
         "--cosmos-key",
-        conf.getOrElse(PropCosmosKey, sys.env(EnvCosmosKey)),
+        CosmosKVStoreFactory.getOrElseThrow(EnvCosmosKey, conf),
         "--cosmos-database",
-        conf.getOrElse(PropCosmosDatabase, sys.env.getOrElse(EnvCosmosDatabase, DefaultDatabaseName)),
+        CosmosKVStoreFactory.getOptional(EnvCosmosDatabase, conf).getOrElse(DefaultDatabaseName),
         "--cosmos-container",
         containerName,
         "--ttl",

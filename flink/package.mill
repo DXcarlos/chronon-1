@@ -30,8 +30,8 @@ trait FlinkModule extends Cross.Module[String] with build.BaseModule {
       .exclude("com.fasterxml.jackson.core" -> "jackson-core")
       .exclude("com.fasterxml.jackson.core" -> "jackson-databind")
       .exclude("com.fasterxml.jackson.core" -> "jackson-annotations"),
-    mvn"com.google.protobuf:protobuf-java-util:3.25.1",
-    mvn"com.google.protobuf:protobuf-java:3.25.1",
+    mvn"com.google.protobuf:protobuf-java-util:${build.Constants.protobufVersion}",
+    mvn"com.google.protobuf:protobuf-java:${build.Constants.protobufVersion}",
     mvn"org.apache.flink:flink-connector-kafka:3.0.2-1.18",
     mvn"io.netty:netty-codec-http2:4.1.129.Final",
   )

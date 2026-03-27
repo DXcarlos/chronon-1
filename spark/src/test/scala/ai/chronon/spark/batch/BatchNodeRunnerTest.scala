@@ -277,6 +277,11 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     spark.sql("DROP TABLE IF EXISTS test_db.tp_staging_output")
     spark.sql("DROP TABLE IF EXISTS test_db.tp_gb_output")
     spark.sql("DROP TABLE IF EXISTS test_db.time_part_sensor")
+    spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_events")
+    spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_gb_test")
+    spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_sq_test")
+    spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_join_test")
+    spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_join_gb")
 
     setupTestTables()
     mockKVStore.reset()
@@ -404,61 +409,42 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     assertEquals("runFromArgs should return 1 on failure due to missing partitions", 1, exitCode)
   }
 
-  it should "correctly translate partition ranges before diffing against existing partitions" ignore {
+  it should "correctly translate yyyyMMdd partition ranges when computing input table statuses" in {
     import spark.implicits._
 
-    // Convert dates to different format for the alternative partition format
     val yesterdayAlt = yesterday.replace("-", "") // yyyyMMdd format
     val twoDaysAgoAlt = twoDaysAgo.replace("-", "") // yyyyMMdd format
 
-    // Insert data with different partition format using TableUtils.insertPartitions
     val inputData = Seq(
       (1, "value1", yesterdayAlt),
       (2, "value2", twoDaysAgoAlt)
     ).toDF("id", "value", "partition_date")
 
-    val leftData = Seq(
-      (1, yesterdayAlt),
-      (2, twoDaysAgoAlt)
-    ).toDF("id", "partition_date")
-
     tableUtils.insertPartitions(inputData, "test_db.input_table_alt", partitionColumns = List("partition_date"))
-    tableUtils.insertPartitions(leftData, "test_db.left_table_alt", partitionColumns = List("partition_date"))
 
-    val configPath = createTestConfigFile(
-      twoDaysAgoAlt,
-      yesterdayAlt,
-      inputTable = "test_db.input_table_alt",
-      outputTable = "test_db.output_table_alt",
-      leftTable = "test_db.left_table_alt",
+    val metadata = createTestMetadata(
+      "test_db.input_table_alt",
+      "test_db.output_table_alt",
       partitionColumn = "partition_date",
       partitionFormat = "yyyyMMdd"
     )
-    val node = ThriftJsonCodec.fromJsonFile[Node](configPath, check = true)
+
+    val nodeContent = new NodeContent()
+    nodeContent.setGroupByBackfill(new GroupByBackfillNode())
+    val node = new Node().setMetaData(metadata).setContent(nodeContent)
     val runner = new BatchNodeRunner(node, tableUtils, mockApi)
 
-    val exitCode = runner.runFromArgs(twoDaysAgo, yesterday, NodeRunner.DefaultTablePartitionsDataset, None)
+    // CLI dates are always yyyy-MM-dd; the BatchNodeRunner wraps them with PartitionSpec.daily
+    val cliRange = PartitionRange(twoDaysAgo, yesterday)(PartitionSpec.daily)
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, cliRange, tableUtils)
 
-    assertEquals("runFromArgs should return 0 on success", 0, exitCode)
-
-    // Verify that partitions were written to kvStore - this validates the translation worked
-    assertTrue("KVStore should have received put requests", mockKVStore.putRequests.nonEmpty)
-
-    // Check that the partition data is properly formatted (indicates successful translation)
-    val inputTableRequests =
-      mockKVStore.putRequests.filter(req => new String(req.keyBytes).contains("input_table_alt"))
-    assertTrue("Should have input table partition requests", inputTableRequests.nonEmpty)
-
-    // Verify the partition values are correctly translated to the default partition spec format (yyyy-MM-dd)
-    inputTableRequests.foreach { req =>
-      val partitionData = new String(req.valueBytes)
-      // The key assertion: partitions should be translated from yyyyMMdd to yyyy-MM-dd format
-      assertTrue("Partition data should contain yesterday in translated format", partitionData.contains(yesterday))
-      assertTrue("Partition data should contain twoDaysAgo in translated format",
-                  partitionData.contains(twoDaysAgo))
-      // Verify it does NOT contain the original format
-      assertFalse("Partition data should NOT contain original date format (yyyyMMdd)",
-                  partitionData.contains(yesterdayAlt) || partitionData.contains(twoDaysAgoAlt))
+    statuses.foreach { tps =>
+      // Partitions should be translated from yyyyMMdd to PartitionSpec.daily (yyyy-MM-dd)
+      assertTrue(s"Translated partitions should contain $yesterday", tps.existingPartitions.contains(yesterday))
+      assertTrue(s"Translated partitions should contain $twoDaysAgo", tps.existingPartitions.contains(twoDaysAgo))
+      assertFalse("Should NOT contain yyyyMMdd format",
+        tps.existingPartitions.exists(p => p == yesterdayAlt || p == twoDaysAgoAlt))
+      assertTrue("No partitions should be missing", tps.missingPartitions.isEmpty)
     }
   }
 
@@ -1079,6 +1065,220 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
       s"SELECT * FROM $outputTable WHERE user_id = 1 AND ds = '$yesterday'"
     ).collect()
     assertTrue("Should have results for user_id=1", user1Rows.nonEmpty)
+  }
+
+  private def createYyyyMMddEventsTable(): Unit = {
+    import spark.implicits._
+    val yesterdayAlt = yesterday.replace("-", "")
+    val twoDaysAgoAlt = twoDaysAgo.replace("-", "")
+    val todayAlt = today.replace("-", "")
+
+    val data = Seq(
+      (1, 10.0, s"${twoDaysAgoAlt} 12:00:00", twoDaysAgoAlt),
+      (2, 20.0, s"${twoDaysAgoAlt} 14:00:00", twoDaysAgoAlt),
+      (1, 30.0, s"${yesterdayAlt} 10:00:00", yesterdayAlt),
+      (3, 40.0, s"${yesterdayAlt} 16:00:00", yesterdayAlt),
+      (2, 50.0, s"${todayAlt} 08:00:00", todayAlt)
+    ).toDF("user_id", "value", "event_time", "partition_date")
+
+    tableUtils.insertPartitions(data, "test_db.yyyymmdd_events", partitionColumns = List("partition_date"))
+  }
+
+  "E2E GroupBy backfill with yyyyMMdd partitions" should "produce correct output when CLI dates are yyyy-MM-dd" in {
+    createYyyyMMddEventsTable()
+
+    val yesterdayAlt = yesterday.replace("-", "")
+    val twoDaysAgoAlt = twoDaysAgo.replace("-", "")
+
+    val sourceQuery = Builders.Query(
+      selects = Builders.Selects("user_id", "value"),
+      partitionColumn = "partition_date",
+      timeColumn = s"UNIX_TIMESTAMP(event_time, 'yyyyMMdd HH:mm:ss') * 1000",
+      startPartition = twoDaysAgoAlt
+    )
+    sourceQuery.setPartitionFormat("yyyyMMdd")
+
+    val source = Builders.Source.events(sourceQuery, table = "test_db.yyyymmdd_events")
+    val tableDep = TableDependencies.fromSource(source).get
+
+    val gbMetaData = Builders.MetaData(namespace = "test_db", name = "yyyymmdd_gb_test")
+    val outputTable = gbMetaData.outputTable
+
+    val groupByConf = Builders.GroupBy(
+      sources = Seq(source),
+      keyColumns = Seq("user_id"),
+      aggregations = Seq(
+        Builders.Aggregation(inputColumn = "value", operation = Operation.SUM)
+      ),
+      metaData = gbMetaData
+    )
+
+    val gbNode = new GroupByBackfillNode().setGroupBy(groupByConf)
+    val nodeContent = new NodeContent()
+    nodeContent.setGroupByBackfill(gbNode)
+
+    implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+    val metadata = MetaDataUtils.layer(
+      baseMetadata = new MetaData().setOutputNamespace("test_db").setTeam("test_team"),
+      modeName = "test_mode",
+      nodeName = "yyyymmdd_gb_test",
+      tableDependencies = Seq(tableDep),
+      stepDays = Some(1),
+      outputTableOverride = Some(outputTable)
+    )
+
+    val node = new Node().setMetaData(metadata).setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+
+    // CLI dates are always yyyy-MM-dd; BatchNodeRunner wraps with PartitionSpec.daily
+    val cliRange = PartitionRange(twoDaysAgo, yesterday)(PartitionSpec.daily)
+
+    // This is the core path: BatchNodeRunner.run extracts range.start/range.end (yyyy-MM-dd strings)
+    // and passes them to GroupBy.computeBackfill, which must translate to the configured partition spec.
+    runner.run(metadata, nodeContent, Option(cliRange))
+
+    val outputDf = spark.sql(s"SELECT * FROM $outputTable ORDER BY ds, user_id")
+    val rowCount = outputDf.count()
+    assertTrue(s"Output should have rows, got $rowCount", rowCount > 0)
+
+    val outputPartitions = tableUtils.partitions(outputTable)
+    assertTrue("Output should have partitions", outputPartitions.nonEmpty)
+    // Output uses default partition spec (yyyy-MM-dd) since tableUtils is default-configured
+    outputPartitions should contain(twoDaysAgo)
+    outputPartitions should contain(yesterday)
+  }
+
+  "E2E StagingQuery with yyyyMMdd input dependency" should "resolve partitions correctly for yyyyMMdd tables" in {
+    createYyyyMMddEventsTable()
+
+    val yesterdayAlt = yesterday.replace("-", "")
+    val twoDaysAgoAlt = twoDaysAgo.replace("-", "")
+
+    val query = new Query()
+      .setPartitionColumn("partition_date")
+      .setPartitionFormat("yyyyMMdd")
+    val tableDep = TableDependencies.fromTable("test_db.yyyymmdd_events", query)
+
+    val sqMetaData = Builders.MetaData(namespace = "test_db", name = "yyyymmdd_sq_test")
+    val outputTable = sqMetaData.outputTable
+
+    // Staging query with explicit yyyyMMdd date literals (avoiding macro complexity)
+    val stagingQueryConf = Builders.StagingQuery(
+      query = s"""SELECT user_id, value, partition_date as ds
+                 |FROM test_db.yyyymmdd_events
+                 |WHERE partition_date >= '$twoDaysAgoAlt'
+                 |  AND partition_date <= '$yesterdayAlt'""".stripMargin,
+      metaData = sqMetaData,
+      startPartition = twoDaysAgo,
+      tableDependencies = Seq(tableDep)
+    )
+
+    val stagingQueryNode = new StagingQueryNode().setStagingQuery(stagingQueryConf)
+    val nodeContent = new NodeContent()
+    nodeContent.setStagingQuery(stagingQueryNode)
+
+    implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+    val metadata = MetaDataUtils.layer(
+      baseMetadata = new MetaData().setOutputNamespace("test_db").setTeam("test_team"),
+      modeName = "test_mode",
+      nodeName = "yyyymmdd_sq_test",
+      tableDependencies = Seq(tableDep),
+      stepDays = Some(1),
+      outputTableOverride = Some(outputTable)
+    )
+
+    val node = new Node().setMetaData(metadata).setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val cliRange = PartitionRange(twoDaysAgo, yesterday)(PartitionSpec.daily)
+
+    runner.run(metadata, nodeContent, Option(cliRange))
+
+    val outputDf = spark.sql(s"SELECT * FROM $outputTable")
+    val rowCount = outputDf.count()
+    assertTrue(s"Output should have rows, got $rowCount", rowCount > 0)
+
+    val outputPartitions = tableUtils.partitions(outputTable)
+    assertTrue("Output should have partitions", outputPartitions.nonEmpty)
+  }
+
+  "E2E Join backfill with yyyyMMdd partitions" should "produce correct output when CLI dates are yyyy-MM-dd" in {
+    createYyyyMMddEventsTable()
+
+    val yesterdayAlt = yesterday.replace("-", "")
+    val twoDaysAgoAlt = twoDaysAgo.replace("-", "")
+
+    // Left side: events table with yyyyMMdd partitions
+    val leftQuery = Builders.Query(
+      selects = Builders.Selects("user_id"),
+      partitionColumn = "partition_date",
+      timeColumn = s"UNIX_TIMESTAMP(event_time, 'yyyyMMdd HH:mm:ss') * 1000",
+      startPartition = twoDaysAgoAlt
+    )
+    leftQuery.setPartitionFormat("yyyyMMdd")
+    val leftSource = Builders.Source.events(leftQuery, table = "test_db.yyyymmdd_events")
+
+    // Right side GroupBy: aggregate value per user from the same yyyyMMdd table
+    val gbSourceQuery = Builders.Query(
+      selects = Builders.Selects("user_id", "value"),
+      partitionColumn = "partition_date",
+      timeColumn = s"UNIX_TIMESTAMP(event_time, 'yyyyMMdd HH:mm:ss') * 1000",
+      startPartition = twoDaysAgoAlt
+    )
+    gbSourceQuery.setPartitionFormat("yyyyMMdd")
+    val gbSource = Builders.Source.events(gbSourceQuery, table = "test_db.yyyymmdd_events")
+
+    val gbMetaData = Builders.MetaData(namespace = "test_db", name = "yyyymmdd_join_gb", team = "test_team")
+    val groupByConf = Builders.GroupBy(
+      sources = Seq(gbSource),
+      keyColumns = Seq("user_id"),
+      aggregations = Seq(
+        Builders.Aggregation(inputColumn = "value", operation = Operation.SUM)
+      ),
+      metaData = gbMetaData
+    )
+
+    val joinPart = new JoinPart().setGroupBy(groupByConf)
+    val joinMetaData = Builders.MetaData(namespace = "test_db", name = "yyyymmdd_join_test", team = "test_team")
+    val joinConf = Builders.Join(
+      metaData = joinMetaData,
+      left = leftSource,
+      joinParts = Seq(joinPart)
+    )
+    val outputTable = joinMetaData.outputTable
+
+    val leftTableDep = TableDependencies.fromSource(leftSource).get
+    val rightTableDep = TableDependencies.fromSource(gbSource).get
+
+    val monolithJoin = new MonolithJoinNode().setJoin(joinConf)
+    val nodeContent = new NodeContent()
+    nodeContent.setMonolithJoin(monolithJoin)
+
+    implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+    val metadata = MetaDataUtils.layer(
+      baseMetadata = new MetaData().setOutputNamespace("test_db").setTeam("test_team"),
+      modeName = "test_mode",
+      nodeName = "yyyymmdd_join_test",
+      tableDependencies = Seq(leftTableDep, rightTableDep),
+      stepDays = Some(1),
+      outputTableOverride = Some(outputTable)
+    )
+
+    val node = new Node().setMetaData(metadata).setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+
+    // CLI dates are always yyyy-MM-dd
+    val cliRange = PartitionRange(twoDaysAgo, yesterday)(PartitionSpec.daily)
+
+    runner.run(metadata, nodeContent, Option(cliRange))
+
+    val outputDf = spark.sql(s"SELECT * FROM $outputTable ORDER BY ds, user_id")
+    val rowCount = outputDf.count()
+    assertTrue(s"Join output should have rows, got $rowCount", rowCount > 0)
+
+    val outputPartitions = tableUtils.partitions(outputTable)
+    assertTrue("Join output should have partitions", outputPartitions.nonEmpty)
+    outputPartitions should contain(twoDaysAgo)
+    outputPartitions should contain(yesterday)
   }
 
   override def afterAll(): Unit = {

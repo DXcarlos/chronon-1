@@ -300,6 +300,54 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
     upstreamJoinDeps should be(empty)
   }
 
+  it should "semantic hash should be the same regardless of EventSource topic" in {
+    val gbTopicA = Builders.GroupBy(
+      sources = Seq(Builders.Source.events(Builders.Query(), table = "my_user_events", topic = "topic_a")),
+      keyColumns = Seq("user"),
+      aggregations = Seq(Builders.Aggregation(Operation.COUNT, "charges", Seq(WindowUtils.Unbounded))),
+      metaData = Builders.MetaData(namespace = "test_namespace", name = "user_charges")
+    )
+    val gbTopicB = Builders.GroupBy(
+      sources = Seq(Builders.Source.events(Builders.Query(), table = "my_user_events", topic = "topic_b")),
+      keyColumns = Seq("user"),
+      aggregations = Seq(Builders.Aggregation(Operation.COUNT, "charges", Seq(WindowUtils.Unbounded))),
+      metaData = Builders.MetaData(namespace = "test_namespace", name = "user_charges")
+    )
+
+    val planA = GroupByPlanner(gbTopicA).buildPlan
+    val planB = GroupByPlanner(gbTopicB).buildPlan
+
+    // Topics are routing concerns; they should not affect the semantic hash
+    planA.nodes.asScala.zip(planB.nodes.asScala).foreach { case (nodeA, nodeB) =>
+      nodeA.semanticHash should equal(nodeB.semanticHash)
+    }
+  }
+
+  it should "semantic hash should be the same regardless of EntitySource mutationTopic" in {
+    val gbTopicA = Builders.GroupBy(
+      sources = Seq(
+        Builders.Source.entities(Builders.Query(), snapshotTable = "my_entity_snapshot", mutationTopic = "topic_a")),
+      keyColumns = Seq("entity_id"),
+      aggregations = Seq(Builders.Aggregation(Operation.LAST, "value", Seq(WindowUtils.Unbounded))),
+      metaData = Builders.MetaData(namespace = "test_namespace", name = "entity_gb")
+    )
+    val gbTopicB = Builders.GroupBy(
+      sources = Seq(
+        Builders.Source.entities(Builders.Query(), snapshotTable = "my_entity_snapshot", mutationTopic = "topic_b")),
+      keyColumns = Seq("entity_id"),
+      aggregations = Seq(Builders.Aggregation(Operation.LAST, "value", Seq(WindowUtils.Unbounded))),
+      metaData = Builders.MetaData(namespace = "test_namespace", name = "entity_gb")
+    )
+
+    val planA = GroupByPlanner(gbTopicA).buildPlan
+    val planB = GroupByPlanner(gbTopicB).buildPlan
+
+    // mutationTopic is a routing concern; it should not affect the semantic hash
+    planA.nodes.asScala.zip(planB.nodes.asScala).foreach { case (nodeA, nodeB) =>
+      nodeA.semanticHash should equal(nodeB.semanticHash)
+    }
+  }
+
   it should "GroupBy without streaming source should not be affected by JoinSource" in {
     import ai.chronon.api.Builders._
 

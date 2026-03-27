@@ -3,10 +3,9 @@ package ai.chronon.spark.catalog
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.delta.DeltaLog
 
-// The Delta Lake format is compatible with the Delta lake and Spark versions currently supported by the project.
-// Attempting to use newer Delta lake library versions (e.g. 3.2 which works with Spark 3.5) results in errors:
-// java.lang.NoSuchMethodError: 'org.apache.spark.sql.delta.Snapshot org.apache.spark.sql.delta.DeltaLog.update(boolean)'
-// In such cases, you should implement your own FormatProvider built on the newer Delta lake version
+// Compiled against delta-spark 3.3.2 to match EMR 7.12.0. DeltaLog.update() signature changes
+// across Delta versions (e.g. 2 params in 3.2, 3 params in 3.3), so compiling against an older
+// version will cause NoSuchMethodError at runtime if the EMR-bundled Delta jar has a newer signature.
 case object DeltaLake extends Format {
 
   override def tableTypeString: String = "delta"
@@ -23,8 +22,7 @@ case object DeltaLake extends Format {
 
     // delta lake doesn't support the `SHOW PARTITIONS <tableName>` syntax - https://github.com/delta-io/delta/issues/996
     // there's alternative ways to retrieve partitions using the DeltaLog abstraction which is what we have to lean into
-    // below
-    // first pull table location as that is what we need to pass to the delta log
+    // below first pull table location as that is what we need to pass to the delta log
     val describeResult = sparkSession.sql(s"DESCRIBE DETAIL $tableName")
     val tablePath = describeResult.select("location").head().getString(0)
 

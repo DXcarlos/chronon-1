@@ -148,6 +148,10 @@ object FlinkJob {
     val enableDebug: ScallopOption[Boolean] =
       opt[Boolean](required = false, descr = "Enable debug logging mode", default = Some(false))
 
+    val topicOverride: ScallopOption[String] =
+      opt[String](required = false,
+                  descr = "Optional topic URI override. If set, used instead of topic from GroupByServingInfo.")
+
     verify()
   }
 
@@ -182,7 +186,7 @@ object FlinkJob {
         .map { servingInfo =>
           // create the groupby dataset on the KV store if it doesn't exist prior to starting up the job
           kvStore.create(servingInfo.groupBy.streamingDataset)
-          buildFlinkJob(groupByName, props, api, servingInfo, enableDebug)
+          buildFlinkJob(groupByName, props, api, servingInfo, enableDebug, jobArgs.topicOverride.toOption)
         }
         .recover { case e: Exception =>
           throw new IllegalArgumentException(s"Unable to lookup serving info for GroupBy: '$groupByName'", e)
@@ -241,12 +245,13 @@ object FlinkJob {
                             props: Map[String, String],
                             api: Api,
                             servingInfo: GroupByServingInfoParsed,
-                            enableDebug: Boolean = false): BaseFlinkJob = {
+                            enableDebug: Boolean = false,
+                            maybeTopicOverride: Option[String] = None): BaseFlinkJob = {
     // Check if this is a JoinSource GroupBy
     if (servingInfo.groupBy.streamingSource.get.isSetJoinSource) {
-      buildJoinSourceFlinkJob(groupByName, props, api, servingInfo, enableDebug)
+      buildJoinSourceFlinkJob(groupByName, props, api, servingInfo, enableDebug, maybeTopicOverride)
     } else {
-      buildGroupByStreamingJob(groupByName, props, api, servingInfo, enableDebug)
+      buildGroupByStreamingJob(groupByName, props, api, servingInfo, enableDebug, maybeTopicOverride)
     }
   }
 
@@ -254,7 +259,8 @@ object FlinkJob {
                                       props: Map[String, String],
                                       api: Api,
                                       servingInfo: GroupByServingInfoParsed,
-                                      enableDebug: Boolean): ChainedGroupByJob = {
+                                      enableDebug: Boolean,
+                                      maybeTopicOverride: Option[String] = None): ChainedGroupByJob = {
     val logger = LoggerFactory.getLogger(getClass)
 
     val joinSource = servingInfo.groupBy.streamingSource.get.getJoinSource
@@ -265,7 +271,8 @@ object FlinkJob {
         s"Found: ${leftSource.dataModel} for groupBy: $groupByName"
     )
 
-    val topicInfo = TopicInfo.parse(leftSource.topic)
+    val rawTopic = maybeTopicOverride.getOrElse(leftSource.topic)
+    val topicInfo = TopicInfo.parse(rawTopic)
     val schemaProvider = FlinkSerDeProvider.build(topicInfo)
 
     // Use left source query for deserialization schema - this is the topic & schema we use to drive
@@ -318,10 +325,12 @@ object FlinkJob {
                                        props: Map[String, String],
                                        api: Api,
                                        servingInfo: GroupByServingInfoParsed,
-                                       enableDebug: Boolean): FlinkGroupByStreamingJob = {
+                                       enableDebug: Boolean,
+                                       maybeTopicOverride: Option[String] = None): FlinkGroupByStreamingJob = {
     val logger = LoggerFactory.getLogger(getClass)
 
-    val topicInfo = TopicInfo.parse(servingInfo.groupBy.streamingSource.get.topic)
+    val rawTopic = maybeTopicOverride.getOrElse(servingInfo.groupBy.streamingSource.get.topic)
+    val topicInfo = TopicInfo.parse(rawTopic)
     val schemaProvider = FlinkSerDeProvider.build(topicInfo)
 
     // Use the existing GroupBy-based interface for regular GroupBys

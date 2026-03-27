@@ -393,7 +393,10 @@ def test_blob_exists_gcs_file_exists():
         mock_blob.exists.return_value = True
 
         assert blob_exists("gs://bucket/path/to/file.jar") is True
+        mock_client.bucket.assert_called_once_with("bucket")
+        mock_bucket.blob.assert_called_once_with("path/to/file.jar")
         mock_blob.exists.assert_called_once()
+        mock_client.list_blobs.assert_not_called()
 
 
 def test_blob_exists_gcs_file_not_found():
@@ -412,6 +415,97 @@ def test_blob_exists_gcs_file_not_found():
         mock_blob.exists.return_value = False
 
         assert blob_exists("gs://bucket/path/to/missing.jar") is False
+        mock_client.bucket.assert_called_once_with("bucket")
+        mock_bucket.blob.assert_called_once_with("path/to/missing.jar")
+        mock_blob.exists.assert_called_once()
+        mock_client.list_blobs.assert_not_called()
+
+
+def test_blob_exists_gcs_requires_exact_name_match():
+    """Test fallback list check does not treat prefix-only matches as existence."""
+    from unittest.mock import MagicMock, patch
+
+    from ai.chronon.repo.utils import blob_exists
+
+    class FakeBlob:
+        def __init__(self, name):
+            self.name = name
+
+    with patch("google.cloud.storage.Client") as mock_client_constructor:
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_blob = MagicMock()
+        mock_client_constructor.return_value = mock_client
+        mock_client.bucket.return_value = mock_bucket
+        mock_bucket.blob.return_value = mock_blob
+        mock_blob.exists.side_effect = Exception("403 forbidden")
+        mock_client.list_blobs.return_value = [FakeBlob("path/to/file.jar.backup")]
+
+        assert blob_exists("gs://bucket/path/to/file.jar") is False
+        mock_client.bucket.assert_called_once_with("bucket")
+        mock_bucket.blob.assert_called_once_with("path/to/file.jar")
+        mock_blob.exists.assert_called_once()
+        mock_client.list_blobs.assert_called_once_with(
+            "bucket",
+            prefix="path/to/file.jar",
+            max_results=1,
+        )
+
+
+def test_blob_exists_gcs_fallback_to_list_on_exists_error():
+    """Test blob_exists falls back to list-based check when exists() fails."""
+    from unittest.mock import MagicMock, patch
+
+    from ai.chronon.repo.utils import blob_exists
+
+    class FakeBlob:
+        def __init__(self, name):
+            self.name = name
+
+    with patch("google.cloud.storage.Client") as mock_client_constructor:
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_blob = MagicMock()
+        mock_client_constructor.return_value = mock_client
+        mock_client.bucket.return_value = mock_bucket
+        mock_bucket.blob.return_value = mock_blob
+        mock_blob.exists.side_effect = Exception("403 forbidden")
+        mock_client.list_blobs.return_value = [FakeBlob("path/to/file.jar")]
+
+        assert blob_exists("gs://bucket/path/to/file.jar") is True
+        mock_client.bucket.assert_called_once_with("bucket")
+        mock_bucket.blob.assert_called_once_with("path/to/file.jar")
+        mock_blob.exists.assert_called_once()
+        mock_client.list_blobs.assert_called_once_with(
+            "bucket",
+            prefix="path/to/file.jar",
+            max_results=1,
+        )
+
+
+def test_blob_exists_gcs_returns_false_when_exists_and_list_both_fail():
+    """Test blob_exists returns False when both GCS checks fail."""
+    from unittest.mock import MagicMock, patch
+
+    from ai.chronon.repo.utils import blob_exists
+
+    with patch("google.cloud.storage.Client") as mock_client_constructor:
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_blob = MagicMock()
+        mock_client_constructor.return_value = mock_client
+        mock_client.bucket.return_value = mock_bucket
+        mock_bucket.blob.return_value = mock_blob
+        mock_blob.exists.side_effect = Exception("403 forbidden")
+        mock_client.list_blobs.side_effect = Exception("list denied")
+
+        assert blob_exists("gs://bucket/path/to/file.jar") is False
+        mock_blob.exists.assert_called_once()
+        mock_client.list_blobs.assert_called_once_with(
+            "bucket",
+            prefix="path/to/file.jar",
+            max_results=1,
+        )
 
 
 def test_blob_exists_azure_file_exists():

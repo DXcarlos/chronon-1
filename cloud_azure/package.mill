@@ -40,7 +40,7 @@ trait CloudAzureModule extends Cross.Module[String] with build.BaseModule {
     mvn"com.azure:azure-identity:1.14.2"
       .exclude("com.azure" -> "azure-core-http-netty"),
     // Azure Key Vault for secret management (e.g., Snowflake private keys)
-    mvn"com.azure:azure-security-keyvault-secrets:4.10.4"
+    mvn"com.azure:azure-security-keyvault-secrets:4.10.5"
       .exclude("com.azure" -> "azure-core-http-netty"),
     mvn"net.snowflake:snowflake-jdbc:3.16.0",
     mvn"net.snowflake:spark-snowflake_2.12:3.1.6",

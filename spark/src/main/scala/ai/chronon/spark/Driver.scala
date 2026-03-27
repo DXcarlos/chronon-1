@@ -141,7 +141,8 @@ object Driver {
 
     lazy val sparkSession: SparkSession = buildSparkSession()
 
-    def endDate(): String = endDateInternal.toOption.getOrElse(buildTableUtils().partitionSpec.now)
+    // CLI dates are always in yyyy-MM-dd format; the default must match
+    def endDate(): String = endDateInternal.toOption.getOrElse(PartitionSpec.daily.now)
 
     def subcommandName(): String
 

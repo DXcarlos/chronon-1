@@ -70,9 +70,6 @@ gcp = Team(
                 "spark.sql.catalog.spark_catalog.warehouse": "gs://zipline-warehouse-canary/data/tables/",
                 "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
                 "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
-                "spark.chronon.table.gcs.temporary_gcs_bucket": "zipline-warehouse-canary",
-                "spark.chronon.table.gcs.connector_output_dataset": "data",
-                "spark.chronon.table.gcs.connector_output_project": "canary-443022",
             }),
 
             "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",

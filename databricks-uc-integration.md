@@ -214,9 +214,6 @@ my_team = Team(
             "spark.chronon.partition.column": "ds",
             "spark.chronon.partition.format": "yyyy-MM-dd",
 
-            # REQUIRED: materialize DataFrames before cross-catalog writes
-            # Prevents DeltaSparkSessionExtension conflicts in the write plan
-            "spark.chronon.cross_catalog.persist": "true",
         },
     ),
     clusterConf=ClusterConfigProperties(
@@ -236,7 +233,6 @@ my_team = Team(
 
 **Key configuration notes:**
 - `${DATABRICKS_OAUTH_TOKEN}` is a placeholder resolved by the hub at job submission time. Do not replace it with an actual token.
-- `spark.chronon.cross_catalog.persist=true` is **required**. Without it, DeltaSparkSessionExtension's `PreprocessTableWithDVsStrategy` will fail when the write plan references a `TahoeFileIndex` from the read catalog.
 - The `read_catalog` and `write_catalog` names can be changed, but must match in both `teams.py` and your staging queries.
 - `write_catalog.warehouse` should be set to the name of your Databricks UC catalog (e.g., `workspace`).
 

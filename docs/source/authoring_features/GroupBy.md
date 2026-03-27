@@ -100,7 +100,7 @@ hence stale - missing most recent events. This is not accepable for machine lear
 hopping windows without the loss of most recent events. Sawtooth windows will have variable window interval size - and
 in this particular example we will aggregate events between `1:20` - `2:27`.
 
-![Windows Illustrated](../../images/Windows.png)
+![](../../images/Windows.svg)
 
 See the [Realtime Event GroupBy examples](#realtime-event-groupby-examples) for an example of windowed aggregations.
 

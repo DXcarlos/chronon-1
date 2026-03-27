@@ -3,6 +3,7 @@ import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
+import click
 import requests
 
 from ai.chronon.cli.formatter import Format
@@ -20,6 +21,7 @@ class ZiplineHub:
         cloud_provider=None,
         scope=None,
         format: Format = Format.TEXT,
+        auth_url=None,
     ):
         if not base_url:
             raise ValueError("Base URL for ZiplineHub cannot be empty.")
@@ -30,6 +32,24 @@ class ZiplineHub:
             cloud_provider.lower() if cloud_provider is not None else cloud_provider
         )
         self.version = utils.get_package_version()
+        self._hub_auth_config = None
+
+        # Auth resolution order:
+        # 1. CLI auth exact match (auth_url matches a stored account)
+        # 2. Cloud provider auth (GCP/Azure service account, ID_TOKEN)
+        # 3. CLI auth default (fallback to default account for non-cloud setups)
+        if use_auth:
+            from ai.chronon.repo.auth import get_auth_config
+
+            config = get_auth_config(url=auth_url)
+            if config and config.get("access_token"):
+                self._hub_auth_config = config
+                self.use_auth = True
+                self.sa = None
+                self.id_token = None
+                print_info("Using authentication for ZiplineHub.", format=format)
+                return
+
         if self.base_url.startswith("https") and use_auth:
             if self.cloud_provider == "gcp":
                 self.use_auth = True
@@ -56,6 +76,21 @@ class ZiplineHub:
                     self.use_auth = True
                     print_info("Using authentication for ZiplineHub.", format=format)
                     self.sa = None
+        elif use_auth:
+            # No cloud auth available — try default CLI auth as fallback
+            # (e.g., local dev where FRONTEND_URL in teams.py differs from the auth URL)
+            from ai.chronon.repo.auth import get_auth_config
+
+            config = get_auth_config()
+            if config and config.get("access_token"):
+                self._hub_auth_config = config
+                self.use_auth = True
+                self.sa = None
+                self.id_token = None
+                print_info("Using authentication for ZiplineHub.", format=format)
+                return
+            self.use_auth = False
+            print_info("Not using authentication for ZiplineHub.", format=format)
         else:
             self.use_auth = False
             print_info("Not using authentication for ZiplineHub.", format=format)
@@ -64,6 +99,7 @@ class ZiplineHub:
     def _setup_gcp_auth(self, sa_name):
         """Setup Google Cloud authentication."""
         import google.auth
+        from google.auth.exceptions import GoogleAuthError
         from google.auth.transport.requests import Request
 
         print_info("Using Google Cloud authentication for ZiplineHub.", format=self.format)
@@ -76,15 +112,21 @@ class ZiplineHub:
         elif sa_name is not None:
             # Fallback to Google Cloud authentication
             print_info("Generating ID token from service account credentials.", format=self.format)
-            credentials, project_id = google.auth.default()
-            self.project_id = project_id
-            credentials.refresh(Request())
+            try:
+                credentials, project_id = google.auth.default()
+                self.project_id = project_id
+                credentials.refresh(Request())
+            except GoogleAuthError as e:
+                raise click.ClickException(str(e)) from e
 
             self.sa = f"{sa_name}@{project_id}.iam.gserviceaccount.com"
         else:
             print_info("Generating ID token from default credentials.", format=self.format)
-            credentials, project_id = google.auth.default()
-            credentials.refresh(Request())
+            try:
+                credentials, project_id = google.auth.default()
+                credentials.refresh(Request())
+            except GoogleAuthError as e:
+                raise click.ClickException(str(e)) from e
             self.sa = None
             self.id_token = credentials.id_token
 
@@ -119,11 +161,38 @@ class ZiplineHub:
             "Content-Type": "application/json",
             "X-Zipline-Version": self.version,
         }
-        if self.use_auth and hasattr(self, "sa") and self.sa is not None:
+        if self._hub_auth_config:
+            jwt_token = self._get_hub_jwt()
+            if jwt_token:
+                headers["Authorization"] = f"Bearer {jwt_token}"
+        elif self.use_auth and hasattr(self, "sa") and self.sa is not None:
             headers["Authorization"] = f"Bearer {self._sign_jwt(self.sa, url)}"
         elif self.use_auth:
             headers["Authorization"] = f"Bearer {self.id_token}"
         return headers
+
+    def _get_hub_jwt(self):
+        """Fetch a short-lived JWT from Zipline Hub using the stored session token."""
+        config = self._hub_auth_config
+        hub_url = config["url"]
+        session_token = config["access_token"]
+        try:
+            resp = requests.get(
+                f"{hub_url}/api/auth/token",
+                headers={"Authorization": f"Bearer {session_token}"},
+                timeout=10,
+            )
+            if resp.ok:
+                return resp.json().get("token")
+            else:
+                print_warning(
+                    "Session expired. Run 'zipline auth login' to re-authenticate.",
+                    format=self.format,
+                )
+                return None
+        except requests.RequestException as e:
+            print_warning(f"Failed to fetch JWT from hub: {e}", format=self.format)
+            return None
 
     def _get_error_details(self, e: requests.RequestException) -> str:
         """Extract error details from request exception including response JSON if available."""
@@ -138,18 +207,30 @@ class ZiplineHub:
         return " | ".join(error_parts)
 
     def handle_unauth(self, e: requests.RequestException, api_name: str):
-        if e.response is not None and e.response.status_code == 401 and self.sa is None:
-            print_error(
-                f"Error calling {api_name} API. Unauthorized and no service account provided. "
-                "Set up default credentials or provide SA_NAME in teams.py.",
-                format=self.format,
+        if e.response is None or e.response.status_code != 401:
+            return
+        sa = getattr(self, "sa", None)
+        if self._hub_auth_config:
+            msg = (
+                f"Error calling {api_name} API. Session expired or invalid. "
+                "Run 'zipline auth login' to re-authenticate."
             )
-        elif e.response is not None and e.response.status_code == 401 and self.sa is not None:
-            print_error(
-                f"Error calling {api_name} API. Unauthorized with service account: {self.sa}. "
-                "Ensure the service account has 'iap.webServiceVersions.accessViaIap' permission.",
-                format=self.format,
+        elif not self.use_auth:
+            msg = (
+                f"Error calling {api_name} API. Unauthorized. "
+                "Run 'zipline auth login' to authenticate."
             )
+        elif sa is not None:
+            msg = (
+                f"Error calling {api_name} API. Unauthorized with service account: {sa}. "
+                "Ensure the service account has 'iap.webServiceVersions.accessViaIap' permission."
+            )
+        else:
+            msg = (
+                f"Error calling {api_name} API. Unauthorized. "
+                "Set up default credentials, provide SA_NAME in teams.py, or run 'zipline auth login'."
+            )
+        raise click.ClickException(msg) from e
 
     def _generate_jwt_payload(self, service_account_email: str, resource_url: str) -> str:
         """Generates JWT payload for service account.
@@ -404,6 +485,32 @@ class ZiplineHub:
         except requests.RequestException as e:
             self.handle_unauth(e, "schema")
             print_error(f"Error calling schema API: {self._get_error_details(e)}", format=self.format)
+            raise e
+
+    def call_list_tables_api(
+        self,
+        schema_name,
+        engine_type,
+        execution_info,
+    ):
+        if not self.eval_url:
+            raise ValueError(
+                "Eval URL not specified. Specify EVAL_URL in teams.py, environment variables, or use --eval-url."
+            )
+        _request = {
+            "schemaName": schema_name,
+            "engineType": engine_type,
+            "executionInfo": execution_info,
+        }
+        try:
+            response = requests.post(
+                self.eval_url + "/list-tables", json=_request, headers=self.additional_headers(self.eval_url)
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            self.handle_unauth(e, "list-tables")
+            print_error(f"Error calling list-tables API: {self._get_error_details(e)}", format=self.format)
             raise e
 
     def call_workflow_start_api(

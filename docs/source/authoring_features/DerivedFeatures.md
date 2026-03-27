@@ -218,7 +218,7 @@ The steps involved are
   - The closure automatically is polling this buffer and write out to output buffer when transformation is done
   - We poll the output buffer and deserialize it into Chronon’s type system (we are turning the async process into a sync function execution)
 
-![Overview](../../images/Derived_Features.png)
+![](../../images/Derived_Features.svg)
 
 ### Schema Evolution
 
