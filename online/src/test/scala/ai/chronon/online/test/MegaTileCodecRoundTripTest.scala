@@ -39,15 +39,25 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
   val Epsilon = 1e-6
 
   val Schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType, "amount" -> DoubleType)
+  val SchemaWithCategory: Seq[(String, DataType)] =
+    Seq("ts" -> LongType, "num" -> LongType, "amount" -> DoubleType, "category" -> StringType)
 
-  def approxEqual(a: Any, b: Any): Boolean = (a, b) match {
-    case (null, null)                                  => true
-    case (null, _) | (_, null)                         => false
-    case (x: Double, y: Double)                        => Math.abs(x - y) <= Epsilon * Math.max(1.0, Math.max(Math.abs(x), Math.abs(y)))
-    case (x: Float, y: Float)                          => Math.abs(x - y) <= Epsilon.toFloat * Math.max(1.0f, Math.max(Math.abs(x), Math.abs(y)))
-    case (x: java.util.List[_], y: java.util.List[_]) => x.size() == y.size() && (0 until x.size()).forall(i => approxEqual(x.get(i), y.get(i)))
-    case (x: Array[_], y: Array[_])                    => x.length == y.length && x.zip(y).forall { case (a, b) => approxEqual(a, b) }
-    case _                                             => a == b
+  private val categories = Array("alpha", "beta", "gamma", "delta", "epsilon")
+
+  def approxEqual(a: Any, b: Any, sketchTolerance: Double = 0.0): Boolean = (a, b) match {
+    case (null, null)                         => true
+    case (null, _) | (_, null)                => false
+    case (x: Double, y: Double)               => Math.abs(x - y) <= Epsilon * Math.max(1.0, Math.max(Math.abs(x), Math.abs(y)))
+    case (x: Float, y: Float)                 => Math.abs(x - y) <= Epsilon.toFloat * Math.max(1.0f, Math.max(Math.abs(x), Math.abs(y)))
+    case (x: Long, y: Long) if sketchTolerance > 0 =>
+      x == y || Math.abs(x - y).toDouble <= sketchTolerance * Math.max(1.0, Math.max(Math.abs(x), Math.abs(y)).toDouble)
+    case (x: java.util.List[_], y: java.util.List[_]) =>
+      x.size() == y.size() && (0 until x.size()).forall(i => approxEqual(x.get(i), y.get(i), sketchTolerance))
+    case (x: java.util.Map[_, _], y: java.util.Map[_, _]) =>
+      x.size() == y.size() && x.keySet().toArray.forall(k => approxEqual(x.get(k), y.get(k), sketchTolerance))
+    case (x: Array[_], y: Array[_]) =>
+      x.length == y.length && x.zip(y).forall { case (a, b) => approxEqual(a, b, sketchTolerance) }
+    case _ => a == b
   }
 
   def generateEvents(daySpan: Int, count: Int): Array[Row] = {
@@ -62,11 +72,27 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
     }.toArray
   }
 
-  def naiveAggregate(allEvents: Array[Row], queryTimes: Array[Long], aggregations: Seq[Aggregation]): Array[Array[Any]] = {
+  def generateEventsWithCategory(daySpan: Int, count: Int): Array[Row] = {
+    val rng = new Random(42)
+    val baseTs = 1774000000000L
+    val spanMillis = daySpan.toLong * DayMillis
+    (0 until count).map { _ =>
+      val ts = baseTs + (rng.nextDouble() * spanMillis).toLong
+      val num = rng.nextInt(1000).toLong
+      val amount = rng.nextDouble() * 500.0
+      val cat = categories(rng.nextInt(categories.length))
+      new ArrayRow(Array(ts, num, amount, cat), ts): Row
+    }.toArray
+  }
+
+  def naiveAggregate(allEvents: Array[Row],
+                     queryTimes: Array[Long],
+                     aggregations: Seq[Aggregation],
+                     schema: Seq[(String, DataType)] = Schema): Array[Array[Any]] = {
     val unpackedParts = aggregations.flatMap(_.unpack)
     val unpacked = unpackedParts.map(_.window).toArray
     val tailHops = unpacked.map(w => FiveMinuteResolution.calculateTailHop(w))
-    val rowAgg = new RowAggregator(Schema, unpackedParts)
+    val rowAgg = new RowAggregator(schema, unpackedParts)
     val naiveAgg = new NaiveAggregator(rowAgg, unpacked, tailHops)
     naiveAgg.aggregate(allEvents, queryTimes).map(ir => rowAgg.finalize(ir))
   }
@@ -111,17 +137,18 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
   def streamProcessorWithSerdeAggregate(allEvents: Array[Row],
                                          queryTimes: Array[Long],
                                          aggregations: Seq[Aggregation],
-                                         batchEnd: Long): Array[Array[Any]] = {
+                                         batchEnd: Long,
+                                         schema: Seq[(String, DataType)] = Schema): Array[Array[Any]] = {
 
-    val megaTileAgg = new MegaTileAggregator(aggregations, Schema, tailBufferMillis = TailBufferMillis)
-    val codec = new MegaTileCodec(buildGroupBy(aggregations), Schema)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val codec = new MegaTileCodec(buildGroupBy(aggregations), schema)
     // SerdeTileStore encodes/decodes on every access — tests the codec round-trip inline
     val store = new SerdeTileStore(megaTileAgg.windowedAggregator, codec)
     val processor = new MegaTileStreamProcessor(megaTileAgg, store)
     val merger = new MegaTileMerger(megaTileAgg)
 
     val batchEvents = allEvents.filter(_.ts < batchEnd)
-    val onlineAgg = new SawtoothOnlineAggregator(batchEnd, aggregations, Schema, tailBufferMillis = TailBufferMillis)
+    val onlineAgg = new SawtoothOnlineAggregator(batchEnd, aggregations, schema, tailBufferMillis = TailBufferMillis)
     var batchIr = onlineAgg.init
     batchEvents.foreach(row => batchIr = onlineAgg.update(batchIr, row))
     val finalBatchIr = onlineAgg.finalizeSnapshot(batchIr)
@@ -264,6 +291,36 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
       assertTrue(
         s"key_switch: mismatch at query ${queryTimes(i)}\n  expected: ${gson.toJson(naive(i))}\n  got:      ${gson.toJson(results(i))}",
         approxEqual(results(i), naive(i)))
+    }
+  }
+
+  it should "match naive with complex aggregations through serde (buckets, approx_unique, histogram, last_k)" in {
+    val events = generateEventsWithCategory(14, 20000)
+    val maxTs = events.map(_.ts).max
+    val batchEnd = TsUtils.round(maxTs - DayMillis, DayMillis)
+
+    val aggregations = Seq(
+      // Bucketed: MapType(StringType, irType) — tests map serde
+      Builders.Aggregation(Operation.SUM, "num", AllWindows, buckets = Seq("category")),
+      Builders.Aggregation(Operation.COUNT, "num", AllWindows, buckets = Seq("category")),
+      // Sketch-based: BinaryType IR (CPC sketch) — tests binary serde
+      Builders.Aggregation(Operation.APPROX_UNIQUE_COUNT, "num", AllWindows),
+      // Map IR: MapType(StringType, IntType) — tests map serde
+      Builders.Aggregation(Operation.HISTOGRAM, "category", AllWindows),
+      // Collection IR: ListType — tests list serde
+      Builders.Aggregation(Operation.LAST_K, "num", AllWindows, argMap = Map("k" -> "3"))
+    )
+
+    val queryTimes = Array(batchEnd + 14 * 3600 * 1000L).filter(_ <= maxTs)
+    val results = streamProcessorWithSerdeAggregate(events, queryTimes, aggregations, batchEnd,
+                                                     schema = SchemaWithCategory)
+    val naive = naiveAggregate(events, queryTimes, aggregations, schema = SchemaWithCategory)
+    assertEquals("result count", naive.length, results.length)
+    for (i <- queryTimes.indices) {
+      // 5% tolerance for APPROX_UNIQUE_COUNT (CPC sketch merge imprecision)
+      assertTrue(
+        s"serde_complex_aggs: mismatch at query ${queryTimes(i)}\n  expected: ${gson.toJson(naive(i))}\n  got:      ${gson.toJson(results(i))}",
+        approxEqual(results(i), naive(i), sketchTolerance = 0.05))
     }
   }
 }

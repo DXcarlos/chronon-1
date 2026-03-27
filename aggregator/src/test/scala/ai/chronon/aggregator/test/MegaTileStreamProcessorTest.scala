@@ -36,20 +36,29 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
   val DayMillis: Long = new Window(1, TimeUnit.DAYS).millis
   val Epsilon = 1e-6
 
-  def approxEqual(a: Any, b: Any): Boolean = (a, b) match {
-    case (null, null)                                  => true
-    case (null, _) | (_, null)                         => false
-    case (x: Double, y: Double)                        => Math.abs(x - y) <= Epsilon * Math.max(1.0, Math.max(Math.abs(x), Math.abs(y)))
-    case (x: Float, y: Float)                          => Math.abs(x - y) <= Epsilon.toFloat * Math.max(1.0f, Math.max(Math.abs(x), Math.abs(y)))
-    case (x: java.util.List[_], y: java.util.List[_]) => x.size() == y.size() && (0 until x.size()).forall(i => approxEqual(x.get(i), y.get(i)))
-    case (x: Array[_], y: Array[_])                    => x.length == y.length && x.zip(y).forall { case (a, b) => approxEqual(a, b) }
-    case _                                             => a == b
+  // sketchTolerance: relative tolerance for Long values (sketch-based aggs like APPROX_UNIQUE_COUNT
+  // produce slightly different results when merging partial sketches vs building one sketch).
+  def approxEqual(a: Any, b: Any, sketchTolerance: Double = 0.0): Boolean = (a, b) match {
+    case (null, null)                         => true
+    case (null, _) | (_, null)                => false
+    case (x: Double, y: Double)               => Math.abs(x - y) <= Epsilon * Math.max(1.0, Math.max(Math.abs(x), Math.abs(y)))
+    case (x: Float, y: Float)                 => Math.abs(x - y) <= Epsilon.toFloat * Math.max(1.0f, Math.max(Math.abs(x), Math.abs(y)))
+    case (x: Long, y: Long) if sketchTolerance > 0 =>
+      x == y || Math.abs(x - y).toDouble <= sketchTolerance * Math.max(1.0, Math.max(Math.abs(x), Math.abs(y)).toDouble)
+    case (x: java.util.List[_], y: java.util.List[_]) =>
+      x.size() == y.size() && (0 until x.size()).forall(i => approxEqual(x.get(i), y.get(i), sketchTolerance))
+    case (x: java.util.Map[_, _], y: java.util.Map[_, _]) =>
+      x.size() == y.size() && x.keySet().toArray.forall(k => approxEqual(x.get(k), y.get(k), sketchTolerance))
+    case (x: Array[_], y: Array[_]) =>
+      x.length == y.length && x.zip(y).forall { case (a, b) => approxEqual(a, b, sketchTolerance) }
+    case _ => a == b
   }
 
-  def compareResults(actual: Array[Array[Any]], expected: Array[Array[Any]], queryTimes: Array[Long], label: String): Unit = {
+  def compareResults(actual: Array[Array[Any]], expected: Array[Array[Any]], queryTimes: Array[Long],
+                     label: String, sketchTolerance: Double = 0.0): Unit = {
     assertEquals(s"$label: result count mismatch", expected.length, actual.length)
     for (i <- queryTimes.indices) {
-      if (!approxEqual(actual(i), expected(i))) {
+      if (!approxEqual(actual(i), expected(i), sketchTolerance)) {
         val expStr = gson.toJson(expected(i))
         val actStr = gson.toJson(actual(i))
         fail(s"$label: mismatch at query ${queryTimes(i)} (index $i)\n  expected: $expStr\n  got:      $actStr")
@@ -59,6 +68,17 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
 
   def generateEvents(windowDays: Int, count: Int): (Array[TestRow], Seq[(String, DataType)]) = {
     val columns = Seq(Column("ts", LongType, windowDays), Column("num", LongType, 1000), Column("amount", DoubleType, 500))
+    val data = CStream.gen(columns, count)
+    (data.rows, columns.map(_.schema))
+  }
+
+  def generateEventsWithCategory(windowDays: Int, count: Int): (Array[TestRow], Seq[(String, DataType)]) = {
+    val columns = Seq(
+      Column("ts", LongType, windowDays),
+      Column("num", LongType, 1000),
+      Column("amount", DoubleType, 500),
+      Column("category", StringType, 5)
+    )
     val data = CStream.gen(columns, count)
     (data.rows, columns.map(_.schema))
   }
@@ -295,5 +315,30 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
     val results = streamProcessorAggregate(events, queryTimes, aggregations, schema, batchEnd)
     val naive = naiveAggregate(events, queryTimes, aggregations, schema)
     compareResults(results, naive, queryTimes, "stream_multi_day_gap")
+  }
+
+  it should "match naive with complex aggregations (buckets, approx_unique, histogram, last_k)" in {
+    val (events, schema) = generateEventsWithCategory(14, 20000)
+    val maxTs = events.map(_.ts).max
+    val batchEnd = TsUtils.round(maxTs - DayMillis, DayMillis)
+
+    val aggregations = Seq(
+      // Bucketed: produces MapType(StringType, irType) IR
+      Builders.Aggregation(Operation.SUM, "num", AllWindows, buckets = Seq("category")),
+      Builders.Aggregation(Operation.COUNT, "num", AllWindows, buckets = Seq("category")),
+      // Sketch-based: BinaryType IR (CPC sketch serde)
+      Builders.Aggregation(Operation.APPROX_UNIQUE_COUNT, "num", AllWindows),
+      // Map IR: MapType(StringType, IntType)
+      Builders.Aggregation(Operation.HISTOGRAM, "category", AllWindows),
+      // Collection IR: ListType
+      Builders.Aggregation(Operation.LAST_K, "num", AllWindows, argMap = Map("k" -> "3"))
+    )
+
+    val queryTimes = Array(batchEnd + 14 * 3600 * 1000L).filter(_ <= maxTs)
+
+    val results = streamProcessorAggregate(events, queryTimes, aggregations, schema, batchEnd)
+    val naive = naiveAggregate(events, queryTimes, aggregations, schema)
+    // 5% tolerance for APPROX_UNIQUE_COUNT (CPC sketch merge imprecision)
+    compareResults(results, naive, queryTimes, "stream_complex_aggs", sketchTolerance = 0.05)
   }
 }
