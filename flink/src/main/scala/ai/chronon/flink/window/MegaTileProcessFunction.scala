@@ -1,6 +1,6 @@
 package ai.chronon.flink.window
 
-import ai.chronon.aggregator.windowing.{MegaTileAggregator, MegaTileStreamProcessor}
+import ai.chronon.aggregator.windowing.{MegaTileAggregator, MegaTileStreamProcessor, TileStore}
 import ai.chronon.api.{Constants, DataType, GroupBy, TsUtils}
 import ai.chronon.api.ScalaJavaConversions.IteratorOps
 import ai.chronon.flink.deser.ProjectedEvent
@@ -17,8 +17,8 @@ import org.slf4j.{Logger, LoggerFactory}
 import scala.util.{Failure, Success, Try}
 
 /** Flink KeyedProcessFunction that maintains per-entity mega tile state.
-  * Delegates all aggregation logic to MegaTileStreamProcessor (pure Scala, no Flink deps).
-  * Handles Flink-specific concerns: state serde, timer registration, output collection.
+  * Delegates all aggregation logic to MegaTileStreamProcessor.
+  * State access goes through FlinkTileStore — only touched entries are serialized/deserialized.
   */
 class MegaTileProcessFunction(
     groupBy: GroupBy,
@@ -28,22 +28,17 @@ class MegaTileProcessFunction(
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  // Transient: rebuilt on checkpoint restore
   @transient private var processor: MegaTileStreamProcessor = _
   @transient private var megaTileCodec: MegaTileCodec = _
+  @transient private var flinkStore: FlinkTileStore = _
 
   @transient private var eventProcessingErrorCounter: Counter = _
-
-  // Track the current key to avoid reinitializing processor on every event.
-  // Flink reuses this function across keys — only reset when the key changes.
   @transient private var lastKey: java.util.List[Any] = _
 
   private val valueColumns: Array[String] = inputSchema.map(_._1).toArray
   private val timeColumnAlias: String = Constants.TimeColumn
 
-  // Flink managed state — survives checkpoints
-  // Tiles are stored as encoded bytes to avoid custom TypeSerializer.
-  // Key format: "hopSize:tileStart"
+  // Flink managed state
   private var tileState: MapState[String, Array[Byte]] = _
   private var megaTileIrState: ValueState[Array[Byte]] = _
   private var largeTodayIrState: ValueState[Array[Byte]] = _
@@ -77,12 +72,10 @@ class MegaTileProcessFunction(
 
   private def initializeTransients(): Unit = {
     val inputCols = inputSchema.map { case (name, dt) => (name, dt) }
-    val megaTileAgg = new MegaTileAggregator(
-      groupBy.getAggregations.iterator().toScala.toSeq,
-      inputCols
-    )
-    processor = new MegaTileStreamProcessor(megaTileAgg)
+    val megaTileAgg = new MegaTileAggregator(groupBy.getAggregations.iterator().toScala.toSeq, inputCols)
     megaTileCodec = new MegaTileCodec(groupBy, inputCols)
+    flinkStore = new FlinkTileStore(megaTileAgg, megaTileCodec)
+    processor = new MegaTileStreamProcessor(megaTileAgg, flinkStore)
   }
 
   override def processElement(
@@ -99,21 +92,22 @@ class MegaTileProcessFunction(
       val values: Array[Any] = valueColumns.map(element(_))
       val row = new ArrayRow(values, tsMills)
 
-      // Restore processor state from Flink state (only resets on key switch)
-      restoreProcessorState(ctx.getCurrentKey)
+      // Point FlinkTileStore at current key's Flink state (only resets on key switch)
+      val currentKey = ctx.getCurrentKey
+      if (lastKey == null || !lastKey.equals(currentKey)) {
+        lastKey = currentKey
+        flinkStore.bindFlinkState(tileState,
+                                  megaTileIrState,
+                                  largeTodayIrState,
+                                  largeYesterdayIrState,
+                                  currentDayStartState,
+                                  earliestTileStartState)
+      }
 
-      // Advance watermark (may trigger day transition)
       processor.advanceWatermark(ctx.timerService().currentWatermark())
-
-      // Process event
       val result = processor.onEvent(row, tsMills)
 
-      // Persist processor state back to Flink state
-      persistProcessorState()
-
-      // Emit results. Use todayStart/yesterdayStart as latestTsMillis so the codec
-      // writes to the correct daily KV key. Using raw eventTs would misroute
-      // future-timestamped events (clamped to today by watermark logic).
+      // Emit results
       val keys = ctx.getCurrentKey
       if (result.todayEntry != null) {
         out.collect(
@@ -130,7 +124,6 @@ class MegaTileProcessFunction(
                               event.startProcessingTimeMillis))
       }
 
-      // Register eviction timer
       if (processor.hasSmallWindows) {
         val nextEviction = TsUtils.round(tsMills, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize
         ctx.timerService().registerEventTimeTimer(nextEviction)
@@ -150,25 +143,30 @@ class MegaTileProcessFunction(
     try {
       if (processor == null) initializeTransients()
 
-      restoreProcessorState(ctx.getCurrentKey)
-      processor.advanceWatermark(ctx.timerService().currentWatermark())
+      val currentKey = ctx.getCurrentKey
+      if (lastKey == null || !lastKey.equals(currentKey)) {
+        lastKey = currentKey
+        flinkStore.bindFlinkState(tileState,
+                                  megaTileIrState,
+                                  largeTodayIrState,
+                                  largeYesterdayIrState,
+                                  currentDayStartState,
+                                  earliestTileStartState)
+      }
 
+      processor.advanceWatermark(ctx.timerService().currentWatermark())
       val result = processor.onEviction(timestamp)
-      persistProcessorState()
 
       if (result.todayEntry != null) {
-        val keys = ctx.getCurrentKey
         out.collect(
-          new TimestampedTile(keys,
+          new TimestampedTile(ctx.getCurrentKey,
                               megaTileCodec.encode(result.todayEntry),
                               result.todayStart,
                               System.currentTimeMillis()))
       }
 
-      // Register next eviction timer
       if (processor.hasSmallWindows) {
-        val nextEviction = timestamp + processor.minSmallWindowTileSize
-        ctx.timerService().registerEventTimeTimer(nextEviction)
+        ctx.timerService().registerEventTimeTimer(timestamp + processor.minSmallWindowTileSize)
       }
     } catch {
       case e: Exception =>
@@ -176,47 +174,80 @@ class MegaTileProcessFunction(
         eventProcessingErrorCounter.inc()
     }
   }
+}
 
-  // Restore MegaTileStreamProcessor mutable state from Flink managed state.
-  // Only resets processor state on key switch to avoid GC pressure from
-  // allocating new objects on every event.
-  private def restoreProcessorState(currentKey: java.util.List[Any]): Unit = {
-    val keyChanged = lastKey == null || !lastKey.equals(currentKey)
-    lastKey = currentKey
-    if (keyChanged) processor.reset()
-    val tileIter = tileState.iterator()
-    while (tileIter.hasNext) {
-      val entry = tileIter.next()
-      val parts = entry.getKey.split(":")
-      val hopSize = parts(0).toLong
-      val tileStart = parts(1).toLong
-      processor.tiles.get(hopSize).foreach { tierTiles =>
-        tierTiles(tileStart) = megaTileCodec.decodeBaseIr(entry.getValue)
+/** TileStore backed by Flink's keyed MapState/ValueState.
+  * Encodes/decodes only the entries actually accessed — no bulk restore/persist.
+  * Flink's keyed state is automatically scoped to the current key.
+  */
+class FlinkTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec) extends TileStore {
+  private val windowedAgg = megaTileAgg.windowedAggregator
+
+  // These are set via bindFlinkState when the key changes
+  private var tileState: MapState[String, Array[Byte]] = _
+  private var megaTileIrState: ValueState[Array[Byte]] = _
+  private var largeTodayIrState: ValueState[Array[Byte]] = _
+  private var largeYesterdayIrState: ValueState[Array[Byte]] = _
+  private var currentDayStartState: ValueState[java.lang.Long] = _
+  private var earliestTileStartState: ValueState[java.lang.Long] = _
+
+  def bindFlinkState(tiles: MapState[String, Array[Byte]],
+                     megaTileIr: ValueState[Array[Byte]],
+                     largeToday: ValueState[Array[Byte]],
+                     largeYesterday: ValueState[Array[Byte]],
+                     dayStart: ValueState[java.lang.Long],
+                     earliest: ValueState[java.lang.Long]): Unit = {
+    tileState = tiles
+    megaTileIrState = megaTileIr
+    largeTodayIrState = largeToday
+    largeYesterdayIrState = largeYesterday
+    currentDayStartState = dayStart
+    earliestTileStartState = earliest
+  }
+
+  private def tileKey(hopSize: Long, tileStart: Long): String = s"$hopSize:$tileStart"
+
+  override def getTile(hopSize: Long, tileStart: Long): Array[Any] = {
+    val bytes = tileState.get(tileKey(hopSize, tileStart))
+    if (bytes != null) codec.decodeBaseIr(bytes) else null
+  }
+
+  override def putTile(hopSize: Long, tileStart: Long, ir: Array[Any]): Unit =
+    tileState.put(tileKey(hopSize, tileStart), codec.encodeBaseIr(ir))
+
+  override def removeTile(hopSize: Long, tileStart: Long): Unit =
+    tileState.remove(tileKey(hopSize, tileStart))
+
+  override def tileIterator: Iterator[(Long, Long, Array[Any])] = {
+    val iter = tileState.iterator()
+    new Iterator[(Long, Long, Array[Any])] {
+      override def hasNext: Boolean = iter.hasNext
+      override def next(): (Long, Long, Array[Any]) = {
+        val entry = iter.next()
+        val parts = entry.getKey.split(":")
+        (parts(0).toLong, parts(1).toLong, codec.decodeBaseIr(entry.getValue))
       }
     }
-
-    // Cached small window IR + large window IRs: stored as windowed IRs
-    Option(megaTileIrState.value()).foreach(bytes => processor.cachedSmallWindowIr = megaTileCodec.decode(bytes))
-    Option(largeTodayIrState.value()).foreach(bytes => processor.largeTodayIr = megaTileCodec.decode(bytes))
-    Option(largeYesterdayIrState.value()).foreach(bytes => processor.largeYesterdayIr = megaTileCodec.decode(bytes))
-    Option(currentDayStartState.value()).foreach(v => processor.currentDayStart = v)
-    Option(earliestTileStartState.value()).foreach(v => processor.earliestTileStart = v)
   }
 
-  // Persist MegaTileStreamProcessor mutable state to Flink managed state
-  private def persistProcessorState(): Unit = {
-    // Tiles: encode as base (unwindowed) IRs
-    tileState.clear()
-    for ((hopSize, tierTiles) <- processor.tiles; (tileStart, ir) <- tierTiles) {
-      val key = s"$hopSize:$tileStart"
-      tileState.put(key, megaTileCodec.encodeBaseIr(ir))
-    }
-
-    // IRs: encode as windowed IRs
-    megaTileIrState.update(megaTileCodec.encode(processor.cachedSmallWindowIr))
-    largeTodayIrState.update(megaTileCodec.encode(processor.largeTodayIr))
-    largeYesterdayIrState.update(megaTileCodec.encode(processor.largeYesterdayIr))
-    currentDayStartState.update(processor.currentDayStart)
-    earliestTileStartState.update(processor.earliestTileStart)
+  private def decodeWindowedIr(state: ValueState[Array[Byte]]): Array[Any] = {
+    val bytes = state.value()
+    if (bytes != null) codec.decode(bytes) else windowedAgg.init
   }
+
+  override def getCachedSmallWindowIr: Array[Any] = decodeWindowedIr(megaTileIrState)
+  override def putCachedSmallWindowIr(ir: Array[Any]): Unit = megaTileIrState.update(codec.encode(ir))
+
+  override def getLargeTodayIr: Array[Any] = decodeWindowedIr(largeTodayIrState)
+  override def putLargeTodayIr(ir: Array[Any]): Unit = largeTodayIrState.update(codec.encode(ir))
+
+  override def getLargeYesterdayIr: Array[Any] = decodeWindowedIr(largeYesterdayIrState)
+  override def putLargeYesterdayIr(ir: Array[Any]): Unit = largeYesterdayIrState.update(codec.encode(ir))
+
+  override def getCurrentDayStart: Long = Option(currentDayStartState.value()).map(_.longValue()).getOrElse(-1L)
+  override def putCurrentDayStart(ts: Long): Unit = currentDayStartState.update(ts)
+
+  override def getEarliestTileStart: Long =
+    Option(earliestTileStartState.value()).map(_.longValue()).getOrElse(Long.MaxValue)
+  override def putEarliestTileStart(ts: Long): Unit = earliestTileStartState.update(ts)
 }

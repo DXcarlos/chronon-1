@@ -2,7 +2,7 @@ package ai.chronon.online.test
 
 import ai.chronon.aggregator.row.RowAggregator
 import ai.chronon.aggregator.test.NaiveAggregator
-import ai.chronon.aggregator.windowing._
+import ai.chronon.aggregator.windowing.{InMemoryTileStore, TileStore, _}
 import ai.chronon.api._
 import ai.chronon.api.Extensions.{AggregationOps, WindowOps}
 import ai.chronon.online.MegaTileCodec
@@ -81,36 +81,44 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
     gb
   }
 
-  /** Simulate persist → restore: encode state, create fresh processor, decode into it. */
-  def roundTripProcessorState(source: MegaTileStreamProcessor, codec: MegaTileCodec): MegaTileStreamProcessor = {
-    val dest = new MegaTileStreamProcessor(source.megaTileAgg)
+  /** TileStore that encodes/decodes on every access, simulating Flink's MapState/ValueState with codec. */
+  class SerdeTileStore(windowedAgg: RowAggregator, codec: MegaTileCodec) extends TileStore {
+    private val tileBytes = mutable.Map[(Long, Long), Array[Byte]]()
+    private var cachedSmallBytes: Array[Byte] = codec.encode(windowedAgg.init)
+    private var largeTodayBytes: Array[Byte] = codec.encode(windowedAgg.init)
+    private var largeYesterdayBytes: Array[Byte] = codec.encode(windowedAgg.init)
+    private var dayStart: Long = -1L
+    private var earliest: Long = Long.MaxValue
 
-    // Tiles: encode/decode as base IRs
-    dest.tiles.values.foreach(_.clear())
-    for ((hopSize, tierTiles) <- source.tiles; (tileStart, ir) <- tierTiles) {
-      dest.tiles.get(hopSize).foreach(_(tileStart) = codec.decodeBaseIr(codec.encodeBaseIr(ir)))
-    }
+    override def getTile(h: Long, t: Long): Array[Any] = tileBytes.get((h, t)).map(codec.decodeBaseIr).orNull
+    override def putTile(h: Long, t: Long, ir: Array[Any]): Unit = tileBytes((h, t)) = codec.encodeBaseIr(ir)
+    override def removeTile(h: Long, t: Long): Unit = tileBytes.remove((h, t))
+    override def tileIterator: Iterator[(Long, Long, Array[Any])] =
+      tileBytes.iterator.map { case ((h, t), b) => (h, t, codec.decodeBaseIr(b)) }
 
-    // Windowed IRs
-    dest.cachedSmallWindowIr = codec.decode(codec.encode(source.cachedSmallWindowIr))
-    dest.largeTodayIr = codec.decode(codec.encode(source.largeTodayIr))
-    dest.largeYesterdayIr = codec.decode(codec.encode(source.largeYesterdayIr))
-
-    dest.currentDayStart = source.currentDayStart
-    dest.earliestTileStart = source.earliestTileStart
-    dest
+    override def getCachedSmallWindowIr: Array[Any] = codec.decode(cachedSmallBytes)
+    override def putCachedSmallWindowIr(ir: Array[Any]): Unit = cachedSmallBytes = codec.encode(ir)
+    override def getLargeTodayIr: Array[Any] = codec.decode(largeTodayBytes)
+    override def putLargeTodayIr(ir: Array[Any]): Unit = largeTodayBytes = codec.encode(ir)
+    override def getLargeYesterdayIr: Array[Any] = codec.decode(largeYesterdayBytes)
+    override def putLargeYesterdayIr(ir: Array[Any]): Unit = largeYesterdayBytes = codec.encode(ir)
+    override def getCurrentDayStart: Long = dayStart
+    override def putCurrentDayStart(ts: Long): Unit = dayStart = ts
+    override def getEarliestTileStart: Long = earliest
+    override def putEarliestTileStart(ts: Long): Unit = earliest = ts
   }
 
   def streamProcessorWithSerdeAggregate(allEvents: Array[Row],
                                          queryTimes: Array[Long],
                                          aggregations: Seq[Aggregation],
-                                         batchEnd: Long,
-                                         roundTripInterval: Int = 50): Array[Array[Any]] = {
+                                         batchEnd: Long): Array[Array[Any]] = {
 
     val megaTileAgg = new MegaTileAggregator(aggregations, Schema, tailBufferMillis = TailBufferMillis)
-    var processor = new MegaTileStreamProcessor(megaTileAgg)
-    val merger = new MegaTileMerger(megaTileAgg)
     val codec = new MegaTileCodec(buildGroupBy(aggregations), Schema)
+    // SerdeTileStore encodes/decodes on every access — tests the codec round-trip inline
+    val store = new SerdeTileStore(megaTileAgg.windowedAggregator, codec)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, store)
+    val merger = new MegaTileMerger(megaTileAgg)
 
     val batchEvents = allEvents.filter(_.ts < batchEnd)
     val onlineAgg = new SawtoothOnlineAggregator(batchEnd, aggregations, Schema, tailBufferMillis = TailBufferMillis)
@@ -125,9 +133,9 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
     var nextEvictionTs = Long.MaxValue
     val kvStore = mutable.Map[Long, Array[Any]]()
     var eventIdx = 0
-    var eventsSinceRoundTrip = 0
     val resultsByQueryTs = mutable.Map[Long, Array[Any]]()
 
+    // Serde happens on every TileStore access (SerdeTileStore), so no explicit round-trip needed.
     def firePendingEvictions(upToTs: Long): Unit = {
       if (!processor.hasSmallWindows) return
       while (nextEvictionTs <= upToTs) {
@@ -150,13 +158,6 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
 
         if (nextEvictionTs == Long.MaxValue && processor.hasSmallWindows) {
           nextEvictionTs = TsUtils.round(event.ts, evictionInterval) + evictionInterval
-        }
-
-        // Serde round-trip every N events
-        eventsSinceRoundTrip += 1
-        if (eventsSinceRoundTrip >= roundTripInterval) {
-          processor = roundTripProcessorState(processor, codec)
-          eventsSinceRoundTrip = 0
         }
 
         eventIdx += 1
@@ -236,21 +237,23 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
 
     val megaTileAgg = new MegaTileAggregator(aggregations, Schema, tailBufferMillis = TailBufferMillis)
 
-    // Process key A events — accumulate state
-    val processorA = new MegaTileStreamProcessor(megaTileAgg)
+    // Process key A events — accumulate state in a shared store
+    val storeA = new InMemoryTileStore(megaTileAgg.windowedAggregator)
+    val processorA = new MegaTileStreamProcessor(megaTileAgg, storeA)
     for (event <- events.sortBy(_.ts)) {
       processorA.advanceWatermark(event.ts)
       processorA.onEvent(event, event.ts)
     }
     // Verify key A has non-empty state
-    assertTrue("key A should have tiles", processorA.tiles.values.exists(_.nonEmpty))
+    assertTrue("key A should have tiles", storeA.tiles.nonEmpty)
 
-    // Key switch to B: reinitialize (what restoreProcessorState does after our fix)
-    val processorB = new MegaTileStreamProcessor(megaTileAgg)
+    // Key switch to B: fresh store (what Flink's keyed state scoping does)
+    val storeB = new InMemoryTileStore(megaTileAgg.windowedAggregator)
+    val processorB = new MegaTileStreamProcessor(megaTileAgg, storeB)
     // Verify key B state is clean
-    assertTrue("key B tiles should be empty", processorB.tiles.values.forall(_.isEmpty))
-    assertEquals("key B currentDayStart should be -1", -1L, processorB.currentDayStart)
-    assertEquals("key B earliestTileStart should be MaxValue", Long.MaxValue, processorB.earliestTileStart)
+    assertTrue("key B tiles should be empty", storeB.tiles.isEmpty)
+    assertEquals("key B currentDayStart should be -1", -1L, storeB.currentDayStart)
+    assertEquals("key B earliestTileStart should be MaxValue", Long.MaxValue, storeB.earliestTileStart)
 
     // Process same events through B with serde round-trips — should match naive
     val queryTimes = Array(batchEnd + 14 * 3600 * 1000L).filter(_ <= maxTs)

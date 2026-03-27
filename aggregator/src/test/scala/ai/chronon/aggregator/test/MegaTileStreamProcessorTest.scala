@@ -87,7 +87,8 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
                                 batchEnd: Long): Array[Array[Any]] = {
 
     val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
-    val processor = new MegaTileStreamProcessor(megaTileAgg)
+    val store = new InMemoryTileStore(megaTileAgg.windowedAggregator)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, store)
     val merger = new MegaTileMerger(megaTileAgg)
 
     // Build batch IR from pre-batchEnd events
