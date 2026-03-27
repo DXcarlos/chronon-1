@@ -34,6 +34,10 @@ class MegaTileProcessFunction(
 
   @transient private var eventProcessingErrorCounter: Counter = _
 
+  // Track the current key to avoid reinitializing processor on every event.
+  // Flink reuses this function across keys — only reset when the key changes.
+  @transient private var lastKey: java.util.List[Any] = _
+
   private val valueColumns: Array[String] = inputSchema.map(_._1).toArray
   private val timeColumnAlias: String = Constants.TimeColumn
 
@@ -95,8 +99,8 @@ class MegaTileProcessFunction(
       val values: Array[Any] = valueColumns.map(element(_))
       val row = new ArrayRow(values, tsMills)
 
-      // Restore processor state from Flink state
-      restoreProcessorState()
+      // Restore processor state from Flink state (only resets on key switch)
+      restoreProcessorState(ctx.getCurrentKey)
 
       // Advance watermark (may trigger day transition)
       processor.advanceWatermark(ctx.timerService().currentWatermark())
@@ -146,7 +150,7 @@ class MegaTileProcessFunction(
     try {
       if (processor == null) initializeTransients()
 
-      restoreProcessorState()
+      restoreProcessorState(ctx.getCurrentKey)
       processor.advanceWatermark(ctx.timerService().currentWatermark())
 
       val result = processor.onEviction(timestamp)
@@ -174,10 +178,12 @@ class MegaTileProcessFunction(
   }
 
   // Restore MegaTileStreamProcessor mutable state from Flink managed state.
-  // Reinitialize processor first to clear previous key's state — Flink reuses
-  // the same KeyedProcessFunction instance across keys within a task.
-  private def restoreProcessorState(): Unit = {
-    processor = new MegaTileStreamProcessor(processor.megaTileAgg)
+  // Only resets processor state on key switch to avoid GC pressure from
+  // allocating new objects on every event.
+  private def restoreProcessorState(currentKey: java.util.List[Any]): Unit = {
+    val keyChanged = lastKey == null || !lastKey.equals(currentKey)
+    lastKey = currentKey
+    if (keyChanged) processor.reset()
     val tileIter = tileState.iterator()
     while (tileIter.hasNext) {
       val entry = tileIter.next()

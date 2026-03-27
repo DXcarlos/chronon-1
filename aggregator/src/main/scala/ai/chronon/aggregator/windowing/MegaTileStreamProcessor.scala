@@ -58,6 +58,18 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
   var currentDayStart: Long = -1L
   var earliestTileStart: Long = Long.MaxValue
 
+  /** Clear all mutable state to defaults. Used by Flink wrapper on key switch
+    * to avoid allocating a new processor instance per event.
+    */
+  def reset(): Unit = {
+    tiles.values.foreach(_.clear())
+    cachedSmallWindowIr = windowedAgg.init
+    largeTodayIr = windowedAgg.init
+    largeYesterdayIr = windowedAgg.init
+    currentDayStart = -1L
+    earliestTileStart = Long.MaxValue
+  }
+
   /** Process a new event. Returns an EmitResult describing what should be
     * written to KV store (today and/or yesterday entries).
     */

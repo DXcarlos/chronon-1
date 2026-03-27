@@ -27,9 +27,10 @@ class MegaTileCodec(groupBy: GroupBy, inputSchema: Seq[(String, DataType)]) {
 
   def encode(ir: Array[Any]): Array[Byte] = encodeFn(rowAggregator.normalize(ir))
 
+  @transient private lazy val avroCodec: AvroCodec = AvroCodec.of(avroSchema)
+
   def decode(bytes: Array[Byte]): Array[Any] = {
-    val codec = AvroCodec.of(avroSchema)
-    val record = codec.decode(bytes).asInstanceOf[GenericData.Record]
+    val record = avroCodec.decode(bytes).asInstanceOf[GenericData.Record]
     val ir = rowConverter(record)
     rowAggregator.denormalize(ir)
   }
@@ -46,9 +47,10 @@ class MegaTileCodec(groupBy: GroupBy, inputSchema: Seq[(String, DataType)]) {
 
   def encodeBaseIr(ir: Array[Any]): Array[Byte] = baseEncodeFn(baseRowAggregator.normalize(ir))
 
+  @transient private lazy val baseAvroCodec: AvroCodec = AvroCodec.of(baseAvroSchema)
+
   def decodeBaseIr(bytes: Array[Byte]): Array[Any] = {
-    val codec = AvroCodec.of(baseAvroSchema)
-    val record = codec.decode(bytes).asInstanceOf[GenericData.Record]
+    val record = baseAvroCodec.decode(bytes).asInstanceOf[GenericData.Record]
     val ir = baseRowConverter(record)
     baseRowAggregator.denormalize(ir)
   }
