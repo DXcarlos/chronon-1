@@ -107,11 +107,16 @@ class MegaTileProcessFunction(
       // Persist processor state back to Flink state
       persistProcessorState()
 
-      // Emit results
+      // Emit results. Use todayStart/yesterdayStart as latestTsMillis so the codec
+      // writes to the correct daily KV key. Using raw eventTs would misroute
+      // future-timestamped events (clamped to today by watermark logic).
       val keys = ctx.getCurrentKey
       if (result.todayEntry != null) {
         out.collect(
-          new TimestampedTile(keys, megaTileCodec.encode(result.todayEntry), tsMills, event.startProcessingTimeMillis))
+          new TimestampedTile(keys,
+                              megaTileCodec.encode(result.todayEntry),
+                              result.todayStart,
+                              event.startProcessingTimeMillis))
       }
       if (result.yesterdayEntry != null) {
         out.collect(
@@ -150,7 +155,10 @@ class MegaTileProcessFunction(
       if (result.todayEntry != null) {
         val keys = ctx.getCurrentKey
         out.collect(
-          new TimestampedTile(keys, megaTileCodec.encode(result.todayEntry), timestamp, System.currentTimeMillis()))
+          new TimestampedTile(keys,
+                              megaTileCodec.encode(result.todayEntry),
+                              result.todayStart,
+                              System.currentTimeMillis()))
       }
 
       // Register next eviction timer

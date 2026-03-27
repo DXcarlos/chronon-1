@@ -112,7 +112,15 @@ class FlinkGroupByStreamingJob(eventSrc: FlinkSource[ProjectedEvent],
   override def runTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] = {
     logger.info(f"Running Flink job for groupByName=${groupByName}, Topic=${topic}. Tiling is enabled.")
     val preparedStream = buildSourceStream(env)
-    buildTiledTail(preparedStream, inputSchema, parallelism, sinkFn, kvStoreCapacity, props, topicInfo, enableDebug)
+    buildTiledTail(preparedStream,
+                   inputSchema,
+                   parallelism,
+                   sinkFn,
+                   kvStoreCapacity,
+                   props,
+                   topicInfo,
+                   enableDebug,
+                   uidSuffix = "-01")
   }
 
   override def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] = {

@@ -76,7 +76,8 @@ abstract class BaseFlinkJob {
       kvStoreCapacity: Int,
       props: Map[String, String],
       topicInfo: TopicInfo,
-      enableDebug: Boolean
+      enableDebug: Boolean,
+      uidSuffix: String = ""
   ): DataStream[WriteResponse] = {
     val tilingWindowSizeInMillis = ResolutionUtils.getSmallestTailHopMillis(groupByServingInfoParsed.groupBy)
 
@@ -107,20 +108,20 @@ abstract class BaseFlinkJob {
           new FlinkRowAggregationFunction(groupByServingInfoParsed.groupBy, schema, enableDebug),
           new FlinkRowAggProcessFunction(groupByServingInfoParsed.groupBy, schema, enableDebug)
         )
-        .uid(s"tiling-$groupByName")
+        .uid(s"tiling${uidSuffix}-$groupByName")
         .name(s"Tiling for $groupByName")
         .setParallelism(parallelism)
 
     tilingDS
       .getSideOutput(tilingLateEventsTag)
       .flatMap(new LateEventCounter(groupByName))
-      .uid(s"tiling-side-output-$groupByName")
+      .uid(s"tiling-side-output${uidSuffix}-$groupByName")
       .name(s"Tiling Side Output Late Data for $groupByName")
       .setParallelism(parallelism)
 
     val putRecordDS = tilingDS
       .flatMap(TiledAvroCodecFn(groupByServingInfoParsed, tilingWindowSizeInMillis, enableDebug))
-      .uid(s"avro-conversion-$groupByName")
+      .uid(s"avro-conversion${uidSuffix}-$groupByName")
       .name(s"Avro conversion for $groupByName")
       .setParallelism(parallelism)
 
