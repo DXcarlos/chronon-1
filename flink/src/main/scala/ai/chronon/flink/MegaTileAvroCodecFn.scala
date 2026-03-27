@@ -13,13 +13,11 @@ import org.apache.flink.metrics.Counter
 import org.apache.flink.util.Collector
 import org.slf4j.{Logger, LoggerFactory}
 
-/**
-  * Converts mega tile output (TimestampedTile) to KV PutRequests (AvroCodecOutput).
+/** Converts mega tile output (TimestampedTile) to KV PutRequests (AvroCodecOutput).
   * Key: TileKey(streamingDataset, entityKeyBytes, DayMillis, dayStart).
   * Value: mega tile IR bytes (passthrough from MegaTileProcessFunction).
   */
-case class MegaTileAvroCodecFn(groupByServingInfoParsed: GroupByServingInfoParsed,
-                                enableDebug: Boolean = false)
+case class MegaTileAvroCodecFn(groupByServingInfoParsed: GroupByServingInfoParsed, enableDebug: Boolean = false)
     extends RichFlatMapFunction[TimestampedTile, AvroCodecOutput] {
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
@@ -32,10 +30,11 @@ case class MegaTileAvroCodecFn(groupByServingInfoParsed: GroupByServingInfoParse
     SparkExpressionEval.buildKeyValueEventTimeColumns(groupByServingInfoParsed.groupBy)._1
   private lazy val keyToBytes: Any => Array[Byte] = {
     val keyZSchema: ChrononStructType = groupByServingInfoParsed.keyChrononSchema
-    AvroConversions.encodeBytes(keyZSchema, {
-      case x: Map[_, _] if x.keys.forall(_.isInstanceOf[String]) =>
-        x.toArray.flatMap { case (key, value) => Array(key, value) }
-    })
+    AvroConversions.encodeBytes(keyZSchema,
+                                {
+                                  case x: Map[_, _] if x.keys.forall(_.isInstanceOf[String]) =>
+                                    x.toArray.flatMap { case (key, value) => Array(key, value) }
+                                })
   }
 
   override def open(configuration: Configuration): Unit = {

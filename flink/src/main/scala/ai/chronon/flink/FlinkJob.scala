@@ -11,7 +11,14 @@ import ai.chronon.flink.chaining.ChainedGroupByJob
 import ai.chronon.flink.source.FlinkSourceProvider
 import ai.chronon.flink.types.{AvroCodecOutput, TimestampedTile, WriteResponse}
 import ai.chronon.flink.validation.ValidationFlinkJob
-import ai.chronon.flink.window.{AlwaysFireOnElementTrigger, BufferedProcessingTimeTrigger, FlinkRowAggProcessFunction, FlinkRowAggregationFunction, KeySelectorBuilder, MegaTileProcessFunction}
+import ai.chronon.flink.window.{
+  AlwaysFireOnElementTrigger,
+  BufferedProcessingTimeTrigger,
+  FlinkRowAggProcessFunction,
+  FlinkRowAggregationFunction,
+  KeySelectorBuilder,
+  MegaTileProcessFunction
+}
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
 import ai.chronon.online.{Api, GroupByServingInfoParsed, TopicInfo}
 import org.apache.flink.api.common.eventtime.{SerializableTimestampAssigner, WatermarkStrategy}
@@ -77,11 +84,14 @@ abstract class BaseFlinkJob {
       .of(Time.milliseconds(tilingWindowSizeInMillis))
       .asInstanceOf[WindowAssigner[ProjectedEvent, TimeWindow]]
 
-    val trigger = FlinkUtils.getProperty("trigger", props, topicInfo).map {
-      case "always_fire" => new AlwaysFireOnElementTrigger(): Trigger[ProjectedEvent, TimeWindow]
-      case "buffered"    => new BufferedProcessingTimeTrigger(100L): Trigger[ProjectedEvent, TimeWindow]
-      case t => throw new IllegalArgumentException(s"Unsupported trigger type: $t")
-    }.getOrElse(new AlwaysFireOnElementTrigger())
+    val trigger = FlinkUtils
+      .getProperty("trigger", props, topicInfo)
+      .map {
+        case "always_fire" => new AlwaysFireOnElementTrigger(): Trigger[ProjectedEvent, TimeWindow]
+        case "buffered"    => new BufferedProcessingTimeTrigger(100L): Trigger[ProjectedEvent, TimeWindow]
+        case t             => throw new IllegalArgumentException(s"Unsupported trigger type: $t")
+      }
+      .getOrElse(new AlwaysFireOnElementTrigger())
 
     val allowedLatenessMs = FlinkUtils.getAllowedLatenessMs(props, topicInfo)
     val tilingLateEventsTag = new OutputTag[ProjectedEvent]("tiling-late-events") {}

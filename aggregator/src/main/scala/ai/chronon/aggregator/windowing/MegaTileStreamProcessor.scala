@@ -5,8 +5,7 @@ import ai.chronon.api.TsUtils
 
 import scala.collection.mutable
 
-/**
-  * Pure Scala state manager for the MegaTile streaming pipeline.
+/** Pure Scala state manager for the MegaTile streaming pipeline.
   * Contains ALL logic for tile updates, day transitions, late event routing,
   * eviction, and IR packing. No Flink imports — testable in isolation.
   *
@@ -59,8 +58,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
   var currentDayStart: Long = -1L
   var earliestTileStart: Long = Long.MaxValue
 
-  /**
-    * Process a new event. Returns an EmitResult describing what should be
+  /** Process a new event. Returns an EmitResult describing what should be
     * written to KV store (today and/or yesterday entries).
     */
   def onEvent(row: Row, eventTs: Long): EmitResult = {
@@ -132,8 +130,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
     )
   }
 
-  /**
-    * Advance the watermark. Day transitions happen ONLY here, never in onEvent.
+  /** Advance the watermark. Day transitions happen ONLY here, never in onEvent.
     * This prevents future-timestamped events from prematurely rotating state.
     */
   def advanceWatermark(watermarkTs: Long): Unit = {
@@ -149,8 +146,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
     }
   }
 
-  /**
-    * Evict stale tiles and rebuild cachedSmallWindowIr from remaining tiles.
+  /** Evict stale tiles and rebuild cachedSmallWindowIr from remaining tiles.
     * Called on timer at every minSmallWindowTileSize interval (watermark-driven).
     * The rebuild corrects the sawtooth over-inclusiveness by scoping each
     * column to its effectiveStart via buildMegaTileIr.
@@ -188,8 +184,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
     )
   }
 
-  /**
-    * Pack today's KV entry from cached state.
+  /** Pack today's KV entry from cached state.
     * Small-window columns: cachedSmallWindowIr (sawtooth, corrected on eviction).
     * Large-window columns: largeTodayIr (always fresh).
     */

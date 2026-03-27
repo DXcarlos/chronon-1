@@ -130,8 +130,7 @@ class ChainedGroupByJob(eventSrc: FlinkSource[ProjectedEvent],
     val processedStream =
       if (joinSource.query != null && joinSource.query.selects != null && !joinSource.query.selects.isEmpty) {
         logger.info("Applying join source query transformations")
-        val queryFunction = new JoinSourceQueryFunction(
-          joinSource, inputSchema, groupByName, api, enableDebug)
+        val queryFunction = new JoinSourceQueryFunction(joinSource, inputSchema, groupByName, api, enableDebug)
         enrichedStream
           .flatMap(queryFunction)
           .uid(s"join-source-query-$groupByName")

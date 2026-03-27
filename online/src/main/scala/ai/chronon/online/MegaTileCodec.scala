@@ -6,8 +6,7 @@ import ai.chronon.api.{DataType, GroupBy, StructType}
 import ai.chronon.online.serde.{AvroCodec, AvroConversions}
 import org.apache.avro.generic.GenericData
 
-/**
-  * Encodes/decodes the windowed mega tile IR (Array[Any]) to/from bytes.
+/** Encodes/decodes the windowed mega tile IR (Array[Any]) to/from bytes.
   * Unlike TileCodec which uses the unwindowed base aggregator schema,
   * MegaTileCodec uses the windowed aggregator schema — one IR slot per (agg, window) pair.
   *

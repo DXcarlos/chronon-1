@@ -274,12 +274,15 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
     val todayIr = decodeLatestMegaTile(todayResponses, servingInfo)
     val yesterdayIr = decodeLatestMegaTile(yesterdayResponses, servingInfo)
     val (todayStart, _) = servingInfo.megaTileMerger.streamingDayKeys(requestContext.queryTimeMs)
-    servingInfo.megaTileMerger.merge(batchIr, todayIr, yesterdayIr, todayStart,
-                                     requestContext.queryTimeMs, servingInfo.batchEndTsMillis)
+    servingInfo.megaTileMerger.merge(batchIr,
+                                     todayIr,
+                                     yesterdayIr,
+                                     todayStart,
+                                     requestContext.queryTimeMs,
+                                     servingInfo.batchEndTsMillis)
   }
 
-  private def decodeLatestMegaTile(responses: Seq[TimedValue],
-                                    servingInfo: GroupByServingInfoParsed): Array[Any] = {
+  private def decodeLatestMegaTile(responses: Seq[TimedValue], servingInfo: GroupByServingInfoParsed): Array[Any] = {
     if (responses == null || responses.isEmpty) return null
     val latest = responses.maxBy(_.millis)
     servingInfo.megaTileCodec.decode(latest.bytes)

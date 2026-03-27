@@ -65,9 +65,7 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
   }
 
   // Build windowed mega tile IR from small tiles
-  def buildMegaTileIr(tiles: Map[Long, collection.Map[Long, Array[Any]]],
-                      now: Long,
-                      batchEnd: Long): Array[Any] = {
+  def buildMegaTileIr(tiles: Map[Long, collection.Map[Long, Array[Any]]], now: Long, batchEnd: Long): Array[Any] = {
     val megaTileIr = windowedAggregator.init
     var col = 0
     while (col < windowedAggregator.length) {
@@ -89,10 +87,7 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
   }
 
   // Merge mega tile with batch IR to produce finalized result
-  def serveMegaTile(batchIr: FinalBatchIr,
-                    megaTileIr: Array[Any],
-                    queryTs: Long,
-                    batchEnd: Long): Array[Any] = {
+  def serveMegaTile(batchIr: FinalBatchIr, megaTileIr: Array[Any], queryTs: Long, batchEnd: Long): Array[Any] = {
     // Start from batch collapsed (normalized) — same as lambdaAggregateIrTiled
     val resultIr = if (batchIr != null) windowedAggregator.clone(batchIr.collapsed) else windowedAggregator.init
     var col = 0
@@ -119,9 +114,9 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
 
   // Like mergeTailHops but skips NO BATCH columns (window <= tailBuffer)
   private[windowing] def mergeTailHopsForBatchColumns(ir: Array[Any],
-                                           queryTs: Long,
-                                           batchEndTs: Long,
-                                           batchIr: FinalBatchIr): Array[Any] = {
+                                                      queryTs: Long,
+                                                      batchEndTs: Long,
+                                                      batchIr: FinalBatchIr): Array[Any] = {
     var i: Int = 0
     while (i < windowedAggregator.length) {
       val windowMillis = windowMappings(i).millis

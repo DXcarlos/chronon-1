@@ -2,8 +2,7 @@ package ai.chronon.aggregator.windowing
 
 import ai.chronon.api.TsUtils
 
-/**
-  * Fetcher-side merge logic for the per-day MegaTile KV scheme.
+/** Fetcher-side merge logic for the per-day MegaTile KV scheme.
   *
   * Flink writes at most 2 entries per entity per day: (key, today_midnight) and (key, yesterday_midnight).
   * The fetcher reads both entries plus the batch IR and this class combines them into a finalized result.
@@ -26,8 +25,7 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
     (todayStart, todayStart - DayMillis)
   }
 
-  /**
-    * Merge batch IR + up to 2 daily streaming entries into a finalized result.
+  /** Merge batch IR + up to 2 daily streaming entries into a finalized result.
     *
     * @param batchIr     Finalized batch IR (collapsed + tail hops). May be null.
     * @param todayIr     Today's daily entry from stream KV. May be null.
@@ -44,8 +42,9 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
             queryTs: Long,
             batchEnd: Long): Array[Any] = {
 
-    val resultIr = if (batchIr != null) windowedAggregator.clone(batchIr.collapsed)
-                   else windowedAggregator.init
+    val resultIr =
+      if (batchIr != null) windowedAggregator.clone(batchIr.collapsed)
+      else windowedAggregator.init
 
     var col = 0
     while (col < windowedAggregator.length) {

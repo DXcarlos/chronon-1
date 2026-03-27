@@ -16,8 +16,7 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Success, Try}
 
-/**
-  * Flink KeyedProcessFunction that maintains per-entity mega tile state.
+/** Flink KeyedProcessFunction that maintains per-entity mega tile state.
   * Delegates all aggregation logic to MegaTileStreamProcessor (pure Scala, no Flink deps).
   * Handles Flink-specific concerns: state serde, timer registration, output collection.
   */
@@ -58,10 +57,10 @@ class MegaTileProcessFunction(
 
     tileState = getRuntimeContext.getMapState(
       new MapStateDescriptor[String, Array[Byte]]("mega-tile-tiles", classOf[String], classOf[Array[Byte]]))
-    megaTileIrState = getRuntimeContext.getState(
-      new ValueStateDescriptor[Array[Byte]]("mega-tile-ir", classOf[Array[Byte]]))
-    largeTodayIrState = getRuntimeContext.getState(
-      new ValueStateDescriptor[Array[Byte]]("mega-tile-large-today", classOf[Array[Byte]]))
+    megaTileIrState =
+      getRuntimeContext.getState(new ValueStateDescriptor[Array[Byte]]("mega-tile-ir", classOf[Array[Byte]]))
+    largeTodayIrState =
+      getRuntimeContext.getState(new ValueStateDescriptor[Array[Byte]]("mega-tile-large-today", classOf[Array[Byte]]))
     largeYesterdayIrState = getRuntimeContext.getState(
       new ValueStateDescriptor[Array[Byte]]("mega-tile-large-yesterday", classOf[Array[Byte]]))
     currentDayStartState = getRuntimeContext.getState(
@@ -111,12 +110,15 @@ class MegaTileProcessFunction(
       // Emit results
       val keys = ctx.getCurrentKey
       if (result.todayEntry != null) {
-        out.collect(new TimestampedTile(keys, megaTileCodec.encode(result.todayEntry),
-                                        tsMills, event.startProcessingTimeMillis))
+        out.collect(
+          new TimestampedTile(keys, megaTileCodec.encode(result.todayEntry), tsMills, event.startProcessingTimeMillis))
       }
       if (result.yesterdayEntry != null) {
-        out.collect(new TimestampedTile(keys, megaTileCodec.encode(result.yesterdayEntry),
-                                        result.yesterdayStart, event.startProcessingTimeMillis))
+        out.collect(
+          new TimestampedTile(keys,
+                              megaTileCodec.encode(result.yesterdayEntry),
+                              result.yesterdayStart,
+                              event.startProcessingTimeMillis))
       }
 
       // Register eviction timer
@@ -147,8 +149,8 @@ class MegaTileProcessFunction(
 
       if (result.todayEntry != null) {
         val keys = ctx.getCurrentKey
-        out.collect(new TimestampedTile(keys, megaTileCodec.encode(result.todayEntry),
-                                        timestamp, System.currentTimeMillis()))
+        out.collect(
+          new TimestampedTile(keys, megaTileCodec.encode(result.todayEntry), timestamp, System.currentTimeMillis()))
       }
 
       // Register next eviction timer

@@ -135,12 +135,12 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
 
       val castedRequest = request.copy(keys = groupByServingInfo.keyChrononSchema.cast(request.keys))
       LambdaKvRequest(groupByServingInfo,
-                       castedRequest,
-                       batchRequest,
-                       streamingRequestOpt,
-                       megaTileYesterdayRequestOpt,
-                       Some(resolvedQueryTs),
-                       context)
+                      castedRequest,
+                      batchRequest,
+                      streamingRequestOpt,
+                      megaTileYesterdayRequestOpt,
+                      Some(resolvedQueryTs),
+                      context)
 
     }
 
@@ -221,8 +221,13 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
 
         val responses: Seq[Response] = groupByRequestToKvRequest.iterator.map { case (request, requestMetaTry) =>
           val responseMapTry: Try[Map[String, AnyRef]] = requestMetaTry.map { requestMeta =>
-            val LambdaKvRequest(groupByServingInfo, castedRequest, batchRequest, streamingRequestOpt,
-                                megaTileYesterdayOpt, endTs, context) = requestMeta
+            val LambdaKvRequest(groupByServingInfo,
+                                castedRequest,
+                                batchRequest,
+                                streamingRequestOpt,
+                                megaTileYesterdayOpt,
+                                endTs,
+                                context) = requestMeta
 
             context.count("multi_get.batch.size", allRequestsToFetch.length)
             context.distribution("multi_get.bytes", totalResponseValueBytes)
@@ -260,10 +265,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
                     s"Constructing response for groupBy: ${groupByServingInfo.groupByOps.metaData.getName} " +
                       s"for keys: ${request.keys}")
 
-                decodeAndMerge(batchResponses,
-                               streamingResponsesOpt,
-                               megaTileYesterdayResponsesOpt,
-                               requestContext)
+                decodeAndMerge(batchResponses, streamingResponsesOpt, megaTileYesterdayResponsesOpt, requestContext)
 
               } catch {
 
