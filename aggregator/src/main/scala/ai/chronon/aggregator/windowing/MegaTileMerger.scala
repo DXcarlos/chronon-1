@@ -15,7 +15,6 @@ import ai.chronon.api.TsUtils
 class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
 
   private val windowedAggregator = megaTileAgg.windowedAggregator
-  private val windowMappings = megaTileAgg.windowMappings
   private val isNoBatch = megaTileAgg.isNoBatch
 
   val DayMillis: Long = 24 * 3600 * 1000L
