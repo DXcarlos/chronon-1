@@ -6,7 +6,6 @@ import ai.chronon.api.ScalaJavaConversions.IteratorOps
 import ai.chronon.flink.deser.ProjectedEvent
 import ai.chronon.flink.types.TimestampedTile
 import ai.chronon.online.MegaTileCodec
-import ai.chronon.online.TileCodec
 import ai.chronon.online.serde.ArrayRow
 import org.apache.flink.api.common.state.{MapState, MapStateDescriptor, ValueState, ValueStateDescriptor}
 import org.apache.flink.configuration.Configuration
@@ -33,7 +32,6 @@ class MegaTileProcessFunction(
   // Transient: rebuilt on checkpoint restore
   @transient private var processor: MegaTileStreamProcessor = _
   @transient private var megaTileCodec: MegaTileCodec = _
-  @transient private var tileCodec: TileCodec = _
 
   @transient private var eventProcessingErrorCounter: Counter = _
 
@@ -82,7 +80,6 @@ class MegaTileProcessFunction(
     )
     processor = new MegaTileStreamProcessor(megaTileAgg)
     megaTileCodec = new MegaTileCodec(groupBy, inputCols)
-    tileCodec = new TileCodec(groupBy, inputCols)
   }
 
   override def processElement(
@@ -168,7 +165,7 @@ class MegaTileProcessFunction(
 
   // Restore MegaTileStreamProcessor mutable state from Flink managed state
   private def restoreProcessorState(): Unit = {
-    // Tiles
+    // Tiles: stored as base (unwindowed) IRs via megaTileCodec.encodeBaseIr
     processor.tiles.values.foreach(_.clear())
     val tileIter = tileState.iterator()
     while (tileIter.hasNext) {
@@ -177,15 +174,11 @@ class MegaTileProcessFunction(
       val hopSize = parts(0).toLong
       val tileStart = parts(1).toLong
       processor.tiles.get(hopSize).foreach { tierTiles =>
-        val (ir, _) = tileCodec.decodeTileIr(entry.getValue)
-        // decodeTileIr returns windowed form; we need base form
-        // Use the base aggregator init size to extract base IR
-        tierTiles(tileStart) = processor.megaTileAgg.baseAggregator.denormalize(
-          processor.megaTileAgg.baseAggregator.normalize(ir.take(processor.megaTileAgg.baseAggregator.length)))
+        tierTiles(tileStart) = megaTileCodec.decodeBaseIr(entry.getValue)
       }
     }
 
-    // Cached small window IR + large window IRs
+    // Cached small window IR + large window IRs: stored as windowed IRs
     Option(megaTileIrState.value()).foreach(bytes => processor.cachedSmallWindowIr = megaTileCodec.decode(bytes))
     Option(largeTodayIrState.value()).foreach(bytes => processor.largeTodayIr = megaTileCodec.decode(bytes))
     Option(largeYesterdayIrState.value()).foreach(bytes => processor.largeYesterdayIr = megaTileCodec.decode(bytes))
@@ -195,14 +188,14 @@ class MegaTileProcessFunction(
 
   // Persist MegaTileStreamProcessor mutable state to Flink managed state
   private def persistProcessorState(): Unit = {
-    // Tiles
+    // Tiles: encode as base (unwindowed) IRs
     tileState.clear()
     for ((hopSize, tierTiles) <- processor.tiles; (tileStart, ir) <- tierTiles) {
       val key = s"$hopSize:$tileStart"
-      tileState.put(key, tileCodec.makeTileIr(ir, isComplete = true))
+      tileState.put(key, megaTileCodec.encodeBaseIr(ir))
     }
 
-    // IRs
+    // IRs: encode as windowed IRs
     megaTileIrState.update(megaTileCodec.encode(processor.cachedSmallWindowIr))
     largeTodayIrState.update(megaTileCodec.encode(processor.largeTodayIr))
     largeYesterdayIrState.update(megaTileCodec.encode(processor.largeYesterdayIr))

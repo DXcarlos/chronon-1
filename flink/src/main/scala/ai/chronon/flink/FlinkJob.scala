@@ -41,6 +41,13 @@ abstract class BaseFlinkJob {
     * This is the main execution method that should be implemented by subclasses.
     */
   def runTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse]
+
+  /** Run the streaming job with mega tiling enabled.
+    * Subclasses that support mega tiling should override this.
+    */
+  def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] =
+    throw new UnsupportedOperationException(
+      s"Mega tiling is not supported for ${getClass.getSimpleName} (groupBy=$groupByName)")
 }
 
 object FlinkJob {
@@ -232,7 +239,7 @@ object FlinkJob {
 
     val isMegaTiling = new GroupByOps(flinkJob.groupByServingInfoParsed.groupBy).isMegaTilingEnabled
     val jobDatastream =
-      if (isMegaTiling) flinkJob.asInstanceOf[FlinkGroupByStreamingJob].runMegaTiledGroupByJob(env)
+      if (isMegaTiling) flinkJob.runMegaTiledGroupByJob(env)
       else flinkJob.runTiledGroupByJob(env)
 
     jobDatastream

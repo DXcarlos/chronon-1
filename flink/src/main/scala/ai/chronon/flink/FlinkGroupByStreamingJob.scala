@@ -210,7 +210,7 @@ class FlinkGroupByStreamingJob(eventSrc: FlinkSource[ProjectedEvent],
     )
   }
 
-  def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] = {
+  override def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] = {
     logger.info(
       f"Running Mega Tiled Flink job for groupByName=${groupByName}, Topic=${topic}.")
 
