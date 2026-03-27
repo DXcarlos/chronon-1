@@ -1,7 +1,7 @@
 package ai.chronon.online.fetcher
 import ai.chronon.aggregator.windowing
 import ai.chronon.aggregator.windowing.{FinalBatchIr, SawtoothOnlineAggregator, TiledIr}
-import ai.chronon.api.Extensions.WindowOps
+import ai.chronon.api.Extensions.{GroupByOps, WindowOps}
 import ai.chronon.api.ScalaJavaConversions.{IteratorOps, JMapOps}
 import ai.chronon.api.{DataModel, Row, Window}
 import ai.chronon.online.serde.AvroConversions
@@ -30,6 +30,7 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
 
   def decodeAndMerge(batchResponses: BatchResponses,
                      streamingResponsesOpt: Option[Seq[TimedValue]],
+                     megaTileYesterdayResponsesOpt: Option[Seq[TimedValue]] = None,
                      requestContext: RequestContext): Map[String, AnyRef] = {
 
     val newServingInfo = getServingInfo(requestContext.servingInfo, batchResponses)
@@ -61,11 +62,18 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
 
       } else { // temporal accurate
 
+        val updatedContext = requestContext.copy(servingInfo = newServingInfo)
         val streamingResponses = streamingResponsesOpt.get
-        val output: Array[Any] = mergeWithStreaming(batchResponses,
-                                                    streamingResponses,
-                                                    batchBytes,
-                                                    requestContext.copy(servingInfo = newServingInfo))
+        val output: Array[Any] =
+          if (newServingInfo.groupByOps.isMegaTilingEnabled) {
+            mergeMegaTilesFromStreaming(updatedContext,
+                                        newServingInfo,
+                                        streamingResponses,
+                                        megaTileYesterdayResponsesOpt.getOrElse(Seq.empty),
+                                        batchBytes)
+          } else {
+            mergeWithStreaming(batchResponses, streamingResponses, batchBytes, updatedContext)
+          }
 
         val fieldNames = newServingInfo.outputCodec.fieldNames
         if (output != null) {
@@ -253,6 +261,26 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
     requestContext.metricsContext.distribution("group_by.aggregator.latency.millis",
                                                System.currentTimeMillis() - aggregatorStartTime)
     result
+  }
+
+  private def mergeMegaTilesFromStreaming(requestContext: RequestContext,
+                                          servingInfo: GroupByServingInfoParsed,
+                                          todayResponses: Seq[TimedValue],
+                                          yesterdayResponses: Seq[TimedValue],
+                                          batchBytes: Array[Byte]): Array[Any] = {
+    val batchIr = toBatchIr(batchBytes, servingInfo)
+    val todayIr = decodeLatestMegaTile(todayResponses, servingInfo)
+    val yesterdayIr = decodeLatestMegaTile(yesterdayResponses, servingInfo)
+    val (todayStart, _) = servingInfo.megaTileMerger.streamingDayKeys(requestContext.queryTimeMs)
+    servingInfo.megaTileMerger.merge(batchIr, todayIr, yesterdayIr, todayStart,
+                                     requestContext.queryTimeMs, servingInfo.batchEndTsMillis)
+  }
+
+  private def decodeLatestMegaTile(responses: Seq[TimedValue],
+                                    servingInfo: GroupByServingInfoParsed): Array[Any] = {
+    if (responses == null || responses.isEmpty) return null
+    val latest = responses.maxBy(_.millis)
+    servingInfo.megaTileCodec.decode(latest.bytes)
   }
 
   private def reportKvResponse(ctx: Metrics.Context, response: Seq[TimedValue], queryTsMillis: Long): Unit = {

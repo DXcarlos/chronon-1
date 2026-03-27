@@ -230,7 +230,10 @@ object FlinkJob {
       FlinkJob.runWriteInternalManifestJob(env, jobArgs.streamingManifestPath(), maybeParentJobId.get, groupByName)
     }
 
-    val jobDatastream = flinkJob.runTiledGroupByJob(env)
+    val isMegaTiling = new GroupByOps(flinkJob.groupByServingInfoParsed.groupBy).isMegaTilingEnabled
+    val jobDatastream =
+      if (isMegaTiling) flinkJob.asInstanceOf[FlinkGroupByStreamingJob].runMegaTiledGroupByJob(env)
+      else flinkJob.runTiledGroupByJob(env)
 
     jobDatastream
       .addSink(new MetricsSink(groupByName))

@@ -12,7 +12,8 @@ import ai.chronon.flink.window.{
   BufferedProcessingTimeTrigger,
   FlinkRowAggProcessFunction,
   FlinkRowAggregationFunction,
-  KeySelectorBuilder
+  KeySelectorBuilder,
+  MegaTileProcessFunction
 }
 import ai.chronon.online.{GroupByServingInfoParsed, TopicInfo}
 import org.apache.flink.streaming.api.datastream.{DataStream, SingleOutputStreamOperator}
@@ -199,6 +200,44 @@ class FlinkGroupByStreamingJob(eventSrc: FlinkSource[ProjectedEvent],
       .flatMap(TiledAvroCodecFn(groupByServingInfoParsed, tilingWindowSizeInMillis, enableDebug))
       .uid(s"avro-conversion-01-$groupByName")
       .name(s"Avro conversion for $groupByName")
+      .setParallelism(sourceSparkProjectedStream.getParallelism)
+
+    AsyncKVStoreWriter.withUnorderedWaits(
+      putRecordDS,
+      sinkFn,
+      groupByName,
+      capacity = kvStoreCapacity
+    )
+  }
+
+  def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] = {
+    logger.info(
+      f"Running Mega Tiled Flink job for groupByName=${groupByName}, Topic=${topic}.")
+
+    val sourceSparkProjectedStream: DataStream[ProjectedEvent] =
+      eventSrc
+        .getDataStream(topic, groupByName)(env, parallelism)
+        .uid(s"source-$groupByName")
+        .name(s"Source for $groupByName")
+
+    val sparkExprEvalDSAndWatermarks: DataStream[ProjectedEvent] = sourceSparkProjectedStream
+      .assignTimestampsAndWatermarks(watermarkStrategy)
+      .uid(s"spark-expr-eval-timestamps-$groupByName")
+      .name(s"Spark expression eval with timestamps for $groupByName")
+      .setParallelism(sourceSparkProjectedStream.getParallelism)
+
+    val megaTileDS: DataStream[TimestampedTile] = sparkExprEvalDSAndWatermarks
+      .keyBy(KeySelectorBuilder.build(groupByServingInfoParsed.groupBy))
+      .process(
+        new MegaTileProcessFunction(groupByServingInfoParsed.groupBy, inputSchema, enableDebug))
+      .uid(s"mega-tiling-$groupByName")
+      .name(s"Mega Tiling for $groupByName")
+      .setParallelism(sourceSparkProjectedStream.getParallelism)
+
+    val putRecordDS: DataStream[AvroCodecOutput] = megaTileDS
+      .flatMap(MegaTileAvroCodecFn(groupByServingInfoParsed, enableDebug))
+      .uid(s"mega-avro-conversion-$groupByName")
+      .name(s"Mega Tile Avro conversion for $groupByName")
       .setParallelism(sourceSparkProjectedStream.getParallelism)
 
     AsyncKVStoreWriter.withUnorderedWaits(
