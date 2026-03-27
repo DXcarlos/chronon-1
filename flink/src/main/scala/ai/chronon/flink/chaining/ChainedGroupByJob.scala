@@ -1,32 +1,19 @@
 package ai.chronon.flink.chaining
 
-import ai.chronon.aggregator.windowing.ResolutionUtils
 import ai.chronon.api.Extensions.GroupByOps
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
-import ai.chronon.flink.{AsyncKVStoreWriter, BaseFlinkJob, FlinkUtils, LateEventCounter, TiledAvroCodecFn}
+import ai.chronon.flink.{AsyncKVStoreWriter, BaseFlinkJob, FlinkUtils}
 import ai.chronon.flink.FlinkJob.watermarkStrategy
 import ai.chronon.flink.deser.ProjectedEvent
 import ai.chronon.flink.source.FlinkSource
-import ai.chronon.flink.types.{AvroCodecOutput, TimestampedTile, WriteResponse}
-import ai.chronon.flink.window.{
-  AlwaysFireOnElementTrigger,
-  BufferedProcessingTimeTrigger,
-  FlinkRowAggProcessFunction,
-  FlinkRowAggregationFunction,
-  KeySelectorBuilder
-}
+import ai.chronon.flink.types.{AvroCodecOutput, WriteResponse}
 import ai.chronon.online.{Api, GroupByServingInfoParsed, TopicInfo}
 
 import java.util.concurrent.TimeUnit
-import org.apache.flink.streaming.api.datastream.{AsyncDataStream, DataStream, SingleOutputStreamOperator}
+import org.apache.flink.streaming.api.datastream.{AsyncDataStream, DataStream}
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment
 import org.apache.flink.streaming.api.functions.async.RichAsyncFunction
-import org.apache.flink.streaming.api.windowing.assigners.{TumblingEventTimeWindows, WindowAssigner}
-import org.apache.flink.streaming.api.windowing.time.Time
-import org.apache.flink.streaming.api.windowing.triggers.Trigger
-import org.apache.flink.streaming.api.windowing.windows.TimeWindow
-import org.apache.flink.util.OutputTag
 
 /** Flink job implementation for chaining features using JoinSource GroupBys.
   * The job reads from event source (that has already performed projections/filters), performs async enrichment,
@@ -80,20 +67,6 @@ class ChainedGroupByJob(eventSrc: FlinkSource[ProjectedEvent],
     .map(_.toInt)
     .getOrElse(AsyncKVStoreWriter.kvStoreConcurrency)
 
-  // We default to the AlwaysFireOnElementTrigger which will cause the window to "FIRE" on every element.
-  // An alternative is the BufferedProcessingTimeTrigger (trigger=buffered in topic info
-  // or properties) which will buffer writes and only "FIRE" every X milliseconds per GroupBy & key.
-  private def getTrigger(): Trigger[ProjectedEvent, TimeWindow] = {
-    FlinkUtils.getProperty("trigger", props, topicInfo).getOrElse("always_fire") match {
-      case "always_fire" => new AlwaysFireOnElementTrigger()
-      case "buffered"    => new BufferedProcessingTimeTrigger(100L)
-      case t =>
-        throw new IllegalArgumentException(s"Unsupported trigger type: $t. Supported: 'always_fire', 'buffered'")
-    }
-  }
-
-  private def getAllowedLatenessMs(): Long = FlinkUtils.getAllowedLatenessMs(props, topicInfo)
-
   /** Build the tiled version of the Flink GroupBy job that chains features using a JoinSource.
     *  The operators are structured as follows:
     *  - Source: Read from Kafka topic into ProjectedEvent stream
@@ -105,10 +78,25 @@ class ChainedGroupByJob(eventSrc: FlinkSource[ProjectedEvent],
     */
   override def runTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] = {
     logger.info(
-      s"Building Flink streaming job for groupBy: $groupByName that chains join: ${joinSource.getJoin.getMetaData.getName}" +
-        s" using topic: $topic")
+      s"Building tiled Flink streaming job for groupBy: $groupByName that chains join: " +
+        s"${joinSource.getJoin.getMetaData.getName} using topic: $topic")
+    val (processedStream, schema) = buildEnrichedStream(env)
+    buildTiledTail(processedStream, schema, parallelism, sinkFn, kvStoreCapacity, props, topicInfo, enableDebug)
+  }
 
-    // we expect parallelism on the source stream to be set by the source provider
+  override def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] = {
+    logger.info(
+      s"Building mega tiled Flink streaming job for groupBy: $groupByName that chains join: " +
+        s"${joinSource.getJoin.getMetaData.getName} using topic: $topic")
+    val (processedStream, schema) = buildEnrichedStream(env)
+    buildMegaTiledTail(processedStream, schema, parallelism, sinkFn, kvStoreCapacity, enableDebug)
+  }
+
+  /** Build the source → watermark → enrichment → query transform pipeline.
+    * Returns the prepared stream and its post-transformation schema.
+    */
+  private def buildEnrichedStream(
+      env: StreamExecutionEnvironment): (DataStream[ProjectedEvent], Seq[(String, DataType)]) = {
     val sourceSparkProjectedStream: DataStream[ProjectedEvent] = eventSrc
       .getDataStream(topic, groupByName)(env, parallelism)
       .uid(s"join-source-$groupByName")
@@ -139,18 +127,11 @@ class ChainedGroupByJob(eventSrc: FlinkSource[ProjectedEvent],
       .name(s"Async Join Enrichment for $groupByName")
       .setParallelism(sourceSparkProjectedStream.getParallelism)
 
-    // Apply join source query transformations only if there are transformations to apply
     val processedStream =
       if (joinSource.query != null && joinSource.query.selects != null && !joinSource.query.selects.isEmpty) {
         logger.info("Applying join source query transformations")
         val queryFunction = new JoinSourceQueryFunction(
-          joinSource,
-          inputSchema,
-          groupByName,
-          api,
-          enableDebug
-        )
-
+          joinSource, inputSchema, groupByName, api, enableDebug)
         enrichedStream
           .flatMap(queryFunction)
           .uid(s"join-source-query-$groupByName")
@@ -161,69 +142,8 @@ class ChainedGroupByJob(eventSrc: FlinkSource[ProjectedEvent],
         enrichedStream
       }
 
-    // Compute the output schema after JoinSourceQueryFunction transformations using Catalyst
     val postTransformationSchema = computePostTransformationSchemaWithCatalyst(joinSource, inputSchema)
-
-    // Calculate tiling window size based on the GroupBy configuration
-    val tilingWindowSizeInMillis: Long =
-      ResolutionUtils.getSmallestTailHopMillis(groupByServingInfoParsed.groupBy)
-
-    // Configure tumbling window for tiled aggregations
-    val window = TumblingEventTimeWindows
-      .of(Time.milliseconds(tilingWindowSizeInMillis))
-      .asInstanceOf[WindowAssigner[ProjectedEvent, TimeWindow]]
-
-    // Configure trigger (default to always fire on element)
-    val trigger = getTrigger()
-
-    // allowedLateness keeps window state open after the watermark passes the window end,
-    // allowing late events to still be processed. Configurable via allowed_lateness_seconds property.
-    // Default: 0 (disabled).
-    val allowedLatenessMs = getAllowedLatenessMs()
-
-    // We use Flink "Side Outputs" to track any late events that aren't computed.
-    val tilingLateEventsTag = new OutputTag[ProjectedEvent]("tiling-late-events") {}
-
-    // Tiled aggregation: key by entity keys, window, and aggregate
-    val tilingDS: SingleOutputStreamOperator[TimestampedTile] =
-      processedStream
-        .keyBy(KeySelectorBuilder.build(groupByServingInfoParsed.groupBy))
-        .window(window)
-        .allowedLateness(Time.milliseconds(allowedLatenessMs))
-        .trigger(trigger)
-        .sideOutputLateData(tilingLateEventsTag)
-        .aggregate(
-          // Aggregation function that maintains incremental IRs in state
-          new FlinkRowAggregationFunction(groupByServingInfoParsed.groupBy, postTransformationSchema, enableDebug),
-          // Process function that marks tiles as closed for client-side caching
-          new FlinkRowAggProcessFunction(groupByServingInfoParsed.groupBy, postTransformationSchema, enableDebug)
-        )
-        .uid(s"tiling-$groupByName")
-        .name(s"Tiling for $groupByName")
-        .setParallelism(sourceSparkProjectedStream.getParallelism)
-
-    // Track late events
-    tilingDS
-      .getSideOutput(tilingLateEventsTag)
-      .flatMap(new LateEventCounter(groupByName))
-      .uid(s"tiling-side-output-$groupByName")
-      .name(s"Tiling Side Output Late Data for $groupByName")
-      .setParallelism(sourceSparkProjectedStream.getParallelism)
-
-    // Convert tiles to AvroCodecOutput format for KV store writing
-    val avroConvertedStream = tilingDS
-      .flatMap(TiledAvroCodecFn(groupByServingInfoParsed, tilingWindowSizeInMillis, enableDebug))
-      .uid(s"avro-conversion-$groupByName")
-      .name(s"Avro Conversion for $groupByName")
-      .setParallelism(sourceSparkProjectedStream.getParallelism)
-
-    // Write to KV store using existing AsyncKVStoreWriter
-    AsyncKVStoreWriter.withUnorderedWaits(
-      avroConvertedStream,
-      sinkFn,
-      groupByName,
-      capacity = kvStoreCapacity
-    )
+    (processedStream, postTransformationSchema)
   }
 
   /** Compute the schema that results after JoinSourceQueryFunction transformations.

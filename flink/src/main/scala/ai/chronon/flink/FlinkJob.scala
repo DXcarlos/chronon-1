@@ -1,18 +1,28 @@
 package ai.chronon.flink
 
+import ai.chronon.aggregator.windowing.ResolutionUtils
 import ai.chronon.api.Constants.MetadataDataset
+import ai.chronon.api.DataType
 import ai.chronon.api.Extensions.{GroupByOps, SourceOps}
 import ai.chronon.api.{Constants, DataModel}
 import ai.chronon.flink.{AsyncKVStoreWriter, FlinkGroupByStreamingJob}
 import ai.chronon.flink.deser.{DeserializationSchemaBuilder, FlinkSerDeProvider, ProjectedEvent, SourceProjection}
 import ai.chronon.flink.chaining.ChainedGroupByJob
 import ai.chronon.flink.source.FlinkSourceProvider
-import ai.chronon.flink.types.WriteResponse
+import ai.chronon.flink.types.{AvroCodecOutput, TimestampedTile, WriteResponse}
 import ai.chronon.flink.validation.ValidationFlinkJob
+import ai.chronon.flink.window.{AlwaysFireOnElementTrigger, BufferedProcessingTimeTrigger, FlinkRowAggProcessFunction, FlinkRowAggregationFunction, KeySelectorBuilder, MegaTileProcessFunction}
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
 import ai.chronon.online.{Api, GroupByServingInfoParsed, TopicInfo}
 import org.apache.flink.api.common.eventtime.{SerializableTimestampAssigner, WatermarkStrategy}
 import org.apache.flink.api.common.functions.RichMapFunction
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator
+import org.apache.flink.streaming.api.functions.async.RichAsyncFunction
+import org.apache.flink.streaming.api.windowing.assigners.{TumblingEventTimeWindows, WindowAssigner}
+import org.apache.flink.streaming.api.windowing.time.Time
+import org.apache.flink.streaming.api.windowing.triggers.Trigger
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow
+import org.apache.flink.util.OutputTag
 import org.apache.flink.api.common.restartstrategy.RestartStrategies
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.core.fs.FileSystem
@@ -43,11 +53,94 @@ abstract class BaseFlinkJob {
   def runTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse]
 
   /** Run the streaming job with mega tiling enabled.
-    * Subclasses that support mega tiling should override this.
+    * Default delegates to buildMegaTiledTail. Subclasses must provide source setup.
     */
-  def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] =
-    throw new UnsupportedOperationException(
-      s"Mega tiling is not supported for ${getClass.getSimpleName} (groupBy=$groupByName)")
+  def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse]
+
+  /** Shared tail for tiled pipeline: keyBy → window aggregate → tile codec → KV write.
+    * Both FlinkGroupByStreamingJob and ChainedGroupByJob use this with their respective
+    * prepared streams and schemas.
+    */
+  protected def buildTiledTail(
+      preparedStream: DataStream[ProjectedEvent],
+      schema: Seq[(String, DataType)],
+      parallelism: Int,
+      sinkFn: RichAsyncFunction[AvroCodecOutput, WriteResponse],
+      kvStoreCapacity: Int,
+      props: Map[String, String],
+      topicInfo: TopicInfo,
+      enableDebug: Boolean
+  ): DataStream[WriteResponse] = {
+    val tilingWindowSizeInMillis = ResolutionUtils.getSmallestTailHopMillis(groupByServingInfoParsed.groupBy)
+
+    val window = TumblingEventTimeWindows
+      .of(Time.milliseconds(tilingWindowSizeInMillis))
+      .asInstanceOf[WindowAssigner[ProjectedEvent, TimeWindow]]
+
+    val trigger = FlinkUtils.getProperty("trigger", props, topicInfo).map {
+      case "always_fire" => new AlwaysFireOnElementTrigger(): Trigger[ProjectedEvent, TimeWindow]
+      case "buffered"    => new BufferedProcessingTimeTrigger(100L): Trigger[ProjectedEvent, TimeWindow]
+      case t => throw new IllegalArgumentException(s"Unsupported trigger type: $t")
+    }.getOrElse(new AlwaysFireOnElementTrigger())
+
+    val allowedLatenessMs = FlinkUtils.getAllowedLatenessMs(props, topicInfo)
+    val tilingLateEventsTag = new OutputTag[ProjectedEvent]("tiling-late-events") {}
+
+    val tilingDS: SingleOutputStreamOperator[TimestampedTile] =
+      preparedStream
+        .keyBy(KeySelectorBuilder.build(groupByServingInfoParsed.groupBy))
+        .window(window)
+        .allowedLateness(Time.milliseconds(allowedLatenessMs))
+        .trigger(trigger)
+        .sideOutputLateData(tilingLateEventsTag)
+        .aggregate(
+          new FlinkRowAggregationFunction(groupByServingInfoParsed.groupBy, schema, enableDebug),
+          new FlinkRowAggProcessFunction(groupByServingInfoParsed.groupBy, schema, enableDebug)
+        )
+        .uid(s"tiling-$groupByName")
+        .name(s"Tiling for $groupByName")
+        .setParallelism(parallelism)
+
+    tilingDS
+      .getSideOutput(tilingLateEventsTag)
+      .flatMap(new LateEventCounter(groupByName))
+      .uid(s"tiling-side-output-$groupByName")
+      .name(s"Tiling Side Output Late Data for $groupByName")
+      .setParallelism(parallelism)
+
+    val putRecordDS = tilingDS
+      .flatMap(TiledAvroCodecFn(groupByServingInfoParsed, tilingWindowSizeInMillis, enableDebug))
+      .uid(s"avro-conversion-$groupByName")
+      .name(s"Avro conversion for $groupByName")
+      .setParallelism(parallelism)
+
+    AsyncKVStoreWriter.withUnorderedWaits(putRecordDS, sinkFn, groupByName, capacity = kvStoreCapacity)
+  }
+
+  /** Shared tail for mega tiled pipeline: keyBy → MegaTileProcessFunction → mega tile codec → KV write. */
+  protected def buildMegaTiledTail(
+      preparedStream: DataStream[ProjectedEvent],
+      schema: Seq[(String, DataType)],
+      parallelism: Int,
+      sinkFn: RichAsyncFunction[AvroCodecOutput, WriteResponse],
+      kvStoreCapacity: Int,
+      enableDebug: Boolean
+  ): DataStream[WriteResponse] = {
+    val megaTileDS = preparedStream
+      .keyBy(KeySelectorBuilder.build(groupByServingInfoParsed.groupBy))
+      .process(new MegaTileProcessFunction(groupByServingInfoParsed.groupBy, schema, enableDebug))
+      .uid(s"mega-tiling-$groupByName")
+      .name(s"Mega Tiling for $groupByName")
+      .setParallelism(parallelism)
+
+    val putRecordDS = megaTileDS
+      .flatMap(MegaTileAvroCodecFn(groupByServingInfoParsed, enableDebug))
+      .uid(s"mega-avro-conversion-$groupByName")
+      .name(s"Mega Tile Avro conversion for $groupByName")
+      .setParallelism(parallelism)
+
+    AsyncKVStoreWriter.withUnorderedWaits(putRecordDS, sinkFn, groupByName, capacity = kvStoreCapacity)
+  }
 }
 
 object FlinkJob {
