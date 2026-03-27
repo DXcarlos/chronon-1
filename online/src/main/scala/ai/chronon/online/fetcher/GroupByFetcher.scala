@@ -91,14 +91,16 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
 
       val batchRequest = GetRequest(batchKeyBytes, groupByServingInfo.groupByOps.batchDataset)
 
+      // Resolve query time once to avoid inconsistency across midnight boundaries
+      val resolvedQueryTs = request.atMillis.getOrElse(System.currentTimeMillis())
+
       val (streamingRequestOpt, megaTileYesterdayRequestOpt) =
         groupByServingInfo.groupByOps.inferredAccuracy match {
           case Accuracy.TEMPORAL if groupByServingInfo.groupByOps.isMegaTilingEnabled =>
             // Mega tiling: 2 point gets — (key, today) + (key, yesterday)
-            val queryTs = request.atMillis.getOrElse(System.currentTimeMillis())
             val DayMillis = 24 * 3600 * 1000L
             val (todayStart, yesterdayStart) =
-              groupByServingInfo.megaTileMerger.streamingDayKeys(queryTs)
+              groupByServingInfo.megaTileMerger.streamingDayKeys(resolvedQueryTs)
             val dataset = groupByServingInfo.groupByOps.streamingDataset
 
             def megaTileRequest(dayStart: Long): GetRequest = {
@@ -137,7 +139,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
                        batchRequest,
                        streamingRequestOpt,
                        megaTileYesterdayRequestOpt,
-                       request.atMillis,
+                       Some(resolvedQueryTs),
                        context)
 
     }
@@ -220,7 +222,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
         val responses: Seq[Response] = groupByRequestToKvRequest.iterator.map { case (request, requestMetaTry) =>
           val responseMapTry: Try[Map[String, AnyRef]] = requestMetaTry.map { requestMeta =>
             val LambdaKvRequest(groupByServingInfo, castedRequest, batchRequest, streamingRequestOpt,
-                                megaTileYesterdayOpt, _, context) = requestMeta
+                                megaTileYesterdayOpt, endTs, context) = requestMeta
 
             context.count("multi_get.batch.size", allRequestsToFetch.length)
             context.distribution("multi_get.bytes", totalResponseValueBytes)
@@ -248,7 +250,7 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
             val megaTileYesterdayResponsesOpt =
               megaTileYesterdayOpt.map(responsesMap.getOrElse(_, Success(Seq.empty)).getOrElse(Seq.empty))
 
-            val queryTs = request.atMillis.getOrElse(System.currentTimeMillis())
+            val queryTs = endTs.getOrElse(request.atMillis.getOrElse(System.currentTimeMillis()))
             val requestContext = RequestContext(groupByServingInfo, queryTs, startTimeMs, context, request.keys)
 
             val groupByResponse: Map[String, AnyRef] =

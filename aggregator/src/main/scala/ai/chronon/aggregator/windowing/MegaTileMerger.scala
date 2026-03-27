@@ -10,7 +10,8 @@ import ai.chronon.api.TsUtils
   *
   * Per-column merge semantics:
   *   - Small windows (≤ tailBuffer): self-contained in daily entry. Pick today, fall back to yesterday.
-  *   - Large windows (> tailBuffer) + unwindowed: batch collapsed + streaming daily aggregates + tail hops.
+  *   - Large windows (> tailBuffer): batch collapsed + streaming daily aggregates + tail hops.
+  *   - Unwindowed: batch collapsed + streaming daily aggregates (no tail hops).
   */
 class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
 

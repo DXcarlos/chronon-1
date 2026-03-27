@@ -140,7 +140,10 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator) {
     if (currentDayStart == -1L) return
     val wmDay = TsUtils.round(watermarkTs, DayMillis)
     if (wmDay > currentDayStart) {
-      largeYesterdayIr = largeTodayIr
+      // Single-day hop: today's aggregate becomes yesterday's.
+      // Multi-day hop (e.g., after long idle/restart): today's data is stale beyond
+      // the 2d tolerance, so yesterday starts fresh.
+      largeYesterdayIr = if (wmDay == currentDayStart + DayMillis) largeTodayIr else windowedAgg.init
       largeTodayIr = windowedAgg.init
       currentDayStart = wmDay
     }

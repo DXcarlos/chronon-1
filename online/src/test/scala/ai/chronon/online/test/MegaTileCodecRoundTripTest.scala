@@ -219,4 +219,48 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
                  approxEqual(results(i), naive(i)))
     }
   }
+
+  it should "handle key switching (Flink reuses processor across keys)" in {
+    // Simulates Flink's key reuse: process events for key A, then reinitialize
+    // processor (simulating key switch to B with empty state), verify B's state
+    // is clean by comparing against the normal serde round-trip test for the same data.
+    val events = generateEvents(14, 20000)
+    val maxTs = events.map(_.ts).max
+    val batchEnd = TsUtils.round(maxTs - DayMillis, DayMillis)
+
+    val aggregations = Seq(
+      Builders.Aggregation(Operation.SUM, "num", AllWindows),
+      Builders.Aggregation(Operation.COUNT, "num", AllWindows),
+      Builders.Aggregation(Operation.AVERAGE, "amount", AllWindows)
+    )
+
+    val megaTileAgg = new MegaTileAggregator(aggregations, Schema, tailBufferMillis = TailBufferMillis)
+
+    // Process key A events — accumulate state
+    val processorA = new MegaTileStreamProcessor(megaTileAgg)
+    for (event <- events.sortBy(_.ts)) {
+      processorA.advanceWatermark(event.ts)
+      processorA.onEvent(event, event.ts)
+    }
+    // Verify key A has non-empty state
+    assertTrue("key A should have tiles", processorA.tiles.values.exists(_.nonEmpty))
+
+    // Key switch to B: reinitialize (what restoreProcessorState does after our fix)
+    val processorB = new MegaTileStreamProcessor(megaTileAgg)
+    // Verify key B state is clean
+    assertTrue("key B tiles should be empty", processorB.tiles.values.forall(_.isEmpty))
+    assertEquals("key B currentDayStart should be -1", -1L, processorB.currentDayStart)
+    assertEquals("key B earliestTileStart should be MaxValue", Long.MaxValue, processorB.earliestTileStart)
+
+    // Process same events through B with serde round-trips — should match naive
+    val queryTimes = Array(batchEnd + 14 * 3600 * 1000L).filter(_ <= maxTs)
+    val results = streamProcessorWithSerdeAggregate(events, queryTimes, aggregations, batchEnd)
+    val naive = naiveAggregate(events, queryTimes, aggregations)
+    assertEquals("result count", naive.length, results.length)
+    for (i <- queryTimes.indices) {
+      assertTrue(
+        s"key_switch: mismatch at query ${queryTimes(i)}\n  expected: ${gson.toJson(naive(i))}\n  got:      ${gson.toJson(results(i))}",
+        approxEqual(results(i), naive(i)))
+    }
+  }
 }

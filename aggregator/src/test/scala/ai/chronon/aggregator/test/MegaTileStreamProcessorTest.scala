@@ -265,4 +265,34 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
     val naive = naiveAggregate(events, queryTimes, aggregations, schema)
     compareResults(results, naive, queryTimes, "stream_day_boundary")
   }
+
+  it should "handle multi-day watermark gap (3+ day idle then resume)" in {
+    // Events span 14 days with a 3-day gap. Tests that advanceWatermark handles
+    // multi-day jumps correctly (clears largeYesterdayIr instead of carrying stale data).
+    // Batch is set fresh (1 day before query) so we stay within 2d staleness tolerance.
+    val (allEvents, schema) = generateEvents(14, 20000)
+    val maxTs = allEvents.map(_.ts).max
+    val gapEnd = TsUtils.round(maxTs - 2 * DayMillis, DayMillis)
+    val gapStart = gapEnd - 3 * DayMillis
+
+    // Remove events in the gap to simulate idle entity
+    val events = allEvents.filter(e => e.ts < gapStart || e.ts >= gapEnd)
+
+    // Batch is fresh: 1 day before query time
+    val batchEnd = TsUtils.round(maxTs - DayMillis, DayMillis)
+
+    val aggregations = Seq(
+      Builders.Aggregation(Operation.SUM, "num", AllWindows),
+      Builders.Aggregation(Operation.COUNT, "num", AllWindows)
+    )
+
+    val queryTimes = Array(
+      batchEnd + 6 * 3600 * 1000L,
+      batchEnd + 14 * 3600 * 1000L
+    ).filter(_ <= maxTs)
+
+    val results = streamProcessorAggregate(events, queryTimes, aggregations, schema, batchEnd)
+    val naive = naiveAggregate(events, queryTimes, aggregations, schema)
+    compareResults(results, naive, queryTimes, "stream_multi_day_gap")
+  }
 }

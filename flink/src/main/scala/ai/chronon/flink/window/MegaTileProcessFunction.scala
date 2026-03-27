@@ -163,10 +163,11 @@ class MegaTileProcessFunction(
     }
   }
 
-  // Restore MegaTileStreamProcessor mutable state from Flink managed state
+  // Restore MegaTileStreamProcessor mutable state from Flink managed state.
+  // Reinitialize processor first to clear previous key's state — Flink reuses
+  // the same KeyedProcessFunction instance across keys within a task.
   private def restoreProcessorState(): Unit = {
-    // Tiles: stored as base (unwindowed) IRs via megaTileCodec.encodeBaseIr
-    processor.tiles.values.foreach(_.clear())
+    processor = new MegaTileStreamProcessor(processor.megaTileAgg)
     val tileIter = tileState.iterator()
     while (tileIter.hasNext) {
       val entry = tileIter.next()

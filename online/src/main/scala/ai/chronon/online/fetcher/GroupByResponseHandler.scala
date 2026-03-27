@@ -68,6 +68,7 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
           if (newServingInfo.groupByOps.isMegaTilingEnabled) {
             mergeMegaTilesFromStreaming(updatedContext,
                                         newServingInfo,
+                                        batchResponses,
                                         streamingResponses,
                                         megaTileYesterdayResponsesOpt.getOrElse(Seq.empty),
                                         batchBytes)
@@ -265,10 +266,11 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
 
   private def mergeMegaTilesFromStreaming(requestContext: RequestContext,
                                           servingInfo: GroupByServingInfoParsed,
+                                          batchResponses: BatchResponses,
                                           todayResponses: Seq[TimedValue],
                                           yesterdayResponses: Seq[TimedValue],
                                           batchBytes: Array[Byte]): Array[Any] = {
-    val batchIr = toBatchIr(batchBytes, servingInfo)
+    val batchIr = getBatchIrFromBatchResponse(batchResponses, batchBytes, servingInfo, toBatchIr, requestContext.keys)
     val todayIr = decodeLatestMegaTile(todayResponses, servingInfo)
     val yesterdayIr = decodeLatestMegaTile(yesterdayResponses, servingInfo)
     val (todayStart, _) = servingInfo.megaTileMerger.streamingDayKeys(requestContext.queryTimeMs)
