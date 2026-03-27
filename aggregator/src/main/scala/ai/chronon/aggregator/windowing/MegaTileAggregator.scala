@@ -45,9 +45,10 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
     }
   }
 
-  // Compute tile start timestamps for an event across all active tiers
-  def tileStartsForEvent(eventTs: Long): Map[Long, Long] =
-    activeTiers.iterator.map(hopSize => hopSize -> TsUtils.round(eventTs, hopSize)).toMap
+  // Compute tile start timestamps for an event across all active tiers.
+  // Returns an Array to avoid Map allocation on every event.
+  def tileStartsForEvent(eventTs: Long): Array[(Long, Long)] =
+    activeTiers.map(hopSize => (hopSize, TsUtils.round(eventTs, hopSize)))
 
   // Per-tier retention floor: the earliest tile we must keep
   def retentionFloor(hopSize: Long, now: Long, batchEnd: Long): Long = {

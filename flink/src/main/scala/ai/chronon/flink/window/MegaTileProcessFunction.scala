@@ -178,18 +178,29 @@ class MegaTileProcessFunction(
 
 /** TileStore backed by Flink's keyed MapState/ValueState.
   * Encodes/decodes only the entries actually accessed — no bulk restore/persist.
-  * Flink's keyed state is automatically scoped to the current key.
+  * Windowed IR get/put is memoized to avoid redundant decodes within the same event
+  * (e.g., onEvent reads cachedSmallWindowIr, then packTodayEntry reads it again).
+  * Cache is invalidated on key switch via bindFlinkState.
   */
 class FlinkTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec) extends TileStore {
   private val windowedAgg = megaTileAgg.windowedAggregator
 
-  // These are set via bindFlinkState when the key changes
   private var tileState: MapState[String, Array[Byte]] = _
   private var megaTileIrState: ValueState[Array[Byte]] = _
   private var largeTodayIrState: ValueState[Array[Byte]] = _
   private var largeYesterdayIrState: ValueState[Array[Byte]] = _
   private var currentDayStartState: ValueState[java.lang.Long] = _
   private var earliestTileStartState: ValueState[java.lang.Long] = _
+
+  // Per-access decode cache for windowed IRs. Avoids redundant Avro decodes
+  // when the same IR is read multiple times within one event (get → update → pack).
+  // Invalidated on key switch (bindFlinkState) and updated on put.
+  private var cachedSmallDecoded: Array[Any] = _
+  private var cachedSmallValid: Boolean = false
+  private var largeTodayDecoded: Array[Any] = _
+  private var largeTodayValid: Boolean = false
+  private var largeYesterdayDecoded: Array[Any] = _
+  private var largeYesterdayValid: Boolean = false
 
   def bindFlinkState(tiles: MapState[String, Array[Byte]],
                      megaTileIr: ValueState[Array[Byte]],
@@ -203,6 +214,10 @@ class FlinkTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec) exte
     largeYesterdayIrState = largeYesterday
     currentDayStartState = dayStart
     earliestTileStartState = earliest
+    // Invalidate decode cache on key switch
+    cachedSmallValid = false
+    largeTodayValid = false
+    largeYesterdayValid = false
   }
 
   private def tileKey(hopSize: Long, tileStart: Long): String = s"$hopSize:$tileStart"
@@ -235,14 +250,34 @@ class FlinkTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec) exte
     if (bytes != null) codec.decode(bytes) else windowedAgg.init
   }
 
-  override def getCachedSmallWindowIr: Array[Any] = decodeWindowedIr(megaTileIrState)
-  override def putCachedSmallWindowIr(ir: Array[Any]): Unit = megaTileIrState.update(codec.encode(ir))
+  override def getCachedSmallWindowIr: Array[Any] = {
+    if (!cachedSmallValid) { cachedSmallDecoded = decodeWindowedIr(megaTileIrState); cachedSmallValid = true }
+    cachedSmallDecoded
+  }
+  override def putCachedSmallWindowIr(ir: Array[Any]): Unit = {
+    megaTileIrState.update(codec.encode(ir))
+    cachedSmallDecoded = ir; cachedSmallValid = true
+  }
 
-  override def getLargeTodayIr: Array[Any] = decodeWindowedIr(largeTodayIrState)
-  override def putLargeTodayIr(ir: Array[Any]): Unit = largeTodayIrState.update(codec.encode(ir))
+  override def getLargeTodayIr: Array[Any] = {
+    if (!largeTodayValid) { largeTodayDecoded = decodeWindowedIr(largeTodayIrState); largeTodayValid = true }
+    largeTodayDecoded
+  }
+  override def putLargeTodayIr(ir: Array[Any]): Unit = {
+    largeTodayIrState.update(codec.encode(ir))
+    largeTodayDecoded = ir; largeTodayValid = true
+  }
 
-  override def getLargeYesterdayIr: Array[Any] = decodeWindowedIr(largeYesterdayIrState)
-  override def putLargeYesterdayIr(ir: Array[Any]): Unit = largeYesterdayIrState.update(codec.encode(ir))
+  override def getLargeYesterdayIr: Array[Any] = {
+    if (!largeYesterdayValid) {
+      largeYesterdayDecoded = decodeWindowedIr(largeYesterdayIrState); largeYesterdayValid = true
+    }
+    largeYesterdayDecoded
+  }
+  override def putLargeYesterdayIr(ir: Array[Any]): Unit = {
+    largeYesterdayIrState.update(codec.encode(ir))
+    largeYesterdayDecoded = ir; largeYesterdayValid = true
+  }
 
   override def getCurrentDayStart: Long = Option(currentDayStartState.value()).map(_.longValue()).getOrElse(-1L)
   override def putCurrentDayStart(ts: Long): Unit = currentDayStartState.update(ts)
