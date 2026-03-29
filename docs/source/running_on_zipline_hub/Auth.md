@@ -239,10 +239,47 @@ Credentials are stored in `~/.zipline/auth.json`.
 
 When making requests to the backend, the CLI tries the following in order:
 
-1. **Hub auth** — session token from `zipline auth login`, exchanged for a short-lived JWT
-2. **GCP IAM** — service account via Application Default Credentials
-3. **Azure CLI** — DefaultAzureCredential
-4. **`ID_TOKEN` environment variable** — fallback for custom setups
+1. **`ZIPLINE_TOKEN` environment variable** — session token or JWT (see [Token Environment Variable](#token-environment-variable) below)
+2. **Hub auth** — session token from `zipline auth login`, exchanged for a short-lived JWT
+3. **GCP IAM** — service account via Application Default Credentials
+4. **Azure CLI** — DefaultAzureCredential
+5. **`ID_TOKEN` environment variable** — fallback for custom setups
+
+### Service Principals
+
+For CI pipelines, automation, and non-interactive environments, admins can create **service principals** — long-lived credentials that don't require browser-based login.
+
+1. Navigate to **Admin -> Service Principals** in the Zipline UI
+2. Create a new service principal with a name (e.g., `ci-pipeline`) and a role (`viewer`, `operator`, or `admin`)
+3. Copy the generated token — it is shown only once and cannot be retrieved again
+
+The token can be rotated or the service principal deleted from the same admin page.
+
+### Token Environment Variable
+
+The `ZIPLINE_TOKEN` environment variable provides a cloud-agnostic way to authenticate CLI commands without interactive login. It accepts two token types, auto-detected by format:
+
+| Token type | Source | `ZIPLINE_AUTH_URL` required? | Lifetime |
+|---|---|---|---|
+| **Session token** | Service principal (admin UI) | Yes | Until rotated/deleted |
+| **JWT** | `zipline auth get-access-token` | No | ~15 minutes |
+
+**Examples:**
+
+```bash
+# CI / automation — service principal token (long-lived, auto-exchanges for JWTs)
+export ZIPLINE_TOKEN="<token from admin UI>"
+export ZIPLINE_AUTH_URL="https://zipline.example.com"
+zipline hub backfill compiled/joins/team/my_join --start-ds=2024-01-01 --end-ds=2024-01-01
+
+# Quick testing — JWT used directly (short-lived, no ZIPLINE_AUTH_URL needed)
+ZIPLINE_TOKEN=$(zipline auth get-access-token) zipline hub backfill ...
+```
+
+| Variable | Description |
+|---|---|
+| `ZIPLINE_TOKEN` | A service principal session token or a JWT from `get-access-token` |
+| `ZIPLINE_AUTH_URL` | Frontend URL for token exchange (e.g., `https://zipline.example.com`). Required when `ZIPLINE_TOKEN` is a session token |
 
 ## Docker Networking
 

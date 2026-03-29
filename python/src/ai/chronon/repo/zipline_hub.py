@@ -33,11 +33,24 @@ class ZiplineHub:
         )
         self.version = utils.get_package_version()
         self._hub_auth_config = None
+        self._zipline_token = None
+        self._zipline_auth_url = None
 
         # Auth resolution order:
+        # 0. ZIPLINE_TOKEN env var (session token → JWT exchange, or JWT directly)
         # 1. CLI auth exact match (auth_url matches a stored account)
         # 2. Cloud provider auth (GCP/Azure service account, ID_TOKEN)
         # 3. CLI auth default (fallback to default account for non-cloud setups)
+        zipline_token = os.getenv("ZIPLINE_TOKEN")
+        if zipline_token:
+            self._zipline_token = zipline_token
+            self._zipline_auth_url = os.getenv("ZIPLINE_AUTH_URL") or auth_url
+            self.use_auth = True
+            self.sa = None
+            self.id_token = None
+            print_info("Using ZIPLINE_TOKEN for authentication.", format=format)
+            return
+
         if use_auth:
             from ai.chronon.repo.auth import get_auth_config
 
@@ -161,7 +174,15 @@ class ZiplineHub:
             "Content-Type": "application/json",
             "X-Zipline-Version": self.version,
         }
-        if self._hub_auth_config:
+        if self._zipline_token:
+            from ai.chronon.repo.token_exchange import resolve_token
+
+            try:
+                jwt_token = resolve_token(self._zipline_token, self._zipline_auth_url)
+            except (RuntimeError, ValueError) as e:
+                raise click.ClickException(str(e)) from None
+            headers["Authorization"] = f"Bearer {jwt_token}"
+        elif self._hub_auth_config:
             jwt_token = self._get_hub_jwt()
             if jwt_token:
                 headers["Authorization"] = f"Bearer {jwt_token}"
@@ -210,7 +231,14 @@ class ZiplineHub:
         if e.response is None or e.response.status_code != 401:
             return
         sa = getattr(self, "sa", None)
-        if self._hub_auth_config:
+        if self._zipline_token:
+            msg = (
+                f"Error calling {api_name} API. Unauthorized with ZIPLINE_TOKEN. "
+                "The token may be expired or revoked. If using a service principal, "
+                "rotate the token in the admin UI. If using a JWT from "
+                "'zipline auth get-access-token', it may have expired (~15 min)."
+            )
+        elif self._hub_auth_config:
             msg = (
                 f"Error calling {api_name} API. Session expired or invalid. "
                 "Run 'zipline auth login' to re-authenticate."

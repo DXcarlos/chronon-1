@@ -8,9 +8,17 @@ import requests
 
 def _get_auth_headers() -> dict:
     headers = {}
-    token = os.environ.get("GCP_ID_TOKEN") or os.environ.get("AWS_ID_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    zipline_token = os.environ.get("ZIPLINE_TOKEN")
+    if zipline_token:
+        from ai.chronon.repo.token_exchange import resolve_token
+
+        auth_url = os.environ.get("ZIPLINE_AUTH_URL")
+        jwt = resolve_token(zipline_token, auth_url)
+        headers["Authorization"] = f"Bearer {jwt}"
+    else:
+        token = os.environ.get("GCP_ID_TOKEN") or os.environ.get("AWS_ID_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
     return headers
 
 
