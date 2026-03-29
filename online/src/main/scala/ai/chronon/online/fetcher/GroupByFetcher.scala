@@ -96,6 +96,12 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
 
       val (streamingRequestOpt, megaTileHistoricalRequestsOpt) =
         groupByServingInfo.groupByOps.inferredAccuracy match {
+          case Accuracy.TEMPORAL if groupByServingInfo.groupByOps.isGigaTilingEnabled =>
+            // Giga tiling (push): single point get with plain entity key.
+            // Flink writes finalized vectors — no merge needed.
+            val dataset = groupByServingInfo.groupByOps.streamingDataset
+            (Some(GetRequest(streamingKeyBytes, dataset)), None)
+
           case Accuracy.TEMPORAL if groupByServingInfo.groupByOps.isMegaTilingEnabled =>
             // Mega tiling: one daily point get per day from today back to batch day,
             // plus one extra fallback day for no-batch windows.
