@@ -437,7 +437,6 @@
           }
         }
       },
-      "offlineSchedule": "@daily",
       "onlineSchedule": "@daily"
     },
     "name": "gcp.item_event_join.canary_combined_v1__0",

@@ -19,6 +19,6 @@ downstream_join = Join(
         ),
     ],
     version=0,
-    online=True,
+    online=False,
     output_namespace="data",
 )

@@ -312,8 +312,7 @@
             "WAREHOUSE_PREFIX": "s3://zipline-warehouse-canary"
           }
         }
-      },
-      "offlineSchedule": "@daily"
+      }
     },
     "name": "aws.training_set.v1_dev__0",
     "online": 0,

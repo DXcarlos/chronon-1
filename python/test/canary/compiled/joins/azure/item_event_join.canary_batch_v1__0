@@ -221,7 +221,6 @@
           "WAREHOUSE_PREFIX": "abfss://dev-zipline-warehouse@ziplineai2.dfs.core.windows.net"
         }
       },
-      "offlineSchedule": "@daily",
       "onlineSchedule": "@daily"
     },
     "name": "azure.item_event_join.canary_batch_v1__0",

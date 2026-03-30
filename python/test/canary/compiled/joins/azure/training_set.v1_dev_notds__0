@@ -220,8 +220,7 @@
           "VERSION": "latest",
           "WAREHOUSE_PREFIX": "abfss://dev-zipline-warehouse@ziplineai2.dfs.core.windows.net"
         }
-      },
-      "offlineSchedule": "@daily"
+      }
     },
     "name": "azure.training_set.v1_dev_notds__0",
     "online": 0,

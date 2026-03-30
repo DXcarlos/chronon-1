@@ -277,7 +277,6 @@
           }
         }
       },
-      "offlineSchedule": "@daily",
       "onlineSchedule": "@daily"
     },
     "name": "aws.demo_parent.parent_join__0",

@@ -234,7 +234,6 @@
           "WAREHOUSE_PREFIX": "abfss://dev-zipline-warehouse@ziplineai2.dfs.core.windows.net"
         }
       },
-      "offlineSchedule": "@daily",
       "onlineSchedule": "@daily"
     },
     "name": "azure.demo_chaining.downstream_join__0",

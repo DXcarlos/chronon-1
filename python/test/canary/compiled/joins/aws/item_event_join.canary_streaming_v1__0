@@ -289,7 +289,6 @@
           }
         }
       },
-      "offlineSchedule": "@daily",
       "onlineSchedule": "@daily"
     },
     "name": "aws.item_event_join.canary_streaming_v1__0",

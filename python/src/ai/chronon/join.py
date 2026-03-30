@@ -314,7 +314,7 @@ def Join(
     consistency_sample_percent: float = 5.0,
     use_long_names: bool = False,
     # execution params
-    offline_schedule: str = "@daily",
+    offline_schedule: str = None,
     online_schedule: str = None,
     historical_backfill: bool = None,
     conf: common.ConfigProperties = None,

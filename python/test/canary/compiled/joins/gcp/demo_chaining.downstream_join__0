@@ -289,7 +289,6 @@
           }
         }
       },
-      "offlineSchedule": "@daily",
       "onlineSchedule": "@daily"
     },
     "name": "gcp.demo_chaining.downstream_join__0",

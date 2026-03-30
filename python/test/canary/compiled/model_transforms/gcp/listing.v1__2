@@ -709,7 +709,6 @@
           "metaData": {
             "executionInfo": {
               "enableStatsCompute": 1,
-              "offlineSchedule": "@daily",
               "onlineSchedule": "@daily",
               "stepDays": 30
             },

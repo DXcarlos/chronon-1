@@ -11,7 +11,7 @@ include listing price information.
 chained_user_gb = GroupBy(
     sources=[demo_parent.upstream_join_source],
     keys=["user_id"],
-    online=True,
+    online=False,
     version=0,
     aggregations=[
         Aggregation(

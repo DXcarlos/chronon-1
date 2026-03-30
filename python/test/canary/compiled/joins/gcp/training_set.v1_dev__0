@@ -272,8 +272,7 @@
             "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
           }
         }
-      },
-      "offlineSchedule": "@daily"
+      }
     },
     "name": "gcp.training_set.v1_dev__0",
     "online": 0,

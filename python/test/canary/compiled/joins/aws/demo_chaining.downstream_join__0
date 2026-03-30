@@ -111,11 +111,10 @@
                 }
               }
             },
-            "historicalBackfill": 0,
-            "onlineSchedule": "@daily"
+            "historicalBackfill": 0
           },
           "name": "aws.user_activities_chained.chained_user_gb__0",
-          "online": 1,
+          "online": 0,
           "outputNamespace": "data",
           "team": "aws",
           "version": "0"
@@ -189,7 +188,6 @@
                 },
                 "metaData": {
                   "executionInfo": {
-                    "offlineSchedule": "@daily",
                     "onlineSchedule": "@daily"
                   },
                   "name": "aws.demo_parent.parent_join__0",
@@ -329,12 +327,10 @@
             "WAREHOUSE_PREFIX": "s3://zipline-warehouse-canary"
           }
         }
-      },
-      "offlineSchedule": "@daily",
-      "onlineSchedule": "@daily"
+      }
     },
     "name": "aws.demo_chaining.downstream_join__0",
-    "online": 1,
+    "online": 0,
     "outputNamespace": "data",
     "production": 0,
     "samplePercent": 100.0,

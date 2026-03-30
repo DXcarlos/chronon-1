@@ -55,6 +55,7 @@ v1 = Join(
     output_namespace="data",
     step_days=30,
     enable_stats_compute=True,
+    offline_schedule="@daily"
 )
 
 # Example join with some derivations
