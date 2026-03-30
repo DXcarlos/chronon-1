@@ -107,15 +107,17 @@ aws = Team(
         common={
             "CLOUD_PROVIDER": "aws",
             "CUSTOMER_ID": "canary",
-            "VERSION": "latest",
+            "VERSION": "1.4.1-sparseness",
             "AWS_REGION": "us-west-2",
             "SPARK_CLUSTER_NAME": "zipline-emr-canary",
             "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
             "WAREHOUSE_PREFIX": "s3://zipline-warehouse-canary",
             "FLINK_STATE_URI": "s3://zipline-warehouse-canary/flink-state",
             "CHRONON_ONLINE_ARGS": " -Ztasks=1",
-            "FRONTEND_URL": "https://canary-aws.zipline.ai",
-            "HUB_URL": "https://canary-orch-aws.zipline.ai",
+            # "FRONTEND_URL": "https://canary-aws.zipline.ai",
+            # "HUB_URL": "https://canary-orch-aws.zipline.ai",
+            "FRONTEND_URL": "http://localhost:3000",
+            "HUB_URL": "http://localhost:3903",
             "ENABLE_KINESIS": "true",
             "FLINK_JARS_URI": "s3://zipline-artifacts-canary/spark-3.5.3/libs/",
         },
@@ -148,6 +150,56 @@ aws = Team(
             RunMode.BACKFILL: {
             }
         }
+    ),
+    clusterConf=ClusterConfigProperties(
+        common={
+            "emr.config": generate_emr_cluster_config(
+                instance_count=3,
+                subnet_name="zipline-canary-subnet-main",
+                security_group_name="zipline-canary-sg",
+                instance_type="m5.xlarge",
+                idle_timeout=300,
+                release_label="emr-7.12.0"
+            )
+        }
+    ),
+)
+
+# Mirrors customer (Oscilar) setup: yyyyMMdd partition format, hive write format
+# Used to test partition format translation (PR #1634)
+aws_yyyymmdd = Team(
+    outputNamespace="data",
+    env=EnvironmentVariables(
+        common={
+            "CLOUD_PROVIDER": "aws",
+            "CUSTOMER_ID": "canary",
+            "VERSION": "1.4.1-sparseness",
+            "AWS_REGION": "us-west-2",
+            "SPARK_CLUSTER_NAME": "zipline-emr-canary",
+            "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+            "WAREHOUSE_PREFIX": "s3://zipline-warehouse-canary",
+            "FRONTEND_URL": "http://localhost:3000",
+            "HUB_URL": "http://localhost:3903",
+        },
+    ),
+    conf=ConfigProperties(
+        common={
+            **GlueConfiguration({
+                "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-canary/data/tables/",
+            }),
+            "spark.chronon.partition.format": "yyyyMMdd",
+            "spark.chronon.partition.column": "ds",
+            "spark.chronon.table_write.format": "hive",
+            "spark.chronon.table_write.prefix": "s3://zipline-warehouse-canary",
+            "spark.sql.warehouse.dir": "s3://zipline-warehouse-canary/data/spark-warehouse/",
+            "spark.chronon.coalesce.factor": "10",
+            "spark.default.parallelism": "10",
+            "spark.sql.shuffle.partitions": "10",
+            "spark.driver.memory": "1g",
+            "spark.driver.cores": "1",
+            "spark.executor.memory": "1g",
+            "spark.executor.cores": "1",
+        },
     ),
     clusterConf=ClusterConfigProperties(
         common={
