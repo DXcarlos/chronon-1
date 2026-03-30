@@ -86,16 +86,34 @@ def __compile(
     compiler = Compiler(compile_context)
     results = compiler.compile(dry_run, validate_all)
     has_errors = compiler.has_compilation_errors()
+
+    pending_changes = compiler.compile_context.validator.pending_changes
+    # add 'errors' to pending_changes
+    if has_errors:
+        pending_changes['errors'] = compiler.get_all_errors()
+
+    added = pending_changes.get("added", [])
+    changed = pending_changes.get("changed", [])
+    deleted = pending_changes.get("deleted", [])
+    errors = pending_changes.get("errors", [])
+
+    has_changes = bool(added or changed or deleted or errors)
+
     if format == Format.JSON and (not has_errors or force):
+        status_message = "Changes detected in compilation." if has_changes else "No changes detected in compilation"
         print(
             json.dumps(
                 {
-                    "status": "Compilation succeeded.",
+                    "status": status_message,
                     "results": {
                         ConfType._VALUES_TO_NAMES[conf_type]: list(conf_result.obj_dict.keys())
                         for conf_type, conf_result in results.items()
                         if conf_result.obj_dict
                     },
+                    "errors": errors,
+                    "added": [c.name for c in added],
+                    "changed": [c.name for c in changed],
+                    "deleted": [c.name for c in deleted],
                 },
                 indent=4,
             )
@@ -104,11 +122,7 @@ def __compile(
     if has_errors and not ignore_python_errors and not dry_run:
         sys.exit(1)
 
-    # add 'errors' to pending_changes
-    if has_errors:
-        compiler.compile_context.validator.pending_changes['errors'] = compiler.get_all_errors()
-
-    return results, has_errors, compiler.compile_context.validator.pending_changes
+    return results, has_errors, pending_changes
 
 
 if __name__ == "__main__":

@@ -107,7 +107,9 @@ def test_compile_with_json_format(canary):
 
     # Verify the JSON structure contains expected fields
     assert "status" in output_json, f"Output missing 'status' field: {output_json}"
-    assert output_json["status"] == "success", f"Expected status 'success', got: {output_json['status']}"
+    # Status should be either "Changes detected in compilation." or "No changes detected in compilation"
+    assert output_json["status"] in ["Changes detected in compilation.", "No changes detected in compilation"], \
+        f"Unexpected status value: {output_json['status']}"
 
     assert "results" in output_json, f"Output missing 'results' field: {output_json}"
     assert isinstance(output_json["results"], dict), f"'results' should be a dict, got: {type(output_json['results'])}"

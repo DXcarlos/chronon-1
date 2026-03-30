@@ -597,37 +597,13 @@ def schedule_all(
         has_changes = bool(added or changed or deleted or errors)
 
         if has_changes:
-            print_error(
-                "Compilation resulted in changes detected in dry run mode",
-                format=format,
-            )
-            if errors:
-                print_error(
-                    f"  Errors: {json.dumps(errors, indent=4)}", format=format
-                )
-            if added:
-                print_error(
-                    f"  Added: {', '.join([c.name for c in added])}", format=format
-                )
-            if changed:
-                print_error(
-                    f"  Changed: {', '.join([c.name for c in changed])}",
-                    format=format,
-                )
-            if deleted:
-                print_error(
-                    f"  Deleted: {', '.join([c.name for c in deleted])}",
-                    format=format,
-                )
-
-            if format == Format.JSON:
-                print(json.dumps({
-                    "status": "Compilation changes detected. Exiting schedule-all.",
-                    "errors": errors,
-                    "added": [c.name for c in added],
-                    "changed": [c.name for c in changed],
-                    "deleted": [c.name for c in deleted],
-                }, indent=4))
+            print_error("Compilation resulted in changes in dry run mode. Exiting schedule-all.", format=format)
+            for change in added:
+                print_info(f"Added: {change.name}", format=format)
+            for change in changed:
+                print_info(f"Changed: {change.name}", format=format)
+            for change in deleted:
+                print_info(f"Deleted: {change.name}", format=format)
             sys.exit(1)
         else:
             print_success("No compilation changes detected.", format=format)
