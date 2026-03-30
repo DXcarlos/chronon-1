@@ -90,7 +90,7 @@ def __compile(
         print(
             json.dumps(
                 {
-                    "status": "success",
+                    "status": "Compilation succeeded.",
                     "results": {
                         ConfType._VALUES_TO_NAMES[conf_type]: list(conf_result.obj_dict.keys())
                         for conf_type, conf_result in results.items()
