@@ -58,6 +58,9 @@ struct Query {
     **/
     25: optional bool timePartitioned
 
+    // Source table may not have data for every partition in the requested range.
+    26: optional bool sparse
+
 }
  
 /**

@@ -220,6 +220,69 @@ class TableDependenciesTest extends AnyFlatSpec with Matchers {
     result.getEndCutOff should be(null)
   }
 
+  it should "propagate sparse flag from query" in {
+    val table = "test.sparse_table"
+    val query = Builders.Query(partitionColumn = "ds")
+    query.setSparse(true)
+
+    val result = TableDependencies.fromTable(table, query)
+
+    result should not be null
+    result.isSetSparse should be(true)
+    result.sparse should be(true)
+  }
+
+  it should "not set sparse when query does not have it" in {
+    val table = "test.dense_table"
+    val query = Builders.Query(partitionColumn = "ds")
+
+    val result = TableDependencies.fromTable(table, query)
+
+    result should not be null
+    result.isSetSparse should be(false)
+  }
+
+  "TableDependencies.fromSource" should "propagate sparse flag from source query" in {
+    val query = Builders.Query(
+      partitionColumn = "ds",
+      timeColumn = "UNIX_TIMESTAMP(ts) * 1000"
+    )
+    query.setSparse(true)
+
+    val source = Builders.Source.events(query, table = "test_db.sparse_events")
+    val result = TableDependencies.fromSource(source)
+
+    result should be(defined)
+    result.get.isSetSparse should be(true)
+    result.get.sparse should be(true)
+  }
+
+  "TableDependencies.fromGroupBy" should "propagate sparse flag through sources" in {
+    val query = Builders.Query(
+      partitionColumn = "ds",
+      timeColumn = "UNIX_TIMESTAMP(ts) * 1000"
+    )
+    query.setSparse(true)
+
+    val source = Builders.Source.events(query, table = "test_db.sparse_events")
+    val groupBy = Builders.GroupBy(
+      sources = Seq(source),
+      keyColumns = Seq("user_id"),
+      aggregations = Seq(
+        Builders.Aggregation(
+          inputColumn = "value",
+          operation = Operation.SUM,
+          windows = Seq(new Window(7, TimeUnit.DAYS))
+        )
+      )
+    )
+
+    val deps = TableDependencies.fromGroupBy(groupBy)
+    deps should not be empty
+    deps.head.isSetSparse should be(true)
+    deps.head.sparse should be(true)
+  }
+
   "TableDependencies.fromJoinSources" should "create dependencies for JoinSources" in {
     import ai.chronon.api.Builders._
 

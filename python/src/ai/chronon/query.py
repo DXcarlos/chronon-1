@@ -31,6 +31,7 @@ def Query(
     partition_format: str = None,
     sub_partitions_to_wait_for: List[str] = None,
     time_partitioned: bool = None,
+    sparse: bool = None,
 ) -> api.Query:
     """
     Create a query object that is used to scan data from various data sources.
@@ -106,6 +107,7 @@ def Query(
         subPartitionsToWaitFor=sub_partitions_to_wait_for,
         partitionFormat=partition_format,
         timePartitioned=time_partitioned,
+        sparse=sparse,
     )
 
 

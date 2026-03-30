@@ -101,6 +101,7 @@ object TableDependencies {
       .setEndOffset(endOffset)
       .setStartCutOff(startCutOff)
       .setEndCutOff(endCutOff)
+    if (Option(source.query).exists(q => q.isSetSparse && q.sparse)) tableDep.setSparse(true)
 
     Some(tableDep)
   }
@@ -135,13 +136,15 @@ object TableDependencies {
       .setPartitionInterval(query.getPartitionInterval)
     if (isTimePartitioned) tableInfo.setTimePartitioned(true)
 
-    new TableDependency()
+    val tableDep = new TableDependency()
       .setTableInfo(tableInfo)
       .setStartOffset(offset)
       .setEndOffset(offset)
       .setStartCutOff(query.startPartition)
       .setEndCutOff(query.endPartition)
+    if (query.isSetSparse && query.sparse) tableDep.setSparse(true)
 
+    tableDep
   }
 
   def fromJoinSources(sources: java.util.List[api.Source]): Seq[TableDependency] = {

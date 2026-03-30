@@ -190,15 +190,15 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           logger.info(s"Input table ${tableName} has the requested range present: ${range}.")
           Success(())
         case Success(missingPartitions) if attempt < retryCount =>
-          logger.warn(
-            s"Attempt ${attempt + 1} failed: Input table ${tableName} is missing partitions: ${missingPartitions
-                .mkString(", ")}. Retrying in ${retryIntervalMin} minutes")
+          logger.warn(s"Attempt ${attempt + 1} failed: Input table ${tableName} is missing partitions: " +
+            s"${PartitionRange.collapsedPrint(missingPartitions)(tableUtils.partitionSpec)}. Retrying in ${retryIntervalMin} minutes")
           Thread.sleep(retryIntervalMin * 60 * 1000)
           retry(attempt + 1)
         case Success(missingPartitions) =>
-          Failure(new RuntimeException(
-            s"Sensor timed out after ${retryIntervalMin * attempt} minutes. Input table ${tableName} is missing partitions: ${missingPartitions
-                .mkString(", ")}"))
+          Failure(
+            new RuntimeException(
+              s"Sensor timed out after ${retryIntervalMin * attempt} minutes. Input table ${tableName} is missing partitions: " +
+                s"${PartitionRange.collapsedPrint(missingPartitions)(tableUtils.partitionSpec)}"))
         case Failure(e) => Failure(e)
       }
     }
@@ -538,8 +538,9 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     if (!translatedRange.partitions.forall(p => allOutputTablePartitions.contains(p))) {
       val missingPartitions = translatedRange.partitions.filterNot(p => allOutputTablePartitions.contains(p))
       logger.error(
-        s"After job completion, output table ${metadata.executionInfo.outputTableInfo.table} is missing partitions: ${missingPartitions
-            .mkString(", ")} from the requested range: $translatedRange. All output partitions: ${allOutputTablePartitions}"
+        s"After job completion, output table ${metadata.executionInfo.outputTableInfo.table} is missing partitions: " +
+          s"${PartitionRange.collapsedPrint(missingPartitions)(tableUtils.partitionSpec)} from the requested range: " +
+          s"$translatedRange. All output partitions: ${PartitionRange.collapsedPrint(allOutputTablePartitions)(tableUtils.partitionSpec)}"
       )
     }
 
@@ -597,6 +598,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 
     inputTableDependencies
       .filterNot(_._2.forall(td => td.isSetIsSoftNodeDependency && td.isSoftNodeDependency))
+      .filterNot(_._2.forall(td => td.isSetSparse && td.sparse))
       .map { case (table, deps) =>
         val inputPartitionSpec = deps.head.tableInfo.partitionSpec(tableUtils.partitionSpec)
         val isTimePartitioned = deps.head.tableInfo.isSetTimePartitioned && deps.head.tableInfo.timePartitioned
@@ -692,7 +694,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           "The following input tables are missing partitions for the requested range:\n" +
             inputTableToMissingPartitions
               .map { case (tableName, missing) =>
-                s"Table: $tableName, Missing Partitions: ${missing.mkString(", ")}"
+                s"Table: $tableName, Missing Partitions: ${PartitionRange.collapsedPrint(missing)(tableUtils.partitionSpec)}"
               }
               .mkString("\n")
         )

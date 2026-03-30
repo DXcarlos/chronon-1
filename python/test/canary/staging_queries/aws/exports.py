@@ -48,3 +48,22 @@ checkouts = get_native_partition_export("checkouts", "ts")
 dim_listings = get_select_star_export("dim_listings", "ds")
 dim_merchants = get_select_star_export("dim_merchants", "ds")
 dim_users = get_select_star_export("dim_users", "ds")
+
+# Sparse input table — only has partitions on 01-01, 01-05, 01-10, 01-15, 01-20
+# Used to test backfill with missing input partitions
+user_activities_sparse = StagingQuery(
+    query="""
+    SELECT
+        *
+    FROM demo.user_activities_raw_sparse
+    WHERE
+    ds BETWEEN {{ start_date }} AND {{ end_date }}
+    """,
+    output_namespace="data",
+    engine_type=EngineType.SPARK,
+    dependencies=[
+        TableDependency(table="demo.user_activities_raw_sparse", partition_column="ds", offset=0, sparse=True)
+    ],
+    version=1,
+    step_days=30,
+)

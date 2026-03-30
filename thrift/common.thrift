@@ -122,6 +122,10 @@ struct TableDependency {
 
     7: optional string semanticHash
 
+    // When true, the source table may not have data for every partition in the requested range.
+    // The engine skips missing input partition checks and the orchestrator ignores KvPartition data.
+    8: optional bool sparse
+
     /**
     * JoinParts could use data from batch backfill-s or upload tables when available
     * When not available they shouldn't force computation of the backfills and upload tables.

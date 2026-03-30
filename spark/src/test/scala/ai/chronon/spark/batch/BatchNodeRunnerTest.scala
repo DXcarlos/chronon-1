@@ -109,10 +109,12 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
                          partitionColumn: String = "ds",
                          partitionFormat: String = "yyyy-MM-dd",
                          semanticHash: Option[String] = None,
-                         isSoftDependency: Boolean = false): MetaData = {
+                         isSoftDependency: Boolean = false,
+                         sparse: Boolean = false): MetaData = {
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
 
     val query = new Query().setPartitionColumn(partitionColumn).setPartitionFormat(partitionFormat)
+    if (sparse) query.setSparse(true)
     val tableDependency = TableDependencies.fromTable(inputTable, query)
 
     semanticHash.foreach(tableDependency.setSemanticHash)
@@ -702,6 +704,21 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
 
     val inputTableStatus = statuses.find(_.name == "test_db.input_table")
     assertTrue("Should not have status for soft dependency", inputTableStatus.isEmpty)
+  }
+
+  it should "filter out sparse dependencies" in {
+    val metadata = createTestMetadata("test_db.input_table", "test_db.output_table", sparse = true)
+    val nodeContent = createTestNodeContent()
+    val node = new Node()
+    node.setMetaData(metadata)
+    node.setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    val inputTableStatus = statuses.find(_.name == "test_db.input_table")
+    assertTrue("Should not have status for sparse dependency", inputTableStatus.isEmpty)
   }
 
   it should "capture semantic hash when set on table dependency" in {
