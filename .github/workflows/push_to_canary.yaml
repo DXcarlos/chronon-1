@@ -179,6 +179,25 @@ jobs:
             ziplineai/chronon-fetcher:${{ github.sha }}
             ziplineai/chronon-fetcher:nightly
 
+      - name: Configure GCP Credentials
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_CANARY_PROJECT_ID }}
+          workload_identity_provider: projects/${{ secrets.GCP_CANARY_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-actions/providers/github
+          service_account: github-actions@${{ secrets.GCP_CANARY_PROJECT_ID }}.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Update fetcher Cloud Run services to pull latest nightly
+        env:
+          IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_CANARY_PROJECT_ID }}/canary-zipline-docker-hub-proxy/ziplineai/chronon-fetcher:nightly
+        run: |
+          gcloud run services update canary-zipline-chronon-fetcher \
+            --image=$IMAGE \
+            --region=${{ secrets.GCP_REGION }} \
+            --project=${{ secrets.GCP_CANARY_PROJECT_ID }}
+
   push_to_aws_passing:
     needs: [build_and_push, integration_tests]
     runs-on: ubuntu-latest
