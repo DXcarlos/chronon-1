@@ -203,7 +203,6 @@ object JobSubmitterConstants {
   val FlinkJarsUri = "flinkJarsUri"
   val AdditionalJars = "additionalJars"
   val SavepointUri = "savepointUri"
-  val FlinkStateUri = "flinkStateUri"
   val FlinkCheckpointUri = "flinkCheckpointUri"
 
   val JobId = "jobId"
@@ -244,7 +243,6 @@ object JobSubmitterConstants {
   val FlinkKinesisJarUriArgKeyword = "--flink-kinesis-jar-uri"
   val FlinkJarsUriArgKeyword = "--flink-jars-uri"
   val AdditionalJarsUriArgKeyword = "--additional-jars"
-  val FlinkGroupByNameArgKeyword = "--groupby-name"
   val FilesArgKeyword = "--files"
   val ConfTypeArgKeyword = "--conf-type"
   val ConfPathArgKeyword = "--conf-path"
@@ -260,6 +258,7 @@ object JobSubmitterConstants {
   val StreamingModeArgKeyword = "--streaming-mode"
 
   val StreamingVersionCheckDeploy = "--version-check"
+  val StreamingTopicOverrideArgKeyword = "--topic-override"
 
   val StreamingLatestSavepointArgKeyword = "--latest-savepoint"
   val StreamingCustomSavepointArgKeyword = "--custom-savepoint"
@@ -304,8 +303,6 @@ object JobSubmitterConstants {
   // Deprecated: Use ClusterNameEnvVar instead
   val GcpDataprocClusterNameEnvVar = "GCP_DATAPROC_CLUSTER_NAME"
   val EnableUploadKVClientEnvVar = "ENABLE_UPLOAD_CLIENTS"
-  @deprecated("Use EnableUploadKVClientEnvVar", "")
-  val GcpEnableUploadKVClientEnvVar = EnableUploadKVClientEnvVar
 
   // AWS-specific environment variables
   // Deprecated: Use ClusterNameEnvVar instead

@@ -54,11 +54,11 @@
       },
       "offlineSchedule": "@daily"
     },
-    "name": "aws_databricks.exports.dim_listings__2",
+    "name": "aws_databricks.exports.dim_listings_non_partitioned__0",
     "outputNamespace": "workspace_iceberg.poc",
     "sourceFile": "staging_queries/aws_databricks/exports.py",
     "team": "aws_databricks",
-    "version": "2"
+    "version": "0"
   },
   "query": "\n    SELECT\n        *, DATE_FORMAT(updated_at_ts, 'yyyy-MM-dd') AS ds\n    FROM workspace.poc.dim_listings_nop\n    WHERE\n    DATE_FORMAT(updated_at_ts, 'yyyy-MM-dd') BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [

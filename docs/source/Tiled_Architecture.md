@@ -24,8 +24,7 @@ The regular, untiled version works as pictured in Figure 1.
 - The "write" path: reads an event stream, processes the events in Spark, then writes them out to a datastore.
 - The "read" path: reads O(events) events from the store, aggregates them, and returns the feature values to the user.
 
-![Architecture](../images/Untiled_Architecture.png)
-_Figure 1: The untiled architecture_
+![Figure 1: The untiled architecture](../images/Untiled_Architecture.svg)
 
 At scale, aggregating O(n) events each time there is a request can become costly. For example, if you have an event
 stream producing 10 events/sec for a certain key, a request for a feature with a 12-hour window will have to fetch and
@@ -41,8 +40,7 @@ The tiled architecture, depicted in Figure 2, works differently:
 - The "read" path: reads O(tiles) tiles from the store, merges the pre-aggregates, and returns the feature values to the
   user.
 
-![Architecture](../images/Tiled_Architecture.png)
-_Figure 2: The tiled architecture_
+![Figure 2: The tiled architecture](../images/Tiled_Architecture.svg)
 
 Tiling shifts a significant part of the aggregation work to the write path, which allows for faster feature serving.
 

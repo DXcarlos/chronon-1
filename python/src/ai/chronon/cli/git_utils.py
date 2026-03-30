@@ -10,7 +10,7 @@ logger = get_logger()
 
 
 def get_git_user_email() -> str:
-    """Get the email of the current git user, falling back to USER env var."""
+    """Get the user email from git config, falling back to USER env var."""
     try:
         result = subprocess.run(
             ["git", "config", "user.email"],

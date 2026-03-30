@@ -7,7 +7,7 @@ order: 1
 
 All the jobs that Chronon runs are driven by the configs in the Chronon repo. The orchestrator (Airflow by default) is configured to read the files in the repo and kick off a number of jobs to drive data and metadata flows. This is illustrated below:
 
-![Overview](../../images/control_plane.png)
+![](../../images/control_plane.svg)
 
 At a high level, the flow is `config (GroupBy/Join/StagingQuery) -> control plane action -> data plane action/result`. The production DAGs run these actions based on certain triggers for each config type (i.e. upstream data landing), however, these control plane actions can also be triggered manually using the `run.py` CLI utility.
 

@@ -1,4 +1,4 @@
-"""Zipline admin CLI commands for loading images into customer registries and verifying deployments."""
+"""Zipline admin CLI commands for loading images into customer registries and diagnosing deployments."""
 
 import json
 import logging
@@ -77,7 +77,7 @@ def _parse_registry(registry):
 
 
 @click.group(
-    help="Administrative commands for initializing repos, loading images, and verifying deployments."
+    help="Administrative commands for initializing repos, loading images, and diagnosing deployments."
 )
 def admin():
     pass
@@ -849,10 +849,10 @@ def _print_summary(results, release, cloud, registry):
         raise SystemExit(1)
 
 
-@admin.command("verify")
+@admin.command("doctor")
 @click.argument("hub_url")
 @click.option("--expected-version", default=None, help="Expected Zipline version (optional).")
-def verify(hub_url, expected_version):
+def doctor(hub_url, expected_version):
     """Check that a Zipline hub is reachable and healthy.
 
     HUB_URL is the URL of the running Zipline hub (e.g. https://hub.example.com).
@@ -902,7 +902,7 @@ def verify(hub_url, expected_version):
     except Exception as e:
         results.append(("Upload API", f"{hub_url}/upload/v2/diff", "FAIL", str(e)))
 
-    table = Table(title=f"Zipline Deployment Verification: {hub_url}")
+    table = Table(title=f"Zipline Deployment Diagnostics: {hub_url}")
     table.add_column("Check", style="cyan")
     table.add_column("Endpoint", style="white")
     table.add_column("Status", style="green")

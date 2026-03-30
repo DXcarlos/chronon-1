@@ -14,7 +14,7 @@ from ai.chronon.cli.formatter import (
     format_print,
     jsonify_exceptions_if_json_format,
 )
-from ai.chronon.cli.git_utils import get_current_branch, get_git_user_email
+from ai.chronon.cli.git_utils import get_current_branch
 from ai.chronon.cli.theme import (
     print_error,
     print_info,
@@ -25,6 +25,7 @@ from ai.chronon.cli.theme import (
 )
 from ai.chronon.click_helpers import handle_compile, handle_conf_not_found, handle_dry_run_compile
 from ai.chronon.repo import hub_uploader, utils
+from ai.chronon.repo.auth import get_user_email
 from ai.chronon.repo.constants import VALID_CLOUDS, RunMode
 from ai.chronon.repo.utils import print_possible_confs, upload_to_blob_store
 from ai.chronon.repo.zipline_hub import ZiplineHub
@@ -228,6 +229,7 @@ def _get_zipline_hub(
         cloud_provider=hub_conf.cloud_provider,
         scope=scope,
         format=format,
+        auth_url=hub_conf.frontend_url,
     )
 
 
@@ -398,7 +400,7 @@ def submit_workflow(
             conf_name=conf_name,
             mode=mode,
             branch=branch,
-            user=get_git_user_email(),
+            user=get_user_email(),
             start=start_ds,
             end=end_ds,
             conf_hash=conf_name_to_hash_dict[conf_name].hash,
@@ -823,6 +825,7 @@ def eval(
         cloud_provider=hub_conf.cloud_provider,
         scope=scope,
         format=format,
+        auth_url=hub_conf.frontend_url,
     )
     conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
     branch = get_current_branch()
@@ -945,6 +948,7 @@ def eval_table(
         cloud_provider=hub_conf.cloud_provider,
         scope=scope,
         format=format,
+        auth_url=hub_conf.frontend_url,
     )
 
     execution_info = (
@@ -967,6 +971,94 @@ def eval_table(
         format_print(response_json.get("message"), format=format)
     else:
         print_error("Schema evaluation failed.", format=format)
+        format_print(response_json.get("message"), format=format)
+        sys.exit(1)
+
+
+# zipline hub list-tables demo
+# list tables in a schema using eval API
+@hub.command()
+@click.argument("schema_name")
+@repo_option
+@click.option(
+    "--team",
+    required=False,
+    help="Optional team name to use for executionInfo. If not specified, uses default team metadata.",
+)
+@hub_url_option
+@use_auth_option
+@format_option
+@click.option(
+    "--eval-url",
+    help="Eval server address (e.g. http://localhost:3904).",
+    type=str,
+    default=None,
+)
+@click.option(
+    "--engine-type",
+    help="Engine type for listing tables.",
+    type=str,
+    default="SPARK",
+    show_default=True,
+)
+@jsonify_exceptions_if_json_format
+def list_tables(schema_name, repo, team, hub_url, use_auth, format, eval_url, engine_type):
+    """List tables in a schema.
+
+    SCHEMA_NAME is the schema/database to list tables from (e.g. demo).
+    """
+    team_execution_info, default_execution_info = None, None
+    team = team or os.environ.get("TEAM")
+    if team:
+        team_metadata_path = f"compiled/teams_metadata/{team}/{team}_team_metadata"
+        file_path = os.path.join(repo, team_metadata_path)
+        with open(file_path, "r") as f:
+            team_execution_info = json.load(f).get("executionInfo")
+    else:
+        file_path = os.path.join(repo, DEFAULT_TEAM_METADATA_CONF)
+        with open(file_path, "r") as f:
+            default_execution_info = json.load(f).get("executionInfo")
+    execution_info = team_execution_info or default_execution_info
+    common_env = execution_info["env"]["common"]
+    common_env.update(os.environ)
+    hub_conf = HubConfig(
+        **{k: common_env.get(k.upper()) for k in HubConfig.__dataclass_fields__.keys()}
+    )
+    scope = ""
+    if hub_conf.auth_scope is not None:
+        scope = hub_conf.auth_scope
+    elif hub_conf.cloud_provider == "azure" and hub_conf.customer_id is not None:
+        scope = f"api://{hub_conf.customer_id}-zipline-auth"
+
+    zipline_hub = ZiplineHub(
+        base_url=hub_url or hub_conf.hub_url,
+        sa_name=hub_conf.sa_name,
+        use_auth=use_auth,
+        eval_url=eval_url or hub_conf.eval_url,
+        cloud_provider=hub_conf.cloud_provider,
+        scope=scope,
+        format=format,
+        auth_url=hub_conf.frontend_url,
+    )
+
+    response_json = zipline_hub.call_list_tables_api(
+        schema_name=schema_name,
+        engine_type=engine_type,
+        execution_info=execution_info,
+    )
+
+    success = response_json.get("success")
+    if format == Format.JSON:
+        print(json.dumps(response_json, indent=4))
+        sys.exit(0 if success else 1)
+
+    if success:
+        print_success("List tables finished successfully.", format=format)
+        tables = response_json.get("tables") or []
+        for table in tables:
+            print_info(table, format=format)
+    else:
+        print_error("List tables failed.", format=format)
         format_print(response_json.get("message"), format=format)
         sys.exit(1)
 

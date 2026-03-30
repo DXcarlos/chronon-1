@@ -13,7 +13,7 @@ This doc will explain the process
 
 ## Overview
 
-![Versioning](../../images/versioning.png)
+![](../../images/versioning.svg)
 
 The basic steps to make a change to an existing entity in Chronon are:
 

@@ -1,22 +1,24 @@
 ---
-title: "Quickstart"
-order: 2
+title: "Local Sandbox"
+order: 4
 ---
 
-# Quickstart
+# Local Sandbox
 
-This section walks you through the steps to create a training dataset with Chronon, using a fabricated underlying raw dataset.
+This tutorial walks you through the steps to create a training dataset with Chronon using a self-contained local environment. It is designed for developers who want to **explore the open source Chronon project** without needing access to a Zipline deployment.
 
-Includes:
-- Example implementation of the main API components for defining features - `GroupBy` and `Join`.
-- The workflow for authoring these entities.
-- The workflow for backfilling training data.
-- The workflows for uploading and serving this data.
-- The workflow for measuring consistency between backfilled training data and online inference data.
+> **Looking for the Zipline platform?** If you have access to a Zipline subscription, see the [Quickstart](/docs/getting_started/Quickstart) guide instead. It covers the AI agent, the VS Code extension, and the full Zipline workflow including the Hub UI, automated scheduling, and online serving.
 
-Does not include:
-- A deep dive on the various concepts and terminologies in Chronon. For that, please see the [Introductory](/docs/authoring_features/GroupBy) documentation.
-- Running streaming jobs.
+This sandbox **does not include**:
+- The Zipline Hub UI or automated scheduling
+- Online serving infrastructure
+- Streaming pipelines
+
+It **does include** a working local example of:
+- Defining features with `GroupBy` and `Join`
+- Backfilling training data
+- Uploading feature data to a local KV store and fetching it
+- Measuring online/offline consistency
 
 ## Requirements
 

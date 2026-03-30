@@ -7,6 +7,13 @@ ignore:
       name: "libsqlite3-0"
     fix-state: "wont-fix"
 
+  # GHSA-jwp6-cvj8-fw65: ReDoS in Spark UI log viewer
+  # High severity in spark-core_2.12 3.5.3, fixed in 3.5.7
+  # Ignoring until Spark dependency is upgraded
+  - vulnerability: "GHSA-jwp6-cvj8-fw65"
+    package:
+      name: "spark-core_2.12"
+
   # Curl CVE exceptions - required for fetcher container functionality
   # Used for Amazon Corretto key download, Google Cloud Profiler download, and healthcheck
   - package:

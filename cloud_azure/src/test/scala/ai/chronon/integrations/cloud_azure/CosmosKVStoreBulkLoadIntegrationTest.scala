@@ -39,17 +39,17 @@ class CosmosKVStoreBulkLoadIntegrationTest extends AnyFlatSpec with Matchers {
 
     // Create KV store using the factory
     val conf = Map(
-      "cosmos.endpoint" -> endpoint,
-      "cosmos.key" -> key,
-      "cosmos.database" -> databaseName,
-      "cosmos.preferred.regions" -> "Central US"
+      "COSMOS_ENDPOINT" -> endpoint,
+      "COSMOS_KEY" -> key,
+      "COSMOS_DATABASE" -> databaseName,
+      "COSMOS_PREFERRED_REGIONS" -> "Central US"
     )
 
     val kvStore = CosmosKVStoreFactory.create(conf)
 
     // Create container with production settings (autoscale throughput)
     val createProps = Map(
-      "cosmos.endpoint" -> endpoint,
+      "COSMOS_ENDPOINT" -> endpoint,
       "autoscale" -> 4000  // Use autoscale with 4000 max RU/s for the test
     )
 

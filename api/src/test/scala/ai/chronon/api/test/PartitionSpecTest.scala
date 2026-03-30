@@ -1,13 +1,14 @@
 package ai.chronon.api.test
 
-import ai.chronon.api.{PartitionSpec, Window, TimeUnit}
+import ai.chronon.api.{PartitionRange, PartitionSpec, Window, TimeUnit}
 import ai.chronon.api.Extensions.WindowUtils
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 class PartitionSpecTest extends AnyFlatSpec with Matchers {
-  
+
   private val dailySpec = PartitionSpec.daily
+  private val compactSpec = PartitionSpec("ds", "yyyyMMdd", 24 * 60 * 60 * 1000)
   
   "PartitionSpec.expandRange" should "expand date range into individual dates" in {
     val result = dailySpec.expandRange("2024-01-01", "2024-01-05")
@@ -74,5 +75,61 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     val window = new Window(1, TimeUnit.MINUTES)
     val result = dailySpec.calendarGrain(window)
     result should be(java.util.Calendar.MINUTE)
+  }
+
+  "PartitionSpec.translate" should "convert from yyyy-MM-dd to yyyyMMdd" in {
+    dailySpec.translate("2025-11-25", compactSpec) should be("20251125")
+    dailySpec.translate("2025-01-01", compactSpec) should be("20250101")
+    dailySpec.translate("1970-01-01", compactSpec) should be("19700101")
+  }
+
+  it should "convert from yyyyMMdd to yyyy-MM-dd" in {
+    compactSpec.translate("20251125", dailySpec) should be("2025-11-25")
+    compactSpec.translate("20250101", dailySpec) should be("2025-01-01")
+    compactSpec.translate("19700101", dailySpec) should be("1970-01-01")
+  }
+
+  it should "round-trip between formats" in {
+    val date = "2025-12-01"
+    val roundTripped = compactSpec.translate(dailySpec.translate(date, compactSpec), dailySpec)
+    roundTripped should be(date)
+  }
+
+  "PartitionSpec date arithmetic" should "work correctly with yyyyMMdd format" in {
+    compactSpec.after("20251125") should be("20251126")
+    compactSpec.before("20251201") should be("20251130")
+    compactSpec.shift("20251231", 1) should be("20260101")
+  }
+
+  it should "support minus with window in yyyyMMdd format" in {
+    val twoDays = new Window(2, TimeUnit.DAYS)
+    compactSpec.minus("20251125", twoDays) should be("20251123")
+  }
+
+  "PartitionRange.translate" should "convert CLI dates (yyyy-MM-dd) to yyyyMMdd" in {
+    val cliRange = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
+    val translated = cliRange.translate(compactSpec)
+
+    translated.start should be("20251125")
+    translated.end should be("20251201")
+    translated.partitionSpec should be(compactSpec)
+  }
+
+  it should "preserve range validity after translation" in {
+    val cliRange = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
+    val translated = cliRange.translate(compactSpec)
+
+    translated.wellDefined should be(true)
+    translated.partitions.size should be(7)
+    translated.partitions.head should be("20251125")
+    translated.partitions.last should be("20251201")
+  }
+
+  it should "be a no-op when source and target formats match" in {
+    val range = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
+    val translated = range.translate(dailySpec)
+
+    translated.start should be("2025-11-25")
+    translated.end should be("2025-12-01")
   }
 }

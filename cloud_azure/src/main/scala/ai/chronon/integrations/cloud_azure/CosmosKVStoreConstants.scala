@@ -24,10 +24,6 @@ object CosmosKVStoreConstants {
   val PropTTLSeconds: String = "ttl-seconds"
   val PropThroughput: String = "throughput"
   val PropAutoscale: String = "autoscale"
-  val PropCosmosEndpoint: String = "cosmos.endpoint"
-  val PropCosmosKey: String = "cosmos.key"
-  val PropCosmosDatabase: String = "cosmos.database"
-  val PropCosmosPreferredRegions: String = "cosmos.preferred.regions"
   val PropEmulatorMode: String = "emulator-mode"
 
   // Default database name

@@ -1,0 +1,12 @@
+{
+	"groups": {
+		"getting_started": "Getting Started",
+		"authoring_features": "Authoring Features",
+		"setup": "Setup",
+		"running_on_zipline_hub": "Test, Deploy, Serve (Zipline)",
+		"test_deploy_serve": "Test, Deploy, Serve (self-hosted)",
+		"management_in_production": "Management in Production",
+		"reference": "Reference",
+		"other": "Other"
+	}
+}

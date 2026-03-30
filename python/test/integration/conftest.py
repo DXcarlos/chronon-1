@@ -2,14 +2,26 @@
 
 Usage::
 
-    # Run all integration tests:
+    # Run all integration tests (using ZIPLINE_TOKEN — service principal):
+    ZIPLINE_TOKEN=<session_token> \\
+        ZIPLINE_AUTH_URL=https://canary.zipline.ai \\
+        HUB_URL=https://canary-orch.zipline.ai \\
+        ./mill python.test_integration
+
+    # Run all integration tests (using ZIPLINE_TOKEN — quick JWT):
+    ZIPLINE_TOKEN=$(zipline auth get-access-token) \\
+        HUB_URL=https://canary-orch.zipline.ai \\
+        ./mill python.test_integration
+
+    # Run all integration tests (using cloud IAM token):
     GCP_ID_TOKEN=$(gcloud auth print-identity-token) \\
         HUB_URL=https://canary-orch.zipline.ai \\
         ./mill python.test_integration
 
     # Run a specific test:
     PYTEST_ADDOPTS="-k test_backfill_no_data" \\
-        GCP_ID_TOKEN=$(gcloud auth print-identity-token) \\
+        ZIPLINE_TOKEN=<token> \\
+        ZIPLINE_AUTH_URL=https://canary.zipline.ai \\
         HUB_URL=https://canary-orch.zipline.ai \\
         ./mill python.test_integration
 """

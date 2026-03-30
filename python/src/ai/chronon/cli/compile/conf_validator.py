@@ -361,7 +361,7 @@ class ConfValidator(object):
         if missing:
             key_mapping_str = f"Key Mapping: {key_mapping}" if key_mapping else ""
             err_string += textwrap.dedent(f"""
-                - Join is missing keys {missing} on left side. Required for JoinPart: {group_by_name}. 
+                - Join is missing keys {missing} on left side. Required for JoinPart: {group_by_name}.
                 Existing columns on left side: {left_cols_as_str}
                 All required Keys: {join_part.groupBy.keyColumns}
                 {key_mapping_str}
@@ -562,8 +562,8 @@ class ConfValidator(object):
 
             errors.append(
                 ValueError(
-                    f"""group_by {group_by.metaData.name} uses unwindowed aggregations [{nln}{f",{nln}".join(unwindowed_aggregations)}{nln}] 
-                    on unbounded event sources: [{nln}{f",{nln}".join(unbounded_event_sources)}{nln}]. 
+                    f"""group_by {group_by.metaData.name} uses unwindowed aggregations [{nln}{f",{nln}".join(unwindowed_aggregations)}{nln}]
+                    on unbounded event sources: [{nln}{f",{nln}".join(unbounded_event_sources)}{nln}].
                     Please set a start_partition on the source, or a window on the aggregation."""
                 )
             )
@@ -713,7 +713,7 @@ class ConfValidator(object):
         if self._has_compilation_errors(compile_status):
             return  # Don't prompt when there are errors
 
-        if not hasattr(self, "_pending_changes"):
+        if not hasattr(self, "pending_changes"):
             return  # No pending changes
 
         # Check if we need user confirmation (only for non-version-bump changes)

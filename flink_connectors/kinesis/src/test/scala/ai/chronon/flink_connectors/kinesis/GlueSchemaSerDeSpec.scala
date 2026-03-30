@@ -1,6 +1,9 @@
 package ai.chronon.flink_connectors.kinesis
 
+import ai.chronon.api.{IntType, StringType}
 import ai.chronon.online.TopicInfo
+import com.google.protobuf.DynamicMessage
+import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema
 import org.mockito.Mockito.when
 import org.mockito.ArgumentMatchers.any
 import org.mockito.MockitoSugar.mock
@@ -214,7 +217,16 @@ class GlueSchemaSerDeSpec extends AnyFlatSpec {
     assert(schema.fields.exists(_.name == "id"))
   }
 
-  it should "fail for unsupported schema formats" in {
+  // ============== Proto3 Tests ==============
+
+  it should "succeed if the schema is found and is of type PROTOBUF (proto3)" in {
+    val proto3SchemaStr =
+      """syntax = "proto3";
+        |message TestProto3 {
+        |  string name = 1;
+        |  int32 age = 2;
+        |}""".stripMargin
+
     val topicInfo = TopicInfo("test-stream", "kinesis",
       Map(
         GlueSchemaSerDe.RegionKey -> "us-east-1",
@@ -224,6 +236,221 @@ class GlueSchemaSerDeSpec extends AnyFlatSpec {
     val mockGlueClient = mock[GlueClient]
     val response = GetSchemaVersionResponse.builder()
       .dataFormat(DataFormat.PROTOBUF)
+      .schemaDefinition(proto3SchemaStr)
+      .versionNumber(1L)
+      .build()
+    when(mockGlueClient.getSchemaVersion(any[GetSchemaVersionRequest]())).thenReturn(response)
+
+    val serDe = new MockGlueSchemaSerDe(topicInfo, mockGlueClient)
+    val schema = serDe.schema
+    assert(schema != null)
+    assert(schema.fields.length == 2)
+    assert(schema.fields.exists(f => f.name == "name" && f.fieldType == StringType))
+    assert(schema.fields.exists(f => f.name == "age" && f.fieldType == IntType))
+  }
+
+  it should "deserialize proto3 messages from Glue" in {
+    val proto3SchemaStr =
+      """syntax = "proto3";
+        |message User {
+        |  string username = 1;
+        |  int32 user_id = 2;
+        |}""".stripMargin
+
+    val topicInfo = TopicInfo("test-stream", "kinesis",
+      Map(
+        GlueSchemaSerDe.RegionKey -> "us-east-1",
+        GlueSchemaSerDe.RegistryNameKey -> "test-registry",
+        GlueSchemaSerDe.SchemaNameKey -> "user-schema"
+      ))
+    val mockGlueClient = mock[GlueClient]
+    val response = GetSchemaVersionResponse.builder()
+      .dataFormat(DataFormat.PROTOBUF)
+      .schemaDefinition(proto3SchemaStr)
+      .versionNumber(1L)
+      .build()
+    when(mockGlueClient.getSchemaVersion(any[GetSchemaVersionRequest]())).thenReturn(response)
+
+    val serDe = new MockGlueSchemaSerDe(topicInfo, mockGlueClient)
+
+    val protobufSchema = new ProtobufSchema(proto3SchemaStr)
+    val descriptor = protobufSchema.toDescriptor()
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("username"), "alice")
+      .setField(descriptor.findFieldByName("user_id"), 42)
+      .build()
+
+    val mutation = serDe.fromBytes(message.toByteArray)
+    assert(mutation.after != null)
+    assert(mutation.after(0) == "alice")
+    assert(mutation.after(1) == 42)
+  }
+
+  it should "handle proto3DefaultAsNull parameter for proto3 schemas from Glue" in {
+    val proto3SchemaStr =
+      """syntax = "proto3";
+        |message TestDefaults {
+        |  string text = 1;
+        |  int32 number = 2;
+        |}""".stripMargin
+
+    val topicInfoWithNull = TopicInfo("test-stream", "kinesis",
+      Map(
+        GlueSchemaSerDe.RegionKey -> "us-east-1",
+        GlueSchemaSerDe.RegistryNameKey -> "test-registry",
+        GlueSchemaSerDe.SchemaNameKey -> "test-defaults",
+        GlueSchemaSerDe.Proto3DefaultAsNullKey -> "true"
+      ))
+    val mockGlueClient = mock[GlueClient]
+    val response = GetSchemaVersionResponse.builder()
+      .dataFormat(DataFormat.PROTOBUF)
+      .schemaDefinition(proto3SchemaStr)
+      .versionNumber(1L)
+      .build()
+    when(mockGlueClient.getSchemaVersion(any[GetSchemaVersionRequest]())).thenReturn(response)
+
+    val serDeWithNull = new MockGlueSchemaSerDe(topicInfoWithNull, mockGlueClient)
+
+    val protobufSchema = new ProtobufSchema(proto3SchemaStr)
+    val descriptor = protobufSchema.toDescriptor()
+    val emptyMessage = DynamicMessage.newBuilder(descriptor).build()
+
+    val mutationWithNull = serDeWithNull.fromBytes(emptyMessage.toByteArray)
+    assert(mutationWithNull.after(0) == null)
+    assert(mutationWithNull.after(1) == null)
+
+    val topicInfoWithoutNull = TopicInfo("test-stream", "kinesis",
+      Map(
+        GlueSchemaSerDe.RegionKey -> "us-east-1",
+        GlueSchemaSerDe.RegistryNameKey -> "test-registry",
+        GlueSchemaSerDe.SchemaNameKey -> "test-defaults",
+        GlueSchemaSerDe.Proto3DefaultAsNullKey -> "false"
+      ))
+    val serDeWithoutNull = new MockGlueSchemaSerDe(topicInfoWithoutNull, mockGlueClient)
+
+    val mutationWithoutNull = serDeWithoutNull.fromBytes(emptyMessage.toByteArray)
+    assert(mutationWithoutNull.after(0) == "")
+    assert(mutationWithoutNull.after(1) == 0)
+  }
+
+  // ============== Proto2 Tests ==============
+
+  it should "succeed if the schema is found and is of type PROTOBUF (proto2)" in {
+    val proto2SchemaStr =
+      """syntax = "proto2";
+        |message TestProto2 {
+        |  required string name = 1;
+        |  optional int32 age = 2;
+        |}""".stripMargin
+
+    val topicInfo = TopicInfo("test-stream", "kinesis",
+      Map(
+        GlueSchemaSerDe.RegionKey -> "us-east-1",
+        GlueSchemaSerDe.RegistryNameKey -> "test-registry",
+        GlueSchemaSerDe.SchemaNameKey -> "test-schema-proto2"
+      ))
+    val mockGlueClient = mock[GlueClient]
+    val response = GetSchemaVersionResponse.builder()
+      .dataFormat(DataFormat.PROTOBUF)
+      .schemaDefinition(proto2SchemaStr)
+      .versionNumber(1L)
+      .build()
+    when(mockGlueClient.getSchemaVersion(any[GetSchemaVersionRequest]())).thenReturn(response)
+
+    val serDe = new MockGlueSchemaSerDe(topicInfo, mockGlueClient)
+    val schema = serDe.schema
+    assert(schema != null)
+    assert(schema.fields.length == 2)
+    assert(schema.fields.exists(f => f.name == "name" && f.fieldType == StringType))
+    assert(schema.fields.exists(f => f.name == "age" && f.fieldType == IntType))
+  }
+
+  it should "deserialize proto2 messages with required and optional fields from Glue" in {
+    val proto2SchemaStr =
+      """syntax = "proto2";
+        |message Person {
+        |  required string name = 1;
+        |  optional int32 id = 2;
+        |}""".stripMargin
+
+    val topicInfo = TopicInfo("test-stream", "kinesis",
+      Map(
+        GlueSchemaSerDe.RegionKey -> "us-east-1",
+        GlueSchemaSerDe.RegistryNameKey -> "test-registry",
+        GlueSchemaSerDe.SchemaNameKey -> "person-schema"
+      ))
+    val mockGlueClient = mock[GlueClient]
+    val response = GetSchemaVersionResponse.builder()
+      .dataFormat(DataFormat.PROTOBUF)
+      .schemaDefinition(proto2SchemaStr)
+      .versionNumber(1L)
+      .build()
+    when(mockGlueClient.getSchemaVersion(any[GetSchemaVersionRequest]())).thenReturn(response)
+
+    val serDe = new MockGlueSchemaSerDe(topicInfo, mockGlueClient)
+
+    val protobufSchema = new ProtobufSchema(proto2SchemaStr)
+    val descriptor = protobufSchema.toDescriptor()
+    val message = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "bob")
+      .setField(descriptor.findFieldByName("id"), 123)
+      .build()
+
+    val mutation = serDe.fromBytes(message.toByteArray)
+    assert(mutation.after != null)
+    assert(mutation.after(0) == "bob")
+    assert(mutation.after(1) == 123)
+  }
+
+  it should "handle proto2 unset optional fields as null from Glue" in {
+    val proto2SchemaStr =
+      """syntax = "proto2";
+        |message OptionalTest {
+        |  required string name = 1;
+        |  optional int32 value = 2;
+        |}""".stripMargin
+
+    val topicInfo = TopicInfo("test-stream", "kinesis",
+      Map(
+        GlueSchemaSerDe.RegionKey -> "us-east-1",
+        GlueSchemaSerDe.RegistryNameKey -> "test-registry",
+        GlueSchemaSerDe.SchemaNameKey -> "optional-test"
+      ))
+    val mockGlueClient = mock[GlueClient]
+    val response = GetSchemaVersionResponse.builder()
+      .dataFormat(DataFormat.PROTOBUF)
+      .schemaDefinition(proto2SchemaStr)
+      .versionNumber(1L)
+      .build()
+    when(mockGlueClient.getSchemaVersion(any[GetSchemaVersionRequest]())).thenReturn(response)
+
+    val serDe = new MockGlueSchemaSerDe(topicInfo, mockGlueClient)
+
+    val protobufSchema = new ProtobufSchema(proto2SchemaStr)
+    val descriptor = protobufSchema.toDescriptor()
+    val messageWithOnlyRequired = DynamicMessage
+      .newBuilder(descriptor)
+      .setField(descriptor.findFieldByName("name"), "test")
+      .build()
+
+    val mutation = serDe.fromBytes(messageWithOnlyRequired.toByteArray)
+    assert(mutation.after != null)
+    assert(mutation.after(0) == "test")
+    assert(mutation.after(1) == null)
+  }
+
+  it should "fail for unknown schema formats" in {
+    val topicInfo = TopicInfo("test-stream", "kinesis",
+      Map(
+        GlueSchemaSerDe.RegionKey -> "us-east-1",
+        GlueSchemaSerDe.RegistryNameKey -> "test-registry",
+        GlueSchemaSerDe.SchemaNameKey -> "test-schema"
+      ))
+    val mockGlueClient = mock[GlueClient]
+    val response = GetSchemaVersionResponse.builder()
+      .dataFormat(DataFormat.UNKNOWN_TO_SDK_VERSION)
       .schemaDefinition("{}")
       .build()
     when(mockGlueClient.getSchemaVersion(any[GetSchemaVersionRequest]())).thenReturn(response)

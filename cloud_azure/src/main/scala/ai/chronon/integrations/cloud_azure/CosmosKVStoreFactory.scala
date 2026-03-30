@@ -15,12 +15,9 @@ object CosmosKVStoreFactory {
   private val clientLock = new Object()
 
   def create(conf: Map[String, String]): CosmosKVStoreImpl = {
-    val endpoint = getOrElseThrow(PropCosmosEndpoint, EnvCosmosEndpoint, conf)
-    val key = getOrElseThrow(PropCosmosKey, EnvCosmosKey, conf)
-    val databaseName = conf.getOrElse(
-      PropCosmosDatabase,
-      sys.env.getOrElse(EnvCosmosDatabase, DefaultDatabaseName)
-    )
+    val endpoint = getOrElseThrow(EnvCosmosEndpoint, conf)
+    val key = getOrElseThrow(EnvCosmosKey, conf)
+    val databaseName = getOptional(EnvCosmosDatabase, conf).getOrElse(DefaultDatabaseName)
 
     val client = Option(clientCache.get()) match {
       case Some(existingClient) => existingClient
@@ -75,26 +72,17 @@ object CosmosKVStoreFactory {
   }
 
   private def parsePreferredRegions(conf: Map[String, String]): java.util.List[String] = {
-    conf
-      .get(PropCosmosPreferredRegions)
-      .orElse(sys.env.get(EnvCosmosPreferredRegions))
+    getOptional(EnvCosmosPreferredRegions, conf)
       .map(_.split(",").map(_.trim).filter(_.nonEmpty).toList.asJava)
       .getOrElse(java.util.Collections.emptyList[String]())
   }
 
-  private def getOrElseThrow(
-      propKey: String,
-      envKey: String,
-      conf: Map[String, String]
-  ): String = {
-    conf.getOrElse(
-      propKey,
-      sys.env.getOrElse(
-        envKey,
-        throw new IllegalArgumentException(s"$propKey or $envKey required but not found")
-      )
-    )
-  }
+  private[cloud_azure] def getOptional(key: String, conf: Map[String, String]): Option[String] =
+    sys.env.get(key).orElse(conf.get(key))
+
+  private[cloud_azure] def getOrElseThrow(key: String, conf: Map[String, String]): String =
+    getOptional(key, conf)
+      .getOrElse(throw new IllegalArgumentException(s"$key required but not found"))
 
   // Cleanup on shutdown
   sys.addShutdownHook {

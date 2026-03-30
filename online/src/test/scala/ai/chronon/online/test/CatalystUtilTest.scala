@@ -169,6 +169,10 @@ trait CatalystUtilTestSparkSQLStructs {
 
 class CatalystUtilTest extends AnyFlatSpec with CatalystUtilTestSparkSQLStructs {
 
+  it should "disable spark cleaner reference tracking in serving session" in {
+    assert(CatalystUtil.session.sparkContext.getConf.get("spark.cleaner.referenceTracking") === "false")
+  }
+
   it should "select star with common scalars should return as is" in {
     val selects = Seq(
       "bool_x" -> "bool_x",

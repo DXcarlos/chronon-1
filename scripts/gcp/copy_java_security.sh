@@ -1,4 +1,13 @@
 #!/bin/bash
-ARTIFACT_PREFIX=$(/usr/share/google/get_metadata_value attributes/artifact_prefix)
-# Copy over the java.security settings file to help with TLS setup during BigTable client init
-gcloud storage cp "$ARTIFACT_PREFIX/scripts/java.security" /etc/flink/conf/java.security
+set -euo pipefail
+
+# Keep the TLS overrides inline so Dataproc boot does not depend on a
+# second GCS object path staying in sync with this init action.
+install -d /etc/flink/conf
+cat > /etc/flink/conf/java.security <<'EOF'
+jdk.tls.disabledAlgorithms=SSLv3, RC4, DES, MD5withRSA
+jdk.tls.legacyAlgorithms=
+security.provider.1=sun.security.provider.Sun
+security.provider.2=sun.security.rsa.SunRsaSign
+security.provider.3=sun.security.ssl.SunJSSE
+EOF

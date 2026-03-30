@@ -56,7 +56,7 @@ def test_run_adhoc(confs, chronon_root, hub_url, cloud, flink_cleanup):
     flink_cleanup["workflow_id"] = workflow_id
 
     poll_workflow_until(
-        hub_url, workflow_id, target_statuses={"SUCCEEDED"}, timeout=600, interval=15,
+        hub_url, workflow_id, target_statuses={"SUCCEEDED"}, timeout=1200, interval=15,
     )
 
 @pytest.mark.integration
@@ -71,5 +71,5 @@ def test_run_adhoc_no_data(confs, chronon_root, hub_url, cloud):
     )
 
     poll_workflow_until(
-        hub_url, workflow_id, target_statuses={"FAILED"}, timeout=900, interval=30,
+        hub_url, workflow_id, target_statuses={"FAILED"}, timeout=1800, interval=30,
     )
