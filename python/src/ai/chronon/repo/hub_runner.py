@@ -622,7 +622,7 @@ def schedule_all(
 
             if format == Format.JSON:
                 print(json.dumps({
-                    "status": "Compilation changes detected",
+                    "status": "Compilation changes detected. Exiting schedule-all.",
                     "errors": errors,
                     "added": [c.name for c in added],
                     "changed": [c.name for c in changed],
