@@ -16,10 +16,7 @@ trait FormatProvider extends Serializable {
 
   def readFormat(tableName: String): Option[Format]
 
-  def writeFormat: Format = {
-    val typeString = sparkSession.conf.get("spark.chronon.table_write.format", "").toLowerCase
-    FormatProvider.formatFromTypeString(typeString)
-  }
+  def writeFormat: Format = Iceberg
 
 }
 
