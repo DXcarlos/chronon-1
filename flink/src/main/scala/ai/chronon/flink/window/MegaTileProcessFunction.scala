@@ -10,15 +10,24 @@ import ai.chronon.online.serde.ArrayRow
 import org.apache.flink.api.common.state.{MapState, MapStateDescriptor, ValueState, ValueStateDescriptor}
 import org.apache.flink.configuration.Configuration
 import org.apache.flink.metrics.Counter
+import org.apache.flink.streaming.api.TimeDomain
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction
 import org.apache.flink.util.Collector
 import org.slf4j.{Logger, LoggerFactory}
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 /** Flink KeyedProcessFunction that maintains per-entity mega tile state.
   * Delegates all aggregation logic to MegaTileStreamProcessor.
   * State access goes through FlinkTileStore — only touched entries are serialized/deserialized.
+  *
+  * Timer strategy:
+  * - During catchup (watermark far behind wall clock): event-time timers only.
+  *   Eviction fires as watermark advances through the backlog at the correct cadence.
+  * - During live operation (watermark near wall clock): processing-time timers aligned
+  *   to hop boundaries. Fires at wall-clock intervals so idle entities get timely
+  *   sawtooth correction without waiting for the next event to advance the watermark.
+  * - Transition is one-way: catchup → live. Once caught up, stays in live mode.
   */
 class MegaTileProcessFunction(
     groupBy: GroupBy,
@@ -45,6 +54,16 @@ class MegaTileProcessFunction(
   private var largeYesterdayIrState: ValueState[Array[Byte]] = _
   private var currentDayStartState: ValueState[java.lang.Long] = _
   private var earliestTileStartState: ValueState[java.lang.Long] = _
+
+  // Tracks whether this entity has a processing-time timer registered.
+  // Not persisted — after checkpoint restore, first event re-registers.
+  @transient private var hasProcessingTimeTimer: Boolean = false
+
+  // Once true, stays true for the lifetime of this subtask.
+  @transient private var isLive: Boolean = false
+
+  // Threshold: watermark within 2× the allowed lateness of wall clock → caught up.
+  private val CatchupThresholdMillis: Long = 2 * 60 * 1000L // 2 minutes
 
   override def open(parameters: Configuration): Unit = {
     super.open(parameters)
@@ -78,6 +97,21 @@ class MegaTileProcessFunction(
     processor = new MegaTileStreamProcessor(megaTileAgg, flinkStore)
   }
 
+  private def ensureStateBound(currentKey: java.util.List[Any]): Unit = {
+    if (lastKey == null || !lastKey.equals(currentKey)) {
+      lastKey = currentKey
+      flinkStore.bindFlinkState(tileState,
+                                megaTileIrState,
+                                largeTodayIrState,
+                                largeYesterdayIrState,
+                                currentDayStartState,
+                                earliestTileStartState)
+    }
+  }
+
+  private def isCaughtUp(watermark: Long, procNow: Long): Boolean =
+    watermark > 0 && (procNow - watermark) <= CatchupThresholdMillis
+
   override def processElement(
       event: ProjectedEvent,
       ctx: KeyedProcessFunction[java.util.List[Any], ProjectedEvent, TimestampedTile]#Context,
@@ -92,18 +126,7 @@ class MegaTileProcessFunction(
       val values: Array[Any] = valueColumns.map(element(_))
       val row = new ArrayRow(values, tsMills)
 
-      // Point FlinkTileStore at current key's Flink state (only resets on key switch)
-      val currentKey = ctx.getCurrentKey
-      if (lastKey == null || !lastKey.equals(currentKey)) {
-        lastKey = currentKey
-        flinkStore.bindFlinkState(tileState,
-                                  megaTileIrState,
-                                  largeTodayIrState,
-                                  largeYesterdayIrState,
-                                  currentDayStartState,
-                                  earliestTileStartState)
-      }
-
+      ensureStateBound(ctx.getCurrentKey)
       processor.advanceWatermark(ctx.timerService().currentWatermark())
       val result = processor.onEvent(row, tsMills)
 
@@ -124,9 +147,30 @@ class MegaTileProcessFunction(
                               event.startProcessingTimeMillis))
       }
 
+      // Schedule eviction timer if small windows exist
       if (processor.hasSmallWindows) {
-        val nextEviction = TsUtils.round(tsMills, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize
-        ctx.timerService().registerEventTimeTimer(nextEviction)
+        val hopSize = processor.minSmallWindowTileSize
+        val watermark = ctx.timerService().currentWatermark()
+        val procNow = ctx.timerService().currentProcessingTime()
+
+        if (!isLive && isCaughtUp(watermark, procNow)) {
+          isLive = true
+          if (enableDebug) logger.info(s"Transitioning to live mode: watermark=$watermark procNow=$procNow")
+        }
+
+        if (isLive) {
+          // Live: processing-time timer aligned to hop boundary from wall clock.
+          // Fires at wall-clock intervals so idle entities get timely sawtooth correction.
+          if (!hasProcessingTimeTimer) {
+            val nextEviction = TsUtils.round(procNow, hopSize) + hopSize
+            ctx.timerService().registerProcessingTimeTimer(nextEviction)
+            hasProcessingTimeTimer = true
+          }
+        } else {
+          // Catchup: event-time timer. Fires as watermark advances through the backlog.
+          val nextEviction = TsUtils.round(tsMills, hopSize) + hopSize
+          ctx.timerService().registerEventTimeTimer(nextEviction)
+        }
       }
     } catch {
       case e: Exception =>
@@ -143,18 +187,12 @@ class MegaTileProcessFunction(
     try {
       if (processor == null) initializeTransients()
 
-      val currentKey = ctx.getCurrentKey
-      if (lastKey == null || !lastKey.equals(currentKey)) {
-        lastKey = currentKey
-        flinkStore.bindFlinkState(tileState,
-                                  megaTileIrState,
-                                  largeTodayIrState,
-                                  largeYesterdayIrState,
-                                  currentDayStartState,
-                                  earliestTileStartState)
-      }
-
+      ensureStateBound(ctx.getCurrentKey)
       processor.advanceWatermark(ctx.timerService().currentWatermark())
+
+      // Both event-time and processing-time timers run the same eviction logic.
+      // The timerTs is the eviction point — either the event-time boundary (catchup)
+      // or the wall-clock boundary (live).
       val result = processor.onEviction(timestamp)
 
       if (result.todayEntry != null) {
@@ -165,8 +203,17 @@ class MegaTileProcessFunction(
                               System.currentTimeMillis()))
       }
 
+      // Re-register the next timer
       if (processor.hasSmallWindows) {
-        ctx.timerService().registerEventTimeTimer(timestamp + processor.minSmallWindowTileSize)
+        val hopSize = processor.minSmallWindowTileSize
+        if (ctx.timeDomain() == TimeDomain.PROCESSING_TIME) {
+          // Live mode: re-register next processing-time timer at next hop boundary
+          val nextEviction = TsUtils.round(timestamp, hopSize) + hopSize
+          ctx.timerService().registerProcessingTimeTimer(nextEviction)
+        } else {
+          // Catchup mode: re-register next event-time timer
+          ctx.timerService().registerEventTimeTimer(timestamp + hopSize)
+        }
       }
     } catch {
       case e: Exception =>
