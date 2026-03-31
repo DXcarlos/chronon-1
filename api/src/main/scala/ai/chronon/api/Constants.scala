@@ -37,9 +37,12 @@ object Constants {
   val ChrononDynamicTable = "chronon_dynamic_table"
   val ChrononOOCTable: String = "chronon_ooc_table"
   val ChrononLogTable: String = "chronon_log_table"
-  val MetadataDataset = "CHRONON_METADATA"
+
+  val MetadataDataset: String = "CHRONON_METADATA"
+
   val SchemaPublishEvent = "SCHEMA_PUBLISH_EVENT"
-  val ConsistencyMetricsDataset = "CHRONON_CONSISTENCY_METRICS_STATS_BATCH"
+
+  val ConsistencyMetricsDataset: String = "CHRONON_CONSISTENCY_METRICS_STATS_BATCH"
   val TimeField: StructField = StructField(TimeColumn, LongType)
   val ReversalField: StructField = StructField(ReversalColumn, BooleanType)
   val MutationTimeField: StructField = StructField(MutationTimeColumn, LongType)
@@ -58,6 +61,7 @@ object Constants {
   val ChrononRunDs: String = "CHRONON_RUN_DS"
 
   val TiledSummaryDataset: String = "DATA_QUALITY_METRICS"
+
   val EnhancedStatsDataset: String = "ENHANCED_STATS"
 
   val DefaultDriftTileSize: Window = new Window(30, TimeUnit.MINUTES)
@@ -93,4 +97,6 @@ object Constants {
   val DefaultPercentiles: Seq[String] = Seq("p5", "p50", "p95")
 
   val archiveReuseTableSuffix: String = "_archive_reuse"
+
+  val KvTablePrefixArg = "kv.tablePrefix"
 }

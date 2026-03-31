@@ -16,6 +16,7 @@
 
 package ai.chronon.online
 
+import ai.chronon.api.Constants.{KvTablePrefixArg, MetadataDataset}
 import ai.chronon.api._
 import ai.chronon.online.KVStore._
 import ai.chronon.online.fetcher.Fetcher
@@ -28,7 +29,6 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.function.Consumer
-
 import scala.concurrent.duration.{Duration, MILLISECONDS}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -247,7 +247,6 @@ abstract class Api(userConf: Map[String, String]) extends Serializable {
   def generateModelPlatformProvider: ModelPlatformProvider = null
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
-  def setupLogging(): Unit = {}
 
   /** logged responses should be made available to an offline log table in Hive
     *  with columns
@@ -269,7 +268,7 @@ abstract class Api(userConf: Map[String, String]) extends Serializable {
   def buildFetcher(debug: Boolean = false, callerName: String = null, disableErrorThrows: Boolean = false): Fetcher =
     new Fetcher(
       genKvStore,
-      Constants.MetadataDataset,
+      MetadataDataset,
       logFunc = responseConsumer,
       debug = debug,
       externalSourceRegistry = externalRegistry,
@@ -283,7 +282,7 @@ abstract class Api(userConf: Map[String, String]) extends Serializable {
   final def buildJavaFetcher(callerName: String = null, disableErrorThrows: Boolean = false): JavaFetcher = {
     new JavaFetcher(
       genKvStore,
-      Constants.MetadataDataset,
+      MetadataDataset,
       timeoutMillis,
       responseConsumer,
       externalRegistry,

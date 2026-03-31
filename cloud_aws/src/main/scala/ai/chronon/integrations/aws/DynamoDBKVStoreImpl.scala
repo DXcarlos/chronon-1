@@ -1,67 +1,40 @@
 package ai.chronon.integrations.aws
 
-import ai.chronon.api.Constants
-import ai.chronon.api.Constants.{ContinuationKey, ListLimit}
+import ai.chronon.api.Constants.{ContinuationKey, KvTablePrefixArg, ListLimit}
 import ai.chronon.api.Extensions.StringOps
-import ai.chronon.api.TilingUtils
 import ai.chronon.api.ScalaJavaConversions._
-import ai.chronon.spark.{IonPathConfig, IonWriter}
+import ai.chronon.api.{Constants, TilingUtils}
 import ai.chronon.online.KVStore
-import ai.chronon.online.KVStore.GetResponse
-import ai.chronon.online.KVStore.ListRequest
-import ai.chronon.online.KVStore.ListResponse
-import ai.chronon.online.KVStore.ListValue
-import ai.chronon.online.KVStore.TimedValue
+import ai.chronon.online.KVStore._
 import ai.chronon.online.metrics.Metrics.Context
-import ai.chronon.online.metrics.Metrics
-import ai.chronon.online.metrics.TTLCache
+import ai.chronon.online.metrics.{Metrics, TTLCache}
+import ai.chronon.spark.{IonPathConfig, IonWriter}
 import software.amazon.awssdk.awscore.AwsRequestOverrideConfiguration
 import software.amazon.awssdk.core.SdkBytes
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
-import software.amazon.awssdk.services.dynamodb.model.{
-  AttributeDefinition,
-  AttributeValue,
-  BillingMode,
-  CreateTableRequest,
-  DescribeImportRequest,
-  DescribeTableRequest,
-  GetItemRequest,
-  ImportStatus,
-  ImportTableDescription,
-  ImportTableRequest,
-  InputCompressionType,
-  InputFormat,
-  KeySchemaElement,
-  KeyType,
-  ProvisionedThroughputExceededException,
-  PutItemRequest,
-  QueryRequest,
-  QueryResponse,
-  ResourceInUseException,
-  ResourceNotFoundException,
-  S3BucketSource,
-  ScalarAttributeType,
-  ScanRequest,
-  ScanResponse,
-  TableCreationParameters,
-  TimeToLiveSpecification,
-  UpdateTimeToLiveRequest
-}
+import software.amazon.awssdk.services.dynamodb.model._
 
 import java.nio.charset.Charset
 import java.time.{Duration, Instant}
 import java.util
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.CompletionException
+import java.util.concurrent.{CompletableFuture, CompletionException}
 import scala.compat.java8.FutureConverters
-import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
-import scala.util.Failure
-import scala.util.Success
-import scala.util.Try
+import scala.concurrent.{Await, Future}
+import scala.util.{Failure, Success, Try}
 
-class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String, String] = Map.empty) extends KVStore {
+class DynamoDBKVStoreImpl(rawDynamoDbClient: DynamoDbAsyncClient, conf: Map[String, String] = Map.empty)
+    extends KVStore {
   import DynamoDBKVStoreConstants._
+
+  private val tablePrefix = conf.getOrElse(KvTablePrefixArg, "")
+
+  // Wrap the client to automatically prefix all table names
+  private val prefixedDynamoDbClient: PrefixedDynamoDbAsyncClient = {
+    logger.info(
+      s"Using DynamoDB table prefix: '$tablePrefix' (prefix will be added to all table names used by this KVStore)")
+    new PrefixedDynamoDbAsyncClient(rawDynamoDbClient, tablePrefix)
+  }
 
   protected val metricsContext: Metrics.Context = Metrics.Context(Metrics.Environment.KVStore).withSuffix("dynamodb")
 
@@ -73,7 +46,8 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
         .tableName(batchTableRegistry)
         .key(keyMap.toJava)
         .build
-      val item = dynamoDbClient.getItem(request).join().item().toScala
+
+      val item = prefixedDynamoDbClient.getItem(request).join().item().toScala
       item.get("valueBytes").map(v => new String(v.b().asByteArray())).getOrElse(dataset)
     },
     contextBuilder = { _ => metricsContext.withSuffix("batch_table_cache") }
@@ -88,7 +62,6 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
   override def create(dataset: String): Unit = create(dataset, Map.empty)
 
   override def create(dataset: String, props: Map[String, Any]): Unit = {
-    val dbWaiter = dynamoDbClient.waiter
     val maybeSortKeys = props.get(isTimedSorted) match {
       case Some(value: String) if value.toLowerCase == "true" => Some(sortKeyColumn)
       case Some(value: Boolean) if value                      => Some(sortKeyColumn)
@@ -112,12 +85,10 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
         .tableName(dataset)
         .build
 
-    logger.info(s"Triggering creation of DynamoDb table: $dataset")
+    logger.info(s"Triggering creation of DynamoDb table: $dataset with prefix '$tablePrefix' added later")
     try {
-      dynamoDbClient.createTable(request).join()
-      val tableRequest = DescribeTableRequest.builder.tableName(dataset).build
-      // Wait until the Amazon DynamoDB table is created.
-      val waiterResponse = dbWaiter.waitUntilTableExists(tableRequest).join()
+      prefixedDynamoDbClient.createTable(request).join()
+      val waiterResponse = prefixedDynamoDbClient.waitUntilTableExists(dataset).join()
       if (waiterResponse.matched.exception().isPresent)
         throw waiterResponse.matched.exception().get()
 
@@ -133,7 +104,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
         .tableName(dataset)
         .timeToLiveSpecification(ttlSpec)
         .build
-      dynamoDbClient.updateTimeToLive(ttlRequest).join()
+      prefixedDynamoDbClient.updateTimeToLive(ttlRequest).join()
       logger.info(s"TTL enabled on table: $dataset with attribute 'ttl'")
 
       metricsContext.increment("create.successes")
@@ -165,7 +136,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
       val tableName = resolveTableName(req.dataset)
       val getItemReq = GetItemRequest.builder.key(keyAttributeMap.toJava).tableName(tableName).build
       val startTs = System.currentTimeMillis()
-      (req, dynamoDbClient.getItem(getItemReq), startTs)
+      (req, prefixedDynamoDbClient.getItem(getItemReq), startTs)
     }
 
     // timestamp to use for all get responses when the underlying tables don't have a ts field
@@ -191,7 +162,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
     val queryRequest = buildTimeRangeQuery(dataset, partitionKeyBytes, startTs, endTs)
     val callStartTs = System.currentTimeMillis()
     handleDynamoDbOperation(metricsContext.withSuffix("query"), dataset, callStartTs)(
-      dynamoDbClient.query(queryRequest)
+      prefixedDynamoDbClient.query(queryRequest)
     )
   }
 
@@ -199,7 +170,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
     val queryRequest = buildPartitionOnlyQuery(dataset, partitionKeyBytes)
     val callStartTs = System.currentTimeMillis()
     handleDynamoDbOperation(metricsContext.withSuffix("query"), dataset, callStartTs)(
-      dynamoDbClient.query(queryRequest)
+      prefixedDynamoDbClient.query(queryRequest)
     )
   }
 
@@ -266,7 +237,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
 
     val startTs = System.currentTimeMillis()
     handleDynamoDbOperation(metricsContext.withSuffix("list"), request.dataset, startTs)(
-      dynamoDbClient.scan(scanRequest)
+      prefixedDynamoDbClient.scan(scanRequest)
     ).map { scanResponse =>
       val resultElements = extractListValues(scanResponse)
       val noPagesLeftResponse = ListResponse(request, resultElements, Map.empty)
@@ -312,7 +283,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
         PutItemRequest.builder.tableName(req.dataset).item((attributeMap ++ tsMap ++ ttlMap).toJava).build()
       val startTs = System.currentTimeMillis()
       handleDynamoDbOperation(metricsContext.withSuffix("multiput"), req.dataset, startTs)(
-        dynamoDbClient.putItem(putItemReq)
+        prefixedDynamoDbClient.putItem(putItemReq)
       ).transform {
         case Success(_) => Success(true)
         case Failure(_) => Success(false)
@@ -346,7 +317,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
     val physicalTableName =
       logicalTableName.sanitize.toUpperCase + "_" + partition.replace("-", "_") + "_" + timestamp
     logger.info(
-      s"Starting DynamoDB import for table: $physicalTableName (logical: $logicalTableName) from S3: $s3Source")
+      s"Starting DynamoDB import for table: $physicalTableName (logical: $logicalTableName) from S3: $s3Source with prefix '$tablePrefix' added later")
 
     val tableParams = TableCreationParameters
       .builder()
@@ -371,7 +342,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
 
     try {
       val startTs = System.currentTimeMillis()
-      val importResponse = dynamoDbClient.importTable(importRequest).join()
+      val importResponse = prefixedDynamoDbClient.importTable(importRequest).join()
       val importArn = importResponse.importTableDescription().importArn()
 
       logger.info(s"DynamoDB import initiated with ARN: $importArn for table: $physicalTableName")
@@ -425,7 +396,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
           .importArn(importArn)
           .overrideConfiguration(DynamoDBKVStoreConstants.ControlPlaneApiOverride)
           .build()
-        val describeResponse = dynamoDbClient.describeImport(describeRequest).join()
+        val describeResponse = prefixedDynamoDbClient.describeImport(describeRequest).join()
         lastDescription = describeResponse.importTableDescription()
         status = lastDescription.importStatus()
 
@@ -538,7 +509,7 @@ class DynamoDBKVStoreImpl(dynamoDbClient: DynamoDbAsyncClient, conf: Map[String,
 }
 
 object DynamoDBKVStoreConstants {
-  val batchTableRegistry = "CHRONON_BATCH_TABLE_REGISTRY"
+  val batchTableRegistry: String = "CHRONON_BATCH_TABLE_REGISTRY"
   val batchSuffix = "_BATCH"
 
   // Optional field that indicates if this table is meant to be time sorted in Dynamo or not

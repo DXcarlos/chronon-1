@@ -99,6 +99,7 @@ if ! java $JVM_OPTS -cp $FETCHER_JAR:$ONLINE_JAR ai.chronon.service.ChrononServi
   run ai.chronon.service.FetcherVerticle \
   -Dserver.port=$FETCHER_PORT \
   -Donline.jar=$ONLINE_JAR \
+  -Donline.api.props='{"kv.tablePrefix":"'"$KV_TABLE_PREFIX"'"}' \
   $METRICS_OPTS \
   -Donline.class=$ONLINE_CLASS; then
   echo "Error: Fetcher service failed to start"

@@ -72,8 +72,11 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
       return new DateRange().setStartDate(queryRange.start).setEndDate(queryRange.end)
     }
 
-    // Take the union of all input ranges (earliest start, latest end)
-    val start = inputRanges.map(_.start).min
+    // Take the union of all input ranges (earliest start, latest end).
+    // A null start means unbounded lookback (e.g. no-window aggregations) — propagate null so the
+    // downstream job scans all available data rather than being artificially bounded.
+    val nonNullStarts = inputRanges.flatMap(r => Option(r.start))
+    val start = if (nonNullStarts.isEmpty) null else nonNullStarts.min
     val end = inputRanges.map(_.end).max
 
     new DateRange().setStartDate(start).setEndDate(end)
@@ -134,7 +137,10 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
 
   private def runJoinPartJob(joinPartNode: JoinPartNode, metaData: MetaData, nodeRange: DateRange): Unit = {
     StepRunner(nodeRange, metaData) { stepRange =>
-      val joinPartJob = new JoinPartJob(joinPartNode, metaData, stepRange, alignOutput = true)
+      // alignOutput=false: SNAPSHOT join parts write to the shifted (D-1) partition, which MergeJob reads.
+      // Enabling alignOutput consistently requires MergeJob to also stop shifting its reads, which is a
+      // larger change tracked separately.
+      val joinPartJob = new JoinPartJob(joinPartNode, metaData, stepRange, alignOutput = false)
       joinPartJob.run(None)
     }
     logger.info(s"JoinPartJob completed, output table: ${metaData.outputTable}")

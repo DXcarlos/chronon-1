@@ -15,6 +15,7 @@ import org.apache.avro.generic.GenericRecord
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.online._
 import ai.chronon.spark.Extensions._
+import ai.chronon.spark.batch.ModularMonolith
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.stats.ConsistencyJob
 import ai.chronon.spark.utils.{DataFrameGen, MockApi, OnlineUtils, SchemaEvolutionUtils, SparkTestBase}
@@ -58,7 +59,7 @@ object FetcherTestUtil {
             .map(r =>
               r.copy(keys = r.keys.mapValues { v =>
                 if (v.isInstanceOf[java.lang.Long]) v.toString else v
-              // v
+                // v
               }.toMap))
           val responses = if (useJavaFetcher) {
             // Converting to java request and using the toScalaRequest functionality to test conversion
@@ -156,8 +157,41 @@ object FetcherTestUtil {
     val mockApi = new MockApi(kvStoreFunc, namespace)
     mockApi.setFlagStore(tilingEnabledFlagStore)
 
-    val joinedDf = new ai.chronon.spark.Join(joinConf, endDs, tableUtils).computeJoin()
+    // Determine actual date range from the left source table to avoid empty data issues
+    // The test may generate data for "today" but then query for a different date
+    val leftTable = joinConf.left.table
+    val availablePartitions: Seq[String] =
+      try {
+        tableUtils.partitions(leftTable, Map.empty[String, String])
+      } catch {
+        case _: Exception => Seq.empty[String]
+      }
+
+    val (startDs, actualEndDs) = if (availablePartitions.nonEmpty) {
+      // Use the actual partition range that exists in the data
+      val sortedPartitions = availablePartitions.sorted
+      (sortedPartitions.head, sortedPartitions.last)
+    } else {
+      // Fallback to endDs if we can't determine partitions
+      (endDs, endDs)
+    }
+
+    val dateRange: DateRange = new DateRange()
+      .setStartDate(startDs)
+      .setEndDate(actualEndDs)
+
+    // Run ModularMonolith pipeline
+    ModularMonolith.run(joinConf, dateRange)(tableUtils)
+
+    // JoinPlanner writes derivation output to outputTable + "__derived" when derivations are present.
+    // Use the derivation table so the offline comparison reflects post-derivation feature values.
+    val finalOutputTable =
+      if (joinConf.hasDerivations) joinConf.metaData.outputTable + "__derived"
+      else joinConf.metaData.outputTable
+    val joinedDf = tableUtils.sql(s"SELECT * FROM $finalOutputTable")
     val joinTable = s"$namespace.join_test_expected_${joinConf.metaData.cleanName}"
+    logger.info("Printing Joined DataFrame results:")
+    joinedDf.show()
     joinedDf.save(joinTable)
     val endDsExpected = tableUtils.sql(s"SELECT * FROM $joinTable WHERE ds='$endDs'")
 
@@ -171,10 +205,12 @@ object FetcherTestUtil {
                         dropDsOnWrite = dropDsOnWrite,
                         tilingEnabled = enableTiling))
 
-    // Extract queries for the EndDs from the computedJoin results and eliminating computed aggregation values
+    // Extract queries for the EndDs. Filter by ds to avoid including future-dated events produced by
+    // ModularMonolith (which computes the full date range), which would have no matching row in
+    // endDsExpected (filtered to ds='$endDs').
     val endDsEvents = {
       tableUtils.sql(
-        s"SELECT * FROM $joinTable WHERE ts >= unix_timestamp('$endDs', '${tableUtils.partitionSpec.format}')")
+        s"SELECT * FROM $joinTable WHERE ds='$endDs' AND ts >= unix_timestamp('$endDs', '${tableUtils.partitionSpec.format}')")
     }
     // Keep only left-side columns (keys, ts, ds) and drop all feature columns
     val keys = joinConf.leftKeyCols
@@ -188,7 +224,8 @@ object FetcherTestUtil {
     metadataStore.putJoinConf(joinConf)
 
     def buildRequests(lagMs: Int = 0): Array[Request] =
-      endDsQueries.collect()
+      endDsQueries
+        .collect()
         .map { row =>
           val keyMap = keyIndices.indices.map { idx =>
             keys(idx) -> row.get(keyIndices(idx)).asInstanceOf[AnyRef]
@@ -245,7 +282,8 @@ object FetcherTestUtil {
     logger.info(endDsExpected.schema.pretty)
 
     val keyishColumns = keys.toList ++ List(tableUtils.partitionColumn, Constants.TimeColumn)
-    var responseDf = tableUtils.sparkSession.createDataFrame(java.util.Arrays.asList(responseRows.toSeq: _*), endDsExpected.schema)
+    var responseDf =
+      tableUtils.sparkSession.createDataFrame(java.util.Arrays.asList(responseRows.toSeq: _*), endDsExpected.schema)
     val today = tableUtils.partitionSpec.at(System.currentTimeMillis())
     if (endDs != today) {
       responseDf = responseDf.drop("ds").withColumn("ds", lit(endDs))
@@ -711,7 +749,6 @@ object FetcherTestUtil {
       .events(spark, queryCols, rowCount, 4)
       .withColumnRenamed("user", "user_id")
       .withColumnRenamed("vendor", "vendor_id")
-    queriesDf.show()
     queriesDf.save(queriesTable)
 
     val joinConf = Builders
@@ -764,19 +801,18 @@ object FetcherTestUtil {
 
     if (debug) {
       result.foreach { response =>
-        logger.info(s"FetchJoinV2 Response for ${response.request.name}: " +
-          s"responseType=${response.getResponseValueType}, " +
-          s"hasErrors=${response.errors.isFailure || response.errors.get.nonEmpty}")
+        logger.info(
+          s"FetchJoinV2 Response for ${response.request.name}: " +
+            s"responseType=${response.getResponseValueType}, " +
+            s"hasErrors=${response.errors.isFailure || response.errors.get.nonEmpty}")
       }
     }
 
     result
   }
 
-  def testFetchJoinV2(spark: SparkSession,
-                      requests: Array[Request],
-                      mockApi: MockApi,
-                      debug: Boolean = false)(implicit ec: ExecutionContext): Unit = {
+  def testFetchJoinV2(spark: SparkSession, requests: Array[Request], mockApi: MockApi, debug: Boolean = false)(implicit
+      ec: ExecutionContext): Unit = {
     // Get the join schema and valueCodec for decoding
     val fetcher = mockApi.buildFetcher(debug)
     val joinName = requests.head.name
@@ -796,13 +832,14 @@ object FetcherTestUtil {
     // Validate response types are correct and decode actual values
     avroStringResponses.foreach { response =>
       assert(response.getResponseValueType == FeaturesResponseType.AvroString,
-        s"Response for ${response.request.name} should be AvroString type")
+             s"Response for ${response.request.name} should be AvroString type")
 
-            // Assert no per-feature errors and validate AvroString payload
-              response.errors match {
-            case Success(errs) => assert(errs.isEmpty, s"Expected no per-feature errors for ${response.request.name}, got: $errs")
-               case Failure(e)    => throw new AssertionError(s"errors Try failed for ${response.request.name}: ${e.getMessage}")
-              }
+      // Assert no per-feature errors and validate AvroString payload
+      response.errors match {
+        case Success(errs) =>
+          assert(errs.isEmpty, s"Expected no per-feature errors for ${response.request.name}, got: $errs")
+        case Failure(e) => throw new AssertionError(s"errors Try failed for ${response.request.name}: ${e.getMessage}")
+      }
       response.value match {
         case ai.chronon.online.fetcher.Fetcher.AvroResponseValue.AvroString(valueResult) =>
           valueResult match {
@@ -821,10 +858,12 @@ object FetcherTestUtil {
                 case _: IllegalArgumentException =>
                   throw new AssertionError(s"Invalid base64 string for ${response.request.name}")
                 case e: Exception =>
-                  throw new AssertionError(s"Failed to decode Avro record for ${response.request.name}: ${e.getMessage}")
+                  throw new AssertionError(
+                    s"Failed to decode Avro record for ${response.request.name}: ${e.getMessage}")
               }
             case Failure(exception) =>
-              throw new AssertionError(s"AvroString conversion failed for ${response.request.name}: ${exception.getMessage}")
+              throw new AssertionError(
+                s"AvroString conversion failed for ${response.request.name}: ${exception.getMessage}")
           }
         case _ => throw new AssertionError("Expected AvroString response value")
       }
@@ -832,13 +871,14 @@ object FetcherTestUtil {
 
     avroBytesResponses.foreach { response =>
       assert(response.getResponseValueType == FeaturesResponseType.AvroBytes,
-        s"Response for ${response.request.name} should be AvroBytes type")
+             s"Response for ${response.request.name} should be AvroBytes type")
 
-            // Assert no per-feature errors and validate AvroBytes payload
-              response.errors match {
-           case Success(errs) => assert(errs.isEmpty, s"Expected no per-feature errors for ${response.request.name}, got: $errs")
-               case Failure(e)    => throw new AssertionError(s"errors Try failed for ${response.request.name}: ${e.getMessage}")
-            }
+      // Assert no per-feature errors and validate AvroBytes payload
+      response.errors match {
+        case Success(errs) =>
+          assert(errs.isEmpty, s"Expected no per-feature errors for ${response.request.name}, got: $errs")
+        case Failure(e) => throw new AssertionError(s"errors Try failed for ${response.request.name}: ${e.getMessage}")
+      }
       response.value match {
         case ai.chronon.online.fetcher.Fetcher.AvroResponseValue.AvroBytes(valueResult) =>
           valueResult match {
@@ -854,10 +894,12 @@ object FetcherTestUtil {
                 }
               } catch {
                 case e: Exception =>
-                  throw new AssertionError(s"Failed to decode Avro record from bytes for ${response.request.name}: ${e.getMessage}")
+                  throw new AssertionError(
+                    s"Failed to decode Avro record from bytes for ${response.request.name}: ${e.getMessage}")
               }
             case Failure(exception) =>
-              throw new AssertionError(s"AvroBytes conversion failed for ${response.request.name}: ${exception.getMessage}")
+              throw new AssertionError(
+                s"AvroBytes conversion failed for ${response.request.name}: ${exception.getMessage}")
           }
         case _ => throw new AssertionError("Expected AvroBytes response value")
       }
@@ -865,7 +907,8 @@ object FetcherTestUtil {
 
     if (debug) {
       logger.info(s"FetchJoinV2 test completed successfully for ${requests.length} requests")
-      logger.info(s"AvroString responses: ${avroStringResponses.length}, AvroBytes responses: ${avroBytesResponses.length}")
+      logger.info(
+        s"AvroString responses: ${avroStringResponses.length}, AvroBytes responses: ${avroBytesResponses.length}")
     }
   }
 

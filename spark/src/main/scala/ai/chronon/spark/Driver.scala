@@ -18,7 +18,7 @@ package ai.chronon.spark
 
 import ai.chronon.api
 import ai.chronon.api.{Constants, DateRange, PartitionRange, PartitionSpec, ThriftJsonCodec}
-import ai.chronon.api.Constants.MetadataDataset
+import ai.chronon.api.Constants.{KvTablePrefixArg, MetadataDataset}
 import ai.chronon.api.Extensions.{GroupByOps, JoinPartOps, MetadataOps, SourceOps}
 import ai.chronon.api.planner.RelevantLeftForJoinPart
 import ai.chronon.api.thrift.TBase
@@ -114,11 +114,11 @@ object Driver {
       keyName = "namespace.table",
       valueName = "path_to_local_input_file",
       descr = """Use this option to specify a list of table <> local input file mappings for running local
-          |Chronon jobs. For example,
-          |`--local-data-list ns_1.table_a=p1/p2/ta.csv ns_2.table_b=p3/tb.csv`
-          |will load the two files into the specified tables `table_a` and `table_b` locally.
-          |Once this option is used, the `--local-data-path` will be ignored.
-          |""".stripMargin
+                |Chronon jobs. For example,
+                |`--local-data-list ns_1.table_a=p1/p2/ta.csv ns_2.table_b=p3/tb.csv`
+                |will load the two files into the specified tables `table_a` and `table_b` locally.
+                |Once this option is used, the `--local-data-path` will be ignored.
+                |""".stripMargin
     )
     val localDataPath: ScallopOption[String] =
       opt[String](
@@ -141,8 +141,7 @@ object Driver {
 
     lazy val sparkSession: SparkSession = buildSparkSession()
 
-    // CLI dates are always in yyyy-MM-dd format; the default must match
-    def endDate(): String = endDateInternal.toOption.getOrElse(PartitionSpec.daily.now)
+    def endDate(): String = endDateInternal.toOption.getOrElse(buildTableUtils().partitionSpec.now)
 
     def subcommandName(): String
 
@@ -234,7 +233,7 @@ object Driver {
         required = false,
         default = None,
         descr = """The name of the table containing expected result of a job.
-            |The table should have the exact schema of the output of the job""".stripMargin
+                  |The table should have the exact schema of the output of the job""".stripMargin
       )
 
     def shouldPerformValidate(): Boolean = expectedResultTable.isDefined
@@ -617,7 +616,8 @@ object Driver {
       case _          => impl(serializableProps)
     }
 
-    lazy val fetchContext: FetchContext = FetchContext(api.genKvStore, MetadataDataset)
+    lazy val fetchContext: FetchContext =
+      FetchContext(api.genKvStore, MetadataDataset)
     def metaDataStore =
       new MetadataStore(fetchContext)
 

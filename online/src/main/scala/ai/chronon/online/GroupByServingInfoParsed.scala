@@ -101,7 +101,8 @@ class GroupByServingInfoParsed(val groupByServingInfo: GroupByServingInfo)
       StructType.from(s"${groupBy.metaData.cleanName}_OUTPUT", aggregator.windowedAggregator.outputSchema)
     }
 
-  lazy val outputAvroSchema: String = { AvroConversions.fromChrononSchema(outputChrononSchema).toString() }
+  lazy val outputAvroSchema: String =
+    AvroConversions.fromChrononSchema(outputChrononSchema).toString()
 
   def inputChrononSchema: StructType = {
     AvroConversions.toChrononSchema(parser.parse(inputAvroSchema)).asInstanceOf[StructType]

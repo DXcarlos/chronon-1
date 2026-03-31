@@ -350,8 +350,10 @@ class ConfValidator(object):
         keys = []
 
         key_mapping = join_part.keyMapping if join_part.keyMapping else {}
+        # key_mapping is {left_col: gb_key}, so invert to resolve gb_key -> left_col
+        inverted_key_mapping = {v: k for k, v in key_mapping.items()}
         for key in join_part.groupBy.keyColumns:
-            keys.append(key_mapping.get(key, key))
+            keys.append(inverted_key_mapping.get(key, key))
 
         missing = [k for k in keys if k not in left_cols]
 

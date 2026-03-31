@@ -112,16 +112,28 @@ def JoinPart(
                 "You may pass it in via GroupBy.name. \n"
             )
 
-    if key_mapping:
-        utils.check_contains(
-            key_mapping.values(), group_by.keyColumns, "key", group_by.metaData.name
-        )
+    try:
+        if key_mapping:
+            try:
+                utils.check_contains(
+                    key_mapping.values(), group_by.keyColumns, "key", group_by.metaData.name
+                )
+            except AssertionError as e:
+                raise ValueError(
+                    f"Invalid key_mapping for JoinPart on GroupBy '{group_by.metaData.name}'.\n"
+                    f"key_mapping format is {{left_column: group_by_key}}.\n"
+                    f"Valid GroupBy keys: {group_by.keyColumns}\n"
+                    f"Provided key_mapping: {key_mapping}\n"
+                    f"Bad value(s): {e}"
+                ) from None
 
-    join_part = api.JoinPart(groupBy=group_by, keyMapping=key_mapping, prefix=prefix)
-    join_part.tags = tags
-    # reset before next run
-    __builtins__["__import__"] = import_copy
-    return join_part
+        join_part = api.JoinPart(groupBy=group_by, keyMapping=key_mapping, prefix=prefix)
+        join_part.tags = tags
+        return join_part
+    finally:
+        # Always restore __import__ — if we raise before reaching the reset below,
+        # subsequent imports in this process would use the monkey-patched version.
+        __builtins__["__import__"] = import_copy
 
 
 def ExternalSource(

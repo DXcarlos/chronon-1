@@ -52,24 +52,27 @@ class EmrServerlessSubmitterTest extends AnyFlatSpec with Matchers with MockitoS
       executionRoleArn: String = "arn:aws:iam::123456789012:role/EMRServerlessRole",
       s3LogUri: String = "s3://my-bucket/logs/",
       eksFlinkSubmitter: Option[EksFlinkSubmitter] = None,
-      dynamodbTableName: String = "test-table",
       awsRegion: String = "us-east-1",
       eksClusterName: Option[String] = None,
       ingressBaseUrl: Option[String] = None,
       emrStudioId: Option[String] = None,
-      applicationName: String = "test-app"
+      applicationName: String = "test-app",
+      kvStoreApiProperties: Map[String, String] = Map(
+        "AWS_DYNAMODB_TABLE_NAME" -> "test-table",
+        "AWS_DEFAULT_REGION" -> "us-east-1"
+      )
   ): EmrServerlessSubmitter = {
     new EmrServerlessSubmitter(
       mockClient,
       executionRoleArn,
       s3LogUri,
       eksFlinkSubmitter = eksFlinkSubmitter,
-      dynamodbTableName = dynamodbTableName,
       awsRegion = awsRegion,
       eksClusterName = eksClusterName,
       ingressBaseUrl = ingressBaseUrl,
       emrStudioId = emrStudioId,
-      applicationName = applicationName
+      applicationName = applicationName,
+      kvStoreApiProperties = kvStoreApiProperties
     )
   }
 
@@ -557,7 +560,14 @@ class EmrServerlessSubmitterTest extends AnyFlatSpec with Matchers with MockitoS
 
   it should "return correct kvStoreApiProperties" in {
     val mockClient = mock[EmrServerlessClient]
-    val submitter = createSubmitter(mockClient, dynamodbTableName = "my-table", awsRegion = "us-west-2")
+    val submitter = createSubmitter(
+      mockClient,
+      awsRegion = "us-west-2",
+      kvStoreApiProperties = Map(
+        "AWS_DYNAMODB_TABLE_NAME" -> "my-table",
+        "AWS_DEFAULT_REGION" -> "us-west-2"
+      )
+    )
     val props = submitter.kvStoreApiProperties
     assertEquals("my-table", props("AWS_DYNAMODB_TABLE_NAME"))
     assertEquals("us-west-2", props("AWS_DEFAULT_REGION"))

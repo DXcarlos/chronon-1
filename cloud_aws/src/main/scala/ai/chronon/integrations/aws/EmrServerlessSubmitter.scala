@@ -18,10 +18,10 @@ class EmrServerlessSubmitter(
     executionRoleArn: String,
     s3LogUri: String,
     eksFlinkSubmitter: Option[EksFlinkSubmitter] = None,
-    dynamodbTableName: String = "",
     awsRegion: String = "",
     override val tablePartitionsDataset: String = "",
     override val dqMetricsDataset: String = "",
+    override val kvStoreApiProperties: Map[String, String] = Map.empty,
     flinkEksServiceAccount: Option[String] = None,
     flinkEksNamespace: Option[String] = None,
     eksClusterName: Option[String] = None,
@@ -425,11 +425,6 @@ class EmrServerlessSubmitter(
     }
   }
 
-  override def kvStoreApiProperties: Map[String, String] = Map(
-    "AWS_DYNAMODB_TABLE_NAME" -> dynamodbTableName,
-    "AWS_DEFAULT_REGION" -> awsRegion
-  )
-
   override def close(): Unit = {
     try {
       emrServerlessClient.close()
@@ -475,7 +470,6 @@ object EmrServerlessSubmitter {
       awsRegion: String,
       executionRoleArn: String,
       s3LogUri: String,
-      dynamodbTableName: String = "",
       tablePartitionsDataset: String = "",
       dqMetricsDataset: String = "",
       flinkEksServiceAccount: Option[String] = None,
@@ -486,7 +480,8 @@ object EmrServerlessSubmitter {
       cloudWatchLogGroupName: Option[String] = None,
       k8sConfig: Option[io.fabric8.kubernetes.client.Config] = None,
       flinkHealthCheckFn: Option[String] => Boolean = _ => true,
-      applicationName: String = DefaultApplicationName
+      applicationName: String = DefaultApplicationName,
+      kvStoreApiProperties: Map[String, String] = Map.empty
   ): EmrServerlessSubmitter = {
     val client = EmrServerlessClient
       .builder()
@@ -498,7 +493,6 @@ object EmrServerlessSubmitter {
       executionRoleArn,
       s3LogUri,
       eksFlinkSubmitter = Some(new EksFlinkSubmitter(k8sConfig, ingressBaseUrl = ingressBaseUrl)),
-      dynamodbTableName = dynamodbTableName,
       awsRegion = awsRegion,
       tablePartitionsDataset = tablePartitionsDataset,
       dqMetricsDataset = dqMetricsDataset,
@@ -509,7 +503,8 @@ object EmrServerlessSubmitter {
       emrStudioId = emrStudioId,
       flinkHealthCheckFn = flinkHealthCheckFn,
       cloudWatchLogGroupName = cloudWatchLogGroupName,
-      applicationName = applicationName
+      applicationName = applicationName,
+      kvStoreApiProperties = kvStoreApiProperties
     )
   }
 

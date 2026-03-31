@@ -105,7 +105,8 @@ class AvroCodec(val schemaStr: String) extends Serializable {
   def decodeMap(bytes: Array[Byte]): Map[String, AnyRef] = {
     if (bytes == null) return null
 
-    fieldNames.iterator.zip(decodeArray(bytes).iterator.map(_.asInstanceOf[AnyRef])).toMap
+    val decoded = decodeArray(bytes)
+    fieldNames.iterator.zip(decoded.iterator.map(_.asInstanceOf[AnyRef])).toMap
   }
 }
 

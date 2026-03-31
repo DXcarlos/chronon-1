@@ -49,7 +49,7 @@ class JoinPartJob(node: JoinPartNode,
       val jobContext = context.getOrElse {
         // LeftTable is already computed by SourceJob, no need to apply query/filters/etc
         val relevantLeftCols =
-          joinPart.rightToLeft.keys.toArray ++ Seq(tableUtils.partitionColumn) ++ (node.leftDataModel match {
+          joinPart.rightToLeft.values.toArray ++ Seq(tableUtils.partitionColumn) ++ (node.leftDataModel match {
             case ENTITIES => None
             case EVENTS   => Some(Constants.TimeColumn)
           })

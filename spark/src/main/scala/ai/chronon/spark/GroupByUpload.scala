@@ -150,7 +150,6 @@ class GroupByUpload(endPartition: String, groupBy: ai.chronon.spark.GroupBy) ext
           |value schema:
           |  ${AvroConversions.fromChrononSchema(valueZSchema).toString(true)}
           |""".stripMargin)
-
     df.map { row =>
       val keys = keyIndices.map(row.get)
       val values = valueIndices.map(row.get)

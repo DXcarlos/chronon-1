@@ -348,11 +348,10 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
     // Should have dependencies on both streaming and uploadToKV nodes
     val tableDeps = metadataUploadNode.metaData.executionInfo.tableDependencies.asScala
     tableDeps should not be empty
-    tableDeps should have size 3
+    tableDeps should have size 2
 
     val depTables = tableDeps.map(_.tableInfo.table).toSet
     depTables should contain(streamingGroupBy.metaData.outputTable + "__streaming")
-    depTables should contain(streamingGroupBy.metaData.outputTable + "__uploadToKV")
     depTables should contain(nonStreamingGroupBy.metaData.outputTable + "__uploadToKV")
   }
 
@@ -566,15 +565,12 @@ class MonolithJoinPlannerTest extends AnyFlatSpec with Matchers {
     val metadataUploadNode = plan.nodes.asScala.find(_.content.isSetJoinMetadataUpload).get
     val tableDeps = metadataUploadNode.metaData.executionInfo.tableDependencies.asScala
 
-    // Should have dependencies on both streaming and uploadToKV tables for the streaming GroupBy
-    tableDeps.size should be(2)
-
+    // Should only have dependency on the streaming GroupBy (streaming table)
+    tableDeps.size should be(1)
+    
     val streamingDep = tableDeps.find(_.tableInfo.table.contains("streaming_chained_gb__streaming"))
     streamingDep should be(defined)
-
-    val uploadToKvDep = tableDeps.find(_.tableInfo.table.contains("streaming_chained_gb__uploadToKV"))
-    uploadToKvDep should be(defined)
-
+    
     // Should NOT have upstream join metadata upload dependency (streaming node handles it)
     val upstreamJoinDeps = tableDeps.filter(_.tableInfo.table.contains("upstream_join__metadata_upload"))
     upstreamJoinDeps should be(empty)

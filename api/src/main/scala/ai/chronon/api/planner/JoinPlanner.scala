@@ -250,25 +250,20 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       val groupBy = joinPart.groupBy
       val hasStreamingSource = groupBy.streamingSource.isDefined
 
-      // Add dependency on the GroupBy node
-      val streamingTableName = groupBy.metaData.outputTable + s"__${GroupByPlanner.Streaming}"
-      val uploadToKvTableName = groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}"
-      val groupByTableNames = if (hasStreamingSource) {
-        // metadata upload needs to wait for the uploadToKv since the streaming node is typically always up
-        // and can accidentally unblock the metadata upload node too early
-        Seq(streamingTableName, uploadToKvTableName)
+      // Add dependency on the GroupBy node (either uploadToKV or streaming)
+      val groupByTableName = if (hasStreamingSource) {
+        groupBy.metaData.outputTable + s"__${GroupByPlanner.Streaming}"
       } else {
-        Seq(uploadToKvTableName)
+        groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}"
       }
 
-      val groupByDeps = groupByTableNames.map(t =>
-        new TableDependency()
-          .setTableInfo(
-            new TableInfo()
-              .setTable(t)
-          )
-          .setStartOffset(WindowUtils.zero())
-          .setEndOffset(WindowUtils.zero()))
+      val groupByDep = new TableDependency()
+        .setTableInfo(
+          new TableInfo()
+            .setTable(groupByTableName)
+        )
+        .setStartOffset(WindowUtils.zero())
+        .setEndOffset(WindowUtils.zero())
 
       // Add dependencies on upstream join metadata uploads if GroupBy has JoinSource
       val upstreamJoinDeps = if (hasStreamingSource) {
@@ -278,8 +273,8 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         TableDependencies.fromJoinSources(groupBy.sources)
       }
 
-      // Return both the GroupBy dependencies and any upstream join dependencies
-      groupByDeps ++ upstreamJoinDeps
+      // Return both the GroupBy dependency and any upstream join dependencies
+      Seq(groupByDep) ++ upstreamJoinDeps
     }
 
     val metaData =

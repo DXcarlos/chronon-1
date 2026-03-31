@@ -1,0 +1,134 @@
+package ai.chronon.integrations.aws
+
+import org.slf4j.LoggerFactory
+import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
+import software.amazon.awssdk.services.dynamodb.model._
+
+import java.util.concurrent.CompletableFuture
+
+/** Wraps a DynamoDbAsyncClient to automatically prefix all table names.
+  *
+  * @param delegate the underlying DynamoDbAsyncClient to wrap
+  * @param tablePrefix the prefix to apply to all table names
+  */
+class PrefixedDynamoDbAsyncClient(delegate: DynamoDbAsyncClient, tablePrefix: String = "") {
+
+  private val logger = LoggerFactory.getLogger(getClass)
+
+  private def prefixTableName(tableName: String): String = {
+    if (tableName == null || tableName.isEmpty) tableName
+    else tablePrefix + tableName
+  }
+
+  // ========== Supported Read Operations ==========
+
+  def getItem(request: GetItemRequest): CompletableFuture[GetItemResponse] = {
+    val originalTableName = request.tableName()
+    val prefixedTableName = prefixTableName(originalTableName)
+    logger.debug(s"getItem: original table name='$originalTableName' -> prefixed table name='$prefixedTableName'")
+    val prefixedRequest = request.toBuilder.tableName(prefixedTableName).build()
+    delegate.getItem(prefixedRequest)
+  }
+
+  def query(request: QueryRequest): CompletableFuture[QueryResponse] = {
+    val originalTableName = request.tableName()
+    val prefixedTableName = prefixTableName(originalTableName)
+    logger.debug(s"query: original table name='$originalTableName' -> prefixed table name='$prefixedTableName'")
+    val prefixedRequest = request.toBuilder.tableName(prefixedTableName).build()
+    delegate.query(prefixedRequest)
+  }
+
+  def scan(request: ScanRequest): CompletableFuture[ScanResponse] = {
+    val originalTableName = request.tableName()
+    val prefixedTableName = prefixTableName(originalTableName)
+    logger.debug(s"scan: original table name='$originalTableName' -> prefixed table name='$prefixedTableName'")
+    val prefixedRequest = request.toBuilder.tableName(prefixedTableName).build()
+    delegate.scan(prefixedRequest)
+  }
+
+  def describeTable(request: DescribeTableRequest): CompletableFuture[DescribeTableResponse] = {
+    val originalTableName = request.tableName()
+    val prefixedTableName = prefixTableName(originalTableName)
+    logger.debug(s"describeTable: original table name='$originalTableName' -> prefixed table name='$prefixedTableName'")
+    val prefixedRequest = request.toBuilder.tableName(prefixedTableName).build()
+    delegate.describeTable(prefixedRequest)
+  }
+
+  def describeImport(request: DescribeImportRequest): CompletableFuture[DescribeImportResponse] = {
+    // DescribeImport uses ARN, not table name, so no prefixing needed
+    delegate.describeImport(request)
+  }
+
+  // ========== Supported Write Operations ==========
+
+  def putItem(request: PutItemRequest): CompletableFuture[PutItemResponse] = {
+    val originalTableName = request.tableName()
+    val prefixedTableName = prefixTableName(originalTableName)
+    logger.debug(s"putItem: original table name='$originalTableName' -> prefixed table name='$prefixedTableName'")
+    val prefixedRequest = request.toBuilder.tableName(prefixedTableName).build()
+    delegate.putItem(prefixedRequest)
+  }
+
+  def createTable(request: CreateTableRequest): CompletableFuture[CreateTableResponse] = {
+    val originalTableName = request.tableName()
+    val prefixedTableName = prefixTableName(originalTableName)
+    logger.debug(s"createTable: original table name='$originalTableName' -> prefixed table name='$prefixedTableName'")
+    val prefixedRequest = request.toBuilder.tableName(prefixedTableName).build()
+    delegate.createTable(prefixedRequest)
+  }
+
+  def deleteTable(request: DeleteTableRequest): CompletableFuture[DeleteTableResponse] = {
+    val originalTableName = request.tableName()
+    val prefixedTableName = prefixTableName(originalTableName)
+    logger.debug(s"deleteTable: original table name='$originalTableName' -> prefixed table name='$prefixedTableName'")
+    val prefixedRequest = request.toBuilder.tableName(prefixedTableName).build()
+    delegate.deleteTable(prefixedRequest)
+  }
+
+  def updateTimeToLive(request: UpdateTimeToLiveRequest): CompletableFuture[UpdateTimeToLiveResponse] = {
+    val originalTableName = request.tableName()
+    val prefixedTableName = prefixTableName(originalTableName)
+    logger.debug(
+      s"updateTimeToLive: original table name='$originalTableName' -> prefixed table name='$prefixedTableName'")
+    val prefixedRequest = request.toBuilder.tableName(prefixedTableName).build()
+    delegate.updateTimeToLive(prefixedRequest)
+  }
+
+  def importTable(request: ImportTableRequest): CompletableFuture[ImportTableResponse] = {
+    // For ImportTableRequest, the table name is in tableCreationParameters
+    val originalParams = request.tableCreationParameters()
+    if (originalParams != null && originalParams.tableName() != null) {
+      val originalTableName = originalParams.tableName()
+      val prefixedTableName = prefixTableName(originalTableName)
+      logger.debug(s"importTable: original table name='$originalTableName' -> prefixed table name='$prefixedTableName'")
+      val prefixedParams = originalParams.toBuilder
+        .tableName(prefixedTableName)
+        .build()
+      val prefixedRequest = request.toBuilder
+        .tableCreationParameters(prefixedParams)
+        .build()
+      delegate.importTable(prefixedRequest)
+    } else {
+      delegate.importTable(request)
+    }
+  }
+
+  // ========== Waiters ==========
+
+  def waitUntilTableExists(tableName: String)
+      : CompletableFuture[software.amazon.awssdk.core.waiters.WaiterResponse[DescribeTableResponse]] = {
+    val prefixedTableName = prefixTableName(tableName)
+    logger.debug(s"waitUntilTableExists: original table name='$tableName' -> prefixed table name='$prefixedTableName'")
+    val request = DescribeTableRequest.builder.tableName(prefixedTableName).build
+    delegate.waiter().waitUntilTableExists(request)
+  }
+
+  def waitUntilTableNotExists(tableName: String)
+      : CompletableFuture[software.amazon.awssdk.core.waiters.WaiterResponse[DescribeTableResponse]] = {
+    val prefixedTableName = prefixTableName(tableName)
+    logger.debug(
+      s"waitUntilTableNotExists: original table name='$tableName' -> prefixed table name='$prefixedTableName'")
+    val request = DescribeTableRequest.builder.tableName(prefixedTableName).build
+    delegate.waiter().waitUntilTableNotExists(request)
+  }
+}

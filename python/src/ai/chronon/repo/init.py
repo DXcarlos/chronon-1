@@ -3,6 +3,7 @@
 import os
 import platform
 import shutil
+import subprocess
 
 import click
 from importlib_resources import files
@@ -82,6 +83,7 @@ def main(ctx, cloud, chronon_root):
 
     try:
         shutil.copytree(template_path, target_path, dirs_exist_ok=True)
+
         print_success("Project scaffolding created successfully! 🎉")
         export_line = f'export PYTHONPATH="{target_path}:$PYTHONPATH"'
         shell_name, config_path = _detect_shell_config()
@@ -122,6 +124,22 @@ def main(ctx, cloud, chronon_root):
             )
             console.print(export_cmd)
             console.print("Applied to current session only.")
+
+        # Initialize git repository if not already initialized (best-effort)
+        git_dir = os.path.join(target_path, ".git")
+        if not os.path.exists(git_dir):
+            result = subprocess.run(
+                ["git", "init"],
+                cwd=target_path,
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                console.print("Initialized git repository")
+            else:
+                console.print(
+                    f"[yellow]Warning: Could not initialize git repository: {result.stderr.strip()}[/yellow]"
+                )
     except Exception:
         console.print_exception()
 

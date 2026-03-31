@@ -2,6 +2,7 @@ import copy
 import glob
 import importlib
 import os
+import sys
 from typing import Any, List
 
 from ai.chronon import airflow_helpers
@@ -84,7 +85,22 @@ def from_file(file_path: str, cls: type, input_dir: str):
     conf_type, team_name_with_path = module_name.split(".", 1)
     mod_path = team_name_with_path.replace("/", ".")
 
-    module = importlib.import_module(module_name)
+    modules_before = set(sys.modules.keys())
+    try:
+        module = importlib.import_module(module_name)
+    except Exception as e:
+        # Remove any partially-loaded modules from the cache so that downstream
+        # files importing this one don't get cascading import errors.
+        for mod in set(sys.modules.keys()) - modules_before:
+            del sys.modules[mod]
+        # Python removes the failed module from sys.modules but leaves it as an
+        # attribute on the parent package. Clean that up too to prevent cascade.
+        sys.modules.pop(module_name, None)
+        parent_name, _, child_name = module_name.rpartition(".")
+        parent = sys.modules.get(parent_name)
+        if parent is not None and hasattr(parent, child_name):
+            delattr(parent, child_name)
+        raise ValueError(f"Error parsing {os.path.relpath(file_path)}: {e}") from None
 
     result = {}
 
