@@ -9,17 +9,14 @@ import ai.chronon.spark.Extensions._
 import ai.chronon.spark.JoinUtils
 import ai.chronon.spark.utils.{DataFrameGen, SparkTestBase}
 import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.submission.SparkSessionBuilder
-import org.apache.spark.sql.{SaveMode, SparkSession}
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.functions._
 import org.junit.Assert._
-import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.collection.JavaConverters._
 
-class MergeJobVersioningTest extends AnyFlatSpec {
+class MergeJobVersioningTest extends SparkTestBase {
 
-  private val spark: SparkSession = SparkSessionBuilder.build("MergeJobVersioningTest", local = true)
   private implicit val tableUtils: TableUtils = TableUtils(spark)
 
   private val today = tableUtils.partitionSpec.at(System.currentTimeMillis())

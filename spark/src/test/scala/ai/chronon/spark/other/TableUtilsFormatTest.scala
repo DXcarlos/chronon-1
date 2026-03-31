@@ -1,25 +1,12 @@
 package ai.chronon.spark.other
 
-import ai.chronon.api.DoubleType
-import ai.chronon.api.IntType
-import ai.chronon.api.LongType
-import ai.chronon.api.StringType
-import ai.chronon.api.StructField
-import ai.chronon.api.StructType
-import ai.chronon.spark.catalog.IncompatibleSchemaException
-import ai.chronon.spark.catalog.TableUtils
-import ai.chronon.spark.catalog.{DefaultFormatProvider, FormatProvider}
+import ai.chronon.api._
+import ai.chronon.spark.catalog.{DefaultFormatProvider, FormatProvider, IncompatibleSchemaException, TableUtils}
 import ai.chronon.spark.submission.SparkSessionBuilder
-import ai.chronon.spark.utils.{DataFrameGen, TestUtils}
 import ai.chronon.spark.utils.TestUtils.makeDf
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.Row
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.functions.col
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
 import org.scalatest.flatspec.AnyFlatSpec
 
 import scala.jdk.CollectionConverters._
@@ -36,7 +23,6 @@ class TableUtilsFormatTest extends AnyFlatSpec {
       Map(
         "spark.sql.extensions" -> "io.delta.sql.DeltaSparkSessionExtension",
         "spark.sql.catalog.spark_catalog" -> "org.apache.spark.sql.delta.catalog.DeltaCatalog",
-        "spark.chronon.table_write.format" -> "delta"
       )
     case _ => Map.empty[String, String]
   }
