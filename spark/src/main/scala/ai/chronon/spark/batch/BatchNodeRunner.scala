@@ -191,14 +191,14 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           Success(())
         case Success(missingPartitions) if attempt < retryCount =>
           logger.warn(
-            s"Attempt ${attempt + 1} failed: Input table ${tableName} is missing partitions: ${missingPartitions
-                .mkString(", ")}. Retrying in ${retryIntervalMin} minutes")
+            s"Attempt ${attempt + 1} failed: Input table ${tableName} is missing partitions: ${PartitionRange
+                .collapsedPrint(missingPartitions)(spec)}. Retrying in ${retryIntervalMin} minutes")
           Thread.sleep(retryIntervalMin * 60 * 1000)
           retry(attempt + 1)
         case Success(missingPartitions) =>
           Failure(new RuntimeException(
-            s"Sensor timed out after ${retryIntervalMin * attempt} minutes. Input table ${tableName} is missing partitions: ${missingPartitions
-                .mkString(", ")}"))
+            s"Sensor timed out after ${retryIntervalMin * attempt} minutes. Input table ${tableName} is missing partitions: ${PartitionRange
+                .collapsedPrint(missingPartitions)(spec)}"))
         case Failure(e) => Failure(e)
       }
     }
@@ -538,8 +538,8 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     if (!translatedRange.partitions.forall(p => allOutputTablePartitions.contains(p))) {
       val missingPartitions = translatedRange.partitions.filterNot(p => allOutputTablePartitions.contains(p))
       logger.error(
-        s"After job completion, output table ${metadata.executionInfo.outputTableInfo.table} is missing partitions: ${missingPartitions
-            .mkString(", ")} from the requested range: $translatedRange. All output partitions: ${allOutputTablePartitions}"
+        s"After job completion, output table ${metadata.executionInfo.outputTableInfo.table} is missing partitions: ${PartitionRange
+            .collapsedPrint(missingPartitions)(tableUtils.partitionSpec)} from the requested range: $translatedRange. All output partitions: ${allOutputTablePartitions}"
       )
     }
 
@@ -692,7 +692,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           "The following input tables are missing partitions for the requested range:\n" +
             inputTableToMissingPartitions
               .map { case (tableName, missing) =>
-                s"Table: $tableName, Missing Partitions: ${missing.mkString(", ")}"
+                s"Table: $tableName, Missing Partitions: ${PartitionRange.collapsedPrint(missing)(tableUtils.partitionSpec)}"
               }
               .mkString("\n")
         )
