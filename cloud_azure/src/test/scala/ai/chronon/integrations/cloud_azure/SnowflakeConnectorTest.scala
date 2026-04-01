@@ -93,4 +93,21 @@ class SnowflakeConnectorTest extends AnyFlatSpec with Matchers {
     }
     ex.getMessage should include("jdbc:snowflake://")
   }
+
+  // --- Snowflake.buildPartitionQuery ---
+
+  it should "generate a partition query with a WHERE clause when filters are provided" in {
+    val query = Snowflake.buildPartitionQuery("MY_DB.PUBLIC.EVENTS", "DS", "DS >= '2023-01-01'", "yyyy-MM-dd")
+    query shouldBe "SELECT DISTINCT TO_VARCHAR(DS::DATE, 'YYYY-MM-DD') AS DS FROM MY_DB.PUBLIC.EVENTS WHERE DS >= '2023-01-01'"
+  }
+
+  it should "generate a partition query without a WHERE clause when no filters are provided" in {
+    val query = Snowflake.buildPartitionQuery("MY_DB.PUBLIC.EVENTS", "DS", "", "yyyy-MM-dd")
+    query shouldBe "SELECT DISTINCT TO_VARCHAR(DS::DATE, 'YYYY-MM-DD') AS DS FROM MY_DB.PUBLIC.EVENTS"
+  }
+
+  it should "convert Java date format patterns to Snowflake format patterns" in {
+    val query = Snowflake.buildPartitionQuery("DB.SCHEMA.T", "EVENT_DATE", "", "yyyy/MM/dd")
+    query should include("TO_VARCHAR(EVENT_DATE::DATE, 'YYYY/MM/DD')")
+  }
 }

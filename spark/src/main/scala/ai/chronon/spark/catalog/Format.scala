@@ -75,6 +75,10 @@ trait Format {
       throw new NotImplementedError("subPartitionsFilter is not supported on this format")
     }
 
+    // Allow formats to remap the caller-provided column to the name actually used in storage
+    // (e.g. a format that stores partitions under an uppercase key)
+    val effectiveColumn = resolvePartitionColumn(tableName, partitionColumn)
+
     val partitionSeq = Try(partitions(tableName, partitionFilters)(sparkSession)) match {
       case Success(p) => p
       case Failure(e) =>
@@ -88,12 +92,18 @@ trait Format {
           partitionMap.get(k).contains(v)
         }
       ) {
-        partitionMap.get(partitionColumn)
+        partitionMap.get(effectiveColumn)
       } else {
         None
       }
     }
   }
+
+  // Override to remap the caller-provided partition column to the name used in storage.
+  // Default is a no-op; formats that store partitions under a different key (e.g. clustering-key
+  // column in Snowflake) should override this.
+  protected def resolvePartitionColumn(tableName: String, partitionColumn: String)(implicit
+      sparkSession: SparkSession): String = partitionColumn
 
   // Return a sequence for partitions where each partition entry consists of a map of partition keys to values
   // e.g. Seq(

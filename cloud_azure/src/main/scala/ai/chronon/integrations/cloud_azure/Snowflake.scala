@@ -46,9 +46,9 @@ case object Snowflake extends Format {
   }
 
   override def primaryPartitions(tableName: String,
-                                  partitionColumn: String,
-                                  partitionFilters: String,
-                                  subPartitionsFilter: Map[String, String] = Map.empty)(implicit
+                                 partitionColumn: String,
+                                 partitionFilters: String,
+                                 subPartitionsFilter: Map[String, String] = Map.empty)(implicit
       sparkSession: SparkSession): List[String] = {
     val partitionFormat = sparkSession.conf.get("spark.chronon.partition.format", "yyyy-MM-dd")
     val (database, schema, table) = parseTableName(tableName)
@@ -58,7 +58,7 @@ case object Snowflake extends Format {
     snowflakeLogger.info(s"Using partition column '$effectiveColumn' for table $tableName")
 
     queryDistinctPartitions(tableName, effectiveColumn, partitionFilters, partitionFormat)
-      .flatMap(_.get(effectiveColumn))
+      .flatMap(_.collectFirst { case (k, v) if k.equalsIgnoreCase(effectiveColumn) => v })
   }
 
   override def partitions(tableName: String, partitionFilters: String)(implicit
@@ -187,7 +187,7 @@ case object Snowflake extends Format {
     partitions
   }
 
-  private def buildPartitionQuery(tableName: String,
+  private[cloud_azure] def buildPartitionQuery(tableName: String,
                                   partitionColumn: String,
                                   partitionFilters: String,
                                   partitionFormat: String): String = {
