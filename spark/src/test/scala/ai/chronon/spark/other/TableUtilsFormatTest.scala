@@ -16,6 +16,7 @@ class TableUtilsFormatTest extends AnyFlatSpec {
 
   import TableUtilsFormatTest._
 
+  private val icebergWarehouse = java.nio.file.Files.createTempDirectory("iceberg-format-test").toString
   private val FormatTestEnvVar = "format_test"
   val format: String = sys.env.getOrElse(FormatTestEnvVar, "hive")
   private val formatConfigs = format match {
@@ -24,7 +25,13 @@ class TableUtilsFormatTest extends AnyFlatSpec {
         "spark.sql.extensions" -> "io.delta.sql.DeltaSparkSessionExtension",
         "spark.sql.catalog.spark_catalog" -> "org.apache.spark.sql.delta.catalog.DeltaCatalog",
       )
-    case _ => Map.empty[String, String]
+    case _ =>
+      Map(
+        "spark.sql.extensions" -> "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+        "spark.sql.catalog.spark_catalog" -> "org.apache.iceberg.spark.SparkSessionCatalog",
+        "spark.sql.catalog.spark_catalog.type" -> "hadoop",
+        "spark.sql.catalog.spark_catalog.warehouse" -> icebergWarehouse,
+      )
   }
   val spark: SparkSession =
     SparkSessionBuilder.build("TableUtilsFormatTest", local = true, additionalConfig = Some(formatConfigs))
@@ -205,9 +212,9 @@ object TableUtilsFormatTest {
 
     tableUtils.insertPartitions(df2, tableName, autoExpand = true)
 
-    // check that we wrote out a table in the right format
+    // All writes are now Iceberg regardless of the format config
     val readTableFormat = FormatProvider.from(spark).readFormat(tableName).get.toString
-    assertTrue(s"Mismatch in table format: $readTableFormat; expected: $format", readTableFormat.toLowerCase == format)
+    assertTrue(s"Mismatch in table format: $readTableFormat; expected: iceberg", readTableFormat.toLowerCase == "iceberg")
 
     // check we have all the partitions written
     val returnedPartitions = tableUtils.partitions(tableName)

@@ -43,9 +43,8 @@ import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, SECONDS}
 
 
-class SchemaEvolutionTest extends AnyFlatSpec {
+class SchemaEvolutionTest extends SparkTestBase {
 
-  val spark: SparkSession = SparkSessionBuilder.build("SchemaEvolutionTest", local = true)
   TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
   private val fetchingDs = "2022-10-03"
 

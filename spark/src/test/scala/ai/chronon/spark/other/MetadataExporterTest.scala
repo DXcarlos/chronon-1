@@ -30,11 +30,9 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import scala.io.Source
 
-class MetadataExporterTest extends AnyFlatSpec {
+class MetadataExporterTest extends SparkTestBase {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  val sessionName = "MetadataExporter"
-  val spark: SparkSession = SparkSessionBuilder.build(sessionName, local = true)
   val tableUtils: TableUtils = TableUtils(spark)
 
   def printFilesInDirectory(directoryPath: String): Unit = {
