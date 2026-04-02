@@ -100,8 +100,7 @@ def generate_dataproc_cluster_config(
                 {"executable_file": initialization_action}
                 for initialization_action in (
                     (initialization_actions or [])
-                    # Expecting structured path to be ex:  gs://my-bucket/zipline/release/1.0.42/scripts/gcp/start.sh
-                    + [("/".join([artifact_prefix, f"release/{version}"])).rstrip("/") + s for s in ["/scripts/gcp/copy_java_security.sh", "/scripts/gcp/start.sh"]]
+                    + [("/".join([artifact_prefix, f"release/{version}"])).rstrip("/") + s for s in ["/scripts/gcp/copy_java_security.sh", "/scripts/gcp/opsagent_setup.sh"]]
                 )
             ],
             "endpointConfig": {

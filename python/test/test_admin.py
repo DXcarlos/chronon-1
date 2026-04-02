@@ -653,12 +653,12 @@ class TestExtractJarsFromOciArchive:
         scripts_build = tmp_path / "scripts_build"
         scripts_gcp = scripts_build / "gcp"
         scripts_gcp.mkdir(parents=True)
-        (scripts_gcp / "start.sh").write_text("#!/bin/bash\nstart")
+        (scripts_gcp / "opsagent_setup.sh").write_text("#!/bin/bash\nstart")
 
         layer_tar = oci_dir / "layer.tar"
         with tarfile.open(layer_tar, "w") as tar:
             tar.add(jars_dir / "engine.jar", arcname="jars/engine.jar")
-            tar.add(scripts_gcp / "start.sh", arcname="scripts/gcp/start.sh")
+            tar.add(scripts_gcp / "opsagent_setup.sh", arcname="scripts/gcp/opsagent_setup.sh")
 
         manifest = [{"Layers": ["layer.tar"]}]
         (oci_dir / "manifest.json").write_text(json.dumps(manifest))
@@ -674,7 +674,7 @@ class TestExtractJarsFromOciArchive:
 
         uploaded_paths = [call_args[0][1] for call_args in mock_upload.call_args_list]
         assert any("jars/engine.jar" in path for path in uploaded_paths)
-        assert any("scripts/gcp/start.sh" in path for path in uploaded_paths)
+        assert any("scripts/gcp/opsagent_setup.sh" in path for path in uploaded_paths)
         assert all(status == "ok" for _, _, _, status in results)
 
     def test_handles_no_manifests(self, tmp_path):
