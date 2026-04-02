@@ -8,4 +8,5 @@ ARG VERSION="dev"
 #   Azure: cloud_azure_lib_deploy.jar, flink_assembly_deploy.jar, service_assembly_deploy.jar
 COPY build_output/engine/ /jars/
 COPY build_output/engine_manifest.json /manifest.json
-COPY scripts/ /scripts/
+# Copy initialization scripts from Python package
+COPY python/src/ai/chronon/repo/scripts/ /scripts/
