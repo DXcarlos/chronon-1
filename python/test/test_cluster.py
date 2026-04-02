@@ -171,6 +171,39 @@ class TestScriptValidation:
                 f"Required script {required} not found in discovered scripts: {discovered_names}"
             )
 
+    def test_full_script_paths_in_dataproc_config(self):
+        """
+        Verify the exact full paths of GCP scripts in generated Dataproc config.
+        This prevents accidental deletion of required scripts.
+        """
+        artifact_prefix = "gs://zipline-artifacts-canary"
+        version = "latest"
+
+        config_json = generate_dataproc_cluster_config(
+            num_workers=5,
+            project_id="test-project",
+            artifact_prefix=artifact_prefix,
+            version=version,
+        )
+        config = json.loads(config_json)
+
+        init_actions = config["initializationActions"]
+        executable_files = [action["executable_file"] for action in init_actions]
+
+        # Verify the required scripts are present with exact full paths
+        required_scripts = [
+            "copy_java_security.sh",
+            "opsagent_setup.sh",
+        ]
+
+        for script_name in required_scripts:
+            expected_full_path = f"{artifact_prefix}/release/{version}/scripts/gcp/{script_name}"
+            assert expected_full_path in executable_files, (
+                f"Required script missing or has wrong path.\n"
+                f"Expected: {expected_full_path}\n"
+                f"Found paths: {executable_files}"
+            )
+
 
 class TestFixedGcpCluster:
     """Tests for fixed_gcp_cluster t-shirt sizing function."""
