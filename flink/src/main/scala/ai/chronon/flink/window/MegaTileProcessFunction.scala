@@ -26,21 +26,48 @@ import scala.util.Try
   * Event path (`processElement`)
   * 1. Bind the current Flink key to its private MegaTile state box, then parse the event into
   *    `(eventTs, row)`.
+  *    - Example: `List("user_123")` and `List("user_456")` each have separate tiles, day state,
+  *      dirty bits, and timers. An event with `ts = 11:03:17` becomes one row applied only to that
+  *      key's state.
+  *
   * 2. Roll day state using the Flink watermark, not this event's timestamp. If the watermark crosses
   *    midnight while today's row is still buffered, emit the old-day row first.
+  *    - Why watermark: if one bad/future event arrives with `eventTs = tomorrow 00:01` and day state
+  *      rotated from that event timestamp, later valid `today 23:50` events could be misclassified
+  *      into yesterday or dropped. The watermark means Flink believes the stream as a whole has
+  *      progressed past that event-time point.
+  *
   * 3. Drop events older than yesterday relative to `currentDayStart`; otherwise call
   *    `processor.onEvent(row, eventTs)`. Event time chooses the small-window tile and
   *    today/yesterday bucket that gets updated.
+  *    - Example: with `currentDayStart = Apr 2 00:00`, `Apr 2 11:03` updates today's 11:00-11:05
+  *      tile, `Apr 1 23:59` updates yesterday's large-window bucket, and `Mar 31 23:59` is dropped.
+  *
   * 4. Mark `todayDirty` / `yesterdayDirty` from the processor result.
+  *    - Why: state mutation and KV writes are decoupled. Dirty bits track which day rows still need
+  *      to be published.
+  *
   * 5. Keep one processing-time eviction timer per key at the next hop boundary.
+  *    - Eviction's job is correctness of in-memory state: drop expired small-window tiles, rebuild
+  *      the sawtooth IR, and mark today's row dirty if the rebuilt row changed.
+  *
   * 6. Emit now if buffering is disabled; otherwise keep one processing-time emit timer per key.
+  *    - Emission's job is write coalescing only. The first dirty update arms the timer; later
+  *      updates only flip dirty bits so hot keys do not emit once per event.
   *
   * Timer path (`onTimer`)
   * 7. Dispatch each processing-time callback into exactly one branch: evict+emit collision,
   *    evict-only, or emit-only.
+  *
   * 8. On an eviction timer, choose the eviction timestamp, maybe emit today's pre-rollover row,
   *    roll day state, rebuild today's small-window state, mark dirty state, and re-arm eviction
   *    while small-window tiles still exist.
+  *    - During replay lag, eviction uses the next watermark hop while this key is actively receiving
+  *      events; otherwise eviction uses wall-clock processing time.
+  *    - Example: if wall clock is Apr 2 11:00 but replayed events are from Mar 31 11:00, wall-clock
+  *      eviction would jump `currentDayStart` to Apr 2 and make valid Mar 31 rows look older than
+  *      yesterday. A watermark-aligned eviction time avoids that while replay is active.
+  *
   * 9. On an emit timer, serialize and emit each dirty day row once, then clear its dirty bit.
   */
 class MegaTileProcessFunction(
@@ -118,7 +145,7 @@ class MegaTileProcessFunction(
     processor = new MegaTileStreamProcessor(megaTileAgg, flinkStore)
   }
 
-  private def ensureStateBound(currentKey: java.util.List[Any]): Unit = {
+  private def bindCurrentKey(currentKey: java.util.List[Any]): Unit = {
     if (lastKey == null || !lastKey.equals(currentKey)) {
       lastKey = currentKey
       flinkStore.bindFlinkState(tileState,
@@ -138,7 +165,7 @@ class MegaTileProcessFunction(
     try {
       if (processor == null) initializeTransients()
 
-      ensureStateBound(ctx.getCurrentKey)
+      bindCurrentKey(ctx.getCurrentKey)
 
       val element = event.fields
       val tsMills = Try(element(timeColumnAlias).asInstanceOf[Long])
@@ -151,7 +178,8 @@ class MegaTileProcessFunction(
       val processingTs = timerService.currentProcessingTime()
       lastEventProcessingTsState.update(processingTs)
 
-      // Step 2.
+      // Step 2. Event ingestion rolls day state from watermark, not processing time, so a brief
+      // source lag near midnight does not move `currentDayStart` too early.
       emitTodayIfNeededThenRollDay(watermark, ctx.getCurrentKey, event.startProcessingTimeMillis, out)
       if (isOlderThanYesterdayForCurrentDay(tsMills)) {
         scheduleEvictTimerIfNeeded(timerService, processingTs)
@@ -183,7 +211,7 @@ class MegaTileProcessFunction(
     try {
       if (processor == null) initializeTransients()
 
-      ensureStateBound(ctx.getCurrentKey)
+      bindCurrentKey(ctx.getCurrentKey)
       if (ctx.timeDomain() != TimeDomain.PROCESSING_TIME) {
         return
       }
@@ -267,6 +295,15 @@ class MegaTileProcessFunction(
 
   /** Advance day state at `dayTransitionTs` without losing a buffered pre-rollover today row.
     *
+    * Both input events and processing-time eviction timers can cross a day boundary:
+    *   - `processElement` uses the current Flink watermark before applying the event.
+    *   - `runEvictionTimer` uses either a watermark-aligned replay timestamp or wall-clock PT.
+    *
+    * If that timestamp moves `currentDayStart` forward by exactly one day and today's row is still
+    * dirty, emit `packTodayEntry()` under the previous day key first. Then advance the processor's
+    * day state. This keeps the final small-window row for the old day from being lost when
+    * `advanceWatermark(...)` rotates `largeTodayIr` into yesterday and resets today.
+    *
     * Emitting under `previousDayStart` preserves the logical daily key across rollover; `MegaTileAvroCodecFn`
     * uses that day-start timestamp when constructing the external `TileKey`.
     */
@@ -291,14 +328,28 @@ class MegaTileProcessFunction(
   private def evictionTimeForProcessingTimer(processingTs: Long, watermark: Long): Long = {
     val lastEventProcessingTs =
       Option(lastEventProcessingTsState.value()).map(_.longValue()).getOrElse(Long.MinValue)
-    val backlogIsActive =
+    val watermarkLaggingWallClock =
       watermark > Long.MinValue &&
-        processingTs - watermark > processor.minSmallWindowTileSize &&
-        lastEventProcessingTs != Long.MinValue &&
+        processingTs - watermark > processor.minSmallWindowTileSize
+    val keyRecentlySeenEvent =
+      lastEventProcessingTs != Long.MinValue &&
         processingTs - lastEventProcessingTs <= processor.minSmallWindowTileSize
-    if (backlogIsActive) {
+
+    if (watermark == Long.MinValue) {
+      // No watermark has arrived yet, so fall back to wall-clock PT.
+      processingTs
+    } else if (watermarkLaggingWallClock && keyRecentlySeenEvent) {
+      // Active catchup: this key recently saw events, but event-time watermark is still far behind
+      // wall clock, so evict at the next watermark-aligned hop.
       TsUtils.round(watermark, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize
+    } else if (watermarkLaggingWallClock && !keyRecentlySeenEvent) {
+      // Sparse-key backlog fallback: this key is idle while another key/partition holds watermark
+      // behind wall clock. Keep PT eviction running so values still decay for the idle key.
+      processingTs
     } else {
+      // Live path: watermark lag is within one hop, so use PT eviction to match serving semantics.
+      // The read path enumerates currently valid tiles at query wall-clock time, independent of how
+      // events were produced, so the write side should age out expired hops on the same PT clock.
       processingTs
     }
   }
