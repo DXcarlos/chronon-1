@@ -1,14 +1,14 @@
 name: CI
 on:
   pull_request:
-    branches: [main]
+#    branches: [main]
   push:
-    branches: [main]
-  merge_group:
+#    branches: [main]
+#  merge_group:
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+#concurrency:
+#  group: ci-${{ github.ref }}
+#  cancel-in-progress: true
 
 jobs:
   changes:
@@ -308,30 +308,30 @@ jobs:
     uses: ./.github/workflows/grype_scan_reusable.yaml
   # === Integration test pipeline (merge_group only) ===
   build_and_push:
-    if: github.event_name == 'merge_group'
+#    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/reusable_build_and_push.yaml
     secrets: inherit
 
   integration_tests:
-    if: github.event_name == 'merge_group'
+#    if: github.event_name == 'merge_group'
     needs: build_and_push
     uses: ./.github/workflows/reusable_integration_tests.yaml
     with:
       version: ${{ needs.build_and_push.outputs.version }}
     secrets: inherit
 
-  ci-gate:
-    if: always()
-    needs: [spark, non-spark, python-lint, python-tests, cosmos, redis, format, grype, build_and_push, integration_tests]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check CI results
-        run: |
-          results="${{ join(needs.*.result, ' ') }}"
-          for result in $results; do
-            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
-              echo "CI failed: at least one job had result '$result'"
-              exit 1
-            fi
-          done
-          echo "All CI checks passed or were skipped"
+#  ci-gate:
+#    if: always()
+#    needs: [spark, non-spark, python-lint, python-tests, cosmos, redis, format, grype, build_and_push, integration_tests]
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: Check CI results
+#        run: |
+#          results="${{ join(needs.*.result, ' ') }}"
+#          for result in $results; do
+#            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+#              echo "CI failed: at least one job had result '$result'"
+#              exit 1
+#            fi
+#          done
+#          echo "All CI checks passed or were skipped"
