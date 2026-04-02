@@ -6,9 +6,86 @@ on:
       version:
         type: string
         required: true
+      check_cache:
+        type: boolean
+        default: false
+      skip_if_cached:
+        type: boolean
+        default: false
+    outputs:
+      aws_skipped:
+        description: "Whether AWS tests were skipped due to cache"
+        value: ${{ jobs.check_test_cache.outputs.aws_cache_hit == 'true' && inputs.skip_if_cached }}
+      gcp_skipped:
+        description: "Whether GCP tests were skipped due to cache"
+        value: ${{ jobs.check_test_cache.outputs.gcp_cache_hit == 'true' && inputs.skip_if_cached }}
+      fetcher_skipped:
+        description: "Whether Fetcher tests were skipped due to cache"
+        value: ${{ jobs.check_test_cache.outputs.fetcher_cache_hit == 'true' && inputs.skip_if_cached }}
 
 jobs:
+  check_test_cache:
+    if: inputs.check_cache
+    runs-on: ubuntu-latest
+    outputs:
+      aws_cache_hit: ${{ steps.check_aws.outputs.cache-hit }}
+      gcp_cache_hit: ${{ steps.check_gcp.outputs.cache-hit }}
+      fetcher_cache_hit: ${{ steps.check_fetcher.outputs.cache-hit }}
+      tree_hash: ${{ steps.compute_hash.outputs.tree_hash }}
+      workflow_hash: ${{ steps.compute_hash.outputs.workflow_hash }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute hashes
+        id: compute_hash
+        run: |
+          TREE_HASH=$(git rev-parse HEAD^{tree})
+          WORKFLOW_HASH=$(find .github/workflows -name "reusable_integration_tests.yaml" -o -name "push_to_canary.yaml" | sort | xargs cat | sha256sum | cut -d' ' -f1 | cut -c1-8)
+          echo "tree_hash=$TREE_HASH" >> $GITHUB_OUTPUT
+          echo "workflow_hash=$WORKFLOW_HASH" >> $GITHUB_OUTPUT
+          echo "Tree hash: $TREE_HASH"
+          echo "Workflow hash: $WORKFLOW_HASH"
+
+      - name: Check AWS cache
+        id: check_aws
+        uses: actions/cache/restore@v4
+        with:
+          path: .integration-test-cache
+          key: integration-test-suite<aws>-treeHash<${{ steps.compute_hash.outputs.tree_hash }}>-workflowHash<${{ steps.compute_hash.outputs.workflow_hash }}>-v1
+          lookup-only: true
+
+      - name: Check GCP cache
+        id: check_gcp
+        uses: actions/cache/restore@v4
+        with:
+          path: .integration-test-cache
+          key: integration-test-suite<gcp>-treeHash<${{ steps.compute_hash.outputs.tree_hash }}>-workflowHash<${{ steps.compute_hash.outputs.workflow_hash }}>-v1
+          lookup-only: true
+
+      - name: Check Fetcher cache
+        id: check_fetcher
+        uses: actions/cache/restore@v4
+        with:
+          path: .integration-test-cache
+          key: integration-test-suite<fetcher>-treeHash<${{ steps.compute_hash.outputs.tree_hash }}>-workflowHash<${{ steps.compute_hash.outputs.workflow_hash }}>-v1
+          lookup-only: true
+
+      - name: Report cache status
+        run: |
+          echo "### Integration Test Cache Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Tree hash: \`${{ steps.compute_hash.outputs.tree_hash }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Workflow hash: \`${{ steps.compute_hash.outputs.workflow_hash }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- AWS cache hit: \`${{ steps.check_aws.outputs.cache-hit }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- GCP cache hit: \`${{ steps.check_gcp.outputs.cache-hit }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Fetcher cache hit: \`${{ steps.check_fetcher.outputs.cache-hit }}\`" >> $GITHUB_STEP_SUMMARY
+
   run_aws_integration_tests:
+    needs: [check_test_cache]
+    if: |
+      always() &&
+      (needs.check_test_cache.result == 'skipped' ||
+       needs.check_test_cache.outputs.aws_cache_hit != 'true' ||
+       !inputs.skip_if_cached)
     runs-on: ubuntu-latest
     environment: aws
 
@@ -114,7 +191,37 @@ jobs:
 
           curl -X POST -H 'Content-type: application/json' --data @/tmp/slack_payload.json "$SLACK_WEBHOOK_URL"
 
+      - name: Create cache marker
+        if: success()
+        run: |
+          mkdir -p .integration-test-cache
+          cat > .integration-test-cache/aws-marker.json <<EOF
+          {
+            "tree_hash": "${{ needs.check_test_cache.outputs.tree_hash }}",
+            "commit_sha": "${{ github.sha }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "test_suite": "aws",
+            "status": "success",
+            "workflow_hash": "${{ needs.check_test_cache.outputs.workflow_hash }}",
+            "version": "1"
+          }
+          EOF
+          cat .integration-test-cache/aws-marker.json
+
+      - name: Save cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: .integration-test-cache
+          key: integration-test-suite<aws>-treeHash<${{ needs.check_test_cache.outputs.tree_hash }}>-workflowHash<${{ needs.check_test_cache.outputs.workflow_hash }}>-v1
+
   run_gcp_integration_tests:
+    needs: [check_test_cache]
+    if: |
+      always() &&
+      (needs.check_test_cache.result == 'skipped' ||
+       needs.check_test_cache.outputs.gcp_cache_hit != 'true' ||
+       !inputs.skip_if_cached)
     runs-on: ubuntu-latest
     environment: gcp
 
@@ -221,7 +328,37 @@ jobs:
 
           curl -X POST -H 'Content-type: application/json' --data @/tmp/slack_payload.json "$SLACK_WEBHOOK_URL"
 
+      - name: Create cache marker
+        if: success()
+        run: |
+          mkdir -p .integration-test-cache
+          cat > .integration-test-cache/gcp-marker.json <<EOF
+          {
+            "tree_hash": "${{ needs.check_test_cache.outputs.tree_hash }}",
+            "commit_sha": "${{ github.sha }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "test_suite": "gcp",
+            "status": "success",
+            "workflow_hash": "${{ needs.check_test_cache.outputs.workflow_hash }}",
+            "version": "1"
+          }
+          EOF
+          cat .integration-test-cache/gcp-marker.json
+
+      - name: Save cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: .integration-test-cache
+          key: integration-test-suite<gcp>-treeHash<${{ needs.check_test_cache.outputs.tree_hash }}>-workflowHash<${{ needs.check_test_cache.outputs.workflow_hash }}>-v1
+
   run_fetcher_integration_tests:
+    needs: [check_test_cache]
+    if: |
+      always() &&
+      (needs.check_test_cache.result == 'skipped' ||
+       needs.check_test_cache.outputs.fetcher_cache_hit != 'true' ||
+       !inputs.skip_if_cached)
     runs-on: ubuntu-latest
 
     permissions:
@@ -331,3 +468,27 @@ jobs:
             docker logs chronon-service-chronon-fetcher-1
             exit 1
           fi
+
+      - name: Create cache marker
+        if: success()
+        run: |
+          mkdir -p .integration-test-cache
+          cat > .integration-test-cache/fetcher-marker.json <<EOF
+          {
+            "tree_hash": "${{ needs.check_test_cache.outputs.tree_hash }}",
+            "commit_sha": "${{ github.sha }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "test_suite": "fetcher",
+            "status": "success",
+            "workflow_hash": "${{ needs.check_test_cache.outputs.workflow_hash }}",
+            "version": "1"
+          }
+          EOF
+          cat .integration-test-cache/fetcher-marker.json
+
+      - name: Save cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: .integration-test-cache
+          key: integration-test-suite<fetcher>-treeHash<${{ needs.check_test_cache.outputs.tree_hash }}>-workflowHash<${{ needs.check_test_cache.outputs.workflow_hash }}>-v1

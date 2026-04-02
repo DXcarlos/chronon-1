@@ -25,7 +25,25 @@ jobs:
     uses: ./.github/workflows/reusable_integration_tests.yaml
     with:
       version: ${{ needs.build_and_push.outputs.version }}
+      check_cache: true
+      skip_if_cached: false  # Phase 1: check but don't skip
     secrets: inherit
+
+  integration_tests_summary:
+    needs: integration_tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report cache summary
+        run: |
+          echo "### Integration Test Cache Report" >> $GITHUB_STEP_SUMMARY
+          echo "Phase 1: Monitoring cache hits (tests still run)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test Suite | Would Skip? |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|-------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| AWS | \`${{ needs.integration_tests.outputs.aws_skipped }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| GCP | \`${{ needs.integration_tests.outputs.gcp_skipped }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Fetcher | \`${{ needs.integration_tests.outputs.fetcher_skipped }}\` |" >> $GITHUB_STEP_SUMMARY
 
   # Azure push is now handled by reusable_build_and_push.yaml (inside build_and_push)
 
