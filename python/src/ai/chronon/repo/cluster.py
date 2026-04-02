@@ -1,5 +1,12 @@
 import json
 
+# GCP initialization scripts that should be included in all Dataproc clusters
+# These paths are relative to the artifact_prefix/release/{version} directory
+GCP_DEFAULT_INIT_SCRIPTS = [
+    "/scripts/gcp/copy_java_security.sh",
+    "/scripts/gcp/opsagent_setup.sh",
+]
+
 
 def generate_emr_cluster_config(
     instance_count,
@@ -100,7 +107,7 @@ def generate_dataproc_cluster_config(
                 {"executable_file": initialization_action}
                 for initialization_action in (
                     (initialization_actions or [])
-                    + [("/".join([artifact_prefix, f"release/{version}"])).rstrip("/") + s for s in ["/scripts/gcp/copy_java_security.sh", "/scripts/gcp/opsagent_setup.sh"]]
+                    + [("/".join([artifact_prefix.rstrip("/"), f"release/{version}"])) + s for s in GCP_DEFAULT_INIT_SCRIPTS]
                 )
             ],
             "endpointConfig": {
