@@ -57,6 +57,7 @@ v1 = Join(
     enable_stats_compute=True,
 )
 
+
 # Example join with some derivations
 derivations_v1 = Join(
     left=source,
