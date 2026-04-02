@@ -138,7 +138,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
 
     val todayStart = currentDayStart
 
-    // Classify stale vs retained tiles in one pass because Flink-backed iterators decode on access.
+    // Build the retained-tile snapshot while collecting stale keys, then delete stale state after iteration.
     val staleEntries = mutable.ArrayBuffer.empty[(Long, Long)]
     val tiles: Map[Long, mutable.Map[Long, Array[Any]]] =
       smallWindowTiers.map(hop => hop -> mutable.Map.empty[Long, Array[Any]]).toMap

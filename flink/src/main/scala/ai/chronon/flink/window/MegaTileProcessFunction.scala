@@ -231,11 +231,12 @@ class MegaTileProcessFunction(
     processor.hasSmallWindows &&
       Option(earliestTileStartState.value()).exists(_.longValue() != Long.MaxValue)
 
-  private def catchupThresholdMillis: Long =
-    FlinkJob.AllowedOutOfOrderness.toMillis + processor.minSmallWindowTileSize
+  // Treat watermark within ~2x allowed out-of-orderness of wall clock as caught up.
+  private val CatchupThresholdMillis: Long =
+    2 * FlinkJob.AllowedOutOfOrderness.toMillis
 
   private def isCaughtUp(watermark: Long, processingTs: Long): Boolean =
-    watermark > 0 && (processingTs - watermark) <= catchupThresholdMillis
+    watermark > 0 && (processingTs - watermark) <= CatchupThresholdMillis
 
   private def computeSmallWindowTimerMode(
       eventTs: Long,
