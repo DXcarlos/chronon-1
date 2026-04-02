@@ -12,7 +12,10 @@ import org.junit.Assert._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.slf4j.LoggerFactory
 
+import java.util
 import scala.collection.mutable
+import scala.concurrent.duration.DurationInt
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Random
 
 /**
@@ -321,6 +324,61 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
       assertTrue(
         s"serde_complex_aggs: mismatch at query ${queryTimes(i)}\n  expected: ${gson.toJson(naive(i))}\n  got:      ${gson.toJson(results(i))}",
         approxEqual(results(i), naive(i), sketchTolerance = 0.05))
+    }
+  }
+
+  it should "decode mega tile bytes safely across threads" in {
+    val aggregations = Seq(
+      Builders.Aggregation(Operation.HISTOGRAM, "category", AllWindows),
+      Builders.Aggregation(Operation.LAST_K, "num", AllWindows, argMap = Map("k" -> "3"))
+    )
+    val codec = new MegaTileCodec(buildGroupBy(aggregations), SchemaWithCategory)
+
+    def histogramIr(): util.HashMap[String, java.lang.Long] = {
+      val ir = new util.HashMap[String, java.lang.Long]()
+      ir.put("alpha", Long.box(1L))
+      ir.put("beta", Long.box(2L))
+      ir
+    }
+
+    def lastKIr(): util.ArrayList[util.ArrayList[Any]] = {
+      val ir = new util.ArrayList[util.ArrayList[Any]]()
+      ir.add(ai.chronon.aggregator.base.TimeTuple.make(1775001000000L, Long.box(10L)))
+      ir.add(ai.chronon.aggregator.base.TimeTuple.make(1775000400000L, Long.box(9L)))
+      ir.add(ai.chronon.aggregator.base.TimeTuple.make(1774999800000L, Long.box(8L)))
+      ir
+    }
+
+    val ir = Array[Any](
+      histogramIr(),
+      histogramIr(),
+      histogramIr(),
+      histogramIr(),
+      histogramIr(),
+      histogramIr(),
+      histogramIr(),
+      lastKIr(),
+      lastKIr(),
+      lastKIr(),
+      lastKIr(),
+      lastKIr(),
+      lastKIr(),
+      lastKIr()
+    )
+
+    val bytes = codec.encode(ir)
+    assertTrue(approxEqual(ir, codec.decode(bytes)))
+
+    val executor = java.util.concurrent.Executors.newFixedThreadPool(8)
+    implicit val ec: ExecutionContext = ExecutionContext.fromExecutorService(executor)
+    try {
+      val decoded = Await.result(
+        Future.sequence((0 until 2000).map(_ => Future(codec.decode(bytes)))),
+        30.seconds
+      )
+      decoded.foreach(result => assertTrue(approxEqual(ir, result)))
+    } finally {
+      executor.shutdownNow()
     }
   }
 }

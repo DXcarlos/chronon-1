@@ -1,8 +1,8 @@
 package ai.chronon.flink.test
 
-import ai.chronon.api.Extensions.GroupByOps
-import ai.chronon.api.{GroupBy, TilingUtils}
+import ai.chronon.api.Extensions.{GroupByOps, WindowOps}
 import ai.chronon.api.ScalaJavaConversions._
+import ai.chronon.api.{GroupBy, OnlineStrategy, TilingUtils, TimeUnit, TsUtils, Window}
 import ai.chronon.flink.{FlinkGroupByStreamingJob, SparkExpressionEval, SparkExpressionEvalFn}
 import ai.chronon.flink.types.TimestampedIR
 import ai.chronon.flink.types.TimestampedTile
@@ -153,6 +153,54 @@ class FlinkJobEventIntegrationTest extends AnyFlatSpec with BeforeAndAfter {
     )
 
     expectedFinalIRsPerKey shouldBe finalIRsPerKey
+  }
+
+  it should "mega tiled flink job writes day-start keyed daily snapshots end to end" in {
+    implicit val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+    env.setParallelism(1)
+
+    val elements = Seq(
+      E2ETestEvent(id = "id1", int_val = 1, double_val = 1.5, created = 1712277000000L),
+      E2ETestEvent(id = "id1", int_val = 2, double_val = 2.0, created = 1712277900000L)
+    )
+
+    val groupBy = FlinkTestUtils.makeGroupBy(Seq("id"))
+    groupBy.setOnlineStrategy(OnlineStrategy.STREAMING_MEGATILES)
+    val (job, groupByServingInfoParsed) = buildFlinkJob(groupBy, elements)
+    groupByServingInfoParsed.groupBy.isMegaTilingEnabled shouldBe true
+
+    job.runMegaTiledGroupByJob(env).addSink(new CollectSink)
+    env.execute("MegaTiledFlinkJobIntegrationTest")
+
+    val writeResponses = CollectSink.values.toScala
+    writeResponses.nonEmpty shouldBe true
+    writeResponses.forall(_.status) shouldBe true
+    writeResponses.map(_.dataset).distinct shouldBe Seq(groupByServingInfoParsed.groupBy.streamingDataset)
+
+    val dayMillis = new Window(1, TimeUnit.DAYS).millis
+    val dayStart = TsUtils.round(elements.head.created, dayMillis)
+    val decodedTileKeys = writeResponses.map(response => TilingUtils.deserializeTileKey(response.keyBytes))
+    decodedTileKeys.map(_.tileSizeMillis).distinct shouldBe Seq(dayMillis)
+    decodedTileKeys.map(_.tileStartTimestampMillis).contains(dayStart) shouldBe true
+    decodedTileKeys.forall(tileKey => TsUtils.round(tileKey.tileStartTimestampMillis, dayMillis) == tileKey.tileStartTimestampMillis) shouldBe true
+
+    val decodedEntityKeys = decodedTileKeys.map { tileKey =>
+      val keyBytes = tileKey.keyBytes.toScala.toArray.map(_.asInstanceOf[Byte])
+      val record = groupByServingInfoParsed.keyCodec.decode(keyBytes)
+      record.get("id").toString
+    }
+    decodedEntityKeys.distinct shouldBe Seq("id1")
+
+    val decodedSums = writeResponses
+      .zip(decodedTileKeys)
+      .filter { case (_, tileKey) => tileKey.tileStartTimestampMillis == dayStart }
+      .map(_._1)
+      .map(response => groupByServingInfoParsed.megaTileCodec.decode(response.valueBytes))
+      .map(ir => groupByServingInfoParsed.megaTileCodec.rowAggregator.finalize(ir).head.asInstanceOf[Double])
+      .sorted
+
+    decodedSums.head shouldBe 1.5
+    decodedSums.last shouldBe 3.5
   }
 
   private def buildFlinkJob(groupBy: GroupBy, elements: Seq[E2ETestEvent]): (FlinkGroupByStreamingJob, GroupByServingInfoParsed) = {

@@ -138,28 +138,25 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
 
     val todayStart = currentDayStart
 
-    // Evict stale tiles
+    // Classify stale vs retained tiles in one pass because Flink-backed iterators decode on access.
     val staleEntries = mutable.ArrayBuffer.empty[(Long, Long)]
-    val iter = store.tileIterator
-    while (iter.hasNext) {
-      val (hopSize, tileStart, _) = iter.next()
-      if (smallWindowTiers.contains(hopSize)) {
-        val floor = megaTileAgg.retentionFloor(hopSize, timerTs, todayStart)
-        if (tileStart < floor) staleEntries += ((hopSize, tileStart))
-      }
-    }
-    staleEntries.foreach { case (h, t) => store.removeTile(h, t) }
-
-    // Rebuild cachedSmallWindowIr from remaining tiles
     val tiles: Map[Long, mutable.Map[Long, Array[Any]]] =
       smallWindowTiers.map(hop => hop -> mutable.Map.empty[Long, Array[Any]]).toMap
     var newEarliest = Long.MaxValue
-    val rebuildIter = store.tileIterator
-    while (rebuildIter.hasNext) {
-      val (hopSize, tileStart, ir) = rebuildIter.next()
-      tiles.get(hopSize).foreach(_(tileStart) = ir)
-      if (tileStart < newEarliest) newEarliest = tileStart
+    val iter = store.tileIterator
+    while (iter.hasNext) {
+      val (hopSize, tileStart, ir) = iter.next()
+      if (smallWindowTiers.contains(hopSize)) {
+        val floor = megaTileAgg.retentionFloor(hopSize, timerTs, todayStart)
+        if (tileStart < floor) {
+          staleEntries += ((hopSize, tileStart))
+        } else {
+          tiles(hopSize)(tileStart) = ir
+          if (tileStart < newEarliest) newEarliest = tileStart
+        }
+      }
     }
+    staleEntries.foreach { case (h, t) => store.removeTile(h, t) }
     store.putEarliestTileStart(newEarliest)
 
     val rebuiltIr = megaTileAgg.buildMegaTileIr(tiles, now = timerTs, batchEnd = todayStart)

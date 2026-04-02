@@ -10,7 +10,8 @@ amplification and serving latency.
 
 Write **one mega tile per entity per day** to the KV store. The mega tile contains a **windowed IR**
 where each column has the correct aggregate for its specific window. This reduces KV store reads from
-O(N tiles) to 3 point gets: `(entity, today)` + `(entity, yesterday)` from stream KV + `(entity)` from batch KV.
+O(N tiles) to one batch point get plus one stream point get per daily key from query day back to
+the batch day, with one extra previous-day fallback key for no-batch columns.
 
 ## Opt-in
 
@@ -32,12 +33,14 @@ tailBuffer = 2d (default)
 Small windows (≤ tailBuffer):
   effectiveStart = now - window.millis
   Flink covers full window via tiles + sawtooth running IR.
-  Fetcher uses today's mega tile entry directly (self-contained).
+  Fetcher uses the newest available daily mega tile entry at or after yesterdayStart
+  (self-contained).
 
 Large windows (> tailBuffer) + unwindowed:
   effectiveStart = batchEnd (on fetcher side) or dayStart (on Flink side, per-day)
   Flink accumulates a daily running IR per day (today + yesterday).
-  Fetcher merges batch collapsed + tail hops + streaming daily aggregates.
+  Fetcher merges batch collapsed + tail hops + every available daily streaming aggregate from
+  the batch day through query day.
 ```
 
 ## Tier Assignment
@@ -146,26 +149,28 @@ read from different tiers and different time ranges but the same bucket index in
 
 ## Fetcher Merge (MegaTileMerger)
 
-Fetcher reads 3 entries: `(entity, today)`, `(entity, yesterday)` from stream KV + `(entity)` from batch KV.
+Fetcher reads one stream entry per daily key from query day back to the batch day, plus one extra
+previous-day fallback key for no-batch columns, and one batch entry `(entity)` from batch KV.
 
 ```
-def merge(batchIr, todayIr, yesterdayIr, todayStart, queryTs, batchEnd):
+def merge(batchIr, dailyTileIrs, queryTs, batchEnd):
   resultIr = clone(batchIr.collapsed) or init
+  batchDayStart = round(batchEnd, 1d)
+  noBatchFallbackDayStart = round(queryTs, 1d) - 1d
 
   for col in 0 until windowedAggregator.length:
     window = windowMappings(col).window
 
     if window != null and window.millis <= tailBufferMillis:   // SMALL WINDOW
-      // Self-contained in daily entry. Fall back to yesterday only if
-      // today's entire entry is absent (null array), not if column is null.
-      resultIr(col) = if todayIr != null then todayIr(col)
-                       else if yesterdayIr != null then yesterdayIr(col)
+      // Self-contained in daily entry. Use the newest non-null column value from
+      // query day or fallback day; clear stale batch values when all daily rows are absent.
+      resultIr(col) = newest dailyTileIr(col) where dayStart >= noBatchFallbackDayStart
 
     else:                                                       // LARGE WINDOW / UNWINDOWED
-      // Batch collapsed + streaming daily aggregates
-      if todayIr(col) != null: resultIr(col) = merge(resultIr(col), todayIr(col))
-      if batchEnd < todayStart and yesterdayIr(col) != null:
-        resultIr(col) = merge(resultIr(col), yesterdayIr(col))
+      // Batch collapsed + historical streaming daily aggregates, merged oldest -> newest.
+      for (dayStart, dailyIr) in dailyTileIrs if dayStart >= batchDayStart:
+        if dailyIr != null and dailyIr(col) != null:
+          resultIr(col) = merge(resultIr(col), dailyIr(col))
 
   // Tail hops for large windowed columns only (not small, not unwindowed)
   mergeTailHopsForBatchColumns(resultIr, queryTs, batchEnd, batchIr)
@@ -180,9 +185,9 @@ with `tileSizeMs = DayMillis`. Each day is a separate point-get key.
 
 - Flink emits `todayStart` (not raw `eventTs`) as the tile timestamp, so the codec always writes
   to the correct daily key even for future-timestamped events.
-- Fetcher constructs two explicit `GetRequest`s for today and yesterday using
-  `MegaTileMerger.streamingDayKeys(queryTs)`. Query time is resolved once and propagated to
-  avoid midnight-boundary inconsistency.
+- Fetcher constructs explicit `GetRequest`s for
+  `MegaTileMerger.streamingDayKeys(queryTs, batchEnd)`. Query time is resolved once and
+  propagated to avoid midnight-boundary inconsistency.
 
 ## Codec (MegaTileCodec)
 
@@ -192,12 +197,13 @@ Windowed IR (mega tile entries): `encode(ir)` / `decode(bytes)` using the window
 Base IR (individual tiles in Flink state): `encodeBaseIr(ir)` / `decodeBaseIr(bytes)` using the
 unwindowed base aggregator schema (one IR slot per aggregation bucket).
 
-AvroCodec instances are cached as `@transient lazy val` to avoid schema parsing per decode.
+`AvroCodec.of` internally uses `ThreadLocal`, so `MegaTileCodec` resolves codec instances through
+`def` accessors instead of sharing a single lazy instance across concurrent fetcher requests.
 
 ## Constraints
 
-- **Max batch staleness**: 2 days. Beyond that, large windows have a coverage gap between
-  batchEnd and yesterdayStart. Alert if batch is > 2 days stale.
+- **Batch staleness**: Fetcher covers every daily stream key from the batch day through query day,
+  so large-window coverage remains continuous even when batch lags by multiple days.
 - **Sawtooth approximation**: Accepted for all aggregation types. Between evictions, small-window
   columns are over-inclusive by up to one tile interval at the tail.
 - **Late events**: Up to 2 days late are handled (routed to yesterday's large-window IR).
@@ -231,8 +237,9 @@ All windows, tailBuffer = 2d, batchEnd = Mar 25 00:00.
 | 49h | 1hr | LARGE | — | [Mar 25 00:00, Mar 25 02:00) = 2h | [Mar 24 00:00, Mar 25 00:00) = 24h | yesterday + today + collapsed + tail |
 | 3d | 1hr | LARGE | — | [Mar 25 00:00, Mar 25 02:00) = 2h | [Mar 24 00:00, Mar 25 00:00) = 24h | yesterday + today + collapsed + tail |
 
-For large windows with stale batch (`batchEnd < todayStart`): fetcher sums yesterday + today
-to cover `[batchEnd, now)`, then merges with batch collapsed + tail hops.
+For large windows with stale batch (`batchEnd < todayStart`): fetcher sums all daily stream entries
+from `batchDayStart` through `todayStart` to cover `[batchEnd, now)`, then merges with batch
+collapsed + tail hops.
 
 ### Flink state size (max tiles per tier)
 
@@ -254,10 +261,10 @@ Flink write path:
     → AsyncKVStoreWriter
 
 Fetcher read path:
-  GroupByFetcher: 2 point-get requests (today + yesterday)
+  GroupByFetcher: daily stream point gets from query day back to batch day (+ fallback day)
     → GroupByResponseHandler.mergeMegaTilesFromStreaming
-    → MegaTileCodec.decode (today + yesterday entries)
-    → MegaTileMerger.merge (batch + today + yesterday → finalized result)
+    → MegaTileCodec.decode (daily stream entries)
+    → MegaTileMerger.merge (batch + daily stream entries → finalized result)
 
 Shared pipeline tails (BaseFlinkJob):
   buildTiledTail: keyBy → window aggregate → TiledAvroCodecFn → KV write
@@ -270,10 +277,10 @@ Shared pipeline tails (BaseFlinkJob):
 Tests at three layers, all comparing against NaiveAggregator:
 
 1. **MegaTileAggregatorTest** — tile building + serveMegaTile merge (6 tests)
-2. **MegaTileMergerTest** — per-day entry split + MegaTileMerger.merge (5 tests)
+2. **MegaTileMergerTest** — per-day entry split + MegaTileMerger.merge (7 tests)
 3. **MegaTileStreamProcessorTest** — full Flink simulation with sawtooth + eviction (6 tests,
    including multi-day watermark gap)
-4. **MegaTileCodecRoundTripTest** — serde round-trips via SerdeTileStore + key switch (3 tests)
+4. **MegaTileCodecRoundTripTest** — serde round-trips via SerdeTileStore + key switch (4 tests)
 
 Windows tested: 6h, 1d, 47h, 2d, 49h, 3d, 7d.
 Aggregation types: SUM, COUNT, AVERAGE, MIN, MAX, LAST, FIRST.

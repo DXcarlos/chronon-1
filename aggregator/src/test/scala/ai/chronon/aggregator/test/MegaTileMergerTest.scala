@@ -66,6 +66,68 @@ class MegaTileMergerTest extends AnyFlatSpec {
     (data.rows, columns.map(_.schema))
   }
 
+  it should "fetch day keys from batch day through today plus one no-batch fallback day" in {
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.SUM, "num", AllWindows)
+    )
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val merger = new MegaTileMerger(new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis))
+
+    val todayStart = 1712275200000L // 2024-04-05T00:00:00Z
+    val queryTs = todayStart + 90 * 60 * 1000L
+    val batchEnd = 1711929600000L // 2024-04-01T00:00:00Z
+
+    assertEquals(
+      Seq(
+        todayStart,
+        1712188800000L,
+        1712102400000L,
+        1712016000000L,
+        1711929600000L
+      ),
+      merger.streamingDayKeys(queryTs, batchEnd)
+    )
+
+    assertEquals(
+      Seq(
+        todayStart,
+        1712188800000L
+      ),
+      merger.streamingDayKeys(queryTs, todayStart)
+    )
+  }
+
+  it should "clear no-batch columns when no daily rows exist" in {
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.SUM, "num", Seq(new Window(6, TimeUnit.HOURS))),
+      Builders.Aggregation(Operation.SUM, "num", Seq(new Window(7, TimeUnit.DAYS)))
+    )
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val batchEnd = 1712275200000L // 2024-04-05T00:00:00Z
+    val queryTs = batchEnd + 6 * 3600 * 1000L
+
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val merger = new MegaTileMerger(megaTileAgg)
+    val onlineAgg = new SawtoothOnlineAggregator(batchEnd, aggregations, schema, tailBufferMillis = TailBufferMillis)
+
+    var batchIr = onlineAgg.init
+    batchIr = onlineAgg.update(batchIr, new TestRow(batchEnd - 3600 * 1000L, 5L)(0))
+    val finalBatchIr = onlineAgg.finalizeSnapshot(batchIr)
+
+    val merged = merger.merge(
+      finalBatchIr,
+      Seq(
+        TsUtils.round(queryTs, DayMillis) -> null,
+        (TsUtils.round(queryTs, DayMillis) - DayMillis) -> null
+      ),
+      queryTs,
+      batchEnd
+    )
+
+    assertNull(merged(0))
+    assertEquals(5L, merged(1))
+  }
+
   def naiveAggregate(allEvents: Array[TestRow],
                      queryTimes: Array[Long],
                      aggregations: Seq[Aggregation],
