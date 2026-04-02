@@ -1,8 +1,8 @@
 package ai.chronon.flink.window
 
 import ai.chronon.aggregator.windowing.{MegaTileAggregator, MegaTileStreamProcessor, TileStore}
+import ai.chronon.api.ScalaJavaConversions.ListOps
 import ai.chronon.api.{Constants, DataType, GroupBy, TsUtils}
-import ai.chronon.api.ScalaJavaConversions.IteratorOps
 import ai.chronon.flink.deser.ProjectedEvent
 import ai.chronon.flink.types.TimestampedTile
 import ai.chronon.online.MegaTileCodec
@@ -112,7 +112,7 @@ class MegaTileProcessFunction(
 
   private def initializeTransients(): Unit = {
     val inputCols = inputSchema.map { case (name, dt) => (name, dt) }
-    val megaTileAgg = new MegaTileAggregator(groupBy.getAggregations.iterator().toScala.toSeq, inputCols)
+    val megaTileAgg = new MegaTileAggregator(groupBy.getAggregations.toScala.toSeq, inputCols)
     megaTileCodec = new MegaTileCodec(groupBy, inputCols)
     flinkStore = new FlinkTileStore(megaTileAgg, megaTileCodec)
     processor = new MegaTileStreamProcessor(megaTileAgg, flinkStore)
@@ -149,15 +149,10 @@ class MegaTileProcessFunction(
       val timerService = ctx.timerService()
       val watermark = timerService.currentWatermark()
       val processingTs = timerService.currentProcessingTime()
-      val dayStartBeforeAdvance = flinkStore.getCurrentDayStart
       lastEventProcessingTsState.update(processingTs)
 
       // Step 2.
-      emitTodayIfNeededThenRollDay(dayStartBeforeAdvance,
-                                   watermark,
-                                   ctx.getCurrentKey,
-                                   event.startProcessingTimeMillis,
-                                   out)
+      emitTodayIfNeededThenRollDay(watermark, ctx.getCurrentKey, event.startProcessingTimeMillis, out)
       if (isOlderThanYesterdayForCurrentDay(tsMills)) {
         scheduleEvictTimerIfNeeded(timerService, processingTs)
         emitDirtyOrSchedule(event.startProcessingTimeMillis, processingTs, timerService, out)
@@ -205,21 +200,19 @@ class MegaTileProcessFunction(
         nextEvictPtTimerState.clear()
       }
 
-      if (isEvictTimer) {
+      if (isEvictTimer && isEmitTimer) {
         // Step 7 and Step 8.
         runEvictionTimer(ctx.getCurrentKey, timestamp, processingTs, watermark, timerService, out)
-      }
-
-      if (!isEmitTimer && !isEvictTimer) {
-        return
-      }
-
-      if (isEmitTimer || !bufferingEnabled) {
-        // Step 9.
+        // Step 9: this timestamp is also the buffered emit timer, so emit once after Step 8 rebuilt state.
         emitDirtyMegaTiles(ctx.getCurrentKey, processingTs, out)
       } else if (isEvictTimer) {
+        // Step 7 and Step 8.
+        runEvictionTimer(ctx.getCurrentKey, timestamp, processingTs, watermark, timerService, out)
         // Step 9: eviction changed state; if buffering is enabled, arm one emit timer.
-        scheduleEmitTimerIfNeeded(timerService, processingTs)
+        emitDirtyOrSchedule(processingTs, processingTs, timerService, out)
+      } else if (isEmitTimer) {
+        // Step 7 and Step 9.
+        emitDirtyMegaTiles(ctx.getCurrentKey, processingTs, out)
       }
     } catch {
       case e: Exception =>
@@ -257,9 +250,8 @@ class MegaTileProcessFunction(
                                watermark: Long,
                                timerService: TimerService,
                                out: Collector[TimestampedTile]): Unit = {
-    val previousDayStart = flinkStore.getCurrentDayStart
     val evictionTime = evictionTimeForProcessingTimer(processingTs, watermark)
-    emitTodayIfNeededThenRollDay(previousDayStart, evictionTime, currentKey, processingTs, out)
+    emitTodayIfNeededThenRollDay(evictionTime, currentKey, processingTs, out)
 
     val result = processor.onEviction(evictionTime)
     markDirtyState(result.todayEntry != null, hasYesterdayUpdate = false)
@@ -273,12 +265,16 @@ class MegaTileProcessFunction(
     }
   }
 
-  /** Advance day state at `dayTransitionTs` without losing a buffered pre-rollover today row. */
-  private def emitTodayIfNeededThenRollDay(previousDayStart: Long,
-                                           dayTransitionTs: Long,
+  /** Advance day state at `dayTransitionTs` without losing a buffered pre-rollover today row.
+    *
+    * Emitting under `previousDayStart` preserves the logical daily key across rollover; `MegaTileAvroCodecFn`
+    * uses that day-start timestamp when constructing the external `TileKey`.
+    */
+  private def emitTodayIfNeededThenRollDay(dayTransitionTs: Long,
                                            keys: java.util.List[Any],
                                            processingTsMillis: Long,
                                            out: Collector[TimestampedTile]): Unit = {
+    val previousDayStart = flinkStore.getCurrentDayStart
     val nextDayStart = previousDayStart + processor.DayMillis
     val shouldEmitPreviousTodayRow =
       previousDayStart != -1L &&
