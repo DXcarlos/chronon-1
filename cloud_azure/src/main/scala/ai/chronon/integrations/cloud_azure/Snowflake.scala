@@ -188,9 +188,9 @@ case object Snowflake extends Format {
   }
 
   private[cloud_azure] def buildPartitionQuery(tableName: String,
-                                  partitionColumn: String,
-                                  partitionFilters: String,
-                                  partitionFormat: String): String = {
+                                               partitionColumn: String,
+                                               partitionFilters: String,
+                                               partitionFormat: String): String = {
     // Convert Java DateTimeFormatter pattern to Snowflake format pattern
     // Common mappings: yyyy->YYYY, MM->MM, dd->DD
     val snowflakeFormat = partitionFormat
