@@ -203,6 +203,38 @@ class FlinkJobEventIntegrationTest extends AnyFlatSpec with BeforeAndAfter {
     decodedSums.last shouldBe 3.5
   }
 
+  it should "mega tiled flink job drops events older than yesterday" in {
+    implicit val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+    env.setParallelism(1)
+
+    val currentDayEventTs = 1712277000000L // 2024-04-05T00:30:00Z
+    val staleEventTs = currentDayEventTs - 2 * new Window(1, TimeUnit.DAYS).millis
+    val elements = Seq(
+      E2ETestEvent(id = "id1", int_val = 1, double_val = 2.0, created = currentDayEventTs),
+      E2ETestEvent(id = "id1", int_val = 2, double_val = 9.5, created = staleEventTs)
+    )
+
+    val groupBy = FlinkTestUtils.makeGroupBy(Seq("id"))
+    groupBy.setOnlineStrategy(OnlineStrategy.STREAMING_MEGATILES)
+    val (job, groupByServingInfoParsed) = buildFlinkJob(groupBy, elements)
+
+    job.runMegaTiledGroupByJob(env).addSink(new CollectSink)
+    env.execute("MegaTiledFlinkJobDropsStaleEventsTest")
+
+    val dayMillis = new Window(1, TimeUnit.DAYS).millis
+    val currentDayStart = TsUtils.round(currentDayEventTs, dayMillis)
+    val currentDaySums = CollectSink.values.toScala
+      .filter(_.status)
+      .filter { response =>
+        TilingUtils.deserializeTileKey(response.keyBytes).tileStartTimestampMillis == currentDayStart
+      }
+      .map(response => groupByServingInfoParsed.megaTileCodec.decode(response.valueBytes))
+      .map(ir => groupByServingInfoParsed.megaTileCodec.rowAggregator.finalize(ir).head.asInstanceOf[Double])
+      .distinct
+
+    currentDaySums shouldBe Seq(2.0)
+  }
+
   private def buildFlinkJob(groupBy: GroupBy, elements: Seq[E2ETestEvent]): (FlinkGroupByStreamingJob, GroupByServingInfoParsed) = {
     val query = SparkExpressionEval.queryFromGroupBy(groupBy)
     val sparkExpressionEvalFn = new SparkExpressionEvalFn(Encoders.product[E2ETestEvent], query, groupBy.metaData.name, groupBy.dataModel)

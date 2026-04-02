@@ -133,7 +133,13 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
           val hopIr = hopIrs(idx)
           val hopStart = hopIr.last.asInstanceOf[Long]
           if (alignedCollapsed > hopStart && hopStart >= queryTail) {
-            relevantHops += hopIr(baseIrIndices(i))
+            val hopVal = hopIr(baseIrIndices(i))
+            if (relevantHops(0) == null) {
+              // bulkMerge may mutate its first non-null IR; clone cached tail-hop state on that path.
+              relevantHops += windowedAggregator(i).clone(hopVal)
+            } else {
+              relevantHops += hopVal
+            }
           }
           idx += 1
         }

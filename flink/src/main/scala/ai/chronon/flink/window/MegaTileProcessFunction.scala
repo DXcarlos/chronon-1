@@ -3,7 +3,6 @@ package ai.chronon.flink.window
 import ai.chronon.aggregator.windowing.{MegaTileAggregator, MegaTileStreamProcessor, TileStore}
 import ai.chronon.api.{Constants, DataType, GroupBy, TsUtils}
 import ai.chronon.api.ScalaJavaConversions.IteratorOps
-import ai.chronon.flink.FlinkJob
 import ai.chronon.flink.deser.ProjectedEvent
 import ai.chronon.flink.types.TimestampedTile
 import ai.chronon.online.MegaTileCodec
@@ -22,19 +21,33 @@ import scala.util.Try
   * Delegates all aggregation logic to MegaTileStreamProcessor.
   * State access goes through FlinkTileStore — only touched entries are serialized/deserialized.
   *
-  * Timer strategy:
-  * - During catchup (watermark far behind wall clock): event-time timers only.
-  *   Eviction fires as watermark advances through the backlog at the correct cadence.
-  * - During live operation (watermark near wall clock): processing-time timers aligned
-  *   to hop boundaries. Fires at wall-clock intervals so idle entities get timely
-  *   sawtooth correction without waiting for the next event to advance the watermark.
-  * - Late event-time timers can coexist with processing-time timers in live mode to correct
-  *   sawtooth state after out-of-order arrivals.
+  * Step-by-step mental model in code order:
+  *
+  * Event path (`processElement`)
+  * 1. Bind the current Flink key to its private MegaTile state box, then parse the event into
+  *    `(eventTs, row)`.
+  * 2. Roll day state using the Flink watermark, not this event's timestamp. If the watermark crosses
+  *    midnight while today's row is still buffered, emit the old-day row first.
+  * 3. Drop events older than yesterday relative to `currentDayStart`; otherwise call
+  *    `processor.onEvent(row, eventTs)`. Event time chooses the small-window tile and
+  *    today/yesterday bucket that gets updated.
+  * 4. Mark `todayDirty` / `yesterdayDirty` from the processor result.
+  * 5. Keep one processing-time eviction timer per key at the next hop boundary.
+  * 6. Emit now if buffering is disabled; otherwise keep one processing-time emit timer per key.
+  *
+  * Timer path (`onTimer`)
+  * 7. Dispatch each processing-time callback into exactly one branch: evict+emit collision,
+  *    evict-only, or emit-only.
+  * 8. On an eviction timer, choose the eviction timestamp, maybe emit today's pre-rollover row,
+  *    roll day state, rebuild today's small-window state, mark dirty state, and re-arm eviction
+  *    while small-window tiles still exist.
+  * 9. On an emit timer, serialize and emit each dirty day row once, then clear its dirty bit.
   */
 class MegaTileProcessFunction(
     groupBy: GroupBy,
     inputSchema: Seq[(String, DataType)],
-    enableDebug: Boolean = false
+    enableDebug: Boolean = false,
+    bufferingOutputTimeMillis: Long = 0L
 ) extends KeyedProcessFunction[java.util.List[Any], ProjectedEvent, TimestampedTile] {
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
@@ -57,8 +70,11 @@ class MegaTileProcessFunction(
   private var currentDayStartState: ValueState[java.lang.Long] = _
   private var earliestTileStartState: ValueState[java.lang.Long] = _
 
-  private var nextEventTimerState: ValueState[java.lang.Long] = _
-  private var nextProcessingTimerState: ValueState[java.lang.Long] = _
+  private var nextEvictPtTimerState: ValueState[java.lang.Long] = _
+  private var nextEmitPtTimerState: ValueState[java.lang.Long] = _
+  private var lastEventProcessingTsState: ValueState[java.lang.Long] = _
+  private var todayDirtyState: ValueState[java.lang.Boolean] = _
+  private var yesterdayDirtyState: ValueState[java.lang.Boolean] = _
 
   override def open(parameters: Configuration): Unit = {
     super.open(parameters)
@@ -80,10 +96,16 @@ class MegaTileProcessFunction(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-day-start", classOf[java.lang.Long]))
     earliestTileStartState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-earliest-tile", classOf[java.lang.Long]))
-    nextEventTimerState = getRuntimeContext.getState(
-      new ValueStateDescriptor[java.lang.Long]("mega-tile-next-event-timer", classOf[java.lang.Long]))
-    nextProcessingTimerState = getRuntimeContext.getState(
-      new ValueStateDescriptor[java.lang.Long]("mega-tile-next-processing-timer", classOf[java.lang.Long]))
+    nextEvictPtTimerState = getRuntimeContext.getState(
+      new ValueStateDescriptor[java.lang.Long]("mega-tile-next-evict-pt-timer", classOf[java.lang.Long]))
+    nextEmitPtTimerState = getRuntimeContext.getState(
+      new ValueStateDescriptor[java.lang.Long]("mega-tile-next-emit-pt-timer", classOf[java.lang.Long]))
+    lastEventProcessingTsState = getRuntimeContext.getState(
+      new ValueStateDescriptor[java.lang.Long]("mega-tile-last-event-processing-ts", classOf[java.lang.Long]))
+    todayDirtyState = getRuntimeContext.getState(
+      new ValueStateDescriptor[java.lang.Boolean]("mega-tile-today-dirty", classOf[java.lang.Boolean]))
+    yesterdayDirtyState = getRuntimeContext.getState(
+      new ValueStateDescriptor[java.lang.Boolean]("mega-tile-yesterday-dirty", classOf[java.lang.Boolean]))
 
     initializeTransients()
   }
@@ -116,41 +138,41 @@ class MegaTileProcessFunction(
     try {
       if (processor == null) initializeTransients()
 
+      ensureStateBound(ctx.getCurrentKey)
+
       val element = event.fields
       val tsMills = Try(element(timeColumnAlias).asInstanceOf[Long])
         .getOrElse(element(timeColumnAlias).asInstanceOf[Double].toLong)
       val values: Array[Any] = valueColumns.map(element(_))
       val row = new ArrayRow(values, tsMills)
 
-      ensureStateBound(ctx.getCurrentKey)
       val timerService = ctx.timerService()
       val watermark = timerService.currentWatermark()
       val processingTs = timerService.currentProcessingTime()
+      val dayStartBeforeAdvance = flinkStore.getCurrentDayStart
+      lastEventProcessingTsState.update(processingTs)
 
-      processor.advanceWatermark(watermark)
+      // Step 2.
+      emitTodayIfNeededThenRollDay(dayStartBeforeAdvance,
+                                   watermark,
+                                   ctx.getCurrentKey,
+                                   event.startProcessingTimeMillis,
+                                   out)
+      if (isOlderThanYesterdayForCurrentDay(tsMills)) {
+        scheduleEvictTimerIfNeeded(timerService, processingTs)
+        emitDirtyOrSchedule(event.startProcessingTimeMillis, processingTs, timerService, out)
+        return
+      }
+
+      // Step 3.
       val result = processor.onEvent(row, tsMills)
+      // Step 4.
+      markDirtyState(result.todayEntry != null, result.yesterdayEntry != null)
 
-      // Emit results
-      val keys = ctx.getCurrentKey
-      if (result.todayEntry != null) {
-        out.collect(
-          new TimestampedTile(keys,
-                              megaTileCodec.encode(result.todayEntry),
-                              result.todayStart,
-                              event.startProcessingTimeMillis))
-      }
-      if (result.yesterdayEntry != null) {
-        out.collect(
-          new TimestampedTile(keys,
-                              megaTileCodec.encode(result.yesterdayEntry),
-                              result.yesterdayStart,
-                              event.startProcessingTimeMillis))
-      }
-
-      scheduleSmallWindowTimers(computeSmallWindowTimerMode(tsMills, watermark, processingTs),
-                                tsMills,
-                                processingTs,
-                                timerService)
+      // Step 5.
+      scheduleEvictTimerIfNeeded(timerService, processingTs)
+      // Step 6.
+      emitDirtyOrSchedule(event.startProcessingTimeMillis, processingTs, timerService, out)
     } catch {
       case e: Exception =>
         logger.error(s"Error processing mega tile event for groupBy=${groupBy.getMetaData.getName}", e)
@@ -167,59 +189,38 @@ class MegaTileProcessFunction(
       if (processor == null) initializeTransients()
 
       ensureStateBound(ctx.getCurrentKey)
-      val timerService = ctx.timerService()
-      val watermark = timerService.currentWatermark()
-      val processingTs = timerService.currentProcessingTime()
-      val caughtUp = isCaughtUp(watermark, processingTs)
-      clearFiredTimerState(ctx.timeDomain(), timestamp)
-
-      if (ctx.timeDomain() == TimeDomain.PROCESSING_TIME && !caughtUp) {
-        if (watermark == Long.MinValue) {
-          // Restored processing-time timers can fire before the source emits its first watermark.
-          if (hasActiveSmallWindowState) {
-            scheduleProcessingTimeTimerIfNeeded(
-              timerService,
-              TsUtils.round(processingTs, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize)
-          }
-          return
-        }
-
-        cancelProcessingTimeTimerIfPresent(timerService)
-        if (hasActiveSmallWindowState) {
-          scheduleEventTimeTimerIfNeeded(
-            timerService,
-            TsUtils.round(watermark, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize)
-        }
+      if (ctx.timeDomain() != TimeDomain.PROCESSING_TIME) {
         return
       }
 
-      val evictionTime =
-        if (ctx.timeDomain() == TimeDomain.PROCESSING_TIME) {
-          processor.advanceWatermark(timestamp)
-          timestamp
-        } else if (caughtUp) {
-          // Late event-time timers in live mode should rebuild at wall clock, not stale event time.
-          processor.advanceWatermark(processingTs)
-          processingTs
-        } else {
-          processor.advanceWatermark(watermark)
-          timestamp
-        }
-
-      val result = processor.onEviction(evictionTime)
-
-      if (result.todayEntry != null) {
-        out.collect(
-          new TimestampedTile(ctx.getCurrentKey,
-                              megaTileCodec.encode(result.todayEntry),
-                              result.todayStart,
-                              System.currentTimeMillis()))
+      val timerService = ctx.timerService()
+      val processingTs = timerService.currentProcessingTime()
+      val watermark = timerService.currentWatermark()
+      val isEmitTimer = isCurrentEmitTimer(timestamp)
+      val isEvictTimer = isCurrentEvictTimer(timestamp)
+      if (isEmitTimer) {
+        nextEmitPtTimerState.clear()
+      }
+      if (isEvictTimer) {
+        nextEvictPtTimerState.clear()
       }
 
-      scheduleSmallWindowTimers(computeSmallWindowTimerMode(evictionTime, watermark, processingTs),
-                                evictionTime,
-                                processingTs,
-                                timerService)
+      if (isEvictTimer) {
+        // Step 7 and Step 8.
+        runEvictionTimer(ctx.getCurrentKey, timestamp, processingTs, watermark, timerService, out)
+      }
+
+      if (!isEmitTimer && !isEvictTimer) {
+        return
+      }
+
+      if (isEmitTimer || !bufferingEnabled) {
+        // Step 9.
+        emitDirtyMegaTiles(ctx.getCurrentKey, processingTs, out)
+      } else if (isEvictTimer) {
+        // Step 9: eviction changed state; if buffering is enabled, arm one emit timer.
+        scheduleEmitTimerIfNeeded(timerService, processingTs)
+      }
     } catch {
       case e: Exception =>
         logger.error(s"Error in mega tile eviction for groupBy=${groupBy.getMetaData.getName}", e)
@@ -231,116 +232,162 @@ class MegaTileProcessFunction(
     processor.hasSmallWindows &&
       Option(earliestTileStartState.value()).exists(_.longValue() != Long.MaxValue)
 
-  // Treat watermark within ~2x allowed out-of-orderness of wall clock as caught up.
-  private val CatchupThresholdMillis: Long =
-    2 * FlinkJob.AllowedOutOfOrderness.toMillis
+  private def isOlderThanYesterdayForCurrentDay(eventTs: Long): Boolean = {
+    val currentDayStart = flinkStore.getCurrentDayStart
+    currentDayStart != -1L && eventTs < currentDayStart - processor.DayMillis
+  }
 
-  private def isCaughtUp(watermark: Long, processingTs: Long): Boolean =
-    watermark > 0 && (processingTs - watermark) <= CatchupThresholdMillis
+  private def bufferingEnabled: Boolean =
+    bufferingOutputTimeMillis > 0L
 
-  private def computeSmallWindowTimerMode(
-      eventTs: Long,
-      watermark: Long,
-      processingTs: Long): SmallWindowTimerMode = {
-    if (!hasActiveSmallWindowState) {
-      SmallWindowTimerMode.NoSmallState
-    } else if (!isCaughtUp(watermark, processingTs)) {
-      SmallWindowTimerMode.CatchupEventTimeOnly
-    } else if (eventTs < processingTs - processor.minSmallWindowTileSize) {
-      SmallWindowTimerMode.LiveProcessingTimeAndLateEventTime
+  private def isTodayDirty: Boolean =
+    Option(todayDirtyState.value()).exists(_.booleanValue())
+
+  private def isYesterdayDirty: Boolean =
+    Option(yesterdayDirtyState.value()).exists(_.booleanValue())
+
+  private def markDirtyState(hasTodayUpdate: Boolean, hasYesterdayUpdate: Boolean): Unit = {
+    if (hasTodayUpdate) todayDirtyState.update(java.lang.Boolean.TRUE)
+    if (hasYesterdayUpdate) yesterdayDirtyState.update(java.lang.Boolean.TRUE)
+  }
+
+  private def runEvictionTimer(currentKey: java.util.List[Any],
+                               timestamp: Long,
+                               processingTs: Long,
+                               watermark: Long,
+                               timerService: TimerService,
+                               out: Collector[TimestampedTile]): Unit = {
+    val previousDayStart = flinkStore.getCurrentDayStart
+    val evictionTime = evictionTimeForProcessingTimer(processingTs, watermark)
+    emitTodayIfNeededThenRollDay(previousDayStart, evictionTime, currentKey, processingTs, out)
+
+    val result = processor.onEviction(evictionTime)
+    markDirtyState(result.todayEntry != null, hasYesterdayUpdate = false)
+    scheduleEvictTimerIfNeeded(timerService, processingTs)
+
+    if (enableDebug) {
+      logger.info(s"MegaTile eviction groupBy=${groupBy.getMetaData.getName}, key=$currentKey, " +
+        s"timerTs=$timestamp, evictionTime=$evictionTime, " +
+        s"watermark=$watermark, processingTs=$processingTs, dayStart=${flinkStore.getCurrentDayStart}, " +
+        s"todayDirty=$isTodayDirty, yesterdayDirty=$isYesterdayDirty")
+    }
+  }
+
+  /** Advance day state at `dayTransitionTs` without losing a buffered pre-rollover today row. */
+  private def emitTodayIfNeededThenRollDay(previousDayStart: Long,
+                                           dayTransitionTs: Long,
+                                           keys: java.util.List[Any],
+                                           processingTsMillis: Long,
+                                           out: Collector[TimestampedTile]): Unit = {
+    val nextDayStart = previousDayStart + processor.DayMillis
+    val shouldEmitPreviousTodayRow =
+      previousDayStart != -1L &&
+        isTodayDirty &&
+        TsUtils.round(dayTransitionTs, processor.DayMillis) == nextDayStart
+    if (shouldEmitPreviousTodayRow) {
+      emitMegaTileIfPresent(keys, processor.packTodayEntry(), previousDayStart, processingTsMillis, out)
+      todayDirtyState.clear()
+    }
+
+    processor.advanceWatermark(dayTransitionTs)
+  }
+
+  private def evictionTimeForProcessingTimer(processingTs: Long, watermark: Long): Long = {
+    val lastEventProcessingTs =
+      Option(lastEventProcessingTsState.value()).map(_.longValue()).getOrElse(Long.MinValue)
+    val backlogIsActive =
+      watermark > Long.MinValue &&
+        processingTs - watermark > processor.minSmallWindowTileSize &&
+        lastEventProcessingTs != Long.MinValue &&
+        processingTs - lastEventProcessingTs <= processor.minSmallWindowTileSize
+    if (backlogIsActive) {
+      TsUtils.round(watermark, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize
     } else {
-      SmallWindowTimerMode.LiveProcessingTimeOnly
+      processingTs
     }
   }
 
-  private def scheduleSmallWindowTimers(mode: SmallWindowTimerMode,
-                                        eventTs: Long,
-                                        processingTs: Long,
-                                        timerService: TimerService): Unit = {
-    mode match {
-      case SmallWindowTimerMode.NoSmallState =>
-        cancelEventTimeTimerIfPresent(timerService)
-        cancelProcessingTimeTimerIfPresent(timerService)
-
-      case SmallWindowTimerMode.CatchupEventTimeOnly =>
-        cancelProcessingTimeTimerIfPresent(timerService)
-        scheduleEventTimeTimerIfNeeded(
-          timerService,
-          TsUtils.round(eventTs, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize)
-
-      case SmallWindowTimerMode.LiveProcessingTimeOnly =>
-        cancelEventTimeTimerIfPresent(timerService)
-        scheduleProcessingTimeTimerIfNeeded(
-          timerService,
-          TsUtils.round(processingTs, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize)
-
-      case SmallWindowTimerMode.LiveProcessingTimeAndLateEventTime =>
-        scheduleProcessingTimeTimerIfNeeded(
-          timerService,
-          TsUtils.round(processingTs, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize)
-        scheduleEventTimeTimerIfNeeded(
-          timerService,
-          TsUtils.round(eventTs, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize)
+  private def scheduleEvictTimerIfNeeded(timerService: TimerService, processingTs: Long): Unit = {
+    if (!hasActiveSmallWindowState) {
+      cancelEvictTimerIfPresent(timerService)
+      return
     }
+
+    val current = nextEvictPtTimerState.value()
+    if (current != null) return
+
+    val timestamp =
+      TsUtils.round(processingTs, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize
+    timerService.registerProcessingTimeTimer(timestamp)
+    nextEvictPtTimerState.update(timestamp)
   }
 
-  private def scheduleEventTimeTimerIfNeeded(timerService: TimerService, timestamp: Long): Unit = {
-    val current = nextEventTimerState.value()
-    if (current == null || timestamp < current.longValue()) {
-      if (current != null) timerService.deleteEventTimeTimer(current.longValue())
-      timerService.registerEventTimeTimer(timestamp)
-      nextEventTimerState.update(timestamp)
+  private def emitDirtyOrSchedule(outputProcessingTsMillis: Long,
+                                  processingTs: Long,
+                                  timerService: TimerService,
+                                  out: Collector[TimestampedTile]): Unit = {
+    if (!bufferingEnabled) {
+      emitDirtyMegaTiles(lastKey, outputProcessingTsMillis, out)
+      return
     }
+    scheduleEmitTimerIfNeeded(timerService, processingTs)
   }
 
-  private def scheduleProcessingTimeTimerIfNeeded(timerService: TimerService, timestamp: Long): Unit = {
-    val current = nextProcessingTimerState.value()
-    if (current == null || timestamp < current.longValue()) {
-      if (current != null) timerService.deleteProcessingTimeTimer(current.longValue())
+  private def scheduleEmitTimerIfNeeded(timerService: TimerService, processingTs: Long): Unit = {
+    if (!isTodayDirty && !isYesterdayDirty) return
+
+    val current = nextEmitPtTimerState.value()
+    if (current == null) {
+      val timestamp = processingTs + bufferingOutputTimeMillis
       timerService.registerProcessingTimeTimer(timestamp)
-      nextProcessingTimerState.update(timestamp)
+      nextEmitPtTimerState.update(timestamp)
     }
   }
 
-  private def cancelEventTimeTimerIfPresent(timerService: TimerService): Unit = {
-    val current = nextEventTimerState.value()
-    if (current != null) {
-      timerService.deleteEventTimeTimer(current.longValue())
-      nextEventTimerState.clear()
-    }
-  }
-
-  private def cancelProcessingTimeTimerIfPresent(timerService: TimerService): Unit = {
-    val current = nextProcessingTimerState.value()
+  private def cancelEvictTimerIfPresent(timerService: TimerService): Unit = {
+    val current = nextEvictPtTimerState.value()
     if (current != null) {
       timerService.deleteProcessingTimeTimer(current.longValue())
-      nextProcessingTimerState.clear()
+      nextEvictPtTimerState.clear()
     }
   }
 
-  private def clearFiredTimerState(timeDomain: TimeDomain, timestamp: Long): Unit = {
-    timeDomain match {
-      case TimeDomain.EVENT_TIME =>
-        val current = nextEventTimerState.value()
-        if (current != null && current.longValue() == timestamp) {
-          nextEventTimerState.clear()
-        }
-      case TimeDomain.PROCESSING_TIME =>
-        val current = nextProcessingTimerState.value()
-        if (current != null && current.longValue() == timestamp) {
-          nextProcessingTimerState.clear()
-        }
+  private def isCurrentEmitTimer(timestamp: Long): Boolean = {
+    val current = nextEmitPtTimerState.value()
+    current != null && current.longValue() == timestamp
+  }
+
+  private def isCurrentEvictTimer(timestamp: Long): Boolean = {
+    val current = nextEvictPtTimerState.value()
+    current != null && current.longValue() == timestamp
+  }
+
+  private def emitDirtyMegaTiles(keys: java.util.List[Any],
+                                 processingTsMillis: Long,
+                                 out: Collector[TimestampedTile]): Unit = {
+    val currentDayStart = flinkStore.getCurrentDayStart
+    if (isTodayDirty) {
+      emitMegaTileIfPresent(keys, processor.packTodayEntry(), currentDayStart, processingTsMillis, out)
+      todayDirtyState.clear()
+    }
+    if (isYesterdayDirty) {
+      emitMegaTileIfPresent(keys,
+                            processor.packYesterdayEntry(),
+                            currentDayStart - processor.DayMillis,
+                            processingTsMillis,
+                            out)
+      yesterdayDirtyState.clear()
     }
   }
-}
 
-sealed private trait SmallWindowTimerMode
-
-private object SmallWindowTimerMode {
-  case object NoSmallState extends SmallWindowTimerMode
-  case object CatchupEventTimeOnly extends SmallWindowTimerMode
-  case object LiveProcessingTimeOnly extends SmallWindowTimerMode
-  case object LiveProcessingTimeAndLateEventTime extends SmallWindowTimerMode
+  private def emitMegaTileIfPresent(keys: java.util.List[Any],
+                                    entry: Array[Any],
+                                    dayStartMillis: Long,
+                                    processingTsMillis: Long,
+                                    out: Collector[TimestampedTile]): Unit = {
+    if (entry == null) return
+    out.collect(new TimestampedTile(keys, megaTileCodec.encode(entry), dayStartMillis, processingTsMillis))
+  }
 }
 
 /** TileStore backed by Flink's keyed MapState/ValueState.
