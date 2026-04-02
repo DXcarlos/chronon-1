@@ -5,7 +5,7 @@ from ai.chronon.repo.cluster import (
     generate_dataproc_cluster_config,
     generate_emr_cluster_config,
     fixed_gcp_cluster,
-    GCP_DEFAULT_INIT_SCRIPTS,
+    get_gcp_init_scripts,
 )
 
 
@@ -44,7 +44,7 @@ class TestDataprocClusterConfig:
         executable_files = [action["executable_file"] for action in init_actions]
 
         # Verify all default scripts are present
-        for script in GCP_DEFAULT_INIT_SCRIPTS:
+        for script in get_gcp_init_scripts():
             expected_path = f"gs://test-bucket/artifacts/release/1.2.3{script}"
             assert expected_path in executable_files, f"Missing required script: {script}"
 
@@ -72,7 +72,7 @@ class TestDataprocClusterConfig:
             assert script in executable_files
 
         # Verify default scripts are still included
-        for script in GCP_DEFAULT_INIT_SCRIPTS:
+        for script in get_gcp_init_scripts():
             expected_path = f"gs://test-bucket/artifacts/release/1.0.0{script}"
             assert expected_path in executable_files
 
@@ -107,39 +107,69 @@ class TestDataprocClusterConfig:
         init_actions = config["initializationActions"]
         executable_files = [action["executable_file"] for action in init_actions]
 
-        for script in GCP_DEFAULT_INIT_SCRIPTS:
+        for script in get_gcp_init_scripts():
             expected_path = f"gs://bucket/release/{version}{script}"
             assert expected_path in executable_files
 
 
 class TestScriptValidation:
-    """Tests to validate that required GCP scripts exist in the repository."""
+    """Tests to validate that GCP scripts are properly discovered and exist."""
 
-    def test_gcp_default_scripts_exist_in_repo(self):
-        """Verify all default GCP init scripts actually exist in scripts/gcp/."""
-        # Get the repo root (assuming test is in python/test/)
-        test_dir = os.path.dirname(os.path.abspath(__file__))
-        repo_root = os.path.dirname(os.path.dirname(test_dir))
-        scripts_dir = os.path.join(repo_root, "scripts", "gcp")
+    def test_gcp_scripts_are_discovered(self):
+        """Verify that get_gcp_init_scripts() is populated with scripts."""
+        assert len(get_gcp_init_scripts()) > 0, (
+            "No GCP initialization scripts were discovered. "
+            "Check that scripts exist in ai/chronon/repo/scripts/gcp/"
+        )
 
-        for script_path in GCP_DEFAULT_INIT_SCRIPTS:
-            # Extract filename from path like "/scripts/gcp/opsagent_setup.sh"
-            script_name = os.path.basename(script_path)
-            full_path = os.path.join(scripts_dir, script_name)
-
-            assert os.path.isfile(full_path), (
-                f"Required GCP initialization script not found: {script_name}\n"
-                f"Expected at: {full_path}\n"
-                f"Update GCP_DEFAULT_INIT_SCRIPTS in cluster.py if this script was renamed or removed."
+        # All discovered scripts should end with .sh and have the correct path format
+        for script_path in get_gcp_init_scripts():
+            assert script_path.startswith("/scripts/gcp/"), (
+                f"Script path {script_path} doesn't have expected prefix '/scripts/gcp/'"
+            )
+            assert script_path.endswith(".sh"), (
+                f"Script path {script_path} doesn't end with .sh"
             )
 
-    def test_gcp_scripts_directory_exists(self):
-        """Verify scripts/gcp directory exists."""
+    def test_gcp_scripts_exist_in_package(self):
+        """Verify all discovered scripts actually exist in the Python package."""
+        # Get the package scripts directory
         test_dir = os.path.dirname(os.path.abspath(__file__))
-        repo_root = os.path.dirname(os.path.dirname(test_dir))
-        scripts_dir = os.path.join(repo_root, "scripts", "gcp")
+        python_dir = os.path.dirname(test_dir)
+        package_scripts_dir = os.path.join(python_dir, "src", "ai", "chronon", "repo", "scripts", "gcp")
 
-        assert os.path.isdir(scripts_dir), f"GCP scripts directory not found: {scripts_dir}"
+        assert os.path.isdir(package_scripts_dir), (
+            f"GCP scripts directory not found in package: {package_scripts_dir}"
+        )
+
+        for script_path in get_gcp_init_scripts():
+            script_name = os.path.basename(script_path)
+            full_path = os.path.join(package_scripts_dir, script_name)
+
+            assert os.path.isfile(full_path), (
+                f"Script {script_name} was discovered but doesn't exist at {full_path}"
+            )
+
+    def test_scripts_are_sorted_deterministically(self):
+        """Verify scripts are in sorted order for deterministic behavior."""
+        script_names = [os.path.basename(script) for script in get_gcp_init_scripts()]
+        assert script_names == sorted(script_names), (
+            "Scripts should be in sorted order for deterministic behavior"
+        )
+
+    def test_specific_required_scripts_exist(self):
+        """Verify specific known required scripts are present."""
+        required_scripts = [
+            "copy_java_security.sh",
+            "opsagent_setup.sh",
+        ]
+
+        discovered_names = [os.path.basename(script) for script in get_gcp_init_scripts()]
+
+        for required in required_scripts:
+            assert required in discovered_names, (
+                f"Required script {required} not found in discovered scripts: {discovered_names}"
+            )
 
 
 class TestFixedGcpCluster:

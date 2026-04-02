@@ -1,11 +1,39 @@
 import json
+import os
+from importlib import resources
 
-# GCP initialization scripts that should be included in all Dataproc clusters
-# These paths are relative to the artifact_prefix/release/{version} directory
-GCP_DEFAULT_INIT_SCRIPTS = [
-    "/scripts/gcp/copy_java_security.sh",
-    "/scripts/gcp/opsagent_setup.sh",
-]
+def get_gcp_init_scripts():
+    """
+    Dynamically discover all GCP initialization scripts from the bundled scripts directory.
+    Returns a sorted list of script paths relative to the artifact_prefix/release/{version}.
+    Scripts are auto-discovered from ai/chronon/repo/scripts/gcp/ directory.
+    """
+    try:
+        # For Python 3.9+
+        if hasattr(resources, 'files'):
+            scripts_path = resources.files('ai.chronon.repo.scripts.gcp')
+            script_files = [f.name for f in scripts_path.iterdir() if f.name.endswith('.sh')]
+        else:
+            # For Python 3.7-3.8
+            import pkg_resources
+            script_files = [
+                f for f in pkg_resources.resource_listdir('ai.chronon.repo.scripts', 'gcp')
+                if f.endswith('.sh')
+            ]
+
+        # Sort for deterministic ordering
+        script_files.sort()
+        return [f"/scripts/gcp/{script}" for script in script_files]
+    except (ModuleNotFoundError, FileNotFoundError):
+        # Fallback for development/testing when package isn't installed
+        # Look for scripts in the source tree
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        scripts_dir = os.path.join(current_dir, 'scripts', 'gcp')
+        if os.path.isdir(scripts_dir):
+            script_files = sorted([f for f in os.listdir(scripts_dir) if f.endswith('.sh')])
+            return [f"/scripts/gcp/{script}" for script in script_files]
+        # If all else fails, return empty list (tests will catch this)
+        return []
 
 
 def generate_emr_cluster_config(
@@ -107,7 +135,7 @@ def generate_dataproc_cluster_config(
                 {"executable_file": initialization_action}
                 for initialization_action in (
                     (initialization_actions or [])
-                    + [("/".join([artifact_prefix.rstrip("/"), f"release/{version}"])) + s for s in GCP_DEFAULT_INIT_SCRIPTS]
+                    + [("/".join([artifact_prefix.rstrip("/"), f"release/{version}"])) + s for s in get_gcp_init_scripts()]
                 )
             ],
             "endpointConfig": {
