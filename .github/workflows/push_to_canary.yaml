@@ -20,8 +20,32 @@ jobs:
     uses: ./.github/workflows/reusable_build_and_push.yaml
     secrets: inherit
 
-  run_aws_integration_tests:
+  canary_compile_check:
     needs: build_and_push
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile canary configs
+        shell: bash
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          # Generate thrift sources and set up PYTHONPATH so zipline compile runs from source
+          ./mill python.generatedSources
+          export PYTHONHASHSEED=0
+          export PYTHONPATH="$(pwd)/python/src:$(pwd)/out/python/generatedSources.dest:$(pwd)/python/test/canary"
+          cd python/test/canary
+          python -m ai.chronon.repo.zipline compile
+
+  run_aws_integration_tests:
+    needs: [build_and_push, canary_compile_check]
     runs-on: ubuntu-latest
     environment: aws
 
@@ -125,7 +149,7 @@ jobs:
           curl -X POST -H 'Content-type: application/json' --data @/tmp/slack_payload.json "$SLACK_WEBHOOK_URL"
 
   run_gcp_integration_tests:
-    needs: build_and_push
+    needs: [build_and_push, canary_compile_check]
     runs-on: ubuntu-latest
     environment: gcp
 
@@ -230,7 +254,7 @@ jobs:
           curl -X POST -H 'Content-type: application/json' --data @/tmp/slack_payload.json "$SLACK_WEBHOOK_URL"
 
   run_fetcher_integration_tests:
-    needs: build_and_push
+    needs: [build_and_push, canary_compile_check]
     runs-on: ubuntu-latest
 
     permissions:
@@ -777,7 +801,7 @@ jobs:
 
 
   on_fail_notify_slack:
-    needs: [run_aws_integration_tests, run_gcp_integration_tests, run_fetcher_integration_tests, merge_to_main-passing-tests]
+    needs: [canary_compile_check, run_aws_integration_tests, run_gcp_integration_tests, run_fetcher_integration_tests, merge_to_main-passing-tests]
     if: failure()
     runs-on: ubuntu-latest
 
@@ -818,6 +842,7 @@ jobs:
 
       - name: Build notification payload
         env:
+          COMPILE_CHECK_RESULT: ${{ needs.canary_compile_check.result }}
           AWS_TESTS_RESULT: ${{ needs.run_aws_integration_tests.result }}
           GCP_TESTS_RESULT: ${{ needs.run_gcp_integration_tests.result }}
           FETCHER_TESTS_RESULT: ${{ needs.run_fetcher_integration_tests.result }}
@@ -855,6 +880,7 @@ jobs:
               pass
 
           jobs = [
+              ('COMPILE_CHECK_RESULT', 'Canary Compile Check'),
               ('AWS_TESTS_RESULT', 'AWS Integration Tests'),
               ('GCP_TESTS_RESULT', 'GCP Integration Tests'),
               ('FETCHER_TESTS_RESULT', 'Fetcher Integration Tests'),
