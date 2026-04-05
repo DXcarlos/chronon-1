@@ -40,8 +40,11 @@ jobs:
       - name: Compile canary configs against previous baseline
         shell: bash
         run: |
-          # Generate thrift sources and set up PYTHONPATH
+          # Build the mill venv (installs deps + generates thrift sources)
+          ./mill python.pythonExe
           ./mill python.generatedSources
+          VENV_PYTHON="$(pwd)/out/python/pythonExe.dest/venv/bin/python3"
+
           export PYTHONHASHSEED=0
           export PYTHONPATH="$(pwd)/python/src:$(pwd)/out/python/generatedSources.dest:$(pwd)/python/test/canary"
 
@@ -52,7 +55,7 @@ jobs:
           git checkout HEAD~1 -- python/test/canary/compiled/ 2>/dev/null || true
 
           cd python/test/canary
-          python3 -m ai.chronon.repo.zipline compile
+          $VENV_PYTHON -m ai.chronon.repo.zipline compile
 
   run_aws_integration_tests:
     needs: [build_and_push, canary_compile_check]
