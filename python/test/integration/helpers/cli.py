@@ -179,6 +179,23 @@ def submit_fetch(runner, chronon_root, conf, version, keys, name):
 # ---------------------------------------------------------------------------
 
 
+def submit_hub_fetch(runner, chronon_root, conf, fetcher_url, keys=None, schema=False):
+    """Submit a hub fetch command and return the result for assertion."""
+    from ai.chronon.repo.hub_runner import hub
+
+    args = [
+        "fetch",
+        conf,
+        f"--repo={chronon_root}",
+        f"--fetcher-url={fetcher_url}",
+    ]
+    if schema:
+        args.append("--schema")
+    if keys:
+        args.extend(["--key-json", keys])
+    return runner.invoke(hub, args, catch_exceptions=False)
+
+
 def submit_schedule(runner, chronon_root, hub_url, conf):
     """Deploy a recurring schedule for a conf."""
     result = runner.invoke(
