@@ -54,14 +54,23 @@ class ZiplineHub:
         if use_auth:
             from ai.chronon.repo.auth import get_auth_config
 
-            config = get_auth_config(url=auth_url)
-            if config and config.get("access_token"):
-                self._hub_auth_config = config
+            no_auth_url_config = get_auth_config()
+            if no_auth_url_config and no_auth_url_config.get("access_token"):
+                self._hub_auth_config = no_auth_url_config
                 self.use_auth = True
                 self.sa = None
                 self.id_token = None
                 print_info("Using authentication for ZiplineHub.", format=format)
                 return
+            else:
+                config = get_auth_config(url=auth_url)
+                if config and config.get("access_token"):
+                    self._hub_auth_config = config
+                    self.use_auth = True
+                    self.sa = None
+                    self.id_token = None
+                    print_info("Using authentication for ZiplineHub.", format=format)
+                    return
 
         if self.base_url.startswith("https") and use_auth:
             if self.cloud_provider == "gcp":
@@ -89,21 +98,6 @@ class ZiplineHub:
                     self.use_auth = True
                     print_info("Using authentication for ZiplineHub.", format=format)
                     self.sa = None
-        elif use_auth:
-            # No cloud auth available — try default CLI auth as fallback
-            # (e.g., local dev where FRONTEND_URL in teams.py differs from the auth URL)
-            from ai.chronon.repo.auth import get_auth_config
-
-            config = get_auth_config()
-            if config and config.get("access_token"):
-                self._hub_auth_config = config
-                self.use_auth = True
-                self.sa = None
-                self.id_token = None
-                print_info("Using authentication for ZiplineHub.", format=format)
-                return
-            self.use_auth = False
-            print_info("Not using authentication for ZiplineHub.", format=format)
         else:
             self.use_auth = False
             print_info("Not using authentication for ZiplineHub.", format=format)
