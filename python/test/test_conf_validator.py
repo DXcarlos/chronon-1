@@ -1,6 +1,9 @@
 from gen_thrift.api.ttypes import (
+    Accuracy,
     Aggregation,
     BootstrapPart,
+    Derivation,
+    EntitySource,
     EventSource,
     ExternalPart,
     GroupBy,
@@ -13,8 +16,16 @@ from gen_thrift.api.ttypes import (
     Source,
     StagingQuery,
 )
+from gen_thrift.common.ttypes import TimeUnit, Window
 
-from ai.chronon.cli.compile.conf_validator import ConfValidator
+from ai.chronon.cli.compile.conf_validator import (
+    ConfValidator,
+    SKIPPED_FIELDS,
+    _group_by_has_hourly_windows,
+    _source_has_topic,
+    detect_feature_name_collisions,
+    is_identifier,
+)
 
 
 def _make_group_by(name="team.my_gb", online=False, table="test_table", price_expr="price"):
@@ -462,3 +473,666 @@ class TestTimePartitionedValidation:
 
         errors = validator.validate_obj(group_by)
         assert not _has_time_partitioned_missing_partition_column_error(errors)
+
+
+class TestUnboundedEventsUnwindowed:
+    def test_unbounded_events_unwindowed_error(self):
+        """EventSource with no startPartition + aggregation with no window -> error."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.events",
+                        query=Query(
+                            selects={"user_id": "user_id", "val": "val"},
+                            timeColumn="ts",
+                        ),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[
+                Aggregation(inputColumn="val", operation=Operation.SUM, windows=None),
+            ],
+            metaData=MetaData(name="team.unbounded_gb"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(gb)
+        assert any("unwindowed" in str(e).lower() or "unbounded" in str(e).lower() for e in errors)
+
+    def test_bounded_events_unwindowed_ok(self):
+        """EventSource WITH startPartition + unwindowed aggregation is fine."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.events",
+                        query=Query(
+                            selects={"user_id": "user_id", "val": "val"},
+                            timeColumn="ts",
+                            startPartition="2023-01-01",
+                        ),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[
+                Aggregation(inputColumn="val", operation=Operation.SUM, windows=None),
+            ],
+            metaData=MetaData(name="team.bounded_gb"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(gb)
+        assert not any("unbounded" in str(e).lower() for e in errors)
+
+    def test_unbounded_events_windowed_ok(self):
+        """EventSource with no startPartition but windowed aggregation is fine."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.events",
+                        query=Query(
+                            selects={"user_id": "user_id", "val": "val"},
+                            timeColumn="ts",
+                        ),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[
+                Aggregation(
+                    inputColumn="val",
+                    operation=Operation.SUM,
+                    windows=[Window(length=7, timeUnit=TimeUnit.DAYS)],
+                ),
+            ],
+            metaData=MetaData(name="team.windowed_gb"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(gb)
+        assert not any("unbounded" in str(e).lower() for e in errors)
+
+    def test_entity_source_unwindowed_no_error(self):
+        """EntitySource (not EventSource) with unwindowed aggregation is fine."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    entities=EntitySource(
+                        snapshotTable="db.entities",
+                        query=Query(selects={"user_id": "user_id", "val": "val"}),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[
+                Aggregation(inputColumn="val", operation=Operation.SUM, windows=None),
+            ],
+            metaData=MetaData(name="team.entity_gb"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(gb)
+        assert not any("unbounded" in str(e).lower() for e in errors)
+
+
+class TestCumulativeRequiresTimeColumn:
+    def test_cumulative_without_time_column_error(self):
+        """Cumulative EventSource without timeColumn -> error."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.cumulative",
+                        isCumulative=True,
+                        query=Query(
+                            selects={"user_id": "user_id", "val": "val"},
+                            timeColumn=None,
+                        ),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            metaData=MetaData(name="team.cumul_gb"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(gb)
+        assert any("timecolumn" in str(e).lower() for e in errors)
+
+    def test_cumulative_with_time_column_ok(self):
+        """Cumulative EventSource with timeColumn set is valid."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.cumulative",
+                        isCumulative=True,
+                        query=Query(
+                            selects={"user_id": "user_id", "val": "val"},
+                            timeColumn="event_ts",
+                        ),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            metaData=MetaData(name="team.cumul_gb"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(gb)
+        assert not any("timecolumn" in str(e).lower() for e in errors)
+
+
+class TestHourlyWindowsBatch:
+    def test_hourly_windows_batch_error(self):
+        """Daily-refreshed (no topic, non-temporal) GroupBy with hourly windows -> error."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    entities=EntitySource(
+                        snapshotTable="db.table",
+                        query=Query(selects={"user_id": "user_id", "val": "val"}),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[
+                Aggregation(
+                    inputColumn="val",
+                    operation=Operation.SUM,
+                    windows=[Window(length=1, timeUnit=TimeUnit.HOURS)],
+                ),
+            ],
+            metaData=MetaData(name="team.hourly_batch_gb"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(gb)
+        assert any("hourly" in str(e).lower() for e in errors)
+
+    def test_hourly_windows_streaming_ok(self):
+        """GroupBy with topic (streaming) and hourly windows is fine."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.events",
+                        topic="kafka.topic",
+                        query=Query(
+                            selects={"user_id": "user_id", "val": "val"},
+                            timeColumn="ts",
+                        ),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[
+                Aggregation(
+                    inputColumn="val",
+                    operation=Operation.SUM,
+                    windows=[Window(length=1, timeUnit=TimeUnit.HOURS)],
+                ),
+            ],
+            metaData=MetaData(name="team.hourly_streaming_gb"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(gb)
+        assert not any("hourly" in str(e).lower() for e in errors)
+
+    def test_hourly_windows_temporal_ok(self):
+        """GroupBy with TEMPORAL accuracy and hourly windows is fine."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    entities=EntitySource(
+                        snapshotTable="db.table",
+                        query=Query(selects={"user_id": "user_id", "val": "val"}),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[
+                Aggregation(
+                    inputColumn="val",
+                    operation=Operation.SUM,
+                    windows=[Window(length=1, timeUnit=TimeUnit.HOURS)],
+                ),
+            ],
+            accuracy=Accuracy.TEMPORAL,
+            metaData=MetaData(name="team.hourly_temporal_gb"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(gb)
+        assert not any("hourly" in str(e).lower() for e in errors)
+
+
+class TestGroupByInOnlineJoin:
+    def test_offline_gb_in_online_join_error(self):
+        """GroupBy marked offline that appears in an old online join -> error."""
+        old_join = Join(
+            left=Source(
+                events=EventSource(
+                    table="left_table",
+                    query=Query(selects={"user_id": "user_id"}, timeColumn="ts"),
+                )
+            ),
+            joinParts=[JoinPart(groupBy=_make_group_by(name="team.offline_gb", online=False))],
+            metaData=MetaData(name="team.online_join", online=True),
+        )
+        validator = _make_validator(existing_joins={"team.online_join": old_join})
+        gb = _make_group_by(name="team.offline_gb", online=False)
+        errors = validator._validate_group_by(gb)
+        assert any("offline" in str(e).lower() and "online" in str(e).lower() for e in errors)
+
+    def test_non_prod_gb_in_prod_join_error(self):
+        """GroupBy marked non-production in a production join -> error."""
+        old_join = Join(
+            left=Source(
+                events=EventSource(
+                    table="left_table",
+                    query=Query(selects={"user_id": "user_id"}, timeColumn="ts"),
+                )
+            ),
+            joinParts=[JoinPart(groupBy=_make_group_by(name="team.non_prod_gb"))],
+            metaData=MetaData(name="team.prod_join", production=True),
+        )
+        validator = _make_validator(existing_joins={"team.prod_join": old_join})
+        gb = _make_group_by(name="team.non_prod_gb")
+        gb.metaData.production = False
+        errors = validator._validate_group_by(gb)
+        assert any("non-production" in str(e).lower() or "non production" in str(e).lower() for e in errors)
+
+
+class TestJoinValidation:
+    def test_online_join_offline_groupby_error(self):
+        """Online Join with an offline GroupBy -> error."""
+        gb = _make_group_by(name="team.offline_gb", online=False)
+        join = Join(
+            left=Source(
+                events=EventSource(
+                    table="left_table",
+                    query=Query(selects={"user_id": "user_id"}, timeColumn="ts"),
+                )
+            ),
+            joinParts=[JoinPart(groupBy=gb)],
+            metaData=MetaData(name="team.online_join", online=True),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(join)
+        assert any("offline" in str(e).lower() for e in errors)
+
+    def test_online_join_online_groupby_ok(self):
+        """Online Join with an online GroupBy -> no offline error."""
+        gb = _make_group_by(name="team.online_gb", online=True)
+        join = Join(
+            left=Source(
+                events=EventSource(
+                    table="left_table",
+                    query=Query(selects={"user_id": "user_id"}, timeColumn="ts"),
+                )
+            ),
+            joinParts=[JoinPart(groupBy=gb)],
+            metaData=MetaData(name="team.online_join", online=True),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(join)
+        assert not any("offline" in str(e).lower() and "online" in str(e).lower() for e in errors)
+
+    def test_join_key_mapping_left_key_missing(self):
+        """key_mapping referencing a column not on left side -> error."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.events",
+                        query=Query(selects={"item_id": "item_id", "val": "val"}, timeColumn="ts"),
+                    )
+                )
+            ],
+            keyColumns=["item_id"],
+            aggregations=[Aggregation(inputColumn="val", operation=Operation.SUM)],
+            metaData=MetaData(name="team.gb1", online=False),
+        )
+        join = Join(
+            left=Source(
+                events=EventSource(
+                    table="left_table",
+                    query=Query(selects={"user_id": "user_id"}, timeColumn="ts"),
+                )
+            ),
+            joinParts=[
+                JoinPart(
+                    groupBy=gb,
+                    keyMapping={"nonexistent_col": "item_id"},
+                ),
+            ],
+            metaData=MetaData(name="team.join_bad_keys"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(join)
+        assert any("key" in str(e).lower() for e in errors)
+
+    def test_join_key_mapping_gb_key_missing(self):
+        """key_mapping value referencing non-existent GroupBy key -> error."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.events",
+                        query=Query(selects={"item_id": "item_id", "val": "val"}, timeColumn="ts"),
+                    )
+                )
+            ],
+            keyColumns=["item_id"],
+            aggregations=[Aggregation(inputColumn="val", operation=Operation.SUM)],
+            metaData=MetaData(name="team.gb1", online=False),
+        )
+        join = Join(
+            left=Source(
+                events=EventSource(
+                    table="left_table",
+                    query=Query(selects={"user_id": "user_id"}, timeColumn="ts"),
+                )
+            ),
+            joinParts=[
+                JoinPart(
+                    groupBy=gb,
+                    keyMapping={"user_id": "wrong_key"},
+                ),
+            ],
+            metaData=MetaData(name="team.join_bad_mapping"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(join)
+        assert any("key_mapping" in str(e).lower() or "key" in str(e).lower() for e in errors)
+
+    def test_join_valid_key_mapping_ok(self):
+        """Valid key_mapping from left column to GroupBy key -> no key errors."""
+        gb = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.events",
+                        query=Query(selects={"item_id": "item_id", "val": "val"}, timeColumn="ts"),
+                    )
+                )
+            ],
+            keyColumns=["item_id"],
+            aggregations=[Aggregation(inputColumn="val", operation=Operation.SUM)],
+            metaData=MetaData(name="team.gb1", online=False),
+        )
+        join = Join(
+            left=Source(
+                events=EventSource(
+                    table="left_table",
+                    query=Query(selects={"user_id": "user_id"}, timeColumn="ts"),
+                )
+            ),
+            joinParts=[
+                JoinPart(
+                    groupBy=gb,
+                    keyMapping={"user_id": "item_id"},
+                ),
+            ],
+            metaData=MetaData(name="team.join_ok"),
+        )
+        validator = _make_validator()
+        errors = validator.validate_obj(join)
+        assert not any("missing" in str(e).lower() and "key" in str(e).lower() for e in errors)
+
+    def test_production_join_non_prod_gb_error(self):
+        """Production Join with non-production GroupBy that exists in old_objs -> error."""
+        gb = _make_group_by(name="team.non_prod_gb")
+        gb.metaData.production = False
+        join = Join(
+            left=Source(
+                events=EventSource(
+                    table="left_table",
+                    query=Query(selects={"user_id": "user_id"}, timeColumn="ts"),
+                )
+            ),
+            joinParts=[JoinPart(groupBy=gb)],
+            metaData=MetaData(name="team.prod_join", production=True),
+        )
+        validator = _make_validator(existing_gbs={"team.non_prod_gb": gb})
+        errors = validator.validate_obj(join)
+        assert any("non production" in str(e).lower() or "non-production" in str(e).lower() for e in errors)
+
+
+class TestDerivationValidation:
+    def test_derivation_name_conflict(self):
+        """Two derivations producing the same output name -> error."""
+        validator = _make_validator()
+        pre_derived_cols = ["col_a", "col_b"]
+        derivations = [
+            Derivation(name="output_x", expression="col_a"),
+            Derivation(name="output_x", expression="col_b"),
+        ]
+        errors = validator._validate_derivations(pre_derived_cols, derivations)
+        assert any("conflict" in str(e).lower() or "output_x" in str(e) for e in errors)
+
+    def test_derivation_references_valid_column(self):
+        """Derivation referencing existing pre-derived column -> no error."""
+        validator = _make_validator()
+        pre_derived_cols = ["col_a", "col_b"]
+        derivations = [
+            Derivation(name="renamed_a", expression="col_a"),
+        ]
+        errors = validator._validate_derivations(pre_derived_cols, derivations)
+        assert len(errors) == 0
+
+    def test_derivation_references_invalid_column(self):
+        """Derivation (identifier) referencing non-existent column -> error."""
+        validator = _make_validator()
+        pre_derived_cols = ["col_a", "col_b"]
+        derivations = [
+            Derivation(name="renamed_x", expression="nonexistent_col"),
+        ]
+        errors = validator._validate_derivations(pre_derived_cols, derivations)
+        assert any("nonexistent_col" in str(e) for e in errors)
+
+    def test_derivation_sql_expression_no_column_check(self):
+        """Non-identifier expressions (SQL) are not checked for column existence."""
+        validator = _make_validator()
+        pre_derived_cols = ["col_a", "col_b"]
+        derivations = [
+            Derivation(name="computed", expression="col_a + col_b"),
+        ]
+        errors = validator._validate_derivations(pre_derived_cols, derivations)
+        assert len(errors) == 0
+
+    def test_derivation_wildcard_with_rename(self):
+        """Wildcard derivation with rename removes original from derived set."""
+        validator = _make_validator()
+        pre_derived_cols = ["col_a", "col_b"]
+        derivations = [
+            Derivation(name="*", expression="*"),
+            Derivation(name="renamed_a", expression="col_a"),
+        ]
+        errors = validator._validate_derivations(pre_derived_cols, derivations)
+        assert len(errors) == 0
+
+    def test_derivation_wildcard_name_conflict_with_existing(self):
+        """Wildcard included, then derivation output name same as pre-derived col -> conflict."""
+        validator = _make_validator()
+        pre_derived_cols = ["col_a", "col_b"]
+        # Wildcard expands both col_a and col_b. Then naming a derivation "col_b" conflicts.
+        derivations = [
+            Derivation(name="*", expression="*"),
+            Derivation(name="col_b", expression="col_a + 1"),
+        ]
+        errors = validator._validate_derivations(pre_derived_cols, derivations)
+        assert any("col_b" in str(e) and "conflict" in str(e).lower() for e in errors)
+
+    def test_derivation_ds_ts_allowed(self):
+        """Derivations referencing 'ds' or 'ts' are allowed even if not in pre-derived cols."""
+        validator = _make_validator()
+        pre_derived_cols = ["col_a"]
+        derivations = [
+            Derivation(name="date_col", expression="ds"),
+            Derivation(name="time_col", expression="ts"),
+        ]
+        errors = validator._validate_derivations(pre_derived_cols, derivations)
+        assert len(errors) == 0
+
+
+class TestFeatureNameCollisions:
+    def test_collision_detected(self):
+        """Two GroupBys with same key and same output column name -> collision."""
+        gb1 = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.t1",
+                        query=Query(selects={"user_id": "user_id", "clicks": "clicks"}, timeColumn="ts"),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[Aggregation(inputColumn="clicks", operation=Operation.SUM)],
+            metaData=MetaData(name="team.gb1", version=0),
+        )
+        gb2 = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.t2",
+                        query=Query(selects={"user_id": "user_id", "clicks": "clicks"}, timeColumn="ts"),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[Aggregation(inputColumn="clicks", operation=Operation.SUM)],
+            metaData=MetaData(name="team.gb2", version=0),
+        )
+        result = detect_feature_name_collisions(
+            [(gb1, ""), (gb2, "")], "right parts", "team.test_join"
+        )
+        assert result is not None
+        assert "collision" in str(result).lower()
+
+    def test_no_collision_with_prefix(self):
+        """Same columns but different prefixes -> no collision."""
+        gb1 = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.t1",
+                        query=Query(selects={"user_id": "user_id", "clicks": "clicks"}, timeColumn="ts"),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[Aggregation(inputColumn="clicks", operation=Operation.SUM)],
+            metaData=MetaData(name="team.gb1", version=0),
+        )
+        gb2 = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.t2",
+                        query=Query(selects={"user_id": "user_id", "clicks": "clicks"}, timeColumn="ts"),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[Aggregation(inputColumn="clicks", operation=Operation.SUM)],
+            metaData=MetaData(name="team.gb2", version=0),
+        )
+        result = detect_feature_name_collisions(
+            [(gb1, "prefix_a"), (gb2, "prefix_b")], "right parts", "team.test_join"
+        )
+        assert result is None
+
+    def test_no_collision_different_columns(self):
+        """Different aggregation columns -> no collision."""
+        gb1 = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.t1",
+                        query=Query(selects={"user_id": "user_id", "clicks": "clicks"}, timeColumn="ts"),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[Aggregation(inputColumn="clicks", operation=Operation.SUM)],
+            metaData=MetaData(name="team.gb1", version=0),
+        )
+        gb2 = GroupBy(
+            sources=[
+                Source(
+                    events=EventSource(
+                        table="db.t2",
+                        query=Query(selects={"user_id": "user_id", "views": "views"}, timeColumn="ts"),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[Aggregation(inputColumn="views", operation=Operation.SUM)],
+            metaData=MetaData(name="team.gb2", version=0),
+        )
+        result = detect_feature_name_collisions(
+            [(gb1, ""), (gb2, "")], "right parts", "team.test_join"
+        )
+        assert result is None
+
+
+class TestHelperFunctions:
+    def test_is_identifier_valid(self):
+        assert is_identifier("foo") is True
+        assert is_identifier("_bar") is True
+        assert is_identifier("col_123") is True
+
+    def test_is_identifier_invalid(self):
+        assert is_identifier("1abc") is False
+        assert is_identifier("a + b") is False
+        assert is_identifier("") is False
+
+    def test_source_has_topic_events(self):
+        src_with_topic = Source(events=EventSource(table="t", topic="kafka.topic", query=Query()))
+        src_without_topic = Source(events=EventSource(table="t", query=Query()))
+        assert _source_has_topic(src_with_topic) is True
+        assert _source_has_topic(src_without_topic) is False
+
+    def test_source_has_topic_entities(self):
+        src_with = Source(entities=EntitySource(snapshotTable="t", mutationTopic="topic", query=Query()))
+        src_without = Source(entities=EntitySource(snapshotTable="t", query=Query()))
+        assert _source_has_topic(src_with) is True
+        assert _source_has_topic(src_without) is False
+
+    def test_group_by_has_hourly_windows(self):
+        gb_hourly = _make_group_by()
+        gb_hourly.aggregations = [
+            Aggregation(
+                inputColumn="price",
+                operation=Operation.SUM,
+                windows=[Window(length=1, timeUnit=TimeUnit.HOURS)],
+            ),
+        ]
+        gb_daily = _make_group_by()
+        gb_daily.aggregations = [
+            Aggregation(
+                inputColumn="price",
+                operation=Operation.SUM,
+                windows=[Window(length=1, timeUnit=TimeUnit.DAYS)],
+            ),
+        ]
+        gb_no_aggs = _make_group_by()
+        gb_no_aggs.aggregations = None
+        assert _group_by_has_hourly_windows(gb_hourly) is True
+        assert _group_by_has_hourly_windows(gb_daily) is False
+        assert _group_by_has_hourly_windows(gb_no_aggs) is False
+
+
+class TestCanSkipMaterialize:
+    def test_offline_gb_can_skip(self):
+        """Offline GroupBy does not need batch upload -> can skip."""
+        gb = _make_group_by(name="team.offline_gb", online=False)
+        validator = _make_validator()
+        reasons = validator.can_skip_materialize(gb)
+        assert len(reasons) > 0
+
+    def test_online_gb_cannot_skip(self):
+        """Online GroupBy needs batch upload -> cannot skip."""
+        gb = _make_group_by(name="team.online_gb", online=True)
+        validator = _make_validator()
+        reasons = validator.can_skip_materialize(gb)
+        assert len(reasons) == 0
