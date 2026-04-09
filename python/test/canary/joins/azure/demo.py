@@ -1,7 +1,7 @@
 from group_bys.azure import dim_listings, dim_merchants, user_activities
 from staging_queries.azure import exports
 
-from ai.chronon.types import Derivation, EventSource, GroupBy, Join, JoinPart, Query, selects
+from ai.chronon.types import Derivation, EventSource, GroupBy, Join, JoinPart, Query, selects, EntitySource
 
 """
 This Join combines user activity events with:
@@ -100,6 +100,37 @@ derivations_v3 = Join(
         )
     ],
     online=True,
+    output_namespace="data",
+    step_days=30,
+)
+
+# Time-partitioned join for sparse partition testing
+source_tp = EventSource(
+    table=exports.user_activities_tp.table,
+    query=Query(
+        selects=selects(
+            user_id="user_id",
+            listing_id="listing_id",
+            row_id="event_id"
+        ),
+        time_column="event_time_ms",
+        time_partitioned=True,
+        partition_column="ds",
+    ),
+)
+
+v3 = Join(
+    left=source_tp,
+    row_ids=["event_id"],
+    right_parts=[
+        JoinPart(
+            group_by=dim_listings.v4,
+        ),
+        JoinPart(
+            group_by=dim_merchants.v3,
+            prefix="merchant_"
+        ),
+    ],
     output_namespace="data",
     step_days=30,
 )

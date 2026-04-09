@@ -26,3 +26,23 @@ v2 = GroupBy(
     online=True,
     aggregations=None,  # No aggregations - this is a simple passthrough
 )
+
+# Time-partitioned variant for sparse partition testing
+source_tp = EntitySource(
+    snapshot_table=exports.dim_merchants_tp.table,
+    query=Query(
+        selects=selects(
+            listing_id="CAST(merchant_id AS INT)",
+            primary_category="primary_category",
+        ),
+        start_partition="2025-01-01",
+        time_partitioned=True,
+        partition_column="ds",
+    ),
+)
+
+v3 = GroupBy(
+    sources=[source_tp],
+    keys=["listing_id"],
+    aggregations=None,
+)
