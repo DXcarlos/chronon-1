@@ -1,7 +1,27 @@
 {
-  "engineType": 2,
+  "keyColumns": [
+    "listing_id"
+  ],
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_dim_listings_custom_part_with_offset_0\", \"spec\": \"dim_listings_custom_part/datest={{ macros.ds_add(ds, 0) }}\"}]}",
+    "columnHashes": {
+      "brief_description": "512a6a77dbb620f4ca9170b52d54ac25",
+      "currency": "2f08f3da8c41dfd41df86cb531c6f57d",
+      "headline": "3abf8b2422da9590ad7426105461e4ff",
+      "inventory_count": "9b50a1923e344ca82f3e26f5083dfd7e",
+      "is_active": "f798bec260bc1a4ef97def575864fcd7",
+      "is_expensive": "fa69ef26718f70de7f9562cd55b71cbc",
+      "is_in_stock": "c773c387dc5ca279f3963c86508f42b7",
+      "listing_id": "e694102bdee8f9a1e1e5451fff41338e",
+      "long_description": "f3d6eb0234928bc2c795ead3b77b380f",
+      "main_image_path": "47e440a1f732e300d86f4e95bf379994",
+      "merchant_id": "dee921b5f0a676e7ff8991beb0cf947a",
+      "price_cents": "d214e65ba15490d35d49f4724bff8d30",
+      "primary_category": "8c9d93bcc83b5905220e53c98ce50fd8",
+      "secondary_image_paths": "6ec3b080da0bb6dc93c82f58a11d7179",
+      "tags": "105d522464dd1b8e5de97a6541fb16e4",
+      "weight_grams": "ea543eb07d2bb3a7435b037d79f6b2ca"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_dim_listings_pc__1_with_offset_0\", \"spec\": \"data.azure_exports_dim_listings_pc__1/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "conf": {
         "common": {
@@ -42,34 +62,39 @@
           "WAREHOUSE_PREFIX": "abfss://dev-zipline-warehouse@ziplineai2.dfs.core.windows.net"
         }
       },
-      "offlineSchedule": "@daily",
-      "stepDays": 30
+      "historicalBackfill": 0
     },
-    "name": "azure.exports.dim_listings_pc__0",
+    "name": "azure.dim_listings.v3_pc",
+    "online": 0,
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/azure/exports.py",
-    "team": "azure",
-    "version": "0"
+    "sourceFile": "group_bys/azure/dim_listings.py",
+    "team": "azure"
   },
-  "query": "\n    SELECT\n        *,\n        DATE_TRUNC('DAY', datest)::DATE as ds\n    FROM dim_listings_custom_part\n    WHERE\n    datest BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
-  "tableDependencies": [
+  "sources": [
     {
-      "endOffset": {
-        "length": 0,
-        "timeUnit": 1
-      },
-      "startOffset": {
-        "length": 0,
-        "timeUnit": 1
-      },
-      "tableInfo": {
-        "partitionColumn": "datest",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
+      "entities": {
+        "query": {
+          "selects": {
+            "brief_description": "brief_description",
+            "currency": "currency",
+            "headline": "headline",
+            "inventory_count": "inventory_count",
+            "is_active": "is_active",
+            "is_expensive": "IF(price_cents > 10000, 1, 0)",
+            "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+            "listing_id": "CAST(listing_id AS INT)",
+            "long_description": "long_description",
+            "main_image_path": "main_image_path",
+            "merchant_id": "merchant_id",
+            "price_cents": "price_cents",
+            "primary_category": "primary_category",
+            "secondary_image_paths": "secondary_image_paths",
+            "tags": "tags",
+            "weight_grams": "weight_grams"
+          },
+          "startPartition": "2025-01-01"
         },
-        "table": "dim_listings_custom_part",
-        "timePartitioned": 1
+        "snapshotTable": "data.azure_exports_dim_listings_pc__1"
       }
     }
   ]

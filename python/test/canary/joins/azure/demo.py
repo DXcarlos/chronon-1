@@ -28,6 +28,21 @@ source = EventSource(
     ),
 )
 
+v2_pc = Join(
+    left=dim_listings.source_pc,
+    row_ids=[], # TODO -- kill this once the SPJ API change goes through
+    right_parts=[
+        JoinPart(
+            group_by=dim_listings.v3_pc,
+        ),
+    ],
+    online=False,
+    output_namespace="data",
+    step_days=30,
+    version=0,
+    enable_stats_compute=False,
+)
+
 # Join with user behavioral features and listing attributes
 v2 = Join(
     left=source,
