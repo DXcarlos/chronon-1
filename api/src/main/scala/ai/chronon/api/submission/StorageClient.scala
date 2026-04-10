@@ -1,4 +1,4 @@
-package ai.chronon.spark.submission
+package ai.chronon.api.submission
 
 trait StorageClient {
 
