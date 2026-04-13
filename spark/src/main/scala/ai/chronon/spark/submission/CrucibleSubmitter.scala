@@ -60,6 +60,15 @@ class CrucibleSubmitter(
         body.put("mainClass", mainClass)
         body.put("jar", jarUri)
 
+        // Also add jar to deps.jars so it's on the system classpath.
+        // Spark catalog/format-provider classes must be discoverable by
+        // the system classloader, not just the app classloader.
+        if (jarUri.nonEmpty) {
+          val jarsArray = new io.vertx.core.json.JsonArray()
+          jarsArray.add(jarUri)
+          body.put("jars", jarsArray)
+        }
+
         // Pass Spark conf as the conf map
         if (jobProperties.nonEmpty) {
           val confObj = new JsonObject()

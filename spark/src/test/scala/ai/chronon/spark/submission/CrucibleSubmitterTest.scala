@@ -110,12 +110,12 @@ class CrucibleSubmitterTest extends AnyFlatSpec with MockitoSugar {
     }
   }
 
-  it should "treat 404 as SUCCEEDED (archived job)" in {
+  it should "treat 404 as UNKNOWN (job not found)" in {
     val mockClient = createMockClient()
     val submitter = createSubmitter(mockClient)
 
-    when(mockClient.getJobStatus("archived-job")).thenReturn(("NOT_FOUND", 404))
-    assert(submitter.status("archived-job") == JobStatusType.SUCCEEDED)
+    when(mockClient.getJobStatus("missing-job")).thenReturn(("NOT_FOUND", 404))
+    assert(submitter.status("missing-job") == JobStatusType.UNKNOWN)
   }
 
   it should "return UNKNOWN on API exception" in {
