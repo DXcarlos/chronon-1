@@ -46,23 +46,23 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     .ofPattern(ARCHIVE_TIMESTAMP_FORMAT)
     .withZone(ZoneId.systemDefault())
   val partitionColumn: String =
-    sparkSession.conf.get("spark.chronon.partition.column", "ds")
+    ChrononSparkConf.get(sparkSession, "spark.chronon.partition.column", "ds")
   val partitionFormat: String =
-    sparkSession.conf.get("spark.chronon.partition.format", "yyyy-MM-dd")
+    ChrononSparkConf.get(sparkSession, "spark.chronon.partition.format", "yyyy-MM-dd")
   val partitionSpec: PartitionSpec = PartitionSpec(partitionColumn, partitionFormat, WindowUtils.Day.millis)
 
   val smallModelEnabled: Boolean =
-    sparkSession.conf.get("spark.chronon.backfill.small_mode.enabled", "true").toBoolean
+    ChrononSparkConf.get(sparkSession, "spark.chronon.backfill.small_mode.enabled", "true").toBoolean
   val smallModeNumRowsCutoff: Int =
-    sparkSession.conf.get("spark.chronon.backfill.small_mode.cutoff", "5000").toInt
+    ChrononSparkConf.get(sparkSession, "spark.chronon.backfill.small_mode.cutoff", "5000").toInt
   val backfillValidationEnforced: Boolean =
-    sparkSession.conf.get("spark.chronon.backfill.validation.enabled", "true").toBoolean
+    ChrononSparkConf.get(sparkSession, "spark.chronon.backfill.validation.enabled", "true").toBoolean
   // Threshold to control whether to use bloomfilter on join backfill. If the backfill row approximate count is under this threshold, we will use bloomfilter.
   // default threshold is 100K rows
   val bloomFilterThreshold: Long =
-    sparkSession.conf.get("spark.chronon.backfill.bloomfilter.threshold", "1000000").toLong
+    ChrononSparkConf.get(sparkSession, "spark.chronon.backfill.bloomfilter.threshold", "1000000").toLong
   val checkLeftTimeRange: Boolean =
-    sparkSession.conf.get("spark.chronon.join.backfill.check.left_time_range", "false").toBoolean
+    ChrononSparkConf.get(sparkSession, "spark.chronon.join.backfill.check.left_time_range", "false").toBoolean
   // TODO: This should be at the level of groupBy in theory
   val skewFreeMode: Boolean = sparkSession.conf
     .get("spark.chronon.join.backfill.mode.skewFree", "true")

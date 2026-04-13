@@ -17,7 +17,7 @@ trait FormatProvider extends Serializable {
   def readFormat(tableName: String): Option[Format]
 
   def writeFormat: Format = {
-    val typeString = sparkSession.conf.get("spark.chronon.table_write.format", "").toLowerCase
+    val typeString = ChrononSparkConf.get(sparkSession, "spark.chronon.table_write.format", "").toLowerCase
     FormatProvider.formatFromTypeString(typeString)
   }
 
@@ -38,7 +38,8 @@ object FormatProvider {
     try {
 
       val clazzName =
-        session.conf.get("spark.chronon.table.format_provider.class", classOf[DefaultFormatProvider].getName)
+        ChrononSparkConf.get(session, "spark.chronon.table.format_provider.class",
+          classOf[DefaultFormatProvider].getName)
 
       val mirror = runtimeMirror(getClass.getClassLoader)
       val classSymbol = mirror.staticClass(clazzName)

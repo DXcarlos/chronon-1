@@ -17,6 +17,7 @@
 package ai.chronon.spark.streaming
 
 import ai.chronon.api
+import ai.chronon.spark.catalog.ChrononSparkConf
 import ai.chronon.api.Extensions.{GroupByOps, SourceOps}
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
@@ -90,7 +91,7 @@ class JoinSourceRunner(groupByConf: api.GroupBy, conf: Map[String, String] = Map
   val keyColumns: Array[String] = groupByConf.keyColumns.toScala.toArray
   val valueColumns: Array[String] = groupByConf.aggregationInputs ++ additionalColumns
 
-  private def getProp(prop: String, default: String) = session.conf.get(s"spark.chronon.stream.chain.${prop}", default)
+  private def getProp(prop: String, default: String) = ChrononSparkConf.get(session, s"spark.chronon.stream.chain.${prop}", default)
 
   // when true, we will use the event time of the event to fetchJoin, otherwise we use the current time
   private val useEventTimeForQuery: Boolean = getProp("event_time_query", "true").toBoolean

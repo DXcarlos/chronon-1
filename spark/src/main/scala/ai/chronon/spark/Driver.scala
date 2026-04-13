@@ -17,6 +17,7 @@
 package ai.chronon.spark
 
 import ai.chronon.api
+import ai.chronon.spark.catalog.ChrononSparkConf
 import ai.chronon.api.{Constants, DateRange, PartitionRange, PartitionSpec, ThriftJsonCodec}
 import ai.chronon.api.Constants.{KvTablePrefixArg, MetadataDataset}
 import ai.chronon.api.Extensions.{GroupByOps, JoinPartOps, MetadataOps, SourceOps}
@@ -274,7 +275,7 @@ object Driver {
     def run(args: Args): Unit = {
       val tableUtils = args.buildTableUtils()
 
-      if (tableUtils.sparkSession.conf.get("spark.chronon.join.backfill.mode.skewFree", "false").toBoolean) {
+      if (ChrononSparkConf.get(tableUtils.sparkSession, "spark.chronon.join.backfill.mode.skewFree", "false").toBoolean) {
         logger.info(s" >>> Running join backfill in skew free mode <<< ")
         val startPartition = args.startPartition.toOption.getOrElse(args.joinConf.left.query.startPartition)
         val endPartition = args.endDate()
