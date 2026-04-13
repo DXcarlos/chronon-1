@@ -26,6 +26,11 @@ class CrucibleSubmitter(
     namespace: String,
     sparkImage: String,
     flinkImage: String,
+    override val jarName: String = "cloud_gcp_deploy.jar",
+    override val onlineClass: String = "",
+    override val tablePartitionsDataset: String = "",
+    override val dqMetricsDataset: String = "",
+    override val kvStoreApiProperties: Map[String, String] = Map.empty,
     storageClient: Option[StorageClient] = None
 ) extends JobSubmitter {
 
@@ -87,8 +92,15 @@ class CrucibleSubmitter(
         }
     }
 
-    // Application args (filtered to exclude internal submission args)
-    val appArgs = JobSubmitter.getApplicationArgs(jobType, args.toArray)
+    // Application args (filtered to exclude internal submission args).
+    // When resolveConfPath encoded raw JSON as gz-base64:..., rewrite the
+    // --conf-path arg to --conf-gz-base64 for the driver to decode.
+    val appArgs = JobSubmitter.getApplicationArgs(jobType, args.toArray).map { arg =>
+      if (arg.startsWith("--conf-path=gz-base64:")) {
+        val encoded = arg.substring("--conf-path=gz-base64:".length)
+        s"--conf-gz-base64=$encoded"
+      } else arg
+    }
     if (appArgs.nonEmpty) {
       val argsArray = new io.vertx.core.json.JsonArray()
       appArgs.foreach(argsArray.add)
@@ -105,9 +117,10 @@ class CrucibleSubmitter(
     try {
       val (status, httpCode) = client.getJobStatus(jobId)
       if (httpCode == 404) {
-        // Job archived and CR deleted — treat as completed
-        logger.info(s"Job $jobId not found (archived), treating as SUCCEEDED")
-        return JobStatusType.SUCCEEDED
+        // Job ID not found in Crucible (never created or wrong namespace).
+        // Return UNKNOWN — the orchestrator will retry or error out.
+        logger.warn(s"Job $jobId not found (404), returning UNKNOWN")
+        return JobStatusType.UNKNOWN
       }
       mapStatus(status)
     } catch {
@@ -166,6 +179,20 @@ class CrucibleSubmitter(
       JobStatusType.UNKNOWN
   }
 
+  /** When no StorageClient is available, the stagedFile is raw JSON content.
+    * Gzip+Base64 encode it so BatchNodeRunner can decode via --conf-gz-base64.
+    * Returns the encoded content prefixed with "gz-base64:" as a sentinel.
+    */
+  override def resolveConfPath(stagedFileUri: String): String = {
+    if (stagedFileUri.startsWith("{")) {
+      // Raw JSON content — encode it
+      "gz-base64:" + ai.chronon.api.GzipCodec.encode(stagedFileUri)
+    } else {
+      // Normal GCS/S3 path — extract filename
+      stagedFileUri.split("/").last
+    }
+  }
+
   /** Sanitize job name for Crucible (lowercase, alphanumeric + dashes, max 63 chars) */
   private def sanitizeName(name: String): String = {
     name
@@ -183,20 +210,47 @@ object CrucibleSubmitter {
   /** Create a CrucibleSubmitter from environment variables.
     *
     * Environment variables:
-    *   CRUCIBLE_URL       — Crucible gateway URL (required)
-    *   CRUCIBLE_NAMESPACE — target namespace (default: "default")
-    *   CRUCIBLE_SPARK_IMAGE — Spark image (default: standard Crucible Spark image)
-    *   CRUCIBLE_FLINK_IMAGE — Flink image (default: standard Crucible Flink image)
+    *   CRUCIBLE_URL            — Crucible gateway URL (required)
+    *   CRUCIBLE_NAMESPACE      — target namespace (default: "default")
+    *   CRUCIBLE_SPARK_IMAGE    — Spark image (default: standard Crucible Spark 3.5 image)
+    *   CRUCIBLE_FLINK_IMAGE    — Flink image (default: standard Crucible Flink image)
+    *   CRUCIBLE_JAR_NAME       — JAR filename (default: "cloud_gcp_deploy.jar")
+    *   CHRONON_ONLINE_CLASS    — Online API implementation class (cloud-specific)
+    *   GCP_PROJECT_ID          — GCP project (for KV store API properties)
+    *   GCP_BIGTABLE_INSTANCE_ID — Bigtable instance (for KV store API properties)
+    *   GCP_REGION              — GCP region (for KV store API properties)
     */
   def fromEnv(storageClient: Option[StorageClient] = None): CrucibleSubmitter = {
     val baseUrl = sys.env.getOrElse("CRUCIBLE_URL",
       throw new IllegalArgumentException("CRUCIBLE_URL environment variable is required"))
     val namespace = sys.env.getOrElse("CRUCIBLE_NAMESPACE", "default")
     val sparkImage = sys.env.getOrElse("CRUCIBLE_SPARK_IMAGE",
-      "ghcr.io/zipline-ai/crucible/spark:4.1-crucible-latest")
+      "us-docker.pkg.dev/crucible-io/crucible/spark:3.5-crucible-latest")
     val flinkImage = sys.env.getOrElse("CRUCIBLE_FLINK_IMAGE",
-      "ghcr.io/zipline-ai/crucible/flink:1.19-crucible-latest")
+      "us-docker.pkg.dev/crucible-io/crucible/flink:1.19-crucible-latest")
+    val jarNameVal = sys.env.getOrElse("CRUCIBLE_JAR_NAME", "cloud_gcp_deploy.jar")
+    val onlineClassVal = sys.env.getOrElse("CHRONON_ONLINE_CLASS", "")
 
-    new CrucibleSubmitter(baseUrl, namespace, sparkImage, flinkImage, storageClient)
+    // Build KV store API properties from available env vars (same keys DataprocSubmitter uses)
+    val kvProps = Seq(
+      sys.env.get("GCP_PROJECT_ID").map("GCP_PROJECT_ID" -> _),
+      sys.env.get("GCP_BIGTABLE_INSTANCE_ID").map("GCP_BIGTABLE_INSTANCE_ID" -> _),
+      sys.env.get("GCP_REGION").map("GCP_REGION" -> _),
+      // AWS
+      sys.env.get("AWS_REGION").map("AWS_REGION" -> _)
+    ).flatten.toMap
+
+    val tablePartitions = sys.env.getOrElse("CRUCIBLE_TABLE_PARTITIONS_DATASET", "TABLE_PARTITIONS")
+    val dqMetrics = sys.env.getOrElse("CRUCIBLE_DQ_METRICS_DATASET", "DATA_QUALITY_METRICS")
+
+    new CrucibleSubmitter(
+      baseUrl, namespace, sparkImage, flinkImage,
+      jarName = jarNameVal,
+      onlineClass = onlineClassVal,
+      tablePartitionsDataset = tablePartitions,
+      dqMetricsDataset = dqMetrics,
+      kvStoreApiProperties = kvProps,
+      storageClient = storageClient
+    )
   }
 }
