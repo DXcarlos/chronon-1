@@ -32,6 +32,7 @@ from ai.chronon.repo.azure_runner import (
     ZIPLINE_AZURE_ONLINE_CLASS_DEFAULT,
     AzureRunner,
 )
+from ai.chronon.repo.crucible import CrucibleRunner
 from ai.chronon.repo.constants import (
     APP_NAME_TEMPLATE,
     AWS,
@@ -331,6 +332,9 @@ def main(
         ctx.params[ONLINE_CLASS_ARG] = ZIPLINE_AZURE_ONLINE_CLASS_DEFAULT
         ctx.params[CLOUD_PROVIDER_KEYWORD] = cloud_provider
         AzureRunner(ctx.params).run()
+    elif cloud_provider.upper() == "CRUCIBLE":
+        ctx.params[CLOUD_PROVIDER_KEYWORD] = cloud_provider
+        CrucibleRunner(ctx.params).run()
     else:
         raise ValueError(f"Unsupported cloud provider: {cloud_provider}")
 
