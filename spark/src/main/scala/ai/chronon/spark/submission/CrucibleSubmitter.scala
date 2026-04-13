@@ -60,19 +60,19 @@ class CrucibleSubmitter(
         body.put("mainClass", mainClass)
         body.put("jar", jarUri)
 
-        // Also add jar to deps.jars so it's on the system classpath.
-        // Spark catalog/format-provider classes must be discoverable by
-        // the system classloader, not just the app classloader.
+        // Pass Spark conf as the conf map.
+        // Also add the jar to spark.driver.extraClassPath and
+        // spark.executor.extraClassPath so catalog/format-provider classes
+        // are on the system classloader. The Spark Operator downloads
+        // mainApplicationFile to /opt/spark/work-dir/<filename>.
+        val confObj = new JsonObject()
+        jobProperties.foreach { case (k, v) => confObj.put(k, v) }
         if (jarUri.nonEmpty) {
-          val jarsArray = new io.vertx.core.json.JsonArray()
-          jarsArray.add(jarUri)
-          body.put("jars", jarsArray)
+          val localJarPath = "/opt/spark/work-dir/" + jarUri.split("/").last
+          confObj.put("spark.driver.extraClassPath", localJarPath)
+          confObj.put("spark.executor.extraClassPath", localJarPath)
         }
-
-        // Pass Spark conf as the conf map
-        if (jobProperties.nonEmpty) {
-          val confObj = new JsonObject()
-          jobProperties.foreach { case (k, v) => confObj.put(k, v) }
+        if (confObj.size() > 0) {
           body.put("conf", confObj)
         }
 
