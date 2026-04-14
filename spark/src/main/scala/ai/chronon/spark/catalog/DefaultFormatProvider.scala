@@ -25,6 +25,10 @@ class DefaultFormatProvider(val sparkSession: SparkSession) extends FormatProvid
     } else { null })
   }
 
+  // Format detection methods below are part of a waterfall: Iceberg → Delta → Hive.
+  // Intermediate "not this format" results are expected and logged at debug level
+  // without stack traces. Only the final caller should surface errors.
+
   protected def isIcebergTable(tableName: String): Boolean = {
     val resolved = Format.resolveTableName(tableName)(sparkSession)
     val catalog = sparkSession.sessionState.catalogManager.catalog(resolved.catalog)
@@ -33,23 +37,23 @@ class DefaultFormatProvider(val sparkSession: SparkSession) extends FormatProvid
       case sparkCatalog: SparkCatalog =>
         Try(sparkCatalog.loadTable(resolved.toIdentifier)) match {
           case Success(_: SparkTable) =>
-            logger.info(s"IcebergCheck: Detected iceberg formatted table $tableName.")
+            logger.info(s"Detected iceberg table: $tableName")
             true
           case _ =>
-            logger.info(s"IcebergCheck: Checked table $tableName is not iceberg format.")
+            logger.debug(s"Table $tableName is not iceberg format")
             false
         }
       case tableCatalog: TableCatalog =>
         Try(tableCatalog.loadTable(resolved.toIdentifier)) match {
           case Success(_: SparkTable) =>
-            logger.info(s"IcebergCheck: Detected iceberg formatted table $tableName.")
+            logger.info(s"Detected iceberg table: $tableName")
             true
           case _ =>
-            logger.info(s"IcebergCheck: Checked table $tableName is not iceberg format.")
+            logger.debug(s"Table $tableName is not iceberg format")
             false
         }
       case _ =>
-        logger.info(s"IcebergCheck: Checked table $tableName is not iceberg format.")
+        logger.debug(s"Table $tableName is not iceberg format")
         false
     }
   }
@@ -60,12 +64,10 @@ class DefaultFormatProvider(val sparkSession: SparkSession) extends FormatProvid
       describeResult.select("format").first().getString(0).toLowerCase
     } match {
       case Success(format) =>
-        logger.info(s"Delta check: Successfully read the format of table: $tableName as $format")
+        if (format == "delta") logger.info(s"Detected delta table: $tableName")
         format == "delta"
-      case Failure(e) =>
-        logger.info(
-          s"Delta check: Unable to read the format of the table $tableName using DESCRIBE DETAIL. Error: ${e.getMessage}",
-          e)
+      case Failure(_) =>
+        logger.debug(s"Table $tableName is not delta format")
         false
     }
   }
