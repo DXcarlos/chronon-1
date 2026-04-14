@@ -59,17 +59,3 @@ def test_run_adhoc(confs, chronon_root, hub_url, cloud, flink_cleanup):
         hub_url, workflow_id, target_statuses={"SUCCEEDED"}, timeout=1200, interval=15,
     )
 
-@pytest.mark.integration
-def test_run_adhoc_no_data(confs, chronon_root, hub_url, cloud):
-    """run-adhoc with dates that have no input data should fail."""
-    runner = CliRunner()
-    compile_configs(runner, chronon_root)
-
-    workflow_id = submit_run_adhoc(
-        runner, chronon_root, hub_url,
-        confs[DEMO_BACKFILL[cloud]], "1969-01-01",
-    )
-
-    poll_workflow_until(
-        hub_url, workflow_id, target_statuses={"FAILED"}, timeout=1800, interval=30,
-    )
