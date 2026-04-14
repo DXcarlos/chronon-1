@@ -38,7 +38,10 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
   val hasSmallWindows: Boolean = smallWindowTiers.nonEmpty
   val minSmallWindowTileSize: Long = if (hasSmallWindows) smallWindowTiers.min else DayMillis
 
-  def onEvent(row: Row, eventTs: Long): EmitResult = {
+  /** Ingest an event at eventTs, but bound cached small-window emission as of smallWindowAsOfTs.
+    * Base tile state still uses eventTs so retained late events remain available for future rebuilds.
+    */
+  def onEvent(row: Row, eventTs: Long, smallWindowAsOfTs: Long): EmitResult = {
     var currentDayStart = store.getCurrentDayStart
     if (currentDayStart == -1L) {
       currentDayStart = TsUtils.round(eventTs, DayMillis)
@@ -50,7 +53,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
 
     // Update tiles + cachedSmallWindowIr for small-window tiers
     if (hasSmallWindows) {
-      var tilesUpdated = false
+      val acceptedTileStarts = mutable.Map.empty[Long, Long]
       val tileStarts = megaTileAgg.tileStartsForEvent(eventTs)
       for ((hopSize, tileStart) <- tileStarts) {
         if (smallWindowTiers.contains(hopSize)) {
@@ -63,23 +66,38 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
             store.putTile(hopSize, tileStart, ir)
             val earliest = store.getEarliestTileStart
             if (tileStart < earliest) store.putEarliestTileStart(tileStart)
-            tilesUpdated = true
+            acceptedTileStarts(hopSize) = tileStart
           }
         }
       }
 
-      // Sawtooth: merge event into running IR for all small-window columns.
-      if (tilesUpdated) {
-        val cachedIr = store.getCachedSmallWindowIr
+      // Sawtooth: merge event into the running IR only for columns whose tile belongs
+      // in the as-of window being emitted. The base tile remains retained even when
+      // a late event is outside a smaller current serving horizon.
+      if (acceptedTileStarts.nonEmpty) {
+        var cachedIr: Array[Any] = null
+        var cachedIrUpdated = false
         var col = 0
         while (col < windowedAgg.length) {
           if (isNoBatch(col)) {
-            windowedAgg.columnAggregators(col).update(cachedIr, row)
+            val hopSize = columnHopSize(col)
+            acceptedTileStarts.get(hopSize).foreach { tileStart =>
+              val effectiveStart = megaTileAgg.effectiveStart(col, smallWindowAsOfTs, currentDayStart)
+              // The retained base tile can accept older late events, but the sawtooth cache represents
+              // the value emitted as of smallWindowAsOfTs.
+              if (tileStart >= effectiveStart && tileStart < smallWindowAsOfTs) {
+                if (cachedIr == null) cachedIr = store.getCachedSmallWindowIr
+                windowedAgg.columnAggregators(col).update(cachedIr, row)
+                cachedIrUpdated = true
+              }
+            }
           }
           col += 1
         }
-        store.putCachedSmallWindowIr(cachedIr)
-        todayDirty = true
+        if (cachedIrUpdated) {
+          store.putCachedSmallWindowIr(cachedIr)
+          todayDirty = true
+        }
       }
     }
 

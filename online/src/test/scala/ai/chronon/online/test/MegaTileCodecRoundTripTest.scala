@@ -182,7 +182,7 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
         firePendingEvictions(event.ts)
         processor.advanceWatermark(event.ts)
 
-        val result = processor.onEvent(event, event.ts)
+        val result = processor.onEvent(event, event.ts, queryTs)
         if (result.todayEntry != null) kvStore(result.todayStart) = result.todayEntry
         if (result.yesterdayEntry != null) kvStore(result.yesterdayStart) = result.yesterdayEntry
 
@@ -272,7 +272,8 @@ class MegaTileCodecRoundTripTest extends AnyFlatSpec {
     val processorA = new MegaTileStreamProcessor(megaTileAgg, storeA)
     for (event <- events.sortBy(_.ts)) {
       processorA.advanceWatermark(event.ts)
-      processorA.onEvent(event, event.ts)
+      val smallWindowAsOfTs = TsUtils.round(event.ts, processorA.minSmallWindowTileSize) + processorA.minSmallWindowTileSize
+      processorA.onEvent(event, event.ts, smallWindowAsOfTs)
     }
     // Verify key A has non-empty state
     assertTrue("key A should have tiles", storeA.tiles.nonEmpty)

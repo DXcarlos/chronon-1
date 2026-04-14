@@ -9,6 +9,7 @@ import org.junit.Assert._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.slf4j.LoggerFactory
 
+import java.time.Instant
 import scala.collection.mutable
 
 /**
@@ -83,6 +84,11 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
     (data.rows, columns.map(_.schema))
   }
 
+  def toMillis(instant: String): Long = Instant.parse(instant).toEpochMilli
+
+  def finalizeEntry(megaTileAgg: MegaTileAggregator, entry: Array[Any]): Array[Any] =
+    megaTileAgg.windowedAggregator.finalize(entry.clone())
+
   def naiveAggregate(allEvents: Array[TestRow], queryTimes: Array[Long], aggregations: Seq[Aggregation], schema: Seq[(String, DataType)]): Array[Array[Any]] = {
     val unpackedParts = aggregations.flatMap(_.unpack)
     val unpacked = unpackedParts.map(_.window).toArray
@@ -154,7 +160,7 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
         processor.advanceWatermark(event.ts)
 
         // Process event
-        val result = processor.onEvent(event, event.ts)
+        val result = processor.onEvent(event, event.ts, queryTs)
         if (result.todayEntry != null) kvStore(result.todayStart) = result.todayEntry
         if (result.yesterdayEntry != null) kvStore(result.yesterdayStart) = result.yesterdayEntry
 
@@ -315,6 +321,57 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
     val results = streamProcessorAggregate(events, queryTimes, aggregations, schema, batchEnd)
     val naive = naiveAggregate(events, queryTimes, aggregations, schema)
     compareResults(results, naive, queryTimes, "stream_multi_day_gap")
+  }
+
+  it should "not update cached small windows for a retained late event outside the as-of horizon" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val oneDay = new Window(1, TimeUnit.DAYS)
+    val threeDays = new Window(3, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, oneDay, threeDays)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+
+    val todayStart = toMillis("2025-07-22T00:00:00Z")
+    val asOfTs = toMillis("2025-07-22T00:10:00Z")
+
+    val currentEvent = TestRow(todayStart, 1L)
+    val currentResult = processor.onEvent(currentEvent, currentEvent.ts, asOfTs)
+    val currentFinalized = finalizeEntry(megaTileAgg, currentResult.todayEntry)
+    assertEquals("1h sum after current event", 1L, currentFinalized(0))
+    assertEquals("1d sum after current event", 1L, currentFinalized(1))
+
+    val retainedButOutsideOneHour = TestRow(toMillis("2025-07-21T00:00:00Z"), 1L)
+    val lateResult = processor.onEvent(retainedButOutsideOneHour, retainedButOutsideOneHour.ts, asOfTs)
+    val lateFinalized = finalizeEntry(megaTileAgg, lateResult.todayEntry)
+
+    assertEquals("1h sum should exclude stale retained late event", 1L, lateFinalized(0))
+    assertEquals("1d sum should still include retained late event", 2L, lateFinalized(1))
+    assertNotNull("large-window yesterday entry should still be emitted", lateResult.yesterdayEntry)
+  }
+
+  it should "update cached small windows for a retained late event inside the as-of horizon" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val oneDay = new Window(1, TimeUnit.DAYS)
+    val threeDays = new Window(3, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, oneDay, threeDays)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+
+    val todayStart = toMillis("2025-07-22T00:00:00Z")
+    val asOfTs = toMillis("2025-07-22T00:10:00Z")
+
+    val currentEvent = TestRow(todayStart, 1L)
+    processor.onEvent(currentEvent, currentEvent.ts, asOfTs)
+
+    val retainedInsideOneHour = TestRow(toMillis("2025-07-21T23:30:00Z"), 1L)
+    val lateResult = processor.onEvent(retainedInsideOneHour, retainedInsideOneHour.ts, asOfTs)
+    val lateFinalized = finalizeEntry(megaTileAgg, lateResult.todayEntry)
+
+    assertEquals("1h sum should include retained late event inside as-of horizon", 2L, lateFinalized(0))
+    assertEquals("1d sum should include retained late event", 2L, lateFinalized(1))
+    assertNotNull("large-window yesterday entry should still be emitted", lateResult.yesterdayEntry)
   }
 
   it should "match naive with complex aggregations (buckets, approx_unique, histogram, last_k)" in {
