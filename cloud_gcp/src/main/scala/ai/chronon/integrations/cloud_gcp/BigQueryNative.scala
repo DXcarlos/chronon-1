@@ -1,7 +1,7 @@
 package ai.chronon.integrations.cloud_gcp
 
 import ai.chronon.api.PartitionSpec
-import ai.chronon.spark.catalog.{Format, TableUtils}
+import ai.chronon.spark.catalog.{ChrononSparkConf, Format, TableUtils}
 import com.google.cloud.bigquery._
 import com.google.cloud.spark.bigquery.v2.Spark35BigQueryTableProvider
 import org.apache.spark.sql.functions.{col, date_format, to_date}
@@ -18,6 +18,16 @@ case object BigQueryNative extends Format {
   private val bqFormat = classOf[Spark35BigQueryTableProvider].getName
   private lazy val bqOptions = BigQueryOptions.getDefaultInstance
   private lazy val bigQueryClient: BigQuery = bqOptions.getService
+
+  /** Resolve the BigQuery project for a table.
+    * Priority: explicit project in table name > spark catalog config > BQ client default.
+    * On GKE the BQ client default is the node project (e.g. crucible-io), not the data project.
+    */
+  private def resolveProject(tableId: TableId)(implicit spark: SparkSession): String = {
+    scala.Option(tableId.getProject).getOrElse {
+      ChrononSparkConf.get(spark, "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id", bqOptions.getProjectId)
+    }
+  }
 
   override def table(tableName: String, partitionFilters: String)(implicit sparkSession: SparkSession): DataFrame = {
     throw new UnsupportedOperationException(
@@ -38,8 +48,10 @@ case object BigQueryNative extends Format {
                                  subPartitionsFilter: Map[String, String])(implicit
       sparkSession: SparkSession): List[String] = {
     val tableIdentifier = SparkBQUtils.toTableId(tableName)
+    val project = resolveProject(tableIdentifier)
+    val qualifiedId = TableId.of(project, tableIdentifier.getDataset, tableIdentifier.getTable)
     val definitionOpt = scala
-      .Option(bigQueryClient.getTable(tableIdentifier))
+      .Option(bigQueryClient.getTable(qualifiedId))
       .map((table) => table.getDefinition.asInstanceOf[TableDefinition])
 
     definitionOpt match {
@@ -50,8 +62,6 @@ case object BigQueryNative extends Format {
         }
         import sparkSession.implicits._
 
-        val tableIdentifier = SparkBQUtils.toTableId(tableName)
-        val providedProject = scala.Option(tableIdentifier.getProject).getOrElse(bqOptions.getProjectId)
         val partitionWheres = if (partitionFilters.nonEmpty) s"WHERE ${partitionFilters}" else partitionFilters
 
         val bqPartSQL =
@@ -61,7 +71,8 @@ case object BigQueryNative extends Format {
 
         val partVals = sparkSession.read
           .format(bqFormat)
-          .option("project", providedProject)
+          .option("project", project)
+          .option("parentProject", project)
           // See: https://github.com/GoogleCloudDataproc/spark-bigquery-connector/issues/434#issuecomment-886156191
           // and: https://cloud.google.com/bigquery/docs/information-schema-intro#limitations
           .option("viewsEnabled", true)
@@ -71,7 +82,10 @@ case object BigQueryNative extends Format {
         partVals.as[String].collect().toList
       }
       case Some(std: StandardTableDefinition) =>
-        super.primaryPartitions(tableName, partitionColumn, partitionFilters, subPartitionsFilter)
+        // Use BQ INFORMATION_SCHEMA instead of Spark SQL — native BQ tables aren't in the Spark catalog
+        // on vanilla Spark (they are on Dataproc via auto-registration).
+        val parts = partitions(tableName, partitionFilters)
+        parts.flatMap(_.get(parts.headOption.flatMap(_.keys.headOption).getOrElse(partitionColumn)))
       case Some(other) =>
         throw new IllegalArgumentException(
           s"Table ${tableName} is not a view or standard table. It is of type ${other.getClass.getName}."
@@ -83,7 +97,7 @@ case object BigQueryNative extends Format {
       sparkSession: SparkSession): List[Map[String, String]] = {
     import sparkSession.implicits._
     val tableIdentifier = SparkBQUtils.toTableId(tableName)
-    val providedProject = scala.Option(tableIdentifier.getProject).getOrElse(bqOptions.getProjectId)
+    val providedProject = resolveProject(tableIdentifier)
     val table = tableIdentifier.getTable
     val database =
       scala
@@ -101,6 +115,7 @@ case object BigQueryNative extends Format {
     val partitionCol = sparkSession.read
       .format(bqFormat)
       .option("project", providedProject)
+      .option("parentProject", providedProject)
       // See: https://github.com/GoogleCloudDataproc/spark-bigquery-connector/issues/434#issuecomment-886156191
       // and: https://cloud.google.com/bigquery/docs/information-schema-intro#limitations
       .option("viewsEnabled", true)
@@ -127,6 +142,7 @@ case object BigQueryNative extends Format {
     val partitionInfoDf = sparkSession.read
       .format(bqFormat)
       .option("project", providedProject)
+      .option("parentProject", providedProject)
       // See: https://github.com/GoogleCloudDataproc/spark-bigquery-connector/issues/434#issuecomment-886156191
       // and: https://cloud.google.com/bigquery/docs/information-schema-intro#limitations
       .option("viewsEnabled", true)
@@ -158,13 +174,70 @@ case object BigQueryNative extends Format {
 
   }
 
+  override def firstAvailablePartition(tableName: String, partitionColumn: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): scala.Option[String] = {
+    queryMinMaxPartition(tableName, partitionColumn, partitionSpec, "MIN")
+  }
+
+  override def lastAvailablePartition(tableName: String, partitionColumn: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): scala.Option[String] = {
+    queryMinMaxPartition(tableName, partitionColumn, partitionSpec, "MAX")
+  }
+
+  /** Query MIN or MAX of the partition column directly via BQ Spark connector.
+    * This avoids the base class fallback to sparkSession.read.table() which fails
+    * for native BQ tables that aren't registered in the Spark SQL catalog.
+    */
+  private def queryMinMaxPartition(tableName: String, partitionColumn: String, partitionSpec: PartitionSpec, agg: String)(
+      implicit sparkSession: SparkSession): scala.Option[String] = {
+    Try {
+      val tableIdentifier = SparkBQUtils.toTableId(tableName)
+      val project = resolveProject(tableIdentifier)
+      val database = scala
+        .Option(tableIdentifier.getDataset)
+        .getOrElse(throw new IllegalArgumentException(s"database required for table: ${tableName}"))
+
+      // Fully-qualify the table name so the BQ connector resolves it in the right project
+      val fqTable = s"`${project}.${database}.${tableIdentifier.getTable}`"
+      val sql = s"SELECT CAST(${agg}(${partitionColumn}) AS DATE) AS val FROM ${fqTable}"
+      val result = sparkSession.read
+        .format(bqFormat)
+        .option("project", project)
+        .option("parentProject", project)
+        .option("viewsEnabled", true)
+        .option("materializationDataset", database)
+        .load(sql)
+        .collect()
+        .headOption
+
+      result.flatMap { row =>
+        if (row.isNullAt(0)) None
+        else {
+          // BQ connector may return LocalDate or java.sql.Date depending on version
+          val localDate = row.get(0) match {
+            case ld: java.time.LocalDate => ld
+            case d: java.sql.Date        => d.toLocalDate
+            case other                   => java.time.LocalDate.parse(other.toString)
+          }
+          val utcMillis = localDate.atStartOfDay(ZoneOffset.UTC).toInstant.toEpochMilli
+          Some(partitionSpec.at(utcMillis))
+        }
+      }
+    } match {
+      case Success(result) => result
+      case Failure(e) =>
+        logger.warn(s"BigQueryNative: Failed to get $agg partition for $tableName via BQ: ${e.getMessage}")
+        None
+    }
+  }
+
   override def supportSubPartitionsFilter: Boolean = false
 
   override def maxTimestampDate(tableName: String, timestampColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): scala.Option[String] = {
     Try {
       val tableIdentifier = SparkBQUtils.toTableId(tableName)
-      val providedProject = scala.Option(tableIdentifier.getProject).getOrElse(bqOptions.getProjectId)
+      val providedProject = resolveProject(tableIdentifier)
       val database = scala
         .Option(tableIdentifier.getDataset)
         .getOrElse(throw new IllegalArgumentException(s"database required for table: ${tableName}"))
@@ -174,6 +247,7 @@ case object BigQueryNative extends Format {
       val result = sparkSession.read
         .format(bqFormat)
         .option("project", providedProject)
+        .option("parentProject", providedProject)
         .option("viewsEnabled", true)
         .option("materializationDataset", database)
         .load(sql)
@@ -199,7 +273,7 @@ case object BigQueryNative extends Format {
       sparkSession: SparkSession): List[String] = {
     Try {
       val tableIdentifier = SparkBQUtils.toTableId(tableName)
-      val providedProject = scala.Option(tableIdentifier.getProject).getOrElse(bqOptions.getProjectId)
+      val providedProject = resolveProject(tableIdentifier)
       val database = scala
         .Option(tableIdentifier.getDataset)
         .getOrElse(throw new IllegalArgumentException(s"database required for table: ${tableName}"))
@@ -212,6 +286,7 @@ case object BigQueryNative extends Format {
       val result = sparkSession.read
         .format(bqFormat)
         .option("project", providedProject)
+        .option("parentProject", providedProject)
         .option("viewsEnabled", true)
         .option("materializationDataset", database)
         .load(sql)

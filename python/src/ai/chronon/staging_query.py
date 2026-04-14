@@ -58,6 +58,7 @@ class TableDependency:
     additional_partitions: Optional[List[str]] = None
     offset: Optional[int] = None
     time_partitioned: Optional[bool] = None
+    is_soft: Optional[bool] = None  # Soft dependencies skip the Spark SQL pre-flight check
 
     def to_thrift(self):
         if self.partition_column is not None and self.offset is None:
@@ -75,6 +76,7 @@ class TableDependency:
             endOffset=offset_window,
             startCutOff=None,
             endCutOff=None,
+            isSoftNodeDependency=self.is_soft,
         )
 
 
