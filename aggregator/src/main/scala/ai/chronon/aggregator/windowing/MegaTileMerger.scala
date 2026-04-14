@@ -70,10 +70,7 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
     * @param batchEnd     The batch upload boundary timestamp.
     * @return Finalized feature values.
     */
-  def merge(batchIr: FinalBatchIr,
-            dailyTileIrs: Seq[(Long, Array[Any])],
-            queryTs: Long,
-            batchEnd: Long): Array[Any] = {
+  def merge(batchIr: FinalBatchIr, dailyTileIrs: Seq[(Long, Array[Any])], queryTs: Long, batchEnd: Long): Array[Any] = {
 
     val resultIr =
       if (batchIr != null) windowedAggregator.clone(batchIr.collapsed)
@@ -95,11 +92,10 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
       } else {
         // Large window / unwindowed: batch collapsed + streaming daily aggregates
         // resultIr(col) already has batchIr.collapsed(col) from clone
-        nonNullDailyTileIrs.reverseIterator.foreach {
-          case (dayStart, dayIr) =>
-            if (dayStart >= batchDayStart && dayIr(col) != null) {
-              resultIr(col) = windowedAggregator.columnAggregators(col).merge(resultIr(col), dayIr(col))
-            }
+        nonNullDailyTileIrs.reverseIterator.foreach { case (dayStart, dayIr) =>
+          if (dayStart >= batchDayStart && dayIr(col) != null) {
+            resultIr(col) = windowedAggregator.columnAggregators(col).merge(resultIr(col), dayIr(col))
+          }
         }
       }
       col += 1

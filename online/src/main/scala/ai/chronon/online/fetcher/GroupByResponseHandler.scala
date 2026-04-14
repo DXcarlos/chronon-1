@@ -270,13 +270,15 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
                                           todayResponses: Seq[TimedValue],
                                           megaTileHistoricalResponses: Seq[(Long, Seq[TimedValue])],
                                           batchBytes: Array[Byte]): Array[Any] = {
-    val hasNoHistoricalData = megaTileHistoricalResponses.forall {
-      case (_, responses) => responses == null || responses.isEmpty
+    val hasNoHistoricalData = megaTileHistoricalResponses.forall { case (_, responses) =>
+      responses == null || responses.isEmpty
     }
-    if ((todayResponses == null || todayResponses.isEmpty) &&
-        hasNoHistoricalData &&
-        batchResponses.isInstanceOf[KvStoreBatchResponse] &&
-        batchBytes == null) {
+    if (
+      (todayResponses == null || todayResponses.isEmpty) &&
+      hasNoHistoricalData &&
+      batchResponses.isInstanceOf[KvStoreBatchResponse] &&
+      batchBytes == null
+    ) {
       if (fetchContext.debug) {
         logger.info("Batch, today's streaming data, and historical streaming data are all null")
       }
@@ -298,8 +300,8 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
     val allStreamingIrDecodeStartTime = System.currentTimeMillis()
     val todayStart = servingInfo.megaTileMerger.streamingDayKeys(requestContext.queryTimeMs)._1
     val dailyTileIrs =
-      (Seq(todayStart -> todayResponses) ++ megaTileHistoricalResponses).map {
-        case (dayStart, responses) => dayStart -> decodeLatestMegaTile(responses, servingInfo)
+      (Seq(todayStart -> todayResponses) ++ megaTileHistoricalResponses).map { case (dayStart, responses) =>
+        dayStart -> decodeLatestMegaTile(responses, servingInfo)
       }
     requestContext.metricsContext.distribution("group_by.all_streamingir_decode.latency.millis",
                                                System.currentTimeMillis() - allStreamingIrDecodeStartTime)
@@ -315,10 +317,8 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
     }
 
     val aggregatorStartTime = System.currentTimeMillis()
-    val result = servingInfo.megaTileMerger.merge(batchIr,
-                                                  dailyTileIrs,
-                                                  requestContext.queryTimeMs,
-                                                  servingInfo.batchEndTsMillis)
+    val result =
+      servingInfo.megaTileMerger.merge(batchIr, dailyTileIrs, requestContext.queryTimeMs, servingInfo.batchEndTsMillis)
     requestContext.metricsContext.distribution("group_by.aggregator.latency.millis",
                                                System.currentTimeMillis() - aggregatorStartTime)
     result

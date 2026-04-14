@@ -191,7 +191,8 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
       LRUCache.collectCaffeineCacheMetrics(caffeineMetricsContext, cache.cache, cache.cacheName))
 
     val allRequestsToFetch: Seq[GetRequest] = groupByRequestToKvRequest.flatMap {
-      case (_, Success(LambdaKvRequest(_, _, batchRequest, streamingRequestOpt, megaTileHistoricalRequestsOpt, _, _))) =>
+      case (_,
+            Success(LambdaKvRequest(_, _, batchRequest, streamingRequestOpt, megaTileHistoricalRequestsOpt, _, _))) =>
         // If a batch request is cached, don't include it in the list of requests to fetch because the batch IRs already cached
         val batchReqs = if (cachedRequests.contains(batchRequest)) Seq.empty else Seq(batchRequest)
         batchReqs ++ streamingRequestOpt.toSeq ++ megaTileHistoricalRequestsOpt.getOrElse(Seq.empty).map(_._2)
@@ -257,9 +258,8 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
             val megaTileHistoricalResponses =
               megaTileHistoricalRequestsOpt
                 .getOrElse(Seq.empty)
-                .map {
-                  case (dayStart, historyRequest) =>
-                    dayStart -> responsesMap.getOrElse(historyRequest, Success(Seq.empty)).getOrElse(Seq.empty)
+                .map { case (dayStart, historyRequest) =>
+                  dayStart -> responsesMap.getOrElse(historyRequest, Success(Seq.empty)).getOrElse(Seq.empty)
                 }
 
             val queryTs = endTs.getOrElse(request.atMillis.getOrElse(System.currentTimeMillis()))
