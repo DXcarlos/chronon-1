@@ -6,69 +6,85 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.slf4j.{Logger, LoggerFactory}
 
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
 /** Default format provider implementation based on default Chronon supported open source library versions.
+  *
+  * Format detection is a waterfall: Iceberg → Delta → Hive. Each step returns either
+  * a detected format or the exception that occurred. If the waterfall succeeds, we log
+  * one info line. If all steps fail, we log all exceptions with full stack traces.
   */
 class DefaultFormatProvider(val sparkSession: SparkSession) extends FormatProvider {
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  // Checks the format of a given table if it exists.
+  // Per-table format cache — avoids repeated detection within the same driver process
+  protected val formatCache = mutable.Map[String, Option[Format]]()
+
   override def readFormat(tableName: String): Option[Format] = {
-    Option(if (isIcebergTable(tableName)) {
-      Iceberg
-    } else if (isDeltaTable(tableName)) {
-      DeltaLake
-    } else if (sparkSession.catalog.tableExists(tableName)) {
-      Hive
-    } else { null })
+    formatCache.getOrElseUpdate(tableName, detectFormat(tableName))
   }
 
-  // Format detection methods below are part of a waterfall: Iceberg → Delta → Hive.
-  // Intermediate "not this format" results are expected and logged at debug level
-  // without stack traces. Only the final caller should surface errors.
-
-  protected def isIcebergTable(tableName: String): Boolean = {
-    val resolved = Format.resolveTableName(tableName)(sparkSession)
-    val catalog = sparkSession.sessionState.catalogManager.catalog(resolved.catalog)
-
-    catalog match {
-      case sparkCatalog: SparkCatalog =>
-        Try(sparkCatalog.loadTable(resolved.toIdentifier)) match {
-          case Success(_: SparkTable) =>
-            logger.info(s"Detected iceberg table: $tableName")
-            true
-          case _ =>
-            logger.debug(s"Table $tableName is not iceberg format")
-            false
-        }
-      case tableCatalog: TableCatalog =>
-        Try(tableCatalog.loadTable(resolved.toIdentifier)) match {
-          case Success(_: SparkTable) =>
-            logger.info(s"Detected iceberg table: $tableName")
-            true
-          case _ =>
-            logger.debug(s"Table $tableName is not iceberg format")
-            false
-        }
-      case _ =>
-        logger.debug(s"Table $tableName is not iceberg format")
-        false
+  /** Run the format detection waterfall. Returns the detected format or None. */
+  protected def detectFormat(tableName: String): Option[Format] = {
+    val checks = formatChecks(tableName)
+    for ((format, check) <- checks) {
+      check match {
+        case Right(true) =>
+          logger.info(s"$tableName: detected as $format")
+          return Some(format)
+        case _ => // continue waterfall
+      }
     }
+
+    // All checks failed — log summary at warn, then full stack traces for each failure
+    val summary = checks.map {
+      case (format, Right(false))  => s"  - not $format"
+      case (format, Left(e))       => s"  - not $format: ${e.getMessage.takeWhile(_ != '\n')}"
+      case (format, Right(true))   => s"  - $format (matched)"
+    }
+    logger.warn(s"$tableName: no format detected\n${summary.mkString("\n")}")
+    for ((format, Left(e)) <- checks) {
+      logger.debug(s"$tableName: $format check failure", e)
+    }
+    None
   }
 
-  private def isDeltaTable(tableName: String): Boolean = {
+  /** The ordered list of format checks. Each returns Right(true) for match,
+    * Right(false) for clean non-match, or Left(exception) for failure.
+    * Subclasses can override to extend the waterfall.
+    */
+  protected def formatChecks(tableName: String): Seq[(Format, Either[Throwable, Boolean])] = {
+    Seq(
+      Iceberg -> checkIceberg(tableName),
+      DeltaLake -> checkDelta(tableName),
+      Hive -> checkHive(tableName)
+    )
+  }
+
+  protected def checkIceberg(tableName: String): Either[Throwable, Boolean] = {
+    Try {
+      val resolved = Format.resolveTableName(tableName)(sparkSession)
+      val catalog = sparkSession.sessionState.catalogManager.catalog(resolved.catalog)
+      catalog match {
+        case sparkCatalog: SparkCatalog =>
+          sparkCatalog.loadTable(resolved.toIdentifier).isInstanceOf[SparkTable]
+        case tableCatalog: TableCatalog =>
+          tableCatalog.loadTable(resolved.toIdentifier).isInstanceOf[SparkTable]
+        case _ => false
+      }
+    }.toEither
+  }
+
+  protected def checkDelta(tableName: String): Either[Throwable, Boolean] = {
     Try {
       val describeResult = sparkSession.sql(s"DESCRIBE DETAIL $tableName")
-      describeResult.select("format").first().getString(0).toLowerCase
-    } match {
-      case Success(format) =>
-        if (format == "delta") logger.info(s"Detected delta table: $tableName")
-        format == "delta"
-      case Failure(_) =>
-        logger.debug(s"Table $tableName is not delta format")
-        false
-    }
+      describeResult.select("format").first().getString(0).toLowerCase == "delta"
+    }.toEither
+  }
+
+  protected def checkHive(tableName: String): Either[Throwable, Boolean] = {
+    Try(sparkSession.catalog.tableExists(tableName)).toEither
   }
 }
