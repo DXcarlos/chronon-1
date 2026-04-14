@@ -4,10 +4,12 @@ import org.apache.spark.sql.SparkSession
 
 /** Helper to read spark.chronon.* configs from SparkContext.
   *
-  * SQLConf (session.conf) only contains SQL-level configs. Custom keys
-  * like spark.chronon.* set via spark-submit --conf are on SparkConf
-  * but NOT propagated to SQLConf. This helper reads from SparkContext
-  * first, then falls back to session.conf.
+  * Reads from SparkContext.getConf first, then falls back to session.conf.
+  * In most Spark environments session.conf should reflect SparkConf entries,
+  * but reading from SparkContext directly is a defensive measure against
+  * environments where the propagation is incomplete.
+  *
+  * See: https://github.com/apache/spark/blob/v3.5.8/sql/core/src/main/scala/org/apache/spark/sql/RuntimeConfig.scala
   */
 object ChrononSparkConf {
 

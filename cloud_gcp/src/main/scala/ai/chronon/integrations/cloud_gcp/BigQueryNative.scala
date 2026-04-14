@@ -1,7 +1,7 @@
 package ai.chronon.integrations.cloud_gcp
 
 import ai.chronon.api.PartitionSpec
-import ai.chronon.spark.catalog.{ChrononSparkConf, Format, TableUtils}
+import ai.chronon.spark.catalog.{Format, TableUtils}
 import com.google.cloud.bigquery._
 import com.google.cloud.spark.bigquery.v2.Spark35BigQueryTableProvider
 import org.apache.spark.sql.functions.{col, date_format, to_date}
@@ -19,15 +19,8 @@ case object BigQueryNative extends Format {
   private lazy val bqOptions = BigQueryOptions.getDefaultInstance
   private lazy val bigQueryClient: BigQuery = bqOptions.getService
 
-  /** Resolve the BigQuery project for a table.
-    * Priority: explicit project in table name > spark catalog config > BQ client default.
-    * On GKE the BQ client default is the node project (e.g. crucible-io), not the data project.
-    */
-  private def resolveProject(tableId: TableId)(implicit spark: SparkSession): String = {
-    scala.Option(tableId.getProject).getOrElse {
-      ChrononSparkConf.get(spark, "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id", bqOptions.getProjectId)
-    }
-  }
+  private def resolveProject(tableId: TableId)(implicit spark: SparkSession): String =
+    SparkBQUtils.resolveProject(tableId)
 
   override def table(tableName: String, partitionFilters: String)(implicit sparkSession: SparkSession): DataFrame = {
     throw new UnsupportedOperationException(
@@ -72,6 +65,8 @@ case object BigQueryNative extends Format {
         val partVals = sparkSession.read
           .format(bqFormat)
           .option("project", project)
+          // parentProject controls where the BQ job runs (billing). Without it, the connector
+          // defaults to the host project which may differ from the data project.
           .option("parentProject", project)
           // See: https://github.com/GoogleCloudDataproc/spark-bigquery-connector/issues/434#issuecomment-886156191
           // and: https://cloud.google.com/bigquery/docs/information-schema-intro#limitations

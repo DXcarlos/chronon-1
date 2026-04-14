@@ -5,7 +5,7 @@ import ai.chronon.api.Extensions._
 import ai.chronon.api.PartitionRange
 import ai.chronon.api.ScalaJavaConversions.{IterableOps, MapOps}
 import ai.chronon.spark.batch.StagingQuery
-import ai.chronon.spark.catalog.{ChrononSparkConf, Format, TableUtils}
+import ai.chronon.spark.catalog.{Format, TableUtils}
 import com.google.cloud.bigquery.{BigQuery, BigQueryOptions, JobInfo, QueryJobConfiguration}
 
 import java.util.UUID
@@ -14,11 +14,10 @@ import scala.util.{Failure, Success, Try}
 class BigQueryImport(stagingQueryConf: api.StagingQuery, endPartition: String, tableUtils: TableUtils)
     extends StagingQuery(stagingQueryConf: api.StagingQuery, endPartition: String, tableUtils: TableUtils) {
 
-  // On GKE the default project is the cluster project (e.g. crucible-io), not the data project.
-  // Read the data project from the spark catalog config.
+  // On non-Dataproc environments the default project may differ from the data project.
   private lazy val bqProject: String = {
-    val defaultProject = BigQueryOptions.getDefaultInstance.getProjectId
-    ChrononSparkConf.get(tableUtils.sparkSession, "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id", defaultProject)
+    implicit val spark = tableUtils.sparkSession
+    SparkBQUtils.resolveDefaultProject
   }
   private lazy val bqOptions = BigQueryOptions.newBuilder().setProjectId(bqProject).build()
   private[cloud_gcp] lazy val bigQueryClient: BigQuery = bqOptions.getService

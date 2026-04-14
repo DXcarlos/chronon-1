@@ -423,7 +423,7 @@
             },
             "env": {
               "common": {
-                "ARTIFACT_PREFIX": "gs://crucible-dev-bucket/chronon",
+                "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
                 "CHRONON_ONLINE_ARGS": "-Ztasks=1",
                 "CLOUD_PROVIDER": "gcp",
                 "CUSTOMER_ID": "canary",
@@ -435,12 +435,12 @@
                 "GCP_REGION": "us-central1",
                 "HUB_URL": "http://localhost:3903",
                 "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-                "VERSION": "0.1.0-dev-nikhil",
+                "VERSION": "latest",
                 "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
               },
               "modeEnvironments": {
                 "upload": {
-                  "ARTIFACT_PREFIX": "gs://crucible-dev-bucket/chronon",
+                  "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
                   "CHRONON_ONLINE_ARGS": "-Ztasks=1",
                   "CLOUD_PROVIDER": "gcp",
                   "CUSTOMER_ID": "canary",
@@ -452,7 +452,7 @@
                   "GCP_REGION": "us-central1",
                   "HUB_URL": "http://localhost:3903",
                   "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-                  "VERSION": "0.1.0-dev-nikhil",
+                  "VERSION": "latest",
                   "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
                 }
               }
@@ -550,7 +550,7 @@
             },
             "env": {
               "common": {
-                "ARTIFACT_PREFIX": "gs://crucible-dev-bucket/chronon",
+                "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
                 "CHRONON_ONLINE_ARGS": " -Ztasks=4",
                 "CLOUD_PROVIDER": "gcp",
                 "CUSTOMER_ID": "canary",
@@ -562,12 +562,12 @@
                 "GCP_REGION": "us-central1",
                 "HUB_URL": "http://localhost:3903",
                 "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-                "VERSION": "0.1.0-dev-nikhil",
+                "VERSION": "latest",
                 "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
               },
               "modeEnvironments": {
                 "upload": {
-                  "ARTIFACT_PREFIX": "gs://crucible-dev-bucket/chronon",
+                  "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
                   "CHRONON_ONLINE_ARGS": " -Ztasks=4",
                   "CLOUD_PROVIDER": "gcp",
                   "CUSTOMER_ID": "canary",
@@ -579,7 +579,7 @@
                   "GCP_REGION": "us-central1",
                   "HUB_URL": "http://localhost:3903",
                   "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-                  "VERSION": "0.1.0-dev-nikhil",
+                  "VERSION": "latest",
                   "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
                 }
               }
@@ -666,7 +666,7 @@
             },
             "env": {
               "common": {
-                "ARTIFACT_PREFIX": "gs://crucible-dev-bucket/chronon",
+                "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
                 "CHRONON_ONLINE_ARGS": " -Ztasks=4",
                 "CLOUD_PROVIDER": "gcp",
                 "CUSTOMER_ID": "canary",
@@ -678,12 +678,12 @@
                 "GCP_REGION": "us-central1",
                 "HUB_URL": "http://localhost:3903",
                 "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-                "VERSION": "0.1.0-dev-nikhil",
+                "VERSION": "latest",
                 "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
               },
               "modeEnvironments": {
                 "upload": {
-                  "ARTIFACT_PREFIX": "gs://crucible-dev-bucket/chronon",
+                  "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
                   "CHRONON_ONLINE_ARGS": " -Ztasks=4",
                   "CLOUD_PROVIDER": "gcp",
                   "CUSTOMER_ID": "canary",
@@ -695,7 +695,7 @@
                   "GCP_REGION": "us-central1",
                   "HUB_URL": "http://localhost:3903",
                   "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-                  "VERSION": "0.1.0-dev-nikhil",
+                  "VERSION": "latest",
                   "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
                 }
               }
@@ -857,7 +857,7 @@
       "enableStatsCompute": 1,
       "env": {
         "common": {
-          "ARTIFACT_PREFIX": "gs://crucible-dev-bucket/chronon",
+          "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
           "CHRONON_ONLINE_ARGS": " -Ztasks=4",
           "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "canary",
@@ -869,12 +869,12 @@
           "GCP_REGION": "us-central1",
           "HUB_URL": "http://localhost:3903",
           "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
-          "VERSION": "0.1.0-dev-nikhil",
+          "VERSION": "latest",
           "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
         },
         "modeEnvironments": {
           "upload": {
-            "ARTIFACT_PREFIX": "gs://crucible-dev-bucket/chronon",
+            "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
             "CHRONON_ONLINE_ARGS": " -Ztasks=4",
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "canary",
@@ -886,7 +886,7 @@
             "GCP_REGION": "us-central1",
             "HUB_URL": "http://localhost:3903",
             "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster",
-            "VERSION": "0.1.0-dev-nikhil",
+            "VERSION": "latest",
             "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary"
           }
         }
