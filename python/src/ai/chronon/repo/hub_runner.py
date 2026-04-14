@@ -455,6 +455,24 @@ def submit_schedule_all(
         )
 
 
+def _apply_version_override(conf_map, conf_path, repo, version_override, format):
+    """Patch VERSION in a conf's env vars in memory (no disk writes)."""
+    conf_name = utils.get_metadata_name_from_conf(repo, conf_path)
+    if conf_name not in conf_map:
+        return
+    conf_obj = conf_map[conf_name]
+    conf_json = json.loads(conf_obj.contents)
+    env_common = conf_json.get("metaData", {}).get("executionInfo", {}).get("env", {}).get("common", {})
+    old_version = env_common.get("VERSION")
+    if old_version == version_override:
+        return
+    env_common["VERSION"] = version_override
+    patched = json.dumps(conf_json)
+    conf_obj.contents = patched
+    conf_obj.hash = __import__("hashlib").md5(patched.encode()).hexdigest()
+    print_info(f"Overriding VERSION: {old_version} -> {version_override}", format=format)
+
+
 def submit_workflow(
     repo,
     conf,
@@ -464,12 +482,17 @@ def submit_workflow(
     hub_url=None,
     use_auth=True,
     format: Format = Format.TEXT,
+    version_override=None,
 ):
     hub_conf = get_hub_conf(conf, root_dir=repo)
     zipline_hub = _get_zipline_hub(hub_url, hub_conf, use_auth, format)
 
     with status_spinner("Computing local conf hashes...", format=format):
         conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
+
+    if version_override:
+        _apply_version_override(conf_name_to_hash_dict, conf, repo, version_override, format)
+
     branch = get_current_branch()
 
     with status_spinner("Syncing confs with Hub...", format=format):
@@ -567,6 +590,9 @@ def submit_schedule(
 @common_options
 @start_ds_option
 @end_ds_option
+@click.option("--version", "version_override", default=None,
+              help="Override the VERSION env var in the compiled conf (e.g. 0.1.0-dev). "
+                   "Useful for testing with a different jar version without recompiling.")
 @handle_conf_not_found(log_error=True, callback=print_possible_confs)
 @handle_compile
 @jsonify_exceptions_if_json_format
@@ -580,6 +606,7 @@ def backfill(
     start_ds,
     end_ds,
     skip_compile,
+    version_override,
 ):
     """Submit a backfill job to Zipline Hub.
 
@@ -594,6 +621,7 @@ def backfill(
         hub_url=hub_url,
         use_auth=use_auth,
         format=format,
+        version_override=version_override,
     )
 
 
@@ -603,6 +631,8 @@ def backfill(
 @conf_argument
 @common_options
 @end_ds_option
+@click.option("--version", "version_override", default=None,
+              help="Override the VERSION env var in the compiled conf.")
 @handle_conf_not_found(log_error=True, callback=print_possible_confs)
 @handle_compile
 @jsonify_exceptions_if_json_format
@@ -615,6 +645,7 @@ def run_adhoc(
     force,
     end_ds,
     skip_compile,
+    version_override,
 ):
     """Submit a one-off deploy job to test a conf online.
 
@@ -629,6 +660,7 @@ def run_adhoc(
         hub_url=hub_url,
         use_auth=use_auth,
         format=format,
+        version_override=version_override,
     )
 
 
