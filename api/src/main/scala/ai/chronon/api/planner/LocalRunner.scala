@@ -2,6 +2,7 @@ package ai.chronon.api.planner
 
 import ai.chronon.api.thrift.TBase
 import ai.chronon.api._
+import ai.chronon.api.Extensions.JoinOps
 import ai.chronon.planner.ConfPlan
 
 import java.io.File
@@ -27,12 +28,16 @@ object LocalRunner {
     .filterNot(isIgnorableFile)
     .map(ThriftJsonCodec.fromJsonFile(_, check = true))
 
+  private def selectJoinPlanner(join: Join)(implicit partitionSpec: PartitionSpec): ConfPlanner[Join] =
+    if (join.isModularMode) new JoinPlanner(join)
+    else MonolithJoinPlanner(join)
+
   def processConfigurations(confSubfolder: String, confType: String)(implicit
       partitionSpec: PartitionSpec): Seq[ConfPlan] = {
     confType match {
       case Constants.JoinFolder => {
         val confs = parseConfs[Join](confSubfolder)
-        confs.map((c) => MonolithJoinPlanner(c)).map(_.buildPlan)
+        confs.map(c => selectJoinPlanner(c).buildPlan)
       }
       case Constants.StagingQueryFolder => {
         val confs = parseConfs[StagingQuery](confSubfolder)

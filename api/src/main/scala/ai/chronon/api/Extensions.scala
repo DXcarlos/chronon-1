@@ -935,6 +935,13 @@ object Extensions {
         .toArray
     }
 
+    def isModularMode: Boolean =
+      Option(join.metaData)
+        .flatMap(md => Option(md.executionInfo))
+        .flatMap(ei => Option(ei.conf))
+        .flatMap(c => Option(c.common))
+        .exists(_.get("modular_execution") == "true")
+
     def historicalBackfill: Boolean = {
       if (join.metaData.isSetExecutionInfo && join.metaData.executionInfo.isSetHistoricalBackfill) {
         join.metaData.executionInfo.historicalBackfill
