@@ -36,7 +36,7 @@
           "FRONTEND_URL": "https://dev-azure.zipline.ai",
           "HUB_URL": "https://dev-orch-azure.zipline.ai",
           "SNOWFLAKE_JDBC_URL": "jdbc:snowflake://VEJLULX-AZURE.snowflakecomputing.com/?user=demo_batch_service&db=Demo&schema=public&warehouse=demo_wh",
-          "SNOWFLAKE_VAULT_URI": "https://demo-service-writer-pkey.vault.azure.net/secrets/snowflake-private-key",
+          "SNOWFLAKE_PRIVATE_KEY_VAULT_URI": "https://demo-service-writer-pkey.vault.azure.net/secrets/snowflake-private-key",
           "SPARK_CLUSTER_NAME": "http://kyuubi-dev.westus.cloudapp.azure.com:10099",
           "VERSION": "latest",
           "WAREHOUSE_PREFIX": "abfss://dev-zipline-warehouse@ziplineai2.dfs.core.windows.net"

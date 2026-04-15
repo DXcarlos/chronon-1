@@ -240,7 +240,7 @@ azure = Team(
             "FRONTEND_URL": "https://dev-azure.zipline.ai",
             "HUB_URL": "https://dev-orch-azure.zipline.ai",
             "SNOWFLAKE_JDBC_URL": "jdbc:snowflake://VEJLULX-AZURE.snowflakecomputing.com/?user=demo_batch_service&db=Demo&schema=public&warehouse=demo_wh",
-            "SNOWFLAKE_VAULT_URI": "https://demo-service-writer-pkey.vault.azure.net/secrets/snowflake-private-key",
+            "SNOWFLAKE_PRIVATE_KEY_VAULT_URI": "https://demo-service-writer-pkey.vault.azure.net/secrets/snowflake-private-key",
             "EVAL_URL": "https://dev-azure.zipline.ai/services/eval",
             "AUTH_SCOPE": "api://dev-zipline-auth"
         },
