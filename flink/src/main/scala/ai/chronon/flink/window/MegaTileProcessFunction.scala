@@ -19,42 +19,8 @@ import org.slf4j.{Logger, LoggerFactory}
 import scala.util.Try
 
 /** Flink KeyedProcessFunction that maintains per-entity mega tile state.
-  * Delegates all aggregation logic to MegaTileStreamProcessor.
-  * State access goes through FlinkTileStore - only touched entries are serialized/deserialized.
-  *
-  * Mental model:
-  *
-  * There are two clocks in this operator:
-  *   - event time/watermark: where Flink believes the stream has progressed in event time.
-  *   - processing time (PT): wall clock in the Flink task.
-  *
-  * There are two primary operating modes:
-  *   - Live: watermark is close enough to PT. The small-window cache and eviction use PT as the
-  *     as-of time, matching vanilla tiled serving where reads enumerate tiles for wall-clock query
-  *     time.
-  *   - ActiveCatchup: watermark is far behind PT for an active key, often because replay is lagged
-  *     or allowed out-of-orderness is intentionally high. Event time is then decoupled from wall
-  *     clock, so event-path cache updates and timer-path eviction both use
-  *     nextSmallWindowHop(watermark) instead of PT. This avoids aging out replay tiles that are
-  *     still current relative to the event-time frontier.
-  *
-  * Important details that are easy to mix up:
-  *   - `processor.onEvent(row, eventTs, smallWindowAsOfTs)` receives `eventTs` separately so the
-  *     processor can choose the retained tile/day that the input row mutates. Mode does not choose
-  *     that tile; it chooses the as-of timestamp for cache and eviction behavior.
-  *   - `smallWindowAsOfTs` is the event-path timestamp for deciding whether the touched tile
-  *     contributes to the cached small-window IR. The small-window cache is the Flink
-  *     implementation of Chronon's no-batch windows.
-  *   - `evictionTime` is the timer-path timestamp for making state accurate as of that point: it
-  *     can roll day state, permanently drop expired retained tiles, and rebuild cached
-  *     small-window IR.
-  *   - `NoWatermark` is startup/bootstrap behavior: the event path uses the row's event hop, while
-  *     timer callbacks use PT because there is no watermark clock to trust yet.
-  *   - `SparseKeyLag` is the idle-key fallback: the global watermark may lag because of other
-  *     input, but this key is not actively replaying, so timer callbacks use PT and values decay or
-  *     roll forward with wall clock.
-  *   - Output buffering is write coalescing only. It uses PT timers to avoid emitting on every
-  *     event or eviction; it does not change event-time mutation or as-of selection.
+  * Delegates aggregation logic to MegaTileStreamProcessor and uses FlinkTileStore for keyed state.
+  * See docs/source/megatile.md for the high-level clock/mode mental model.
   *
   * Step-by-step mental model in code order:
   *

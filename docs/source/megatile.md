@@ -75,6 +75,44 @@ Bookkeeping:
   earliestTileStart: ValueState<Long>
 ```
 
+## Flink ProcessFunction Mental Model
+
+There are two clocks in this operator:
+
+- **event time/watermark**: where Flink believes the stream has progressed in event time.
+- **processing time (PT)**: wall clock in the Flink task.
+
+There are two primary operating modes:
+
+**Live**: watermark is close enough to PT. The small-window cache and eviction use PT as the as-of
+time, matching vanilla tiled serving where reads enumerate tiles for wall-clock query time.
+
+**ActiveCatchup**: watermark is far behind PT for an active key, often because replay is lagged or
+allowed out-of-orderness is intentionally high. Event time is then decoupled from wall clock, so
+event-path cache updates and timer-path eviction both use `nextSmallWindowHop(watermark)` instead
+of PT. This avoids aging out replay tiles that are still current relative to the event-time
+frontier.
+
+Important details that are easy to mix up:
+
+- `processor.onEvent(row, eventTs, smallWindowAsOfTs)` receives `eventTs` separately so the
+  processor can choose the retained tile/day that the input row mutates. Mode does not choose that
+  tile; it chooses the as-of timestamp for cache and eviction behavior.
+- `smallWindowAsOfTs` is the event-path timestamp for deciding whether the touched tile contributes
+  to the cached small-window IR. The small-window cache is the Flink implementation of Chronon's
+  no-batch windows.
+- `evictionTime` is the timer-path timestamp for making state accurate as of that point: it can
+  roll day state, permanently drop expired retained tiles, and rebuild cached small-window IR.
+- `NoWatermark` is startup/bootstrap behavior: the event path uses the row's event hop, while timer
+  callbacks use PT because there is no watermark clock to trust yet.
+- `SparseKeyLag` is the idle-key fallback: the global watermark may lag because of other input, but
+  this key is not actively replaying, so timer callbacks use PT and values decay or roll forward
+  with wall clock.
+- Output buffering is write coalescing only. It uses PT timers to avoid emitting on every event or
+  eviction; it does not change event-time mutation or as-of selection.
+
+The code-order step-by-step walkthrough lives in `MegaTileProcessFunction.scala`.
+
 ### On Event
 
 1. **Update tiles** (small-window tiers only):
@@ -85,43 +123,59 @@ Bookkeeping:
    - ~2 tile codec ops per event (one per small-window tier)
 
 2. **Update cachedSmallWindowIr** (sawtooth):
-   - Merge event into running IR for all small-window columns (unconditional)
-   - Over-inclusive at the tail — eviction corrects this
-   - 1 windowed IR codec op
+   - `MegaTileProcessFunction` passes `smallWindowAsOfTs` separately from `eventTs`
+   - For each no-batch column, merge the event only when its accepted tile falls inside
+     `[effectiveStart(col, smallWindowAsOfTs, currentDayStart), smallWindowAsOfTs)`
+   - The base tile still uses `eventTs`, so retained late events can update wider current windows
+     or future rebuilds without re-inflating a stale small window that is outside the current as-of
+     horizon
+   - Up to 1 windowed IR codec op when a cached column is actually updated
 
 3. **Update large window daily IR** — route by event day:
+   - `eventTs >= nextDayStart` → clamp to today (future event; day transitions are not event-driven)
    - `eventTs >= todayStart` → update `largeTodayIr`
-   - `eventTs >= yesterdayStart` → update `largeYesterdayIr` (late event, within 2d tolerance)
-   - `eventTs >= nextDayStart` → clamp to today (future event; day transitions are watermark-driven)
-   - `eventTs < yesterdayStart` → drop for large windows (> 2d late)
+   - `eventTs >= yesterdayStart` → update `largeYesterdayIr` (retained late event)
+   - `eventTs < yesterdayStart` → no large-window update; Flink drops this before processor mutation
+     once `currentDayStart` is initialized
    - 1 windowed IR codec op
 
 4. **Emit** to KV store (only dirty targets):
    - Today's entry: pack `cachedSmallWindowIr` + `largeTodayIr` → `(entity, todayStart)`
    - Yesterday's entry (only if late event touched it): pack `null` + `largeYesterdayIr` → `(entity, yesterdayStart)`
 
-**Total hot-path cost per event: ~6 codec ops** (vs ~102 with bulk restore/persist).
+**Total hot-path cost per event: up to ~6 codec ops** (vs ~102 with bulk restore/persist).
 
 ### Day Transitions (advanceWatermark)
 
-Day transitions are **watermark-driven only** — never triggered by event timestamps. This prevents
-future-timestamped events from prematurely rotating state.
+Day transitions are never triggered directly by event timestamps. This prevents future-timestamped
+events from prematurely rotating state.
+
+- Event ingestion calls `advanceWatermark` with the current Flink watermark before applying the row.
+- Eviction timers call `advanceWatermark` with the selected eviction time: watermark-hop time in
+  `ActiveCatchup`, and PT in `NoWatermark`, `SparseKeyLag`, and `Live`.
+- Before an adjacent one-day roll, `MegaTileProcessFunction` emits any dirty today row under the
+  previous day key so buffered small-window state is not lost.
 
 ```
-wmDay = round(watermarkTs, DayMillis)
-if wmDay > currentDayStart:
+transitionDay = round(dayTransitionTs, DayMillis)
+if transitionDay > currentDayStart:
   // Single-day hop: carry today's aggregate to yesterday
   // Multi-day hop (e.g., after long idle): clear yesterday (stale beyond 2d tolerance)
-  largeYesterdayIr = if (wmDay == currentDayStart + DayMillis) largeTodayIr else init
+  largeYesterdayIr = if (transitionDay == currentDayStart + DayMillis) largeTodayIr else init
   largeTodayIr = init
-  currentDayStart = wmDay
+  currentDayStart = transitionDay
 ```
 
-### Eviction (onEviction, fires every minSmallWindowTileSize)
+### Eviction (onEviction, triggered by PT timer)
 
-1. Compute `retentionFloor` per small-window tier
+`MegaTileProcessFunction` keeps one PT eviction timer per key at the next min-hop boundary. The
+timer passes a mode-specific eviction time into `processor.onEviction`: watermark-hop time during
+active catchup, otherwise PT.
+
+1. Compute `retentionFloor` per small-window tier using the eviction time
 2. Remove tiles below floor
-3. **Rebuild `cachedSmallWindowIr`** from remaining tiles via `buildMegaTileIr(tiles, now, todayStart)`
+3. **Rebuild `cachedSmallWindowIr`** from remaining tiles via
+   `buildMegaTileIr(tiles, evictionTime, todayStart)`
    — corrects the sawtooth tail by scoping each column to its `effectiveStart`
 4. Emit updated today entry
 
@@ -204,13 +258,18 @@ unwindowed base aggregator schema (one IR slot per aggregation bucket).
 
 - **Batch staleness**: Fetcher covers every daily stream key from the batch day through query day,
   so large-window coverage remains continuous even when batch lags by multiple days.
-- **Sawtooth approximation**: Accepted for all aggregation types. Between evictions, small-window
-  columns are over-inclusive by up to one tile interval at the tail.
-- **Late events**: Up to 2 days late are handled (routed to yesterday's large-window IR).
-  Events > 2 days late are dropped for large windows (tiles may still capture them for small windows
-  if within retention).
-- **Future events**: Clamped to today for large windows. Day transitions are watermark-driven,
-  so future timestamps cannot corrupt state.
+- **Sawtooth approximation**: Accepted for all aggregation types. Between evictions, cached
+  small-window columns can be over-inclusive by up to one tile interval at the tail. Retained late
+  events outside the current `smallWindowAsOfTs` horizon do not update stale cached columns.
+- **Late events**: Flink admits events with `eventTs >= currentDayStart - 1d`. A retained late
+  event always uses `eventTs` for base tile and large-window day routing, but it updates cached
+  small-window columns only when the touched tile is inside that column's current as-of horizon.
+  Events older than yesterday relative to `currentDayStart` are dropped before mutating state.
+- **Sparse-key lag**: If a key is idle while another input keeps the global watermark stale,
+  `SparseKeyLag` uses PT for eviction. That can roll `currentDayStart` forward and later cause old
+  backlog events to be dropped as older-than-yesterday for that key.
+- **Future events**: Clamped to today for large windows. Day transitions are driven by watermark or
+  timer eviction mode, not directly by event timestamps, so future timestamps cannot corrupt state.
 
 ## Scenario Tables
 
@@ -274,13 +333,16 @@ Shared pipeline tails (BaseFlinkJob):
 
 ## Test Coverage
 
-Tests at three layers, all comparing against NaiveAggregator:
+Tests at five layers, with aggregator/codec tests comparing against NaiveAggregator:
 
-1. **MegaTileAggregatorTest** — tile building + serveMegaTile merge (6 tests)
+1. **MegaTileAggregatorTest** — tile building + serveMegaTile merge (7 tests)
 2. **MegaTileMergerTest** — per-day entry split + MegaTileMerger.merge (7 tests)
-3. **MegaTileStreamProcessorTest** — full Flink simulation with sawtooth + eviction (6 tests,
-   including multi-day watermark gap)
-4. **MegaTileCodecRoundTripTest** — serde round-trips via SerdeTileStore + key switch (4 tests)
+3. **MegaTileStreamProcessorTest** — full processor simulation with sawtooth, as-of bounded late
+   events, and eviction (9 tests)
+4. **MegaTileCodecRoundTripTest** — serde round-trips via SerdeTileStore + key switch (5 tests)
+5. **MegaTileProcessFunctionTest** — Flink keyed process-function lifecycle coverage for Live,
+   ActiveCatchup, SparseKeyLag, buffered emit jitter, timer restore, malformed rows, and UTC day
+   boundaries (22 tests)
 
 Windows tested: 6h, 1d, 47h, 2d, 49h, 3d, 7d.
 Aggregation types: SUM, COUNT, AVERAGE, MIN, MAX, LAST, FIRST.
