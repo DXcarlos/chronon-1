@@ -20,54 +20,104 @@ import scala.util.Try
 
 /** Flink KeyedProcessFunction that maintains per-entity mega tile state.
   * Delegates all aggregation logic to MegaTileStreamProcessor.
-  * State access goes through FlinkTileStore — only touched entries are serialized/deserialized.
+  * State access goes through FlinkTileStore - only touched entries are serialized/deserialized.
+  *
+  * Mental model:
+  *
+  * There are two clocks in this operator:
+  *   - event time/watermark: where Flink believes the stream has progressed in event time.
+  *   - processing time (PT): wall clock in the Flink task.
+  *
+  * There are two primary operating modes:
+  *   - Live: watermark is close enough to PT. The small-window cache and eviction use PT as the
+  *     as-of time, matching vanilla tiled serving where reads enumerate tiles for wall-clock query
+  *     time.
+  *   - ActiveCatchup: watermark is far behind PT for an active key, often because replay is lagged
+  *     or allowed out-of-orderness is intentionally high. Event time is then decoupled from wall
+  *     clock, so event-path cache updates and timer-path eviction both use
+  *     nextSmallWindowHop(watermark) instead of PT. This avoids aging out replay tiles that are
+  *     still current relative to the event-time frontier.
+  *
+  * Important details that are easy to mix up:
+  *   - `processor.onEvent(row, eventTs, smallWindowAsOfTs)` receives `eventTs` separately so the
+  *     processor can choose the retained tile/day that the input row mutates. Mode does not choose
+  *     that tile; it chooses the as-of timestamp for cache and eviction behavior.
+  *   - `smallWindowAsOfTs` is the event-path timestamp for deciding whether the touched tile
+  *     contributes to the cached small-window IR. The small-window cache is the Flink
+  *     implementation of Chronon's no-batch windows.
+  *   - `evictionTime` is the timer-path timestamp for making state accurate as of that point: it
+  *     can roll day state, permanently drop expired retained tiles, and rebuild cached
+  *     small-window IR.
+  *   - `NoWatermark` is startup/bootstrap behavior: the event path uses the row's event hop, while
+  *     timer callbacks use PT because there is no watermark clock to trust yet.
+  *   - `SparseKeyLag` is the idle-key fallback: the global watermark may lag because of other
+  *     input, but this key is not actively replaying, so timer callbacks use PT and values decay or
+  *     roll forward with wall clock.
+  *   - Output buffering is write coalescing only. It uses PT timers to avoid emitting on every
+  *     event or eviction; it does not change event-time mutation or as-of selection.
   *
   * Step-by-step mental model in code order:
   *
   * Event path (`processElement`)
-  * 1. Bind the current Flink key to its private MegaTile state box, then parse the event into
-  *    `(eventTs, row)`.
+  * 1. Bind the current Flink key to its private MegaTile state box, then parse the projected event
+  *    into `(eventTs, row)`.
   *    - Example: `List("user_123")` and `List("user_456")` each have separate tiles, day state,
   *      dirty bits, and timers. An event with `ts = 11:03:17` becomes one row applied only to that
   *      key's state.
   *
-  * 2. Roll day state using the Flink watermark, not this event's timestamp. If the watermark crosses
-  *    midnight while today's row is still buffered, emit the old-day row first.
-  *    - Why watermark: if one bad/future event arrives with `eventTs = tomorrow 00:01` and day state
-  *      rotated from that event timestamp, later valid `today 23:50` events could be misclassified
-  *      into yesterday or dropped. The watermark means Flink believes the stream as a whole has
-  *      progressed past that event-time point.
+  * 2. Roll day state using the Flink watermark, not this event's timestamp or processing time (PT).
+  *    If the watermark crosses midnight while today's row is still buffered, emit the old-day row
+  *    first.
+  *    - Why watermark: if one bad/future event arrives with `eventTs = tomorrow 00:01` and we
+  *      rotated day state from that event timestamp, then later valid events from `today 23:50`
+  *      would get misclassified into yesterday or dropped. The watermark means the stream has
+  *      progressed past this event-time point, so day rollover only happens when Flink believes the
+  *      whole stream is safely past midnight.
+  *    - Where the watermark comes from: `FlinkJob.watermarkStrategy` assigns event timestamps and
+  *      builds a bounded-out-of-orderness watermark. Each operator subtask sees the minimum
+  *      watermark over its active partitions/input channels, so one input that is still behind can
+  *      hold the watermark back.
   *
   * 3. Drop events older than yesterday relative to `currentDayStart`; otherwise call
-  *    `processor.onEvent(row, eventTs, smallWindowAsOfTs)`. Event time chooses the retained tile
-  *    and today/yesterday bucket; smallWindowAsOfTs bounds the cached no-batch small-window row.
+  *    `processor.onEvent(row, eventTs, smallWindowAsOfTs)`. The processor uses `eventTs` for the
+  *    base tile and today/yesterday bucket; `smallWindowAsOfTs` is the as-of timestamp for the
+  *    cached small-window IR.
   *    - Example: with `currentDayStart = Apr 2 00:00`, `Apr 2 11:03` updates today's 11:00-11:05
   *      tile, `Apr 1 23:59` updates yesterday's large-window bucket, and `Mar 31 23:59` is dropped.
   *
   * 4. Mark `todayDirty` / `yesterdayDirty` from the processor result.
-  *    - Why: state mutation and KV writes are decoupled. Dirty bits track which day rows still need
-  *      to be published.
+  *    - Why: state mutation and downstream writes are decoupled. Dirty bits remember which day rows
+  *      need to be published later.
   *
-  * 5. Keep one processing-time eviction timer per key at the next hop boundary.
-  *    - Eviction's job is correctness of in-memory state: drop expired small-window tiles, rebuild
-  *      the sawtooth IR, and mark today's row dirty if the rebuilt row changed.
+  * 5. Keep one PT eviction timer per key at the next hop boundary.
+  *    - Eviction's job is correctness of the in-memory state: drop expired 5-minute tiles, rebuild
+  *      the small-window sawtooth IR, and mark today's row dirty if the rebuilt row changed.
+  *    - Example: an 11:03 event lands in the 11:00-11:05 tile; the 11:05 eviction timer rebuilds
+  *      the 1h value from retained 5-minute tiles so old tiles eventually fall out and values decay.
   *
-  * 6. Emit now if buffering is disabled; otherwise keep one processing-time emit timer per key.
-  *    - Emission's job is write coalescing only. The first dirty update arms the timer; later
-  *      updates only flip dirty bits so hot keys do not emit once per event.
+  * 6. Emit immediately if buffering is disabled; otherwise keep one PT emit timer per key.
+  *    - Emission's job is write coalescing only: if today/yesterday is dirty, serialize the current
+  *      row and write it downstream. The first dirty update arms the timer; later updates only set
+  *      dirty bits so hot keys do not emit once per event.
+  *    - Example: with `bufferingOutputTimeMillis = 1000`, 100 events in one second produce one emit
+  *      at `processingTs + 1s + stable key jitter`, not 100 downstream writes.
   *
   * Timer path (`onTimer`)
-  * 7. Dispatch each processing-time callback into exactly one branch: evict+emit collision,
-  *    evict-only, or emit-only.
+  * 7. Dispatch each PT callback into exactly one branch: evict+emit collision, evict-only, or
+  *    emit-only.
   *
-  * 8. On an eviction timer, choose the eviction timestamp, maybe emit today's pre-rollover row,
-  *    roll day state, rebuild today's small-window state, mark dirty state, and re-arm eviction
-  *    while small-window tiles still exist.
+  * 8. On an eviction timer, choose the eviction as-of timestamp, maybe emit today's pre-rollover
+  *    row, roll day state, drop expired small-window tiles, rebuild today's small-window state,
+  *    mark dirty state, and re-arm the eviction heartbeat while small-window tiles still exist.
   *    - During replay lag, eviction uses the next watermark hop while this key is actively receiving
-  *      events; otherwise eviction uses wall-clock processing time.
-  *    - Example: if wall clock is Apr 2 11:00 but replayed events are from Mar 31 11:00, wall-clock
-  *      eviction would jump `currentDayStart` to Apr 2 and make valid Mar 31 rows look older than
-  *      yesterday. A watermark-aligned eviction time avoids that while replay is active.
+  *      events; otherwise eviction uses PT.
+  *    - Example: if PT is Apr 2 11:00 but replayed events are from Mar 31 11:00, eviction should
+  *      use Mar 31 watermark time while replay is active; otherwise PT eviction would jump
+  *      `currentDayStart` to Apr 2 and make valid Mar 31 rows look older than yesterday.
+  *    - In a normal live stream, watermark is already close to PT, so the otherwise branch is the
+  *      expected path. A small slack above one hop prevents normal watermark jitter from looking
+  *      like replay. If upstream stops for a key, that same branch keeps PT eviction running so
+  *      values still decay with no new events.
   *
   * 9. On an emit timer, serialize and emit each dirty day row once, then clear its dirty bit.
   */
@@ -472,7 +522,7 @@ class MegaTileProcessFunction(
 }
 
 /** TileStore backed by Flink's keyed MapState/ValueState.
-  * Encodes/decodes only the entries actually accessed — no bulk restore/persist.
+  * Encodes/decodes only the entries actually accessed - no bulk restore/persist.
   * Windowed IR get/put is memoized to avoid redundant decodes within the same event
   * (e.g., onEvent reads cachedSmallWindowIr, then packTodayEntry reads it again).
   * Cache is invalidated on key switch via bindFlinkState.
@@ -488,7 +538,7 @@ class FlinkTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec) exte
   private var earliestTileStartState: ValueState[java.lang.Long] = _
 
   // Per-access decode cache for windowed IRs. Avoids redundant Avro decodes
-  // when the same IR is read multiple times within one event (get → update → pack).
+  // when the same IR is read multiple times within one event (get -> update -> pack).
   // Invalidated on key switch (bindFlinkState) and updated on put.
   private var cachedSmallDecoded: Array[Any] = _
   private var cachedSmallValid: Boolean = false
