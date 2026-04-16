@@ -516,6 +516,7 @@ def submit_workflow(
             end=end_ds,
             conf_hash=conf_name_to_hash_dict[conf_name].hash,
             skip_long_running=False,
+            version_override=version_override,
         )
 
     workflow_id = response_json.get("workflowId", "N/A")

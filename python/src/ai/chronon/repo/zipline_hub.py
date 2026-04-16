@@ -643,6 +643,7 @@ class ZiplineHub:
         start=None,
         end=None,
         skip_long_running=False,
+        version_override=None,
     ):
         url = f"{self.base_url}/workflow/v2/start"
         end_dt = end.strftime("%Y-%m-%d") if end else date.today().strftime("%Y-%m-%d")
@@ -661,6 +662,8 @@ class ZiplineHub:
             "end": end_dt,
             "skipLongRunningNodes": skip_long_running,
         }
+        if version_override:
+            workflow_request["versionOverride"] = version_override
         try:
             response = requests.post(
                 url, json=workflow_request, headers=self.additional_headers(self.base_url)
