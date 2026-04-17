@@ -144,6 +144,9 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
       store.putLargeYesterdayIr(newYesterday)
       store.putLargeTodayIr(windowedAgg.init)
       store.putCurrentDayStart(wmDay)
+      // cachedSmallWindowIr is as-of sensitive. Day rollover changes each small window's
+      // effective start, so rebuild from retained tiles instead of carrying yesterday's cache forward.
+      rebuildCachedSmallWindowIr(watermarkTs, wmDay)
     }
   }
 
@@ -156,29 +159,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
 
     val todayStart = currentDayStart
 
-    // Build the retained-tile snapshot while collecting stale keys, then delete stale state after iteration.
-    val staleEntries = mutable.ArrayBuffer.empty[(Long, Long)]
-    val tiles: Map[Long, mutable.Map[Long, Array[Any]]] =
-      smallWindowTiers.map(hop => hop -> mutable.Map.empty[Long, Array[Any]]).toMap
-    var newEarliest = Long.MaxValue
-    val iter = store.tileIterator
-    while (iter.hasNext) {
-      val (hopSize, tileStart, ir) = iter.next()
-      if (smallWindowTiers.contains(hopSize)) {
-        val floor = megaTileAgg.retentionFloor(hopSize, timerTs, todayStart)
-        if (tileStart < floor) {
-          staleEntries += ((hopSize, tileStart))
-        } else {
-          tiles(hopSize)(tileStart) = ir
-          if (tileStart < newEarliest) newEarliest = tileStart
-        }
-      }
-    }
-    staleEntries.foreach { case (h, t) => store.removeTile(h, t) }
-    store.putEarliestTileStart(newEarliest)
-
-    val rebuiltIr = megaTileAgg.buildMegaTileIr(tiles, now = timerTs, batchEnd = todayStart)
-    store.putCachedSmallWindowIr(rebuiltIr)
+    rebuildCachedSmallWindowIr(timerTs, todayStart)
 
     EmitResult(
       todayEntry = packTodayEntry(),
@@ -219,6 +200,35 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
       }
       col += 1
     }
+  }
+
+  private def rebuildCachedSmallWindowIr(asOfTs: Long, todayStart: Long): Unit = {
+    if (!hasSmallWindows) return
+
+    // Classify stale vs retained tiles in one iterator pass. Flink-backed TileStore decodes values
+    // during iteration, so a second full scan would deserialize every retained tile again.
+    val staleEntries = mutable.ArrayBuffer.empty[(Long, Long)]
+    val tiles: Map[Long, mutable.Map[Long, Array[Any]]] =
+      smallWindowTiers.map(hop => hop -> mutable.Map.empty[Long, Array[Any]]).toMap
+    var newEarliest = Long.MaxValue
+    val iter = store.tileIterator
+    while (iter.hasNext) {
+      val (hopSize, tileStart, ir) = iter.next()
+      if (smallWindowTiers.contains(hopSize)) {
+        val floor = megaTileAgg.retentionFloor(hopSize, asOfTs, todayStart)
+        if (tileStart < floor) {
+          staleEntries += ((hopSize, tileStart))
+        } else {
+          tiles(hopSize)(tileStart) = ir
+          if (tileStart < newEarliest) newEarliest = tileStart
+        }
+      }
+    }
+    staleEntries.foreach { case (h, t) => store.removeTile(h, t) }
+    store.putEarliestTileStart(newEarliest)
+
+    val rebuiltIr = megaTileAgg.buildMegaTileIr(tiles, now = asOfTs, batchEnd = todayStart)
+    store.putCachedSmallWindowIr(rebuiltIr)
   }
 }
 

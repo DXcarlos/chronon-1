@@ -374,6 +374,33 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
     assertNotNull("large-window yesterday entry should still be emitted", lateResult.yesterdayEntry)
   }
 
+  it should "rebuild cached small windows when watermark advances into a new day" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val oneDay = new Window(1, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, oneDay)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+
+    // Before midnight, this event is inside both the 1h and 1d small-window caches.
+    val yesterdayEvent = TestRow(toMillis("2025-07-22T22:00:00Z"), 10L)
+    val yesterdayAsOfTs = toMillis("2025-07-22T23:00:00Z")
+    val yesterdayResult = processor.onEvent(yesterdayEvent, yesterdayEvent.ts, yesterdayAsOfTs)
+    val yesterdayFinalized = finalizeEntry(megaTileAgg, yesterdayResult.todayEntry)
+
+    assertEquals("sanity: previous-day 1h cache contains the event before rollover", 10L, yesterdayFinalized(0))
+    assertEquals("sanity: previous-day 1d cache contains the event before rollover", 10L, yesterdayFinalized(1))
+
+    // Day rollover advances the as-of time without a new event, so cachedSmallWindowIr
+    // must be rebuilt here instead of waiting for the next eviction.
+    processor.advanceWatermark(toMillis("2025-07-23T00:00:00Z"))
+    val todayFinalized = finalizeEntry(megaTileAgg, processor.packTodayEntry())
+
+    // After midnight, the 1h window no longer includes 22:00, but the 1d window still does.
+    assertNull("new-day 1h cache should not carry stale previous-day value", todayFinalized(0))
+    assertEquals("new-day 1d cache should be rebuilt from retained tiles", 10L, todayFinalized(1))
+  }
+
   it should "match naive with complex aggregations (buckets, approx_unique, histogram, last_k)" in {
     val (events, schema) = generateEventsWithCategory(14, 20000)
     val maxTs = events.map(_.ts).max
