@@ -87,13 +87,7 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
     megaTileIr
   }
 
-  // Single-entry merge helper used by MegaTileAggregatorTest for retained-window simulations.
-  // Here megaTileIr is already built from enough retained tiles to cover each small window,
-  // including pre-batchEnd tiles when the small window crosses batchEnd. That makes small-window
-  // columns self-contained, so adding batch tail below would double-count them.
-  //
-  // Online per-day KV serving uses MegaTileMerger instead. There the daily row owns only the
-  // stream-side slice, so MegaTileMerger must add batch tail for crossing small windows.
+  // Merge mega tile with batch IR to produce finalized result
   def serveMegaTile(batchIr: FinalBatchIr, megaTileIr: Array[Any], queryTs: Long, batchEnd: Long): Array[Any] = {
     // Start from batch collapsed (normalized) — same as lambdaAggregateIrTiled
     val resultIr = if (batchIr != null) windowedAggregator.clone(batchIr.collapsed) else windowedAggregator.init
@@ -101,7 +95,7 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
     while (col < windowedAggregator.length) {
       val window = windowMappings(col).aggregationPart.window
       if (window != null && window.millis <= tailBufferMillis) {
-        // Small window: megaTileIr already covers the full retained-window range for this query.
+        // NO BATCH: mega tile is self-contained, replace batch value
         resultIr(col) = megaTileIr(col)
       } else if (megaTileIr(col) != null) {
         // BATCH or unwindowed: merge mega tile into batch collapsed
@@ -110,7 +104,8 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
       col += 1
     }
 
-    // Tail hops only for BATCH columns. Small windows are self-contained in this retained-window helper.
+    // Tail hops ONLY for BATCH columns (window > tailBuffer).
+    // NO BATCH columns are fully covered by the mega tile — adding tail hops would double-count.
     if (batchIr != null) {
       mergeTailHopsForBatchColumns(resultIr, queryTs, batchEnd, batchIr)
     }
@@ -118,35 +113,16 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
     windowedAggregator.finalize(resultIr)
   }
 
-  private[windowing] def mergeTailHopsForNoBatchColumnsCrossingBatchEnd(ir: Array[Any],
-                                                                        queryTs: Long,
-                                                                        batchEndTs: Long,
-                                                                        batchIr: FinalBatchIr): Array[Any] =
-    mergeTailHopsForColumns(ir, queryTs, batchEndTs, batchIr) { (i, window) =>
-      window != null && window.millis <= tailBufferMillis && queryWindowStartForColumn(i, queryTs, window) < batchEndTs
-    }
-
   // Like mergeTailHops but skips NO BATCH columns (window <= tailBuffer)
   private[windowing] def mergeTailHopsForBatchColumns(ir: Array[Any],
                                                       queryTs: Long,
                                                       batchEndTs: Long,
-                                                      batchIr: FinalBatchIr): Array[Any] =
-    mergeTailHopsForColumns(ir, queryTs, batchEndTs, batchIr) { (_, window) =>
-      window != null && window.millis > tailBufferMillis
-    }
-
-  private def queryWindowStartForColumn(colIndex: Int, queryTs: Long, window: Window): Long =
-    TsUtils.round(queryTs - window.millis, hopSizes(tailHopIndices(colIndex)))
-
-  private def mergeTailHopsForColumns(ir: Array[Any],
-                                      queryTs: Long,
-                                      batchEndTs: Long,
-                                      batchIr: FinalBatchIr)(shouldMerge: (Int, Window) => Boolean): Array[Any] = {
+                                                      batchIr: FinalBatchIr): Array[Any] = {
     var i: Int = 0
     while (i < windowedAggregator.length) {
+      val windowMillis = windowMappings(i).millis
       val window = windowMappings(i).aggregationPart.window
-      if (shouldMerge(i, window)) {
-        val windowMillis = window.millis
+      if (window != null && window.millis > tailBufferMillis) {
         val hopIndex = tailHopIndices(i)
         val queryTail = TsUtils.round(queryTs - windowMillis, hopSizes(hopIndex))
         val alignedCollapsed = alignedCollapsedBoundary(batchEndTs - windowMillis, i)

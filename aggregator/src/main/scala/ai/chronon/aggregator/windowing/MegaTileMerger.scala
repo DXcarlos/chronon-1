@@ -7,12 +7,9 @@ import ai.chronon.api.TsUtils
   * Flink writes one entry per entity/day key and may also update yesterday's key for late events.
   * The fetcher reads the day keys needed to bridge batchEnd -> queryTs plus one fallback key for
   * no-batch windows, then combines them with batch IR into a finalized result.
-  * Daily streaming entries are expected to contain stream-owned rows only; rows before batchEnd
-  * are supplied by batch IR and its tail hops.
   *
   * Per-column merge semantics:
-  *   - Small windows (≤ tailBuffer): daily entry, plus batch tail when the query window crosses
-  *     batchEnd.
+  *   - Small windows (≤ tailBuffer): self-contained in daily entry. Pick today, fall back to yesterday.
   *   - Large windows (> tailBuffer): batch collapsed + streaming daily aggregates + tail hops.
   *   - Unwindowed: batch collapsed + streaming daily aggregates (no tail hops).
   */
@@ -61,13 +58,9 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
             yesterdayIr: Array[Any],
             todayStart: Long,
             queryTs: Long,
-            batchEnd: Long): Array[Any] =
-    merge(
-      batchIr,
-      Seq(todayStart -> todayIr, (todayStart - DayMillis) -> yesterdayIr),
-      queryTs,
-      batchEnd
-    )
+            batchEnd: Long): Array[Any] = {
+    merge(batchIr, Seq(todayStart -> todayIr, (todayStart - DayMillis) -> yesterdayIr), queryTs, batchEnd)
+  }
 
   /** Merge batch IR + N daily streaming entries into a finalized result.
     *
@@ -78,6 +71,7 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
     * @return Finalized feature values.
     */
   def merge(batchIr: FinalBatchIr, dailyTileIrs: Seq[(Long, Array[Any])], queryTs: Long, batchEnd: Long): Array[Any] = {
+
     val resultIr =
       if (batchIr != null) windowedAggregator.clone(batchIr.collapsed)
       else windowedAggregator.init
@@ -88,14 +82,12 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
     var col = 0
     while (col < windowedAggregator.length) {
       if (isNoBatch(col)) {
+        // Small window: self-contained in daily entry, ignore batch.
         // Fall back to an older day only if the newer entry is missing entirely,
-        // not if a newer entry exists but this column value is null (no events in window).
+        // not if a newer entry exists but this column value is null.
         val newestAvailableIr = nonNullDailyTileIrs.collectFirst {
           case (dayStart, dayIr) if dayStart >= oldestNoBatchDayStart => dayIr
         }.orNull
-        // Start no-batch columns from the daily row rather than cloned batch collapsed state.
-        // If the small window crosses batchEnd, batch tail hops are merged below for the
-        // pre-batchEnd slice.
         resultIr(col) = if (newestAvailableIr != null) newestAvailableIr(col) else null
       } else {
         // Large window / unwindowed: batch collapsed + streaming daily aggregates
@@ -109,9 +101,8 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
       col += 1
     }
 
-    // Tail hops for large windowed columns, plus small-window batch tails when the query crosses batchEnd.
+    // Tail hops for large windowed columns (skips small + unwindowed)
     if (batchIr != null) {
-      megaTileAgg.mergeTailHopsForNoBatchColumnsCrossingBatchEnd(resultIr, queryTs, batchEnd, batchIr)
       megaTileAgg.mergeTailHopsForBatchColumns(resultIr, queryTs, batchEnd, batchIr)
     }
 
