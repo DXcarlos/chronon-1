@@ -401,6 +401,63 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
     assertEquals("new-day 1d cache should be rebuilt from retained tiles", 10L, todayFinalized(1))
   }
 
+  it should "preserve no-batch values when packing yesterday after rollover" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val threeDays = new Window(3, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, threeDays)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+
+    val midnight = toMillis("2025-07-23T00:00:00Z")
+    val beforeRollover = TestRow(toMillis("2025-07-22T23:30:00Z"), 10L)
+    processor.onEvent(beforeRollover, beforeRollover.ts, midnight)
+    processor.advanceWatermark(midnight)
+
+    val latePreviousDay = TestRow(toMillis("2025-07-22T22:00:00Z"), 5L)
+    val result = processor.onEvent(latePreviousDay, latePreviousDay.ts, midnight + 5 * 60 * 1000L)
+    val yesterdayFinalized = finalizeEntry(megaTileAgg, result.yesterdayEntry)
+
+    // Late previous-day events must update yesterday's batch-backed columns because serving merges
+    // daily contributions across N days. No-batch columns are not merged: serving picks the newest
+    // available daily row, so small-window updates for the query path belong to today's row instead.
+    assertEquals("yesterday 1h no-batch snapshot should survive the late-row overwrite", 10L, yesterdayFinalized(0))
+    assertEquals("yesterday 3d batch-backed column should include the late event", 15L, yesterdayFinalized(1))
+  }
+
+  it should "not update previous-day no-batch columns for late events when serving picks today" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val threeDays = new Window(3, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, threeDays)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+    val merger = new MegaTileMerger(megaTileAgg)
+
+    val yesterdayStart = toMillis("2025-07-22T00:00:00Z")
+    val todayStart = yesterdayStart + DayMillis
+    val queryTs = toMillis("2025-07-23T00:10:00Z")
+
+    val beforeRollover = TestRow(toMillis("2025-07-22T23:30:00Z"), 10L)
+    processor.onEvent(beforeRollover, beforeRollover.ts, todayStart)
+    processor.advanceWatermark(todayStart)
+
+    val todayEvent = TestRow(toMillis("2025-07-23T00:01:00Z"), 7L)
+    processor.onEvent(todayEvent, todayEvent.ts, queryTs)
+
+    val latePreviousDay = TestRow(toMillis("2025-07-22T22:00:00Z"), 5L)
+    val lateResult = processor.onEvent(latePreviousDay, latePreviousDay.ts, queryTs)
+    val yesterdayFinalized = finalizeEntry(megaTileAgg, lateResult.yesterdayEntry)
+    assertEquals("late event should not mutate frozen previous-day 1h snapshot", 10L, yesterdayFinalized(0))
+    assertEquals("late event should still update previous-day 3d contribution", 15L, yesterdayFinalized(1))
+
+    val served =
+      merger.merge(null, Seq(todayStart -> processor.packTodayEntry(), yesterdayStart -> lateResult.yesterdayEntry),
+                   queryTs, yesterdayStart)
+    assertEquals("serving should choose today's self-contained 1h row, not merge yesterday", 17L, served(0))
+    assertEquals("batch-backed column should merge today and yesterday daily contributions", 22L, served(1))
+  }
+
   it should "match naive with complex aggregations (buckets, approx_unique, histogram, last_k)" in {
     val (events, schema) = generateEventsWithCategory(14, 20000)
     val maxTs = events.map(_.ts).max

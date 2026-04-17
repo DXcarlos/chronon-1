@@ -13,7 +13,8 @@ import scala.collection.mutable
   * State layout:
   *   - Small window tiles: per-tier base IRs. Source of truth for eviction rebuilds.
   *   - cachedSmallWindowIr: sawtooth running sum, corrected on eviction.
-  *   - Large window today/yesterday IRs: per-day accumulators.
+  *   - Large window today IR and previous-day IR: large columns are per-day accumulators;
+  *     no-batch columns in previous-day IR are frozen at adjacent day rollover.
   *   - Day transitions are watermark-driven (advanceWatermark), not event-driven.
   */
 class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: TileStore) {
@@ -139,7 +140,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
     val wmDay = TsUtils.round(watermarkTs, DayMillis)
     if (wmDay > currentDayStart) {
       val newYesterday =
-        if (wmDay == currentDayStart + DayMillis) store.getLargeTodayIr
+        if (wmDay == currentDayStart + DayMillis) previousDayIrForAdjacentRollover()
         else windowedAgg.init
       store.putLargeYesterdayIr(newYesterday)
       store.putLargeTodayIr(windowedAgg.init)
@@ -182,14 +183,27 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
   }
 
   def packYesterdayEntry(): Array[Any] = {
-    val largeIr = store.getLargeYesterdayIr
+    val yesterdayIr = store.getLargeYesterdayIr
     val entry = new Array[Any](windowedAgg.length)
     var col = 0
     while (col < windowedAgg.length) {
-      entry(col) = if (isNoBatch(col)) null else largeIr(col)
+      entry(col) = yesterdayIr(col)
       col += 1
     }
     entry
+  }
+
+  private def previousDayIrForAdjacentRollover(): Array[Any] = {
+    val previousDayIr = windowedAgg.clone(store.getLargeTodayIr)
+    val cachedSmallIr = store.getCachedSmallWindowIr
+    var col = 0
+    while (col < windowedAgg.length) {
+      if (isNoBatch(col)) {
+        previousDayIr(col) = windowedAgg.columnAggregators(col).clone(cachedSmallIr(col))
+      }
+      col += 1
+    }
+    previousDayIr
   }
 
   private def updateLargeWindowColumns(ir: Array[Any], row: Row): Unit = {

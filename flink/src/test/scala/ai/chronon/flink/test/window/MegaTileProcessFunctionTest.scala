@@ -144,14 +144,14 @@ class MegaTileProcessFunctionTest extends AnyFlatSpec with Matchers {
       driver.drainNewOutputs() shouldBe empty
 
       // The delayed callback emits both affected day rows: current small windows for Jul22 and
-      // batch-backed yesterday state for Jul21.
+      // a complete previous-day row for Jul21.
       driver.setProcessingTime("2025-07-22T00:00:01.001Z")
       val boundaryOutputs = driver.drainNewOutputs()
       boundaryOutputs should have size 2
       boundaryOutputs.find(_.dayStartMillis == dayStart("2025-07-22T00:00:00Z")).map(_.values) shouldEqual
         Some(windowValues(2L, 2L, null))
       boundaryOutputs.find(_.dayStartMillis == dayStart("2025-07-21T00:00:00Z")).map(_.values) shouldEqual
-        Some(windowValues(null, null, 2L))
+        Some(windowValues(1L, 1L, 2L))
     }
   }
 
@@ -171,7 +171,7 @@ class MegaTileProcessFunctionTest extends AnyFlatSpec with Matchers {
       // Current-day packed row keeps 1h at one event while 1d includes the retained boundary event.
       outputs.find(_.dayStartMillis == dayStart("2025-07-22T00:00:00Z")).map(_.values) shouldEqual
         Some(windowValues(1L, 2L, 1L))
-      // Yesterday's emitted row carries only batch-backed columns; no-batch columns are current-day cache only.
+      // Without a prior rollover, there is no frozen no-batch snapshot for the previous day.
       outputs.find(_.dayStartMillis == dayStart("2025-07-21T00:00:00Z")).map(_.values) shouldEqual
         Some(windowValues(null, null, 1L))
     }
@@ -376,7 +376,7 @@ class MegaTileProcessFunctionTest extends AnyFlatSpec with Matchers {
       outputs.find(_.dayStartMillis == dayStart("2025-07-23T00:00:00Z")).map(_.values) shouldEqual
         Some(windowValues(1L, 2L, null))
       outputs.find(_.dayStartMillis == dayStart("2025-07-22T00:00:00Z")).map(_.values) shouldEqual
-        Some(windowValues(null, null, 2L))
+        Some(windowValues(1L, 1L, 2L))
 
       // Older-than-yesterday replay data is dropped relative to the post-roll currentDayStart.
       driver.processEvent("gen_replay_boundary", "2025-07-21T23:59:59.999Z", "user_too_old")
@@ -440,9 +440,10 @@ class MegaTileProcessFunctionTest extends AnyFlatSpec with Matchers {
       driver.setProcessingTime("2025-07-23T10:32:00Z")
       val preEvictionOutputs = driver.drainNewOutputs()
       preEvictionOutputs should have size 2
-      // The retained Jul21 daily row has only batch-backed 3d state packed for yesterday.
+      // The retained Jul21 daily row keeps its frozen no-batch snapshot when later yesterday
+      // updates republish the same day key.
       preEvictionOutputs.find(_.dayStartMillis == dayStart("2025-07-21T00:00:00Z")).map(_.values) shouldEqual
-        Some(windowValues(null, null, 2L))
+        Some(windowValues(1L, 1L, 2L))
       // Before the rebuild, cached 1h is bounded by watermark-hop smallWindowAsOfTs: Jul21 23:59
       // and Jul22 00:00 count for 1h; Jul21 00:00 is retained only for 1d/3d.
       preEvictionOutputs.find(_.dayStartMillis == dayStart("2025-07-22T00:00:00Z")).map(_.values) shouldEqual
