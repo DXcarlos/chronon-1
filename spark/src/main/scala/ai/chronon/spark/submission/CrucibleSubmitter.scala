@@ -86,9 +86,52 @@ class CrucibleSubmitter(
         val flinkJarUri = submissionProperties.getOrElse(FlinkMainJarURI, jarUri)
         body.put("jar", flinkJarUri)
 
-        // Flink conf: merge jobProperties + checkpoint/savepoint URIs
+        // Additional deploy jars: cloud API jar (GcpApiImpl/AwsApiImpl) and
+        // PubSub/Kinesis connector. These change per release and are downloaded
+        // by the Crucible gateway's init container to /opt/flink/usrlib/.
+        //
+        // Static jars (Spark catalyst, Hadoop client, etc.) are baked into the
+        // Flink image at /opt/flink/usrlib/ — see docker/flink/Dockerfile.
+        val additionalJars = scala.collection.mutable.ArrayBuffer[String]()
+
+        // Cloud API jar (contains GcpApiImpl, AwsApiImpl, etc.)
+        additionalJars += jarUri
+
+        // PubSub / Kinesis connector jar
+        submissionProperties.get(FlinkPubSubConnectorJarURI).foreach(additionalJars += _)
+        submissionProperties.get(FlinkKinesisConnectorJarURI).foreach(additionalJars += _)
+
+        if (additionalJars.nonEmpty) {
+          val jarsArray = new io.vertx.core.json.JsonArray()
+          additionalJars.foreach(jarsArray.add)
+          body.put("jars", jarsArray)
+        }
+
+        // Flink conf: merge jobProperties + checkpoint/savepoint URIs.
+        // NodeSubmitter encodes env vars as spark.kubernetes.driverEnv.* Spark config.
+        // Convert these to Flink-compatible containerized.master.env.* and
+        // containerized.taskmanager.env.* so the Flink Operator sets them as
+        // environment variables on the JM/TM pods.
         val flinkConf = new JsonObject()
-        jobProperties.foreach { case (k, v) => flinkConf.put(k, v) }
+        val sparkDriverEnvPrefix = "spark.kubernetes.driverEnv."
+        jobProperties.foreach { case (k, v) =>
+          flinkConf.put(k, v)
+          if (k.startsWith(sparkDriverEnvPrefix)) {
+            val envName = k.stripPrefix(sparkDriverEnvPrefix)
+            flinkConf.put(s"containerized.master.env.$envName", v)
+            flinkConf.put(s"containerized.taskmanager.env.$envName", v)
+          }
+        }
+        // Override spark.driver.memory for the Flink JVM. Spark catalyst initializes
+        // inside the Flink JM and reads spark.driver.memory from system properties.
+        // The default from batch Spark config (512m+) exceeds the Flink JM heap (~450MB),
+        // causing INVALID_DRIVER_MEMORY. We pass it via env.java.opts which the Flink
+        // Operator adds to JVM startup flags for both JM and TM.
+        val sparkMemOpts = " -Dspark.driver.memory=128m -Dspark.testing.reservedMemory=0"
+        val existingJmOpts = Option(flinkConf.getString("env.java.opts.jobmanager")).getOrElse("")
+        val existingTmOpts = Option(flinkConf.getString("env.java.opts.taskmanager")).getOrElse("")
+        flinkConf.put("env.java.opts.jobmanager", existingJmOpts + sparkMemOpts)
+        flinkConf.put("env.java.opts.taskmanager", existingTmOpts + sparkMemOpts)
         submissionProperties.get(FlinkCheckpointUri).foreach { uri =>
           flinkConf.put("state.checkpoints.dir", uri)
           flinkConf.put("state.savepoints.dir", uri)
@@ -96,6 +139,7 @@ class CrucibleSubmitter(
         submissionProperties.get(SavepointUri).foreach { uri =>
           flinkConf.put("execution.savepoint.path", uri)
         }
+
         if (flinkConf.size() > 0) {
           body.put("conf", flinkConf)
         }
@@ -170,6 +214,9 @@ class CrucibleSubmitter(
     val flinkStateUri = env.getOrElse(
       "FLINK_STATE_URI",
       throw new IllegalArgumentException("FLINK_STATE_URI must be set for GROUP_BY_STREAMING"))
+    // Static jars (Spark catalyst, Hadoop client, etc.) are baked into the Flink image
+    // at /opt/flink/usrlib/ — see crucible/docker/flink/Dockerfile.
+    // Only the main Flink jar and connector jars (which change per release) are passed here.
     val base = Map(
       FlinkMainJarURI -> flinkJarUri,
       FlinkCheckpointUri -> s"$flinkStateUri/checkpoints"

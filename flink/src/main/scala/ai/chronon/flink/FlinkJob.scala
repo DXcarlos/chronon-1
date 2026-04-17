@@ -298,10 +298,10 @@ object FlinkJob {
       try {
         deserializationSchema.asInstanceOf[SourceProjection].projectedSchema
       } catch {
-        case _: Exception =>
+        case e: Exception =>
           throw new RuntimeException(
             s"Failed to perform projection via Spark SQL eval for groupBy: $groupByName. Retrieved event schema: \n${schemaProvider.schema}\n" +
-              s"Make sure the Spark SQL expressions are valid (e.g. column names match the source event schema).")
+              s"Make sure the Spark SQL expressions are valid (e.g. column names match the source event schema).", e)
       }
 
     val source = FlinkSourceProvider.build(props, deserializationSchema, topicInfo)
@@ -350,10 +350,10 @@ object FlinkJob {
       try {
         deserializationSchema.asInstanceOf[SourceProjection].projectedSchema
       } catch {
-        case _: Exception =>
+        case e: Exception =>
           throw new RuntimeException(
             s"Failed to perform projection via Spark SQL eval for groupBy: $groupByName. Retrieved event schema: \n${schemaProvider.schema}\n" +
-              s"Make sure the Spark SQL expressions are valid (e.g. column names match the source event schema).")
+              s"Make sure the Spark SQL expressions are valid (e.g. column names match the source event schema).", e)
       }
 
     val source = FlinkSourceProvider.build(props, deserializationSchema, topicInfo)
