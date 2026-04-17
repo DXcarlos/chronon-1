@@ -102,14 +102,7 @@ class CrucibleSubmitter(
     }
 
     // Application args (filtered to exclude internal submission args).
-    // When resolveConfPath encoded raw JSON as gz-base64:..., rewrite the
-    // --conf-path arg to --conf-gz-base64 for the driver to decode.
-    val appArgs = JobSubmitter.getApplicationArgs(jobType, args.toArray).map { arg =>
-      if (arg.startsWith("--conf-path=gz-base64:")) {
-        val encoded = arg.substring("--conf-path=gz-base64:".length)
-        s"--conf-gz-base64=$encoded"
-      } else arg
-    }
+    val appArgs = JobSubmitter.getApplicationArgs(jobType, args.toArray)
     if (appArgs.nonEmpty) {
       val argsArray = new io.vertx.core.json.JsonArray()
       appArgs.foreach(argsArray.add)
@@ -188,18 +181,11 @@ class CrucibleSubmitter(
       JobStatusType.UNKNOWN
   }
 
-  /** When no StorageClient is available, the stagedFile is raw JSON content.
-    * Gzip+Base64 encode it so BatchNodeRunner can decode via --conf-gz-base64.
-    * Returns the encoded content prefixed with "gz-base64:" as a sentinel.
+  /** Return the full cloud storage URI as the conf path.
+    * The Spark driver reads it using Hadoop FileSystem after initialization.
     */
   override def resolveConfPath(stagedFileUri: String): String = {
-    if (stagedFileUri.startsWith("{")) {
-      // Raw JSON content — encode it
-      "gz-base64:" + ai.chronon.api.GzipCodec.encode(stagedFileUri)
-    } else {
-      // Normal GCS/S3 path — extract filename
-      stagedFileUri.split("/").last
-    }
+    stagedFileUri
   }
 
   /** Sanitize job name for Crucible (lowercase, alphanumeric + dashes, max 63 chars) */

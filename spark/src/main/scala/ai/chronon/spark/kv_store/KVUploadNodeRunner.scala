@@ -162,7 +162,7 @@ object KVUploadNodeRunner {
 
   def runFromArgs(confPath: String, endDs: String, onlineClass: String, props: Map[String, String]): Try[Unit] = {
     Try {
-      val node = ThriftJsonCodec.fromJsonFile[Node](confPath, check = false)
+      val node = ai.chronon.spark.submission.NodeConfReader.read(confPath)
       val metadata = node.metaData
 
       // Merge Node's common conf into API props so config like upload location flows through.

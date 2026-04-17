@@ -2,7 +2,6 @@ package ai.chronon.spark.batch
 
 import ai.chronon.api.Extensions._
 import ai.chronon.api._
-import ai.chronon.api.GzipCodec
 import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
 import ai.chronon.api.secrets.SecretResolver
 import ai.chronon.observability.{TileStats, TileStatsType}
@@ -29,8 +28,7 @@ class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
 
   this: ScallopConf =>
 
-  val confPath: ScallopOption[String] = opt[String](required = false, descr = "Path to node configuration file")
-  val confGzBase64: ScallopOption[String] = opt[String](required = false, descr = "Base64(gzip(JSON)) encoded node config. Alternative to conf-path.")
+  val confPath: ScallopOption[String] = opt[String](required = true, descr = "Path to node configuration file")
   val startDs: ScallopOption[String] = opt[String](
     required = false,
     descr = "Start date string in format yyyy-MM-dd, used for partitioning"
@@ -745,14 +743,7 @@ object BatchNodeRunner {
     val batchArgs = new BatchNodeRunnerArgs(args)
     val resolvedEnv = SecretResolver.resolveVaultUris(sys.env.toMap)
     val driverSecrets = resolvedEnv -- sys.env.keySet
-    val node = if (batchArgs.confGzBase64.isSupplied) {
-      val json = GzipCodec.decode(batchArgs.confGzBase64())
-      ThriftJsonCodec.fromJsonStr[Node](json, check = false, classOf[Node])
-    } else if (batchArgs.confPath.isSupplied) {
-      ThriftJsonCodec.fromJsonFile[Node](batchArgs.confPath(), check = false)
-    } else {
-      throw new IllegalArgumentException("Either --conf-path or --conf-gz-base64 must be provided")
-    }
+    val node = ai.chronon.spark.submission.NodeConfReader.read(batchArgs.confPath())
     val tableUtils = TableUtils(SparkSessionBuilder.build(s"batch-node-runner-${node.metaData.name}"))
     val api = instantiateApi(batchArgs.onlineClass(), batchArgs.apiProps ++ driverSecrets)
     val runner = new BatchNodeRunner(node, tableUtils, api)

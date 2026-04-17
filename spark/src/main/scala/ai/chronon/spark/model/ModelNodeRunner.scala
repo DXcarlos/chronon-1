@@ -253,7 +253,7 @@ object ModelNodeRunner {
 
   def runFromArgs(confPath: String, endDs: String, onlineClass: String, props: Map[String, String]): Try[Unit] = {
     Try {
-      val node = ThriftJsonCodec.fromJsonFile[Node](confPath, check = false)
+      val node = ai.chronon.spark.submission.NodeConfReader.read(confPath)
       val metadata = node.metaData
 
       val api = instantiateApi(onlineClass, props)
