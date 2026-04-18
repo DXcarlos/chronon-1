@@ -21,8 +21,8 @@ class CrucibleClient(val baseUrl: String, val namespace: String) {
 
   private val timeoutSeconds = 60L
 
+  private val vertx: Vertx = Vertx.vertx()
   private val client: WebClient = {
-    val vertx = Vertx.vertx()
     val options = new WebClientOptions()
       .setConnectTimeout(10000)
       .setIdleTimeout(60)
@@ -145,5 +145,6 @@ class CrucibleClient(val baseUrl: String, val namespace: String) {
 
   def close(): Unit = {
     client.close()
+    vertx.close()
   }
 }

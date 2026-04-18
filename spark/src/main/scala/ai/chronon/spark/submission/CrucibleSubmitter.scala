@@ -122,16 +122,25 @@ class CrucibleSubmitter(
             flinkConf.put(s"containerized.taskmanager.env.$envName", v)
           }
         }
-        // Override spark.driver.memory for the Flink JVM. Spark catalyst initializes
-        // inside the Flink JM and reads spark.driver.memory from system properties.
-        // The default from batch Spark config (512m+) exceeds the Flink JM heap (~450MB),
-        // causing INVALID_DRIVER_MEMORY. We pass it via env.java.opts which the Flink
-        // Operator adds to JVM startup flags for both JM and TM.
-        val sparkMemOpts = " -Dspark.driver.memory=128m -Dspark.testing.reservedMemory=0"
-        val existingJmOpts = Option(flinkConf.getString("env.java.opts.jobmanager")).getOrElse("")
-        val existingTmOpts = Option(flinkConf.getString("env.java.opts.taskmanager")).getOrElse("")
-        flinkConf.put("env.java.opts.jobmanager", existingJmOpts + sparkMemOpts)
-        flinkConf.put("env.java.opts.taskmanager", existingTmOpts + sparkMemOpts)
+        // Spark catalyst runs inside the Flink JM JVM. The batch Spark config
+        // (spark.driver.memory=512m) bleeds in via jobProperties and exceeds the
+        // Flink JM heap (~448MB). Override both:
+        // 1. Remove the flinkConf key so Flink's GlobalConfiguration doesn't set it
+        // 2. Set via JVM -D flag so Spark's System.getProperties() reads the low value
+        // Spark catalyst runs inside both JM and TM JVMs for SQL expression evaluation.
+        // Remove the batch spark.driver.memory (512m+) from flinkConf — it bleeds in
+        // from jobProperties and causes INVALID_DRIVER_MEMORY when Spark initializes.
+        // Set a small value via JVM -D opts. Also set reservedMemory=0 so Spark doesn't
+        // require 300MB of reserved space (the JM/TM heap is managed by Flink, not Spark).
+        // Note: JM/TM memory must be >= 2048m in the Crucible gateway's FlinkConfigBuilder
+        // (via Helm values flinkDefaults.jmMemory/tmMemory) for adequate Spark heap.
+        flinkConf.remove("spark.driver.memory")
+        val sparkMemOpts = "-Dspark.driver.memory=128m -Dspark.testing.reservedMemory=0"
+        for (key <- Seq("env.java.opts.jobmanager", "env.java.opts.taskmanager")) {
+          val existing = Option(flinkConf.getString(key)).getOrElse("")
+          val sep = if (existing.nonEmpty) " " else ""
+          flinkConf.put(key, existing + sep + sparkMemOpts)
+        }
         submissionProperties.get(FlinkCheckpointUri).foreach { uri =>
           flinkConf.put("state.checkpoints.dir", uri)
           flinkConf.put("state.savepoints.dir", uri)

@@ -3,16 +3,23 @@
 Submits Spark/Flink jobs to a Crucible gateway via its REST API.
 No JVM required — pure Python HTTP client.
 
+Uses CLI tools (gcloud/aws) for cloud storage — no Python SDK deps needed.
+Auth uses whatever the user has configured (gcloud auth login, AWS_PROFILE, etc).
+
 Environment variables:
     CRUCIBLE_URL        — Crucible gateway URL (required)
     CRUCIBLE_NAMESPACE  — Target namespace (default: test-ns-a)
     CRUCIBLE_SPARK_IMAGE — Spark image
     CRUCIBLE_FLINK_IMAGE — Flink image
+    WAREHOUSE_PREFIX    — GCS/S3 prefix for staging conf files (required)
 """
 
+import hashlib
 import json
 import os
+import subprocess
 import time
+import uuid
 
 import requests
 
@@ -22,6 +29,7 @@ CRUCIBLE_URL_ENV = "CRUCIBLE_URL"
 CRUCIBLE_NAMESPACE_ENV = "CRUCIBLE_NAMESPACE"
 CRUCIBLE_SPARK_IMAGE_ENV = "CRUCIBLE_SPARK_IMAGE"
 CRUCIBLE_FLINK_IMAGE_ENV = "CRUCIBLE_FLINK_IMAGE"
+WAREHOUSE_PREFIX_ENV = "WAREHOUSE_PREFIX"
 
 DEFAULT_SPARK_IMAGE = "us-docker.pkg.dev/crucible-io/crucible/spark:3.5-crucible-latest"
 DEFAULT_FLINK_IMAGE = "us-docker.pkg.dev/crucible-io/crucible/flink:1.19-crucible-latest"
@@ -29,6 +37,33 @@ DEFAULT_FLINK_IMAGE = "us-docker.pkg.dev/crucible-io/crucible/flink:1.19-crucibl
 # Map Chronon conf types to Crucible job types
 SPARK_MODES = {"backfill", "upload", "metastore", "check-partitions"}
 FLINK_MODES = {"streaming", "streaming-client"}
+
+
+def _stage_conf(warehouse_prefix, conf_json):
+    """Stage conf JSON to cloud storage via CLI tools. Returns the full URI."""
+    job_id = str(uuid.uuid4())
+    name = hashlib.md5(conf_json.encode()).hexdigest()[:12]
+    relative_path = f"metadata/execution/{job_id}/{name}"
+    full_path = f"{warehouse_prefix.rstrip('/')}/{relative_path}"
+
+    if full_path.startswith("gs://"):
+        subprocess.run(
+            ["gcloud", "storage", "cp", "-", full_path],
+            input=conf_json.encode("utf-8"),
+            check=True,
+            capture_output=True,
+        )
+    elif full_path.startswith("s3://"):
+        subprocess.run(
+            ["aws", "s3", "cp", "-", full_path],
+            input=conf_json.encode("utf-8"),
+            check=True,
+            capture_output=True,
+        )
+    else:
+        raise ValueError(f"Unsupported storage scheme: {full_path}")
+
+    return full_path
 
 
 class CrucibleRunner(Runner):
@@ -45,18 +80,12 @@ class CrucibleRunner(Runner):
 
     def run(self):
         """Submit job to Crucible and poll until completion."""
-        import gzip
-        import base64
-
         conf_path = os.path.join(self.repo, self.conf) if self.conf else None
         if not conf_path or not os.path.exists(conf_path):
             raise FileNotFoundError(f"Conf file not found: {conf_path}")
 
-        # Read and compress conf
         with open(conf_path) as f:
             conf_json = f.read()
-
-        conf_gz_b64 = base64.b64encode(gzip.compress(conf_json.encode())).decode()
 
         # Read compiled conf metadata
         conf_data = json.loads(conf_json)
@@ -65,6 +94,18 @@ class CrucibleRunner(Runner):
         spark_conf = execution_info.get("conf", {}).get("common", {})
         env_vars = execution_info.get("env", {}).get("common", {})
 
+        # Stage conf to cloud storage
+        warehouse_prefix = env_vars.get(
+            "WAREHOUSE_PREFIX",
+            os.environ.get(WAREHOUSE_PREFIX_ENV, ""),
+        )
+        if not warehouse_prefix:
+            raise ValueError(
+                f"{WAREHOUSE_PREFIX_ENV} must be set in env or node metadata"
+            )
+        staged_uri = _stage_conf(warehouse_prefix, conf_json)
+        print(f"Staged conf to {staged_uri}")
+
         # Determine job type
         is_flink = self.mode in FLINK_MODES
         job_type = "flink" if is_flink else "spark"
@@ -72,21 +113,23 @@ class CrucibleRunner(Runner):
         # Build jar URI
         artifact_prefix = env_vars.get("ARTIFACT_PREFIX", "")
         version = env_vars.get("VERSION", "latest")
-        jar_name = "cloud_gcp_deploy.jar"  # TODO: detect from cloud provider
+        jar_name = os.environ.get("CRUCIBLE_JAR_NAME", "cloud_gcp_deploy.jar")
         jar_uri = f"{artifact_prefix}/release/{version}/jars/{jar_name}"
 
         # Build main class
         main_class = "ai.chronon.spark.batch.BatchNodeRunner"
 
-        # Build application args
-        app_args = [f"--conf-gz-base64={conf_gz_b64}"]
+        # Build application args — use --conf-path with the full cloud URI
+        app_args = [f"--conf-path={staged_uri}"]
 
         if self.start_ds:
             app_args.append(f"--start-ds={self.start_ds}")
         if self.ds:
             app_args.append(f"--end-ds={self.ds}")
 
-        online_class = env_vars.get("CHRONON_ONLINE_CLASS", os.environ.get("CHRONON_ONLINE_CLASS", ""))
+        online_class = env_vars.get(
+            "CHRONON_ONLINE_CLASS", os.environ.get("CHRONON_ONLINE_CLASS", "")
+        )
         if online_class:
             app_args.append(f"--online-class={online_class}")
 
@@ -96,9 +139,10 @@ class CrucibleRunner(Runner):
                 if val:
                     app_args.append(f"-Z{key}={val}")
 
-            # Table partitions dataset
-            app_args.append(f"--table-partitions-dataset=TABLE_PARTITIONS")
-            app_args.append(f"--table-stats-dataset=DATA_QUALITY_METRICS")
+            tpd = os.environ.get("CRUCIBLE_TABLE_PARTITIONS_DATASET", "TABLE_PARTITIONS")
+            dqd = os.environ.get("CRUCIBLE_DQ_METRICS_DATASET", "DATA_QUALITY_METRICS")
+            app_args.append(f"--table-partitions-dataset={tpd}")
+            app_args.append(f"--table-stats-dataset={dqd}")
 
         # Additional args from CLI
         extra = self._args.get("args", "")
@@ -152,17 +196,17 @@ class CrucibleRunner(Runner):
                             print(f"Job {job_id} completed successfully.")
                             return
                         else:
-                            # Fetch logs for error context
                             log_resp = requests.get(f"{poll_url}/logs", timeout=10)
                             logs = log_resp.text if log_resp.status_code == 200 else ""
-                            error_lines = [l for l in logs.split("\n")
-                                           if "Exception" in l or "Error" in l][:5]
+                            error_lines = [
+                                l
+                                for l in logs.split("\n")
+                                if "Exception" in l or "Error" in l
+                            ][:5]
                             raise RuntimeError(
-                                f"Job {job_id} {status}.\n" +
-                                "\n".join(error_lines)
+                                f"Job {job_id} {status}.\n" + "\n".join(error_lines)
                             )
                 elif status_resp.status_code == 404:
-                    # Job archived — check if it was successful
                     print(f"Job {job_id} archived (404). Treating as completed.")
                     return
             except requests.ConnectionError:
