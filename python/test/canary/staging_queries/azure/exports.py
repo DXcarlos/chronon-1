@@ -56,7 +56,7 @@ def user_activities_export(version: int = 0):
         parsed.country_code,
         parsed.listing_id,
         parsed.event_type,
-        to_date(EnqueuedTimeUtc) AS ds
+        to_date(from_unixtime(parsed.event_time_ms / 1000)) AS ds
     FROM (
         SELECT *
           , from_json(CAST(Body AS STRING)
