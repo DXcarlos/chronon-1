@@ -1,0 +1,72 @@
+---
+# Test fixture for staging_queries/azure/claims.py (azure.claims.v1__0).
+# Columns are listed in the order the YAML loader expects; comments name each column.
+
+# atlas_cc_claim: SCD2 fact with one row per claim version
+# id | claimnumber | reporteddate | policyid | retired | record_begin_timestamp | record_end_timestamp | lossdate | flagged | litigationstatus | losscause | ext_severity | claimtier | fault
+atlas_cc_claim:
+  - [1, "CLM-001", !epoch 2024-01-10T00:00:00Z, 100, 0, !epoch 2024-01-10T00:00:00Z, null,                                 !epoch 2024-01-05T00:00:00Z, false, "none",     "vehicle",   "minor",    "tier1", "claimant"]
+  - [2, "CLM-002", !epoch 2024-01-15T00:00:00Z, 200, 0, !epoch 2024-01-15T00:00:00Z, null,                                 !epoch 2024-01-12T00:00:00Z, true,  "litigated", "property",  "major",    "tier2", "insured"]
+  # superseded version of claim 1 (should be filtered out by SCD2 window at as_of_ts = 2024-01-11)
+  - [1, "CLM-001", !epoch 2024-01-10T00:00:00Z, 100, 0, !epoch 2024-01-09T00:00:00Z, !epoch 2024-01-10T00:00:00Z,          !epoch 2024-01-05T00:00:00Z, false, "none",     "vehicle",   "minor",    "tier1", "claimant"]
+
+# atlas_cc_policy: policy dim (no SCD2 filter in the original query)
+# id | ext_riskstate
+atlas_cc_policy:
+  - [100, 50]
+  - [200, 51]
+
+# atlas_cc_transaction: SCD2 transaction
+# id | claimid | retired | bookingdate | record_begin_timestamp | record_end_timestamp
+atlas_cc_transaction:
+  - [1000, 1, 0, !epoch 2024-01-10T00:00:00Z, !epoch 2024-01-10T00:00:00Z, null]
+  - [2000, 2, 0, !epoch 2024-01-15T00:00:00Z, !epoch 2024-01-15T00:00:00Z, null]
+
+# atlas_cc_transactionlineitem: SCD2 line items
+# id | transactionid | claimamount | retired | record_begin_timestamp | record_end_timestamp
+atlas_cc_transactionlineitem:
+  - [10, 1000, 500,  0, !epoch 2024-01-10T00:00:00Z, null]
+  - [11, 1000, 250,  0, !epoch 2024-01-10T00:00:00Z, null]  # claim 1 total = 750
+  - [20, 2000, 1000, 0, !epoch 2024-01-15T00:00:00Z, null]  # claim 2 total = 1000
+
+# atlas_cctl_typelist: enrichment lookup
+# cctl_id | cctl_table_name | typecode
+atlas_cctl_typelist:
+  - [50, "CCTL_EXT_RISKSTATECOSTFILTER", "CA"]
+  - [51, "CCTL_EXT_RISKSTATECOSTFILTER", "NY"]
+
+# Expected output of azure.claims.v1__0 for start=2024-01-01, end=2024-01-31
+# LOSSDATE | DAYS_LOSS_TO_REPORTED | CLAIMNUMBER | POLICYID | FLAGGED | LITIGATIONSTATUS | reporteddate | ds | event_ts | LOSSCAUSE | EXT_SEVERITY | CLAIMTIER | FAULT | claim_amount | risk_state_key | risk_state_code
+__expected__.data.azure_claims_v1__0:
+  - - !epoch 2024-01-05T00:00:00Z # lossdate (timestamp)
+    - 5                           # days_loss_to_reported (int)
+    - "CLM-001"                   # claimnumber (string)
+    - "100"                       # policyid (string)
+    - false                       # flagged (bool)
+    - "none"                      # litigationstatus (string)
+    - "2024-01-10"                # reporteddate (date)
+    - "2024-01-10"                # ds (date)
+    - 1704844800000               # event_ts (bigint ms) = 2024-01-10T00:00:00Z
+    - "vehicle"                   # losscause (string)
+    - "minor"                     # ext_severity (string)
+    - "tier1"                     # claimtier (string)
+    - "claimant"                  # fault (string)
+    - 750                         # claim_amount (numeric)
+    - "50"                        # risk_state_key (string)
+    - "CA"                        # risk_state_code (string)
+  - - !epoch 2024-01-12T00:00:00Z
+    - 3
+    - "CLM-002"
+    - "200"
+    - true
+    - "litigated"
+    - "2024-01-15"
+    - "2024-01-15"
+    - 1705276800000               # 2024-01-15T00:00:00Z
+    - "property"
+    - "major"
+    - "tier2"
+    - "insured"
+    - 1000
+    - "51"
+    - "NY"
