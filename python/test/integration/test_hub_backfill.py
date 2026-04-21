@@ -16,12 +16,18 @@ from .helpers.hub_api import _get_auth_headers
 from .helpers.workflow import poll_workflow
 
 
-# NodeRunStatus.SUCCEEDED = 3 in orchestration.thrift (platform repo). The Hub
-# serializes thrift enums via Jackson, which may emit either the int value or
-# the name depending on module config — guard against both. The orchestration
-# thrifts aren't generated into this Python repo, so we can't reference an
-# enum symbol directly.
-_SUCCEEDED_STATUS = {3, "SUCCEEDED"}
+# Mirror the int→name map pattern `helpers/workflow.WORKFLOW_STATUS` uses for
+# the workflow-level status, but for NodeRunStatus from orchestration.thrift
+# (platform repo — not generated into this Python repo so no enum symbol).
+NODE_RUN_STATUS = {
+    0: "UNKNOWN",
+    1: "WAITING",
+    2: "RUNNING",
+    3: "SUCCEEDED",
+    4: "FAILED",
+    5: "CANCELLED",
+    6: "CANCEL_PENDING",
+}
 
 
 def _expand_range(start: str, end: str) -> list[str]:
@@ -69,7 +75,7 @@ def _succeeded_partitions_by_table(hub_url: str, workflow_id: str) -> dict[str, 
             continue
         partitions: set[str] = set()
         for step in node.get("stepRuns", []):
-            if step.get("status") not in _SUCCEEDED_STATUS:
+            if NODE_RUN_STATUS.get(step.get("status")) != "SUCCEEDED":
                 continue
             s, e = step.get("startPartition"), step.get("endPartition")
             if s and e:
