@@ -299,6 +299,13 @@ aws_databricks = Team(
             "spark.sql.catalog.workspace.auth.oauth.uri": "https://dbc-050d6f00-dcb3.cloud.databricks.com/oidc/v1/token",
             "spark.sql.catalog.workspace.auth.oauth.clientId": "{DATABRICKS_CLIENT_ID}",
             "spark.sql.catalog.workspace.auth.oauth.clientSecret": "{DATABRICKS_CLIENT_SECRET}",
+            "spark.sql.catalog.main": "io.unitycatalog.spark.UCSingleCatalog",
+            "spark.sql.catalog.main.uri": "https://dbc-050d6f00-dcb3.cloud.databricks.com",
+            "spark.sql.catalog.main.auth.type": "oauth",
+            "spark.sql.catalog.main.auth.oauth.uri": "https://dbc-050d6f00-dcb3.cloud.databricks.com/oidc/v1/token",
+            "spark.sql.catalog.main.auth.oauth.clientId": "{DATABRICKS_CLIENT_ID}",
+            "spark.sql.catalog.main.auth.oauth.clientSecret": "{DATABRICKS_CLIENT_SECRET}",
+            # UC 0.4.0 defaults renewCredential.enabled=true which tries to set AwsVendedTokenProvider
             # UC 0.4.0 defaults renewCredential.enabled=true which tries to set AwsVendedTokenProvider
             # on Hadoop's S3A — causes classloader issues on EMR. Disable to use EMR's own credentials.
             "spark.sql.catalog.workspace.renewCredential.enabled": "false",

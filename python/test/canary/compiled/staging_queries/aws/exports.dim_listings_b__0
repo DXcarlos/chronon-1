@@ -1,7 +1,7 @@
 {
   "engineType": 0,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_dim_listings_with_offset_0\", \"spec\": \"dim_listings/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf__schema_with_dashes___example_table__with_offset_0\", \"spec\": \"`schema-with-dashes`.`example-table`/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -91,13 +91,13 @@
       "offlineSchedule": "@daily",
       "stepDays": 10
     },
-    "name": "aws.exports.dim_listings__0",
+    "name": "aws.exports.dim_listings_b__0",
     "outputNamespace": "data",
     "sourceFile": "staging_queries/aws/exports.py",
     "team": "aws",
     "version": "0"
   },
-  "query": "\n    SELECT\n        *\n    FROM dim_listings\n    WHERE\n    ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "query": "\n    SELECT\n        *\n    FROM `schema-with-dashes`.`example-table`\n    WHERE\n    ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [
     {
       "endOffset": {
@@ -114,7 +114,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "dim_listings"
+        "table": "`schema-with-dashes`.`example-table`"
       }
     }
   ]

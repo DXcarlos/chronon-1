@@ -1,7 +1,7 @@
 {
   "engineType": 0,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo_dim_merchants_with_offset_0\", \"spec\": \"demo.dim_merchants/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_dim_merchants_with_offset_0\", \"spec\": \"dim_merchants/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -97,7 +97,7 @@
     "team": "aws",
     "version": "0"
   },
-  "query": "\n    SELECT\n        *\n    FROM demo.dim_merchants\n    WHERE\n    ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "query": "\n    SELECT\n        *\n    FROM dim_merchants\n    WHERE\n    ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [
     {
       "endOffset": {
@@ -114,7 +114,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "demo.dim_merchants"
+        "table": "dim_merchants"
       }
     }
   ]

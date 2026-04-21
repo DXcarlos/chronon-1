@@ -5,7 +5,7 @@ def get_select_star_export(table: str, partition_column: str = "ds"):
     spark_export_sql = f"""
     SELECT
         *
-    FROM demo.{table}
+    FROM {table}
     WHERE
     {partition_column} BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
     """
@@ -15,7 +15,7 @@ def get_select_star_export(table: str, partition_column: str = "ds"):
         output_namespace="data",
         engine_type=EngineType.SPARK,
         dependencies=[
-            TableDependency(table=f"demo.{table}", partition_column=partition_column, offset=0)
+            TableDependency(table=f"{table}", partition_column=partition_column, offset=0)
         ],
         version=0,
         step_days=10,
@@ -46,5 +46,6 @@ def get_native_partition_export(table: str, partition_column: str):
 user_activities = get_native_partition_export("user_activities", "event_time")
 checkouts = get_native_partition_export("checkouts", "ts")
 dim_listings = get_select_star_export("dim_listings", "ds")
+dim_listings_b = get_select_star_export("`schema-with-dashes`.`example-table`", "ds")
 dim_merchants = get_select_star_export("dim_merchants", "ds")
 dim_users = get_select_star_export("dim_users", "ds")

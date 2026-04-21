@@ -16,6 +16,22 @@ dim_listings = StagingQuery(
     version=0,
 )
 
+dim_listings_b = StagingQuery(
+    query="""
+    SELECT
+        *
+    FROM main.`schema-with-dashes`.`example-table`
+    WHERE
+    ds BETWEEN {{ start_date }} AND {{ end_date }}
+    """,
+    output_namespace="workspace_iceberg.poc",
+    engine_type=EngineType.SPARK,
+    dependencies=[
+        TableDependency(table="main.`schema-with-dashes`.`example-table`", partition_column="ds", offset=0)
+    ],
+    version=0,
+)
+
 dim_listings_non_partitioned = StagingQuery(
     query="""
     SELECT
