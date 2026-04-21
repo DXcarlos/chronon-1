@@ -79,14 +79,11 @@ def test_backfill_start_cutoff_enforcement(
     cutoff were ignored, export_b would only have been scheduled for the 3
     backfill-range days.
 
-    Partition presence is checked via raw cloud CLIs (``bq query`` for GCP);
-    other clouds are TODO.
+    Partition presence is checked via raw cloud CLIs:
+      GCP   — ``bq query``
+      AWS   — ``aws athena`` (start-query-execution + poll + get-query-results)
+      Azure — ``snow sql`` against Snowflake
     """
-    if cloud != "gcp":
-        pytest.skip(
-            f"Partition check for cloud={cloud!r} not yet implemented in helpers/partitions.py"
-        )
-
     runner = CliRunner()
     compile_configs(runner, chronon_root)
 
