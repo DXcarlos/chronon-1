@@ -4,12 +4,78 @@ Exercises: compile -> upload diffs -> backfill -> poll workflow to success.
 Replaces the former test_gcp_hub_quickstart.py and test_aws_hub_quickstart.py.
 """
 
+from datetime import date, timedelta
+from urllib.parse import quote
+
 import pytest
+import requests
 from click.testing import CliRunner
 
 from .helpers.cli import compile_configs, submit_backfill
-from .helpers.hub_api import get_succeeded_partitions_by_table
+from .helpers.hub_api import _get_auth_headers
 from .helpers.workflow import poll_workflow
+
+
+# NodeRunStatus.SUCCEEDED = 3 in orchestration.thrift (platform repo). The Hub
+# serializes thrift enums via Jackson, which may emit either the int value or
+# the name depending on module config — guard against both. The orchestration
+# thrifts aren't generated into this Python repo, so we can't reference an
+# enum symbol directly.
+_SUCCEEDED_STATUS = {3, "SUCCEEDED"}
+
+
+def _expand_range(start: str, end: str) -> list[str]:
+    """Inclusive daily expansion of a YYYY-MM-DD range."""
+    s = date.fromisoformat(start)
+    e = date.fromisoformat(end)
+    out: list[str] = []
+    cur = s
+    while cur <= e:
+        out.append(cur.isoformat())
+        cur += timedelta(days=1)
+    return out
+
+
+def _succeeded_partitions_by_table(hub_url: str, workflow_id: str) -> dict[str, set[str]]:
+    """Return ``{outputTable -> {ds, ...}}`` from successful stepRuns in the workflow.
+
+    Reads the workflow's conf/mode/range via ``GET /workflow/v2/<id>`` then
+    enumerates ``nodeExecutions`` + ``stepRuns`` via
+    ``GET /confs/v2/<conf>/status/<mode>``. Cross-cloud by construction — the
+    Hub is the source of truth, no data-plane CLI needed.
+    """
+    headers = _get_auth_headers()
+
+    wf_resp = requests.get(f"{hub_url}/workflow/v2/{workflow_id}", headers=headers)
+    wf_resp.raise_for_status()
+    workflow = wf_resp.json().get("workflow", wf_resp.json())
+
+    status_resp = requests.get(
+        f"{hub_url}/confs/v2/{quote(workflow['confName'], safe='')}/status/"
+        f"{quote(workflow['mode'], safe='')}",
+        params={
+            "start": workflow["startPartition"],
+            "end": workflow["endPartition"],
+            "workflowId": workflow_id,
+        },
+        headers=headers,
+    )
+    status_resp.raise_for_status()
+
+    result: dict[str, set[str]] = {}
+    for node in status_resp.json().get("nodeExecutions", []):
+        output_table = node.get("outputTable")
+        if not output_table:
+            continue
+        partitions: set[str] = set()
+        for step in node.get("stepRuns", []):
+            if step.get("status") not in _SUCCEEDED_STATUS:
+                continue
+            s, e = step.get("startPartition"), step.get("endPartition")
+            if s and e:
+                partitions.update(_expand_range(s, e))
+        result[output_table] = partitions
+    return result
 
 # Demo join conf paths differ across clouds (variable names / versions vary).
 DEMO_DERIVATIONS = {
@@ -98,7 +164,7 @@ def test_backfill_start_cutoff_enforcement(
         "2026-02-25", "2026-02-26", "2026-02-27", "2026-02-28",
     }
 
-    partitions_by_table = get_succeeded_partitions_by_table(hub_url, workflow_id)
+    partitions_by_table = _succeeded_partitions_by_table(hub_url, workflow_id)
     tbl = lambda name: f"data.{cloud}_cutoff_example_{test_id}_{name}__0"
 
     assert backfill_range.issubset(partitions_by_table.get(tbl("downstream"), set())), (

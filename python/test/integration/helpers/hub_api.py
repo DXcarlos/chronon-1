@@ -1,7 +1,6 @@
 """Direct HTTP helpers for Hub API endpoints not exposed via CLI."""
 
 import os
-from datetime import date, timedelta
 from urllib.parse import quote
 
 import requests
@@ -44,68 +43,6 @@ def delete_schedule(hub_url: str, conf_name: str) -> dict:
 def find_schedules_by_test_id(hub_url: str, test_id: str) -> list[dict]:
     """List schedules and filter to those whose confName contains *test_id*."""
     return [s for s in list_schedules(hub_url) if test_id in s.get("confName", "")]
-
-
-# NodeRunStatus.SUCCEEDED = 3 in orchestration.thrift. Accept the int form
-# the Hub emits as well as the name form (some clients/tests stringify).
-_SUCCEEDED_STATUS = {3, "SUCCEEDED"}
-
-
-def _expand_range(start: str, end: str) -> list[str]:
-    """Inclusive daily expansion of a YYYY-MM-DD range."""
-    s = date.fromisoformat(start)
-    e = date.fromisoformat(end)
-    out: list[str] = []
-    cur = s
-    while cur <= e:
-        out.append(cur.isoformat())
-        cur += timedelta(days=1)
-    return out
-
-
-def get_succeeded_partitions_by_table(hub_url: str, workflow_id: str) -> dict[str, set[str]]:
-    """Return ``{outputTable -> {ds, ds, ...}}`` from successful step runs in the workflow.
-
-    Hits ``GET /workflow/v2/<id>`` for the conf/mode/range, then
-    ``GET /confs/v2/<conf>/status/<mode>`` to enumerate ``nodeExecutions`` and
-    their ``stepRuns``. Each successful stepRun's ``[startPartition, endPartition]``
-    is expanded to individual dates and accumulated per ``outputTable``.
-
-    Cross-cloud by construction — no bq / athena / snow config needed. The Hub
-    already knows what the orchestrator ran; we just read its ledger.
-    """
-    headers = _get_auth_headers()
-
-    wf_resp = requests.get(f"{hub_url}/workflow/v2/{workflow_id}", headers=headers)
-    wf_resp.raise_for_status()
-    workflow = wf_resp.json().get("workflow", wf_resp.json())
-    conf_name = workflow["confName"]
-    mode = workflow["mode"]
-    start = workflow["startPartition"]
-    end = workflow["endPartition"]
-
-    status_resp = requests.get(
-        f"{hub_url}/confs/v2/{quote(conf_name, safe='')}/status/{quote(mode, safe='')}",
-        params={"start": start, "end": end, "workflowId": workflow_id},
-        headers=headers,
-    )
-    status_resp.raise_for_status()
-
-    result: dict[str, set[str]] = {}
-    for node in status_resp.json().get("nodeExecutions", []):
-        output_table = node.get("outputTable")
-        if not output_table:
-            continue
-        partitions: set[str] = set()
-        for step in node.get("stepRuns", []):
-            if step.get("status") not in _SUCCEEDED_STATUS:
-                continue
-            step_start = step.get("startPartition")
-            step_end = step.get("endPartition")
-            if step_start and step_end:
-                partitions.update(_expand_range(step_start, step_end))
-        result[output_table] = partitions
-    return result
 
 
 def get_flink_job_ids(hub_url: str, workflow_id: str) -> list[str]:
