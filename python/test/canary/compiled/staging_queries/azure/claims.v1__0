@@ -1,5 +1,4 @@
 {
-  "engineType": 2,
   "metaData": {
     "customJson": "{\"airflowDependencies\": []}",
     "executionInfo": {
@@ -52,7 +51,7 @@
     "team": "azure",
     "version": "0"
   },
-  "query": "\nwith claims_spine as (\n  select\n    id as claim_id,\n    claimnumber,\n    reporteddate,\n    policyid,\n    timestampadd(day, 1, reporteddate::date) as as_of_ts\n  from atlas_cc_claim\n  where {{ start_date }} <= REPORTEDDATE::date and {{ end_date }} >= REPORTEDDATE::date\n    and coalesce(retired, 0) = 0\n    and record_begin_timestamp <= timestampadd(day, 1, reporteddate::date)\n    and (record_end_timestamp is null or record_end_timestamp > timestampadd(day, 1, reporteddate::date))\n),\nclaim_amounts as (\n  select\n    c.claim_id,\n    c.claimnumber,\n    c.reporteddate,\n    p.ext_riskstate,\n    coalesce(sum(li.claimamount), 0) as claim_amount\n  from claims_spine c\n  left join atlas_cc_policy p\n    on cast(c.policyid as varchar) = cast(p.id as varchar)\n  left join atlas_cc_transaction t\n    on t.claimid = c.claim_id\n   and coalesce(t.retired, 0) = 0\n   and t.bookingdate is not null\n   and t.bookingdate <= c.as_of_ts\n   and t.record_begin_timestamp <= c.as_of_ts\n   and (t.record_end_timestamp is null or t.record_end_timestamp > c.as_of_ts)\n  left join atlas_cc_transactionlineitem li\n    on li.transactionid = t.id\n   and coalesce(li.retired, 0) = 0\n   and li.record_begin_timestamp <= c.as_of_ts\n   and (li.record_end_timestamp is null or li.record_end_timestamp > c.as_of_ts)\n  group by c.claim_id, c.claimnumber, c.reporteddate, p.ext_riskstate\n),\nenriched as (\n  select\n    c.*,\n    coalesce(tl.typecode, 'UNK') as risk_state_code,\n    coalesce(cast(c.ext_riskstate as varchar), 'UNK_STATE') as risk_state_key\n  from claim_amounts c\n  left join atlas_cctl_typelist tl\n    on tl.cctl_id = c.ext_riskstate\n   and tl.cctl_table_name = 'CCTL_EXT_RISKSTATECOSTFILTER'\n)\nselect\n    c.LOSSDATE,\n    datediff('DAY', c.lossdate, e.reporteddate) as DAYS_LOSS_TO_REPORTED,\n    e.claimnumber as CLAIMNUMBER,\n    cast(c.POLICYID as varchar) as POLICYID,\n    c.FLAGGED,\n    c.LITIGATIONSTATUS,\n    e.reporteddate::date as reporteddate,\n    e.reporteddate::date as ds,\n    cast((extract(epoch_second from e.reporteddate::timestamp_ntz) * 1000) as bigint) as event_ts,\n    c.LOSSCAUSE,\n    c.EXT_SEVERITY,\n    c.CLAIMTIER,\n    c.FAULT,\n    e.claim_amount,\n    e.risk_state_key,\n    e.risk_state_code\nfrom enriched e\njoin atlas_cc_claim c\n  on c.id = e.claim_id\n and coalesce(c.retired, 0) = 0\n and c.record_begin_timestamp <= timestampadd(day, 1, e.reporteddate::date)\n and (c.record_end_timestamp is null or c.record_end_timestamp > timestampadd(day, 1, e.reporteddate::date))\nwhere {{ start_date }} <= e.reporteddate::date and {{ end_date }} >= e.reporteddate::date\nqualify row_number() over (\n  partition by e.claimnumber, extract(epoch_second from e.reporteddate::timestamp_ntz)\n  order by c.LOSSDATE nulls last, c.POLICYID\n) = 1\n",
+  "query": "\nwith claims_spine as (\n  select\n    id as claim_id,\n    claimnumber,\n    reporteddate,\n    policyid,\n    date_add(cast(reporteddate as date), 1) as as_of_ts\n  from default.atlas_cc_claim\n  where {{ start_date }} <= cast(reporteddate as date) and {{ end_date }} >= cast(reporteddate as date)\n    and coalesce(retired, 0) = 0\n    and record_begin_timestamp <= date_add(cast(reporteddate as date), 1)\n    and (record_end_timestamp is null or record_end_timestamp > date_add(cast(reporteddate as date), 1))\n),\nclaim_amounts as (\n  select\n    c.claim_id,\n    c.claimnumber,\n    c.reporteddate,\n    p.ext_riskstate,\n    coalesce(sum(li.claimamount), 0) as claim_amount\n  from claims_spine c\n  left join default.atlas_cc_policy p\n    on cast(c.policyid as string) = cast(p.id as string)\n  left join default.atlas_cc_transaction t\n    on t.claimid = c.claim_id\n   and coalesce(t.retired, 0) = 0\n   and t.bookingdate is not null\n   and t.bookingdate <= c.as_of_ts\n   and t.record_begin_timestamp <= c.as_of_ts\n   and (t.record_end_timestamp is null or t.record_end_timestamp > c.as_of_ts)\n  left join default.atlas_cc_transactionlineitem li\n    on li.transactionid = t.id\n   and coalesce(li.retired, 0) = 0\n   and li.record_begin_timestamp <= c.as_of_ts\n   and (li.record_end_timestamp is null or li.record_end_timestamp > c.as_of_ts)\n  group by c.claim_id, c.claimnumber, c.reporteddate, p.ext_riskstate\n),\nenriched as (\n  select\n    c.*,\n    coalesce(tl.typecode, 'UNK') as risk_state_code,\n    coalesce(cast(c.ext_riskstate as string), 'UNK_STATE') as risk_state_key\n  from claim_amounts c\n  left join default.atlas_cctl_typelist tl\n    on tl.cctl_id = c.ext_riskstate\n   and tl.cctl_table_name = 'CCTL_EXT_RISKSTATECOSTFILTER'\n),\nranked as (\n  select\n    c.LOSSDATE,\n    datediff(cast(e.reporteddate as date), cast(c.lossdate as date)) as DAYS_LOSS_TO_REPORTED,\n    e.claimnumber as CLAIMNUMBER,\n    cast(c.POLICYID as string) as POLICYID,\n    c.FLAGGED,\n    c.LITIGATIONSTATUS,\n    cast(e.reporteddate as date) as reporteddate,\n    cast(e.reporteddate as date) as ds,\n    cast(unix_timestamp(e.reporteddate) * 1000 as bigint) as event_ts,\n    c.LOSSCAUSE,\n    c.EXT_SEVERITY,\n    c.CLAIMTIER,\n    c.FAULT,\n    e.claim_amount,\n    e.risk_state_key,\n    e.risk_state_code,\n    row_number() over (\n      partition by e.claimnumber, unix_timestamp(e.reporteddate)\n      order by c.LOSSDATE asc nulls last, c.POLICYID asc\n    ) as _rn\n  from enriched e\n  join default.atlas_cc_claim c\n    on c.id = e.claim_id\n   and coalesce(c.retired, 0) = 0\n   and c.record_begin_timestamp <= date_add(cast(e.reporteddate as date), 1)\n   and (c.record_end_timestamp is null or c.record_end_timestamp > date_add(cast(e.reporteddate as date), 1))\n  where {{ start_date }} <= cast(e.reporteddate as date) and {{ end_date }} >= cast(e.reporteddate as date)\n)\nselect\n  LOSSDATE,\n  DAYS_LOSS_TO_REPORTED,\n  CLAIMNUMBER,\n  POLICYID,\n  FLAGGED,\n  LITIGATIONSTATUS,\n  reporteddate,\n  ds,\n  event_ts,\n  LOSSCAUSE,\n  EXT_SEVERITY,\n  CLAIMTIER,\n  FAULT,\n  claim_amount,\n  risk_state_key,\n  risk_state_code\nfrom ranked\nwhere _rn = 1\n",
   "tableDependencies": [
     {
       "endOffset": {
@@ -66,7 +65,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "atlas_cc_claim"
+        "table": "default.atlas_cc_claim"
       }
     },
     {
@@ -81,7 +80,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "atlas_cc_policy"
+        "table": "default.atlas_cc_policy"
       }
     },
     {
@@ -96,7 +95,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "atlas_cc_transaction"
+        "table": "default.atlas_cc_transaction"
       }
     },
     {
@@ -111,7 +110,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "atlas_cc_transactionlineitem"
+        "table": "default.atlas_cc_transactionlineitem"
       }
     },
     {
@@ -126,7 +125,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "atlas_cctl_typelist"
+        "table": "default.atlas_cctl_typelist"
       }
     }
   ]
