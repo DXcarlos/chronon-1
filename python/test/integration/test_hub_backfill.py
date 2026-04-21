@@ -8,6 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from .helpers.cli import compile_configs, submit_backfill
+from .helpers.partitions import assert_partitions_exist
 from .helpers.workflow import poll_workflow
 
 # Demo join conf paths differ across clouds (variable names / versions vary).
@@ -66,12 +67,26 @@ def test_backfill_start_cutoff_enforcement(
       - downstream depends on export_a with plain offset=0
       - downstream depends on export_b with start_cutoff="2026-02-25"
 
-    Backfilling downstream for [2026-03-01, 2026-03-03] requires the orchestrator
-    to expand the export_b dep range to [start_cutoff, query_end] = 7 days. If the
-    cutoff were ignored the workflow would still succeed on dep ranges alone, so
-    the workflow-success assertion here is a smoke check that scheduling+execution
-    complete end-to-end; partition-level assertions live elsewhere.
+    Backfilling downstream for [2026-03-01, 2026-03-03] requires:
+      - export_a partitions for 3 days (the backfill range) — plain offset=0.
+      - export_b partitions for 7 days (2026-02-25..2026-03-03) — the platform
+        orchestrator expands the dep range to [start_cutoff, query_end] and
+        demands every date in that range be Filled.
+      - downstream partitions for the 3 backfill-range days.
+
+    The 4 pre-backfill days on export_b (2026-02-25..02-28) are the load-bearing
+    assertion — they prove start_cutoff actually drove the scheduler. If the
+    cutoff were ignored, export_b would only have been scheduled for the 3
+    backfill-range days.
+
+    Partition presence is checked via raw cloud CLIs (``bq query`` for GCP);
+    other clouds are TODO.
     """
+    if cloud != "gcp":
+        pytest.skip(
+            f"Partition check for cloud={cloud!r} not yet implemented in helpers/partitions.py"
+        )
+
     runner = CliRunner()
     compile_configs(runner, chronon_root)
 
@@ -81,3 +96,20 @@ def test_backfill_start_cutoff_enforcement(
         runner, chronon_root, hub_url, downstream_conf, start_ds, end_ds,
     )
     poll_workflow(hub_url, workflow_id, timeout=1800, interval=45)
+
+    backfill_range = ["2026-03-01", "2026-03-02", "2026-03-03"]
+    cutoff_expanded = [
+        "2026-02-25", "2026-02-26", "2026-02-27", "2026-02-28",
+        "2026-03-01", "2026-03-02", "2026-03-03",
+    ]
+
+    assert_partitions_exist(
+        cloud, f"data.{cloud}_cutoff_example_{test_id}_downstream__0", backfill_range,
+    )
+    assert_partitions_exist(
+        cloud, f"data.{cloud}_cutoff_example_{test_id}_export_a__0", backfill_range,
+    )
+    # Load-bearing: the 4 pre-backfill days prove start_cutoff drove scheduling.
+    assert_partitions_exist(
+        cloud, f"data.{cloud}_cutoff_example_{test_id}_export_b__0", cutoff_expanded,
+    )
