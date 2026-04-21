@@ -8,7 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from .helpers.cli import compile_configs, submit_backfill
-from .helpers.partitions import assert_partitions_exist
+from .helpers.hub_api import get_succeeded_partitions_by_table
 from .helpers.workflow import poll_workflow
 
 # Demo join conf paths differ across clouds (variable names / versions vary).
@@ -79,10 +79,9 @@ def test_backfill_start_cutoff_enforcement(
     cutoff were ignored, export_b would only have been scheduled for the 3
     backfill-range days.
 
-    Partition presence is checked via raw cloud CLIs:
-      GCP   — ``bq query``
-      AWS   — ``aws athena`` (start-query-execution + poll + get-query-results)
-      Azure — ``snow sql`` against Snowflake
+    Partition coverage is read back from the Hub's own ``/confs/v2/.../status/...``
+    endpoint — the orchestrator's ledger of which step ran for which partitions
+    is cross-cloud by construction, so no per-cloud data-plane CLI is needed.
     """
     runner = CliRunner()
     compile_configs(runner, chronon_root)
@@ -94,19 +93,23 @@ def test_backfill_start_cutoff_enforcement(
     )
     poll_workflow(hub_url, workflow_id, timeout=1800, interval=45)
 
-    backfill_range = ["2026-03-01", "2026-03-02", "2026-03-03"]
-    cutoff_expanded = [
+    backfill_range = {"2026-03-01", "2026-03-02", "2026-03-03"}
+    cutoff_expanded = backfill_range | {
         "2026-02-25", "2026-02-26", "2026-02-27", "2026-02-28",
-        "2026-03-01", "2026-03-02", "2026-03-03",
-    ]
+    }
 
-    assert_partitions_exist(
-        cloud, f"data.{cloud}_cutoff_example_{test_id}_downstream__0", backfill_range,
+    partitions_by_table = get_succeeded_partitions_by_table(hub_url, workflow_id)
+    tbl = lambda name: f"data.{cloud}_cutoff_example_{test_id}_{name}__0"
+
+    assert backfill_range.issubset(partitions_by_table.get(tbl("downstream"), set())), (
+        f"downstream missing partitions; got {partitions_by_table.get(tbl('downstream'))}"
     )
-    assert_partitions_exist(
-        cloud, f"data.{cloud}_cutoff_example_{test_id}_export_a__0", backfill_range,
+    assert backfill_range.issubset(partitions_by_table.get(tbl("export_a"), set())), (
+        f"export_a missing partitions; got {partitions_by_table.get(tbl('export_a'))}"
     )
-    # Load-bearing: the 4 pre-backfill days prove start_cutoff drove scheduling.
-    assert_partitions_exist(
-        cloud, f"data.{cloud}_cutoff_example_{test_id}_export_b__0", cutoff_expanded,
+    # Load-bearing: the 4 pre-backfill days (2026-02-25..02-28) prove start_cutoff
+    # drove the orchestrator to schedule export_b outside the downstream's range.
+    assert cutoff_expanded.issubset(partitions_by_table.get(tbl("export_b"), set())), (
+        f"export_b missing start_cutoff-expanded partitions; got "
+        f"{partitions_by_table.get(tbl('export_b'))}"
     )
