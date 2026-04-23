@@ -52,16 +52,67 @@ class EngineType:
 
 @dataclass
 class TableDependency:
+    """Declares that a config depends on upstream partitions of a table.
+
+    The orchestrator resolves a required partition range from the child step's
+    [start_date, end_date] using ``offset``, ``start_cutoff``, and ``end_cutoff``,
+    then requires every partition in that range to be Filled on ``table`` before
+    the child step can run.
+
+    :param table:
+        Fully qualified upstream table name (``namespace.table``) that the child
+        config reads from.
+    :type table: str
+    :param partition_column:
+        Partition column on the upstream table. Overrides the default
+        ``spark.chronon.partition.column`` from teams.py. See ``Query`` for the
+        same semantics. Required when ``offset`` or ``start_cutoff`` is set.
+    :type partition_column: str, optional
+    :param partition_format:
+        Date format string the partition values are stored in (e.g. ``yyyy-MM-dd``).
+        Overrides the default partition format when the upstream uses a different
+        convention than the child.
+    :type partition_format: str, optional
+    :param additional_partitions:
+        Extra sub-partition literals to wait for beyond the date partition,
+        expressed as full ``key=value`` strings (e.g. ``["hr=23:00"]``). Mirrors
+        ``Query.sub_partitions_to_wait_for`` for dependency resolution.
+    :type additional_partitions: List[str], optional
+    :param offset:
+        Relative shift, in days, applied to both ends of the resolved dependency
+        range. ``offset=0`` means "same day as child step"; ``offset=-1`` means
+        "one day before". Mutually exclusive with the ``start_cutoff``-only mode:
+        at least one of ``offset`` or ``start_cutoff`` must be set.
+    :type offset: int, optional
+    :param start_cutoff:
+        Fixed floor (inclusive) on the resolved dependency range start, as a
+        date string in the upstream's partition format. Combined with ``offset``
+        the orchestrator requires every partition in
+        ``[start_cutoff, end_date]`` on the upstream to be Filled before the
+        child step can run. When ``start_cutoff`` is set without ``offset``, the
+        range start is pinned to ``start_cutoff`` (and the end tracks the child
+        step's end_date). Useful for "all-time" deps on upstream StagingQueries.
+    :type start_cutoff: str, optional
+    :param end_cutoff:
+        Fixed ceiling (inclusive) on the resolved dependency range end, as a
+        date string in the upstream's partition format. Caps how far forward the
+        dep range extends regardless of the child step's end_date.
+    :type end_cutoff: str, optional
+    :param time_partitioned:
+        Set to True when the upstream is partitioned by a timestamp/date column
+        rather than Hive-style string partitions (e.g. BigQuery, Snowflake, or
+        Delta Lake tables with no ``ds=...`` directories). See ``Query`` for
+        the same flag; ``partition_column`` should then name the
+        timestamp/date column.
+    :type time_partitioned: bool, optional
+    """
+
     table: str
     partition_column: Optional[str] = None
     partition_format: Optional[str] = None
     additional_partitions: Optional[List[str]] = None
     offset: Optional[int] = None
-    # Fixed floor on the resolved dependency range start. Combined with offset the
-    # platform orchestrator requires every partition in [start_cutoff, query_end]
-    # on the upstream to be Filled before the child step can run.
     start_cutoff: Optional[str] = None
-    # Fixed ceiling on the resolved dependency range end.
     end_cutoff: Optional[str] = None
     time_partitioned: Optional[bool] = None
 
