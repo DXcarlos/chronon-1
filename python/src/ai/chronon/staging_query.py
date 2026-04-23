@@ -66,7 +66,9 @@ class TableDependency:
     :param partition_column:
         Partition column on the upstream table. Overrides the default
         ``spark.chronon.partition.column`` from teams.py. See ``Query`` for the
-        same semantics. Required when ``offset`` or ``start_cutoff`` is set.
+        same semantics. When ``partition_column`` is set, at least one of
+        ``offset`` or ``start_cutoff`` must also be provided so the
+        orchestrator has a concrete range to resolve.
     :type partition_column: str, optional
     :param partition_format:
         Date format string the partition values are stored in (e.g. ``yyyy-MM-dd``).
