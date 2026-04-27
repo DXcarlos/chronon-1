@@ -27,20 +27,20 @@ Backfill, serving, and infra &mdash; 30 minutes.
 
 <div class="grid grid-cols-3 gap-6 pt-4">
 
-<div class="border-l-4 border-blue-400 pl-4">
-<div class="text-xs uppercase opacity-60">backfill</div>
-<div class="text-2xl font-semibold pt-1">UnionJoin</div>
-<div class="text-sm pt-2 opacity-80">collapse N shuffles into one</div>
-</div>
-
 <div class="border-l-4 border-purple-400 pl-4">
-<div class="text-xs uppercase opacity-60">serving</div>
+<div class="text-xs uppercase opacity-60">online &middot; serving</div>
 <div class="text-2xl font-semibold pt-1">Mega &rarr; GigaTile</div>
 <div class="text-sm pt-2 opacity-80">push merge from read to write</div>
 </div>
 
+<div class="border-l-4 border-blue-400 pl-4">
+<div class="text-xs uppercase opacity-60">offline &middot; backfill</div>
+<div class="text-2xl font-semibold pt-1">UnionJoin</div>
+<div class="text-sm pt-2 opacity-80">collapse N shuffles into one</div>
+</div>
+
 <div class="border-l-4 border-emerald-400 pl-4">
-<div class="text-xs uppercase opacity-60">substrate</div>
+<div class="text-xs uppercase opacity-60">offline &middot; cluster</div>
 <div class="text-2xl font-semibold pt-1">Crucible</div>
 <div class="text-sm pt-2 opacity-80">right hardware, right pricing</div>
 </div>
@@ -48,7 +48,7 @@ Backfill, serving, and infra &mdash; 30 minutes.
 </div>
 
 <div class="pt-12 text-center text-lg opacity-80">
-Each one moves work off the read path or onto cheaper hardware.
+Each one moves work off the hot path or onto cheaper hardware.
 </div>
 
 ---
@@ -58,252 +58,21 @@ Each one moves work off the read path or onto cheaper hardware.
 <div class="pt-8 space-y-6 text-lg">
 
 <div v-click>
-<span class="text-blue-400 font-semibold">Backfill</span> &mdash; UnionJoin <span class="opacity-50">(7 min)</span>
+<span class="text-purple-400 font-semibold">Online &middot; serving</span> &mdash; MegaTile &rarr; GigaTile <span class="opacity-50">(15 min)</span>
 </div>
 
 <div v-click>
-<span class="text-purple-400 font-semibold">Serving</span> &mdash; MegaTile &rarr; GigaTile <span class="opacity-50">(15 min)</span>
+<span class="text-blue-400 font-semibold">Offline &middot; backfill</span> &mdash; UnionJoin <span class="opacity-50">(7 min)</span>
 </div>
 
 <div v-click>
-<span class="text-emerald-400 font-semibold">Substrate</span> &mdash; Crucible cluster <span class="opacity-50">(5 min)</span>
+<span class="text-emerald-400 font-semibold">Offline &middot; cluster</span> &mdash; Crucible <span class="opacity-50">(5 min)</span>
 </div>
 
 <div v-click class="pt-6 text-sm opacity-60">
 Recap &middot; Q&amp;A
 </div>
 
-</div>
-
----
-
-# The problem
-
-<div class="pt-6 text-base">
-
-**Inputs**
-
-- `queries` &mdash; `(key, ts)` rows
-- `events` &mdash; `(key, payload, ts)` rows
-- window `w` + aggregation `agg` &mdash; e.g., 7-day sum
-
-</div>
-
-<div class="pt-8 text-base">
-
-**Output**
-
-For each query, aggregate the matching events:
-
-</div>
-
-<div class="pt-3 font-mono text-base">
-<code>result(key, query.ts) = agg(payload) where event.ts &isin; [query.ts &minus; w, query.ts)</code>
-</div>
-
----
-
-# Sawtooth &middot; the reuse insight
-
-<div class="pt-4 flex justify-center">
-
-<svg viewBox="0 0 1100 380" style="width:82%">
-  <defs>
-    <pattern id="tilesPat" x="0" y="0" width="11" height="30" patternUnits="userSpaceOnUse">
-      <rect x="0.5" y="0" width="9" height="30" fill="rgba(251,191,36,0.32)"/>
-      <line x1="10.2" y1="0" x2="10.2" y2="30" stroke="rgba(251,191,36,0.55)" stroke-width="0.4"/>
-    </pattern>
-  </defs>
-  <text x="500" y="34" style="font-size:13px" fill="#cbd5e1" text-anchor="middle">for one key &middot; 7-day window &middot; 5-min tiles</text>
-  <path d="M 60 100 L 60 92 L 720 92 L 720 100" stroke="#86efac" stroke-width="1.2" fill="none"/>
-  <text x="390" y="80" style="font-size:13px" fill="#86efac" text-anchor="middle" font-weight="600">tail &mdash; sum of all tiles up to the bucket boundary</text>
-  <rect x="60" y="135" width="660" height="30" fill="url(#tilesPat)"/>
-  <text x="390" y="155" style="font-size:11px" fill="#fde68a" text-anchor="middle" font-weight="600">~2,000 five-min tiles</text>
-  <text x="60" y="190" style="font-size:10px" fill="#64748b">7 days ago</text>
-  <text x="715" y="190" style="font-size:10px" fill="#64748b" text-anchor="end">bucket boundary</text>
-  <text x="900" y="190" style="font-size:10px" fill="#64748b" text-anchor="end">now</text>
-  <line x1="720" y1="125" x2="720" y2="178" stroke="#64748b" stroke-dasharray="3,2" stroke-width="1"/>
-  <rect x="725" y="135" width="155" height="30" fill="rgba(96,165,250,0.10)" stroke="#60a5fa" stroke-dasharray="3,2"/>
-  <text x="802" y="125" style="font-size:11px" fill="#bfdbfe" text-anchor="middle">current 5-min bucket</text>
-  <circle cx="743" cy="150" r="2.5" fill="#f472b6"/>
-  <circle cx="755" cy="150" r="2.5" fill="#f472b6"/>
-  <circle cx="772" cy="150" r="2.5" fill="#f472b6"/>
-  <circle cx="788" cy="150" r="2.5" fill="#f472b6"/>
-  <circle cx="803" cy="150" r="2.5" fill="#f472b6"/>
-  <text x="900" y="154" style="font-size:10px" fill="#fbcfe8">head events</text>
-  <polygon points="753,184 748,172 758,172" fill="#10b981"/>
-  <polygon points="783,184 778,172 788,172" fill="#10b981"/>
-  <polygon points="823,184 818,172 828,172" fill="#10b981"/>
-  <text x="753" y="202" style="font-size:10px" fill="#86efac" text-anchor="middle">Q&#8321;</text>
-  <text x="783" y="202" style="font-size:10px" fill="#86efac" text-anchor="middle">Q&#8322;</text>
-  <text x="823" y="202" style="font-size:10px" fill="#86efac" text-anchor="middle">Q&#8323;</text>
-  <path d="M 750 215 L 750 222 L 825 222 L 825 215" stroke="#86efac" stroke-width="0.8" fill="none"/>
-  <text x="788" y="240" style="font-size:10px" fill="#86efac" text-anchor="middle">all 3 queries share the same tail</text>
-  <text x="500" y="288" style="font-size:12px" fill="#94a3b8" text-anchor="middle">99.98% reuse within bucket &middot; 99.9% across adjacent buckets (1 tile in, 1 tile out)</text>
-  <text x="500" y="335" style="font-size:24px" fill="#86efac" text-anchor="middle" font-weight="700">~1,000&times; compute saved by reuse</text>
-</svg>
-
-</div>
-
----
-
-# Sawtooth &middot; the 3 layers
-
-<div class="pt-4 flex justify-center">
-
-<svg viewBox="0 0 1000 440" style="width:78%">
-  <defs>
-    <marker id="arrUp" markerWidth="10" markerHeight="10" refX="5" refY="9" orient="auto">
-      <path d="M0,9 L5,2 L10,9 z" fill="#9ca3af"/>
-    </marker>
-  </defs>
-  <rect x="60" y="20" width="880" height="100" fill="rgba(74,222,128,0.10)" stroke="#4ade80" rx="6"/>
-  <text x="80" y="50" style="font-size:11px" fill="#86efac" font-weight="700">3 &middot; PER-QUERY IRs</text>
-  <text x="80" y="78" style="font-size:14px" fill="#dcfce7">for each query in a bucket: combine tail + head events</text>
-  <text x="80" y="103" style="font-size:12px" fill="#9ca3af" font-family="monospace">(key, tail_ir) join [queries] join [events] &rarr; results</text>
-  <path d="M 500 145 L 500 130" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arrUp)" fill="none"/>
-  <rect x="60" y="155" width="880" height="100" fill="rgba(251,191,36,0.10)" stroke="#fbbf24" rx="6"/>
-  <text x="80" y="185" style="font-size:11px" fill="#fde68a" font-weight="700">2 &middot; TAIL IRs</text>
-  <text x="80" y="213" style="font-size:14px" fill="#fef3c7">merge tiles into per-bucket tails &mdash; reuse across adjacent buckets</text>
-  <text x="80" y="238" style="font-size:12px" fill="#9ca3af" font-family="monospace">(key, [tile_ir]) join (key, [tail_end_ts]) &rarr; (key, [tail_ir])</text>
-  <path d="M 500 280 L 500 265" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arrUp)" fill="none"/>
-  <rect x="60" y="290" width="880" height="100" fill="rgba(96,165,250,0.10)" stroke="#60a5fa" rx="6"/>
-  <text x="80" y="320" style="font-size:11px" fill="#bfdbfe" font-weight="700">1 &middot; TILE IRs</text>
-  <text x="80" y="348" style="font-size:14px" fill="#dbeafe">pre-aggregate events into 5-min tiles, one row per key</text>
-  <text x="80" y="373" style="font-size:12px" fill="#9ca3af" font-family="monospace">(key, [event]) &rarr; (key, [tile_ir])</text>
-</svg>
-
-</div>
-
----
-
-# Benefits &amp; cost
-
-<div class="pt-12 grid grid-cols-2 gap-16">
-
-<div class="border-l-2 border-emerald-400 pl-5">
-<div class="font-semibold text-emerald-400 uppercase text-xs">benefits</div>
-<div class="pt-4 space-y-5">
-<div>
-<div class="text-2xl font-semibold text-emerald-300">~1,000&times; compute reuse</div>
-<div class="text-sm opacity-70 pt-1">99.98% within bucket &middot; 99.9% across adjacent buckets</div>
-</div>
-<div>
-<div class="text-base font-semibold text-emerald-300">skew handling</div>
-<div class="text-sm opacity-70 pt-1">a hot key's events + queries are split across machines, never piled on one</div>
-</div>
-</div>
-</div>
-
-<div class="border-l-2 border-pink-400 pl-5">
-<div class="font-semibold text-pink-400 uppercase text-xs">cost</div>
-<div class="pt-4">
-<div class="text-2xl font-semibold text-pink-300">~8 shuffles</div>
-<div class="text-sm opacity-70 pt-1">kryo-encoded Java objects, back and forth between two partitionings</div>
-</div>
-</div>
-
-</div>
-
----
-
-# The move
-
-<div class="pt-6 text-2xl">
-Union into one stream. groupBy + sort once. Sweep with the sawtooth.
-</div>
-
-<div class="pt-8 space-y-3 text-base">
-
-- Union left + right into one stream of `(key, time, side)` rows
-- Group by key &mdash; **one shuffle**
-- Inside each partition: time-sort, sweep with the sawtooth aggregator, emit one row per query
-
-</div>
-
-<div class="pt-8 text-sm opacity-60">
-The sawtooth was already invariant to which window we're computing. Run it once over the
-unified per-key sequence and produce all windows in a single mapPartitions pass.
-</div>
-
----
-
-# UnionJoin algorithm walk
-
-<div class="pt-2 text-xs opacity-60 text-center">click &rarr; to advance</div>
-
-<div class="pt-2 flex justify-center">
-
-<svg viewBox="0 0 760 360" style="width:60%">
-  <defs>
-    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L9,3 z" fill="#9ca3af"/>
-    </marker>
-  </defs>
-
-  <g v-click="1">
-    <rect x="20" y="40" width="140" height="60" fill="rgba(96,165,250,0.18)" stroke="#60a5fa" rx="4"/>
-    <text x="90" y="75" text-anchor="middle" style="font-size:14px" fill="#bfdbfe">left (queries)</text>
-    <rect x="20" y="240" width="140" height="60" fill="rgba(244,114,182,0.18)" stroke="#f472b6" rx="4"/>
-    <text x="90" y="275" text-anchor="middle" style="font-size:14px" fill="#fbcfe8">right (events)</text>
-  </g>
-
-  <g v-click="2">
-    <path d="M165 70 Q 220 70 235 165" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
-    <path d="M165 270 Q 220 270 235 195" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
-    <rect x="245" y="140" width="120" height="60" fill="rgba(156,163,175,0.18)" stroke="#9ca3af" rx="4"/>
-    <text x="305" y="175" text-anchor="middle" style="font-size:14px" fill="#e5e7eb">union</text>
-  </g>
-
-  <g v-click="3">
-    <path d="M370 170 L 420 170" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
-    <rect x="425" y="100" width="160" height="40" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" rx="4"/>
-    <text x="505" y="125" text-anchor="middle" style="font-size:13px" fill="#fde68a">key=A: [t1, t3, t7, ...]</text>
-    <rect x="425" y="155" width="160" height="40" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" rx="4"/>
-    <text x="505" y="180" text-anchor="middle" style="font-size:13px" fill="#fde68a">key=B: [t2, t4, t9, ...]</text>
-    <rect x="425" y="210" width="160" height="40" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" rx="4"/>
-    <text x="505" y="235" text-anchor="middle" style="font-size:13px" fill="#fde68a">key=C: [t1, t5, t8, ...]</text>
-    <text x="505" y="85" text-anchor="middle" style="font-size:11px" fill="#fcd34d">groupBy + time-sort</text>
-  </g>
-
-  <g v-click="4">
-    <path d="M590 170 L 625 170" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
-    <rect x="630" y="140" width="110" height="60" fill="rgba(74,222,128,0.18)" stroke="#4ade80" rx="4"/>
-    <text x="685" y="165" text-anchor="middle" style="font-size:13px" fill="#bbf7d0">sawtooth</text>
-    <text x="685" y="183" text-anchor="middle" style="font-size:11px" fill="#86efac">all windows</text>
-  </g>
-
-</svg>
-
-</div>
-
----
-
-# Cost delta
-
-<div class="grid grid-cols-2 gap-12 pt-6">
-
-<div>
-<div class="text-sm uppercase opacity-60">before</div>
-<div class="text-3xl font-semibold text-pink-300">8 shuffles</div>
-<div class="text-sm pt-2 opacity-80">
-kryo-encoded Java objects, three cogroups, two re-keyings
-</div>
-</div>
-
-<div>
-<div class="text-sm uppercase opacity-60">after</div>
-<div class="text-3xl font-semibold text-emerald-400">1 shuffle</div>
-<div class="text-sm pt-2 opacity-80">
-Spark-native exchange, then in-partition compute
-</div>
-</div>
-
-</div>
-
-<div class="pt-14 text-center">
-<div class="text-5xl font-semibold text-emerald-400">~10&times; faster</div>
-<div class="text-sm pt-3 opacity-70">in production &middot; UnionJoin is now the default for PITC aggregations</div>
 </div>
 
 ---
@@ -790,6 +559,277 @@ does one point get; no aggregation on read.
 <div class="opacity-80 pt-1">Iceberg stream emits keys for batch-only entities &mdash; full key superset, no bootstrap RPC.</div>
 </div>
 
+</div>
+
+---
+
+# The problem
+
+<div class="pt-6 text-base">
+
+**Inputs**
+
+- `queries` &mdash; `(key, ts)` rows
+- `events` &mdash; `(key, payload, ts)` rows
+- window `w` + aggregation `agg` &mdash; e.g., 7-day sum
+
+</div>
+
+<div class="pt-8 text-base">
+
+**Output**
+
+For each query, aggregate the matching events:
+
+</div>
+
+<div class="pt-3 font-mono text-base">
+<code>result(key, query.ts) = agg(payload) where event.ts &isin; [query.ts &minus; w, query.ts)</code>
+</div>
+
+---
+
+# Sawtooth &middot; within-bucket reuse
+
+<div class="pt-4 flex justify-center">
+
+<svg viewBox="0 0 1100 420" style="width:95%">
+  <text x="495" y="38" style="font-size:15px" fill="#cbd5e1" text-anchor="middle">for one key &middot; 7-day window &middot; 5-min tiles</text>
+  <text x="390" y="80" style="font-size:15px" fill="#86efac" text-anchor="middle" font-weight="600">tail &middot; <tspan font-family="monospace" font-weight="400">[1:00 &minus; 7d, 1:00)</tspan></text>
+  <path d="M 60 110 L 60 100 L 720 100 L 720 110" stroke="#86efac" stroke-width="1.4" fill="none"/>
+  <rect x="60" y="135" width="660" height="40" fill="rgba(251,191,36,0.32)" stroke="rgba(251,191,36,0.6)" stroke-width="0.9"/>
+  <text x="390" y="160" style="font-size:14px" fill="#fde68a" text-anchor="middle" font-weight="600">~2,000 five-min tiles</text>
+  <line x1="720" y1="125" x2="720" y2="190" stroke="#64748b" stroke-dasharray="3,2" stroke-width="1"/>
+  <rect x="725" y="135" width="155" height="40" fill="rgba(96,165,250,0.10)" stroke="#60a5fa" stroke-dasharray="3,2"/>
+  <text x="802" y="125" style="font-size:13px" fill="#bfdbfe" text-anchor="middle" font-family="monospace">[1:00, 1:05)</text>
+  <circle cx="745" cy="155" r="3.5" fill="#f472b6"/>
+  <circle cx="760" cy="155" r="3.5" fill="#f472b6"/>
+  <circle cx="775" cy="155" r="3.5" fill="#f472b6"/>
+  <circle cx="803" cy="155" r="3.5" fill="#f472b6"/>
+  <circle cx="850" cy="155" r="3.5" fill="#f472b6"/>
+  <text x="935" y="158" style="font-size:13px" fill="#fbcfe8">head events</text>
+  <text x="60" y="207" style="font-size:13px" fill="#cbd5e1">1:00 &minus; 7d</text>
+  <text x="720" y="207" style="font-size:13px" fill="#cbd5e1" text-anchor="end">1:00</text>
+  <text x="880" y="207" style="font-size:13px" fill="#cbd5e1" text-anchor="end">1:05</text>
+  <polygon points="756,232 750,219 762,219" fill="#10b981"/>
+  <polygon points="787,232 781,219 793,219" fill="#10b981"/>
+  <polygon points="818,232 812,219 824,219" fill="#10b981"/>
+  <text x="756" y="252" style="font-size:13px" fill="#86efac" text-anchor="middle">1:01</text>
+  <text x="787" y="252" style="font-size:13px" fill="#86efac" text-anchor="middle">1:02</text>
+  <text x="818" y="252" style="font-size:13px" fill="#86efac" text-anchor="middle">1:03</text>
+  <path d="M 753 264 L 753 272 L 821 272 L 821 264" stroke="#86efac" stroke-width="1" fill="none"/>
+  <text x="787" y="295" style="font-size:14px" fill="#86efac" text-anchor="middle">3 queries &middot; same tail &middot; different heads</text>
+  <text x="500" y="372" style="font-size:32px" fill="#86efac" text-anchor="middle" font-weight="700">99.98% reuse within a bucket</text>
+</svg>
+
+</div>
+
+---
+
+# Sawtooth &middot; adjacent-tail reuse
+
+<div class="pt-4 flex justify-center">
+
+<svg viewBox="0 0 1100 460" style="width:95%">
+  <text x="500" y="38" style="font-size:15px" fill="#cbd5e1" text-anchor="middle">two adjacent 5-min buckets &middot; 7-day window</text>
+  <text x="60" y="138" style="font-size:14px" fill="#cbd5e1" font-weight="600">tail @ 1:00</text>
+  <text x="60" y="161" style="font-size:13px" fill="#86efac" font-family="monospace">[1:00 &minus; 7d, 1:00)</text>
+  <text x="220" y="118" style="font-size:12px" fill="#94a3b8">1:00 &minus; 7d</text>
+  <text x="1042" y="118" style="font-size:12px" fill="#94a3b8" text-anchor="end">1:00</text>
+  <rect x="220" y="125" width="22" height="42" fill="rgba(244,114,182,0.55)" stroke="#f472b6" stroke-width="1.2"/>
+  <rect x="242" y="125" width="800" height="42" fill="rgba(251,191,36,0.32)" stroke="rgba(251,191,36,0.6)" stroke-width="0.9"/>
+  <text x="231" y="190" style="font-size:13px" fill="#fbcfe8" text-anchor="middle" font-weight="600">drop</text>
+  <text x="642" y="226" style="font-size:14px" fill="#fde68a" text-anchor="middle" font-weight="600">~2,000 shared tiles</text>
+  <text x="60" y="278" style="font-size:14px" fill="#cbd5e1" font-weight="600">tail @ 1:05</text>
+  <text x="60" y="301" style="font-size:13px" fill="#86efac" font-family="monospace">[1:05 &minus; 7d, 1:05)</text>
+  <text x="242" y="258" style="font-size:12px" fill="#94a3b8">1:05 &minus; 7d</text>
+  <text x="1064" y="258" style="font-size:12px" fill="#94a3b8" text-anchor="end">1:05</text>
+  <rect x="242" y="265" width="800" height="42" fill="rgba(251,191,36,0.32)" stroke="rgba(251,191,36,0.6)" stroke-width="0.9"/>
+  <rect x="1042" y="265" width="22" height="42" fill="rgba(74,222,128,0.55)" stroke="#4ade80" stroke-width="1.2"/>
+  <text x="1053" y="330" style="font-size:13px" fill="#bbf7d0" text-anchor="middle" font-weight="600">add</text>
+  <text x="500" y="382" style="font-size:14px" fill="#94a3b8" text-anchor="middle">slide one tile right &middot; 1 in, 1 out</text>
+  <text x="500" y="425" style="font-size:30px" fill="#86efac" text-anchor="middle" font-weight="700">99.9% reuse across adjacent tails</text>
+</svg>
+
+</div>
+
+---
+
+# Sawtooth &middot; the 3 layers
+
+<div class="pt-2 text-xs opacity-50 text-center">click &rarr; reveal shuffle counts</div>
+
+<div class="pt-6 space-y-6">
+
+<div class="grid grid-cols-[1fr_auto] gap-12 items-center border-l-4 border-blue-400 pl-6">
+<div>
+<div class="text-xs uppercase tracking-wider text-blue-300 font-semibold">layer 1 &middot; tile IRs</div>
+<div class="text-lg pt-2">pre-aggregate events into 5-min tiles, one row per key</div>
+<div class="font-mono text-sm opacity-60 pt-1">(key, event) &rarr; (key, [tile_ir])</div>
+</div>
+<div v-click="1" class="text-3xl font-semibold text-blue-300 whitespace-nowrap pr-4">1 shuffle</div>
+</div>
+
+<div class="grid grid-cols-[1fr_auto] gap-12 items-center border-l-4 border-yellow-400 pl-6">
+<div>
+<div class="text-xs uppercase tracking-wider text-yellow-300 font-semibold">layer 2 &middot; tail IRs</div>
+<div class="text-lg pt-2">merge tiles into per-bucket tails &mdash; reuse across adjacent buckets</div>
+<div class="font-mono text-sm opacity-60 pt-1">(key, [tile_ir]) &#x22c8; (key, [head_start]) &rarr; ((key, head_start), tail_ir)</div>
+</div>
+<div v-click="1" class="text-3xl font-semibold text-yellow-300 whitespace-nowrap pr-4">3 shuffles</div>
+</div>
+
+<div class="grid grid-cols-[1fr_auto] gap-12 items-center border-l-4 border-emerald-400 pl-6">
+<div>
+<div class="text-xs uppercase tracking-wider text-emerald-300 font-semibold">layer 3 &middot; per-query IRs</div>
+<div class="text-lg pt-2">extend each tail with head events for queries in the bucket</div>
+<div class="font-mono text-sm opacity-60 pt-1">((key, head_start), tail_ir) &#x22c8; queries &#x22c8; events &rarr; results</div>
+</div>
+<div v-click="1" class="text-3xl font-semibold text-emerald-300 whitespace-nowrap pr-4">4 shuffles</div>
+</div>
+
+</div>
+
+<div v-click="1" class="pt-10 text-center">
+<span class="text-base opacity-70">total: </span>
+<span class="text-3xl font-semibold text-pink-300">8 shuffles</span>
+<span class="text-base opacity-70"> of kryo-encoded Java IRs</span>
+</div>
+
+---
+
+# Fully distributed sawtooth &middot; temporalEvents
+
+<div class="pt-8 text-lg leading-relaxed opacity-90">
+Run the 3 layers across the cluster. Events and queries for the same key never land on the same machine.
+</div>
+
+<div class="pt-14 grid grid-cols-2 gap-16">
+
+<div class="border-l-2 border-emerald-400 pl-5">
+<div class="font-semibold text-emerald-400 uppercase text-xs">benefit</div>
+<div class="pt-4">
+<div class="text-2xl font-semibold text-emerald-300">handles any-skew</div>
+<div class="text-sm opacity-70 pt-2">a key with millions of events still parallelizes &mdash; the layers fan out across executors</div>
+</div>
+</div>
+
+<div class="border-l-2 border-pink-400 pl-5">
+<div class="font-semibold text-pink-400 uppercase text-xs">cost</div>
+<div class="pt-4">
+<div class="text-2xl font-semibold text-pink-300">8 shuffles</div>
+<div class="text-sm opacity-70 pt-2">kryo-encoded Java IRs, back and forth between two partitionings</div>
+</div>
+</div>
+
+</div>
+
+---
+
+# Semi distributed sawtooth &middot; UnionJoin
+
+<div class="pt-8 text-lg leading-relaxed opacity-90">
+Most workloads aren't pathologically skewed. Collapse the per-key sawtooth onto one machine &mdash; sawtooth handles moderate skew fine in a single partition.
+</div>
+
+<div class="pt-14 grid grid-cols-2 gap-16">
+
+<div class="border-l-2 border-emerald-400 pl-5">
+<div class="font-semibold text-emerald-400 uppercase text-xs">benefit</div>
+<div class="pt-4">
+<div class="text-2xl font-semibold text-emerald-300">1 shuffle</div>
+<div class="text-sm opacity-70 pt-2">Spark-native exchange, then sawtooth runs in-memory per partition</div>
+</div>
+</div>
+
+<div class="border-l-2 border-pink-400 pl-5">
+<div class="font-semibold text-pink-400 uppercase text-xs">trade-off</div>
+<div class="pt-4">
+<div class="text-2xl font-semibold text-pink-300">key fits in memory</div>
+<div class="text-sm opacity-70 pt-2">a single key with millions of events can OOM the executor</div>
+</div>
+</div>
+
+</div>
+
+---
+
+# UnionJoin topology
+
+<div class="pt-2 text-xs opacity-60 text-center">click &rarr; to advance</div>
+
+<div class="pt-2 flex justify-center">
+
+<svg viewBox="0 0 760 360" style="width:60%">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#9ca3af"/>
+    </marker>
+  </defs>
+
+  <g v-click="1">
+    <rect x="20" y="40" width="140" height="60" fill="rgba(96,165,250,0.18)" stroke="#60a5fa" rx="4"/>
+    <text x="90" y="75" text-anchor="middle" style="font-size:14px" fill="#bfdbfe">left (queries)</text>
+    <rect x="20" y="240" width="140" height="60" fill="rgba(244,114,182,0.18)" stroke="#f472b6" rx="4"/>
+    <text x="90" y="275" text-anchor="middle" style="font-size:14px" fill="#fbcfe8">right (events)</text>
+  </g>
+
+  <g v-click="2">
+    <path d="M165 70 Q 220 70 235 165" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
+    <path d="M165 270 Q 220 270 235 195" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
+    <rect x="245" y="140" width="120" height="60" fill="rgba(156,163,175,0.18)" stroke="#9ca3af" rx="4"/>
+    <text x="305" y="175" text-anchor="middle" style="font-size:14px" fill="#e5e7eb">union</text>
+  </g>
+
+  <g v-click="3">
+    <path d="M370 170 L 420 170" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
+    <rect x="425" y="100" width="160" height="40" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" rx="4"/>
+    <text x="505" y="125" text-anchor="middle" style="font-size:13px" fill="#fde68a">key=A: [t1, t3, t7, ...]</text>
+    <rect x="425" y="155" width="160" height="40" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" rx="4"/>
+    <text x="505" y="180" text-anchor="middle" style="font-size:13px" fill="#fde68a">key=B: [t2, t4, t9, ...]</text>
+    <rect x="425" y="210" width="160" height="40" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" rx="4"/>
+    <text x="505" y="235" text-anchor="middle" style="font-size:13px" fill="#fde68a">key=C: [t1, t5, t8, ...]</text>
+    <text x="505" y="85" text-anchor="middle" style="font-size:11px" fill="#fcd34d">groupBy + time-sort</text>
+  </g>
+
+  <g v-click="4">
+    <path d="M590 170 L 625 170" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
+    <rect x="630" y="140" width="110" height="60" fill="rgba(74,222,128,0.18)" stroke="#4ade80" rx="4"/>
+    <text x="685" y="165" text-anchor="middle" style="font-size:13px" fill="#bbf7d0">sawtooth</text>
+    <text x="685" y="183" text-anchor="middle" style="font-size:11px" fill="#86efac">all windows</text>
+  </g>
+
+</svg>
+
+</div>
+
+---
+
+# Cost delta
+
+<div class="grid grid-cols-2 gap-12 pt-6">
+
+<div>
+<div class="text-sm uppercase opacity-60">before</div>
+<div class="text-3xl font-semibold text-pink-300">8 shuffles</div>
+<div class="text-sm pt-2 opacity-80">
+kryo-encoded Java objects, three cogroups, two re-keyings
+</div>
+</div>
+
+<div>
+<div class="text-sm uppercase opacity-60">after</div>
+<div class="text-3xl font-semibold text-emerald-400">1 shuffle</div>
+<div class="text-sm pt-2 opacity-80">
+Spark-native exchange, then in-partition compute
+</div>
+</div>
+
+</div>
+
+<div class="pt-14 text-center">
+<div class="text-5xl font-semibold text-emerald-400">~10&times; faster</div>
+<div class="text-sm pt-3 opacity-70">in production &middot; UnionJoin is now the default for PITC aggregations</div>
 </div>
 
 ---
