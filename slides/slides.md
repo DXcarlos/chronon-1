@@ -166,30 +166,16 @@ Recap &middot; Q&amp;A
 
 # MegaTile in production
 
-<div class="pt-12 grid grid-cols-3 gap-6 text-center">
+<div class="pt-10 text-xl space-y-6">
 
-<div>
-<div class="text-xs uppercase opacity-60">p95 latency</div>
-<div class="text-5xl font-semibold pt-2 text-emerald-400">~3&times;</div>
-<div class="text-sm pt-3 opacity-80">reduction in production</div>
-</div>
+<v-clicks>
 
-<div>
-<div class="text-xs uppercase opacity-60">parity with tiling</div>
-<div class="text-5xl font-semibold pt-2 text-emerald-400">exact</div>
-<div class="text-sm pt-3 opacity-80">result match</div>
-</div>
+- <span class="text-emerald-400 font-semibold">3&times;</span> lower latency
+- <span class="text-emerald-400 font-semibold">exact</span> match with old tiling approach
+- <span class="text-emerald-400 font-semibold">288 / 576 tiles &rarr; 1 / 2 tiles</span> in the head
 
-<div>
-<div class="text-xs uppercase opacity-60">KV size + throughput</div>
-<div class="text-5xl font-semibold pt-2 text-emerald-400">~N&times;</div>
-<div class="text-sm pt-3 opacity-80">shrink scales with read fan-out</div>
-</div>
+</v-clicks>
 
-</div>
-
-<div class="pt-14 text-sm opacity-60 text-center">
-Bootstrap mechanism (existing batch IR) is retained. Drop-in via <code>OnlineStrategy</code> enum.
 </div>
 
 ---
