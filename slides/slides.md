@@ -77,32 +77,37 @@ Recap &middot; Q&amp;A
 
 ---
 
-# The status quo: `temporalEvents`
+# The problem
 
-<div class="pt-4 text-base">
-For each <code>(key, queryTs)</code>, build the IR over <code>[queryTs &minus; window, queryTs)</code>.
-The implementation builds it in three layers, keyed differently at each step:
-</div>
+<div class="pt-6 text-base">
 
-<div class="pt-5 space-y-3 text-base">
+**Inputs**
 
-- **Hops** &mdash; events pre-aggregated at hop boundaries. One row per `key`.
-- **HeadStart IRs** &mdash; round each query's `ts` to a hop boundary. Cogroup queries with hops *by `key`* &rarr; IR per `(key, headStart)`.
-- **Per-query IRs** &mdash; cogroup with raw events *by `(key, headStart)`* &rarr; sawtooth walks forward, one IR per query.
+- `queries` &mdash; `(key, ts)` rows
+- `events` &mdash; `(key, payload, ts)` rows
+- window `w` + aggregation `agg` &mdash; e.g., 7-day sum
 
 </div>
 
-<div class="pt-6 text-sm opacity-70">
-Three cogroups, two re-keyings &mdash; <span class="text-pink-300 font-semibold">~8 shuffles</span>, each carrying kryo-encoded Java objects rather than Spark-native rows.
+<div class="pt-8 text-base">
+
+**Output**
+
+For each query, aggregate the matching events:
+
+</div>
+
+<div class="pt-3 font-mono text-base">
+<code>result(key, query.ts) = agg(payload) where event.ts &isin; [query.ts &minus; w, query.ts)</code>
 </div>
 
 ---
 
-# The work, visually
+# Sawtooth &middot; the reuse insight
 
-<div class="pt-2 flex justify-center">
+<div class="pt-4 flex justify-center">
 
-<svg viewBox="0 0 1100 500" style="width:82%">
+<svg viewBox="0 0 1100 380" style="width:82%">
   <defs>
     <pattern id="tilesPat" x="0" y="0" width="11" height="30" patternUnits="userSpaceOnUse">
       <rect x="0.5" y="0" width="9" height="30" fill="rgba(251,191,36,0.32)"/>
@@ -136,10 +141,67 @@ Three cogroups, two re-keyings &mdash; <span class="text-pink-300 font-semibold"
   <text x="788" y="240" style="font-size:10px" fill="#86efac" text-anchor="middle">all 3 queries share the same tail</text>
   <text x="500" y="288" style="font-size:12px" fill="#94a3b8" text-anchor="middle">99.98% reuse within bucket &middot; 99.9% across adjacent buckets (1 tile in, 1 tile out)</text>
   <text x="500" y="335" style="font-size:24px" fill="#86efac" text-anchor="middle" font-weight="700">~1,000&times; compute saved by reuse</text>
-  <line x1="160" y1="378" x2="940" y2="378" stroke="#374151" stroke-dasharray="2,3"/>
-  <text x="500" y="418" style="font-size:14px" fill="#fbcfe8" text-anchor="middle">distributing this across the cluster: <tspan font-weight="700">~8 shuffles</tspan>, all kryo-encoded</text>
-  <text x="500" y="446" style="font-size:11px" fill="#9ca3af" text-anchor="middle">skew benefit: a hot key's events + queries are split across machines, never piled on one</text>
 </svg>
+
+</div>
+
+---
+
+# Sawtooth &middot; the 3 layers
+
+<div class="pt-4 flex justify-center">
+
+<svg viewBox="0 0 1000 440" style="width:78%">
+  <defs>
+    <marker id="arrUp" markerWidth="10" markerHeight="10" refX="5" refY="9" orient="auto">
+      <path d="M0,9 L5,2 L10,9 z" fill="#9ca3af"/>
+    </marker>
+  </defs>
+  <rect x="60" y="20" width="880" height="100" fill="rgba(74,222,128,0.10)" stroke="#4ade80" rx="6"/>
+  <text x="80" y="50" style="font-size:11px" fill="#86efac" font-weight="700">3 &middot; PER-QUERY IRs</text>
+  <text x="80" y="78" style="font-size:14px" fill="#dcfce7">for each query in a bucket: combine tail + head events</text>
+  <text x="80" y="103" style="font-size:12px" fill="#9ca3af" font-family="monospace">(key, tail_ir) join [queries] join [events] &rarr; results</text>
+  <path d="M 500 145 L 500 130" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arrUp)" fill="none"/>
+  <rect x="60" y="155" width="880" height="100" fill="rgba(251,191,36,0.10)" stroke="#fbbf24" rx="6"/>
+  <text x="80" y="185" style="font-size:11px" fill="#fde68a" font-weight="700">2 &middot; TAIL IRs</text>
+  <text x="80" y="213" style="font-size:14px" fill="#fef3c7">merge tiles into per-bucket tails &mdash; reuse across adjacent buckets</text>
+  <text x="80" y="238" style="font-size:12px" fill="#9ca3af" font-family="monospace">(key, [tile_ir]) join (key, [tail_end_ts]) &rarr; (key, [tail_ir])</text>
+  <path d="M 500 280 L 500 265" stroke="#9ca3af" stroke-width="1.5" marker-end="url(#arrUp)" fill="none"/>
+  <rect x="60" y="290" width="880" height="100" fill="rgba(96,165,250,0.10)" stroke="#60a5fa" rx="6"/>
+  <text x="80" y="320" style="font-size:11px" fill="#bfdbfe" font-weight="700">1 &middot; TILE IRs</text>
+  <text x="80" y="348" style="font-size:14px" fill="#dbeafe">pre-aggregate events into 5-min tiles, one row per key</text>
+  <text x="80" y="373" style="font-size:12px" fill="#9ca3af" font-family="monospace">(key, [event]) &rarr; (key, [tile_ir])</text>
+</svg>
+
+</div>
+
+---
+
+# Benefits &amp; cost
+
+<div class="pt-12 grid grid-cols-2 gap-16">
+
+<div class="border-l-2 border-emerald-400 pl-5">
+<div class="font-semibold text-emerald-400 uppercase text-xs">benefits</div>
+<div class="pt-4 space-y-5">
+<div>
+<div class="text-2xl font-semibold text-emerald-300">~1,000&times; compute reuse</div>
+<div class="text-sm opacity-70 pt-1">99.98% within bucket &middot; 99.9% across adjacent buckets</div>
+</div>
+<div>
+<div class="text-base font-semibold text-emerald-300">skew handling</div>
+<div class="text-sm opacity-70 pt-1">a hot key's events + queries are split across machines, never piled on one</div>
+</div>
+</div>
+</div>
+
+<div class="border-l-2 border-pink-400 pl-5">
+<div class="font-semibold text-pink-400 uppercase text-xs">cost</div>
+<div class="pt-4">
+<div class="text-2xl font-semibold text-pink-300">~8 shuffles</div>
+<div class="text-sm opacity-70 pt-1">kryo-encoded Java objects, back and forth between two partitionings</div>
+</div>
+</div>
 
 </div>
 
@@ -242,22 +304,6 @@ Spark-native exchange, then in-partition compute
 <div class="pt-14 text-center">
 <div class="text-5xl font-semibold text-emerald-400">~10&times; faster</div>
 <div class="text-sm pt-3 opacity-70">in production &middot; UnionJoin is now the default for PITC aggregations</div>
-</div>
-
----
-
-# What this unlocks
-
-<div class="pt-6 space-y-4">
-
-- One output table instead of fan-out &mdash; easy to replicate cross-region
-- Cleaner training-data pipelines &mdash; one Spark job, not one-per-window-family
-- Same output feeds search-index hydration
-
-</div>
-
-<div class="pt-10 text-sm opacity-60">
-<code>temporalEvents</code> stays as the fallback for extreme key skew (millions of entries per key) &mdash; rare in practice.
 </div>
 
 ---
