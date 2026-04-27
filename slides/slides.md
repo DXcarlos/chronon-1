@@ -124,10 +124,6 @@ Recap &middot; Q&amp;A
 
 </div>
 
-<div v-click="6" class="pt-2 text-sm opacity-60 text-center">
-MegaTile and GigaTile come next.
-</div>
-
 ---
 
 # Constraints
