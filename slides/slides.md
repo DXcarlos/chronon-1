@@ -182,15 +182,20 @@ Recap &middot; Q&amp;A
 
 # GigaTile algorithm
 
-<div class="pt-8 text-base space-y-3">
+<div class="pt-6 text-base space-y-3">
 
 <v-clicks>
 
 - small windows are fully in Flink state &mdash; carried from MegaTile
 - &ldquo;upload&rdquo; batch IRs into Flink state
 - Flink maintains large-window running sums
-- on new event &mdash; update small-window tiles, large-window megatiles, and all running sums &middot; emit if changed
-- on eviction &mdash; drop older-than-necessary tiles (small + large), refresh running sums &middot; emit if changed
+- on new event
+  - update small-window tiles, large-window megatiles, and all running sums
+  - emit if changed
+- on eviction
+  - drop older-than-necessary tiles (small + large)
+  - refresh running sums
+  - emit if changed
 
 </v-clicks>
 
@@ -644,9 +649,12 @@ DRA + decommission, no external shuffle service.
 
 <v-clicks>
 
-- <code>spark.dynamicAllocation.shuffleTracking.enabled = true</code> &mdash; DRA without an external shuffle service
-- <code>spark.decommission.enabled</code> + <code>storage.decommission.shuffleBlocks.enabled</code> &mdash; graceful shuffle migration on 2-min spot notice
-- <code>maxPendingPods = 50</code>, <code>allocation.batch.size = 50</code> &mdash; bounded burst on scale-up
+- DRA without an external shuffle service
+  - <code>spark.dynamicAllocation.shuffleTracking.enabled = true</code>
+- graceful shuffle migration on 2-min spot notice
+  - <code>spark.decommission.enabled</code> + <code>storage.decommission.shuffleBlocks.enabled</code>
+- bounded burst on scale-up
+  - <code>maxPendingPods = 50</code>, <code>allocation.batch.size = 50</code>
 
 </v-clicks>
 
@@ -665,9 +673,11 @@ Spot for executors. On-demand for drivers. Pre-warmed nodes for fast scheduling.
 <v-clicks>
 
 - Executors opt into spot per job (<code>"spot": true</code>)
-- Driver nodeSelector pins to on-demand &mdash; preemption can't kill the job
-- Driver PriorityClass = 100, warm-pool pause pods = -1 &mdash; pause pods get evicted first, drivers schedule instantly
+- Driver nodeSelector pins to on-demand
+  - preemption can't kill the job
 - Warm pool keeps a small set of driver-sized nodes hot
+  - Driver PriorityClass = 100, warm-pool pause pods = -1
+  - pause pods get evicted first, drivers schedule instantly
 
 </v-clicks>
 
