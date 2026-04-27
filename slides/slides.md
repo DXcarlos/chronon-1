@@ -164,10 +164,14 @@ MegaTile and GigaTile come next.
 
 <div class="pt-10 text-xl space-y-6">
 
+<v-clicks>
+
 - low latency, high RPS
 - sub-second freshness
 - bootstrap &mdash; long windows ready same day
 - batch correction propagates same day
+
+</v-clicks>
 
 </div>
 
@@ -177,6 +181,8 @@ MegaTile and GigaTile come next.
 
 <div class="pt-6 text-base space-y-3">
 
+<v-clicks>
+
 - two regimes by window size
   - <span class="text-blue-300">small</span> (<code>&le; 48h</code>) &mdash; keep N hop tiles (5m or hourly) in state
   - <span class="text-purple-300">large</span> (<code>&gt; 48h</code>) &mdash; keep 1 tile per day in state
@@ -185,7 +191,8 @@ MegaTile and GigaTile come next.
 - fetcher merges <code>batch_ir</code> with stream entries
   - <span class="text-blue-300">small</span> &mdash; <code>batch_ir</code> + latest emitted value
   - <span class="text-purple-300">large</span> &mdash; <code>batch_ir</code> + N daily entries from <code>batchDay &rarr; queryDay</code>
-- <span class="text-emerald-300">multi-day stream coverage keeps reads correct when batch lags</span>
+
+</v-clicks>
 
 </div>
 
@@ -665,11 +672,15 @@ What you get out of the box:
 
 <div class="pt-6 space-y-3">
 
+<v-clicks>
+
 - Cold start &mdash; minutes from submit to first task
 - Shuffle on root-disk EBS / Premium SSD &mdash; slow + noisy
 - No safe spot &mdash; one preemption kills the job
 - No DRA without an external shuffle service (Celeborn, etc.)
 - Driver evicted before executors when memory pressure hits
+
+</v-clicks>
 
 </div>
 
@@ -688,10 +699,14 @@ mounts it, labels and taints the node.
 
 <div class="pt-6 space-y-3">
 
+<v-clicks>
+
 - Spark executors carry a toleration and nodeSelector for NVMe nodes &mdash; routed automatically
 - Driver stays on regular nodes (no NVMe needed for driver)
 - 3&times; faster shuffle I/O, isolated from root-disk noisy neighbors
 - Per-job config: nothing
+
+</v-clicks>
 
 </div>
 
@@ -705,9 +720,13 @@ DRA + decommission, no external shuffle service.
 
 <div class="pt-6 space-y-3">
 
+<v-clicks>
+
 - <code>spark.dynamicAllocation.shuffleTracking.enabled = true</code> &mdash; DRA without an external shuffle service
 - <code>spark.decommission.enabled</code> + <code>storage.decommission.shuffleBlocks.enabled</code> &mdash; graceful shuffle migration on 2-min spot notice
 - <code>maxPendingPods = 50</code>, <code>allocation.batch.size = 50</code> &mdash; bounded burst on scale-up
+
+</v-clicks>
 
 </div>
 
@@ -721,10 +740,14 @@ Spot for executors. On-demand for drivers. Pre-warmed nodes for fast scheduling.
 
 <div class="pt-6 space-y-3">
 
+<v-clicks>
+
 - Executors opt into spot per job (<code>"spot": true</code>)
 - Driver nodeSelector pins to on-demand &mdash; preemption can't kill the job
 - Driver PriorityClass = 100, warm-pool pause pods = -1 &mdash; pause pods get evicted first, drivers schedule instantly
 - Warm pool keeps a small set of driver-sized nodes hot
+
+</v-clicks>
 
 </div>
 
@@ -806,10 +829,14 @@ Locked keys (cluster-controlled) vs admin overrides vs user overrides &mdash; pr
 
 <div class="pt-8 space-y-4 text-base">
 
+<v-clicks>
+
 - **UnionJoin** &mdash; <code>chronon</code> main &middot; <code>spark/.../join/UnionJoin.scala</code>
 - **MegaTile** &mdash; <code>chronon</code> branch <code>nikhil/megatile</code> &middot; design doc <code>docs/source/megatile.md</code>
 - **GigaTile** &mdash; <code>chronon</code> branch <code>nikhil/gigatile</code> &middot; design doc <code>docs/source/gigatile.md</code>
 - **Crucible** &mdash; <code>crucible</code> &middot; <code>pkg/k8s/sparkconfig.go</code>, <code>helm/crucible</code>
+
+</v-clicks>
 
 </div>
 
