@@ -162,27 +162,12 @@ MegaTile and GigaTile come next.
 
 # Constraints
 
-<div class="pt-12 grid grid-cols-2 gap-x-12 gap-y-10">
+<div class="pt-10 text-xl space-y-6">
 
-<div class="border-l-4 border-purple-400 pl-5">
-<div class="text-xs uppercase tracking-wider text-purple-300 font-semibold">low latency &middot; high RPS</div>
-<div class="text-base pt-3 opacity-90">feature reads sit on the user request path &mdash; every read costs RPS budget</div>
-</div>
-
-<div class="border-l-4 border-blue-400 pl-5">
-<div class="text-xs uppercase tracking-wider text-blue-300 font-semibold">sub-second freshness</div>
-<div class="text-base pt-3 opacity-90">event &rarr; feature visible in seconds, not minutes</div>
-</div>
-
-<div class="border-l-4 border-yellow-400 pl-5">
-<div class="text-xs uppercase tracking-wider text-yellow-300 font-semibold">bootstrap</div>
-<div class="text-base pt-3 opacity-90">a 90-day window endpoint is ready same day &mdash; not after waiting 90 days</div>
-</div>
-
-<div class="border-l-4 border-emerald-400 pl-5">
-<div class="text-xs uppercase tracking-wider text-emerald-300 font-semibold">batch correction</div>
-<div class="text-base pt-3 opacity-90">a corrected source partition propagates to features same day</div>
-</div>
+- low latency, high RPS
+- sub-second freshness
+- bootstrap &mdash; long windows ready same day
+- batch correction propagates same day
 
 </div>
 
@@ -190,51 +175,18 @@ MegaTile and GigaTile come next.
 
 # MegaTile algorithm
 
-<div class="pt-2 text-xs opacity-50 text-center">click &rarr; build</div>
+<div class="pt-6 text-base space-y-3">
 
-<div class="pt-4 text-sm text-center opacity-90">
-<span class="text-blue-300 font-semibold">small</span> &middot; window &le; 48h
-&nbsp;&nbsp;&middot;&nbsp;&nbsp;
-<span class="text-purple-300 font-semibold">large</span> &middot; window &gt; 48h
-</div>
+- two regimes by window size
+  - <span class="text-blue-300">small</span> (<code>&le; 48h</code>) &mdash; keep N hop tiles (5m or hourly) in state
+  - <span class="text-purple-300">large</span> (<code>&gt; 48h</code>) &mdash; keep 1 tile per day in state
+- on every event, emit one row covering <span class="text-yellow-300">all windows</span> for the entity
+  - e.g. with a 6h and a 4d window &rarr; row carries the <span class="text-blue-300">full 6h IR</span> (72 &times; 5m hops) and the <span class="text-purple-300">daily IR</span> for the 4d window
+- fetcher merges <code>batch_ir</code> with stream entries
+  - <span class="text-blue-300">small</span> &mdash; <code>batch_ir</code> + latest emitted value
+  - <span class="text-purple-300">large</span> &mdash; <code>batch_ir</code> + N daily entries from <code>batchDay &rarr; queryDay</code>
+- <span class="text-emerald-300">multi-day stream coverage keeps reads correct when batch lags</span>
 
-<div class="pt-5 grid grid-cols-2 gap-6 text-sm">
-
-<div class="border-l-4 border-blue-400 pl-4">
-<div class="text-xs uppercase tracking-wider text-blue-300 font-semibold">flink state &middot; small</div>
-<div class="pt-2 font-mono text-xs opacity-80">tiles[hopSize, tileStart] &rarr; baseIr</div>
-<div class="pt-1 font-mono text-xs opacity-80">cachedSmallWindowIr &mdash; running sum</div>
-</div>
-
-<div class="border-l-4 border-purple-400 pl-4">
-<div class="text-xs uppercase tracking-wider text-purple-300 font-semibold">flink state &middot; large</div>
-<div class="pt-2 font-mono text-xs opacity-80">largeTodayIr &mdash; today's accumulator</div>
-<div class="pt-1 font-mono text-xs opacity-80">largeYesterdayIr &mdash; for late events</div>
-</div>
-
-</div>
-
-<div v-click="1" class="pt-5 grid grid-cols-2 gap-6 text-sm">
-
-<div class="border-l-4 border-yellow-400 pl-4">
-<div class="text-xs uppercase tracking-wider text-yellow-300 font-semibold">on event</div>
-<div class="pt-2 opacity-90">update touched tiles &middot; merge into cachedSmallWindowIr &middot; merge into largeTodayIr</div>
-<div class="pt-1 opacity-70">emit packed entry &rarr; <span class="font-mono text-xs">kv[entity, dayStart]</span></div>
-</div>
-
-<div class="border-l-4 border-pink-400 pl-4">
-<div class="text-xs uppercase tracking-wider text-pink-300 font-semibold">on timer</div>
-<div class="pt-2 opacity-90">eviction &middot; rebuild cachedSmallWindowIr from remaining tiles</div>
-<div class="pt-1 opacity-90">watermark &middot; rotate today &rarr; yesterday, reset today</div>
-</div>
-
-</div>
-
-<div v-click="2" class="pt-5 border-l-4 border-emerald-400 pl-4 text-sm">
-<div class="text-xs uppercase tracking-wider text-emerald-300 font-semibold">fetcher merge</div>
-<div class="pt-2 opacity-90">read <code>batch_ir</code> &middot; read 1 megatile per day for <code>d &isin; [batchDay, queryDay]</code></div>
-<div class="pt-1 opacity-70">small cols: newest non-null daily value &middot; large cols: batch collapsed + sum of dailies + tail hops</div>
-<div class="pt-3 text-emerald-300 font-semibold">multi-day stream coverage is what keeps the read correct when batch lags</div>
 </div>
 
 ---
