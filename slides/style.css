@@ -1,0 +1,4 @@
+/* The right-side slide-jump overlay (triggered by 'G' key) — hide always. */
+#slidev-goto-dialog {
+  display: none !important;
+}

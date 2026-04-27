@@ -1,0 +1,19 @@
+{
+  "name": "chronon-summit-slides",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "slidev --open --remote 0.0.0.0",
+    "build": "slidev build --base /chronon-slides-static/",
+    "deploy": "npm run build && gcloud storage rsync dist gs://chronon-slides-static --recursive --delete-unmatched-destination-objects",
+    "export": "slidev export"
+  },
+  "dependencies": {
+    "@slidev/cli": "^0.50.0",
+    "@slidev/theme-default": "^0.25.0",
+    "@slidev/theme-seriph": "^0.25.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.59.1"
+  }
+}
