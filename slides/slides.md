@@ -23,37 +23,7 @@ Backfill, serving, and infra &mdash; 30 minutes.
 
 ---
 
-# The three vectors
-
-<div class="grid grid-cols-3 gap-6 pt-4">
-
-<div class="border-l-4 border-purple-400 pl-4">
-<div class="text-xs uppercase opacity-60">online &middot; serving</div>
-<div class="text-2xl font-semibold pt-1">Mega &rarr; GigaTile</div>
-<div class="text-sm pt-2 opacity-80">push merge from read to write</div>
-</div>
-
-<div class="border-l-4 border-blue-400 pl-4">
-<div class="text-xs uppercase opacity-60">offline &middot; backfill</div>
-<div class="text-2xl font-semibold pt-1">UnionJoin</div>
-<div class="text-sm pt-2 opacity-80">collapse N shuffles into one</div>
-</div>
-
-<div class="border-l-4 border-emerald-400 pl-4">
-<div class="text-xs uppercase opacity-60">offline &middot; cluster</div>
-<div class="text-2xl font-semibold pt-1">Crucible</div>
-<div class="text-sm pt-2 opacity-80">right hardware, right pricing</div>
-</div>
-
-</div>
-
-<div class="pt-12 text-center text-lg opacity-80">
-Each one moves work off the hot path or onto cheaper hardware.
-</div>
-
----
-
-# Roadmap
+# Agenda
 
 <div class="pt-8 space-y-6 text-lg">
 
