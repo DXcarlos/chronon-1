@@ -180,49 +180,19 @@ Recap &middot; Q&amp;A
 
 ---
 
-# GigaTile &middot; the idea
+# GigaTile algorithm
 
-<div class="pt-4 text-base">
-Move the merge to the write path: Flink emits a finalized vector per entity. Fetcher
-does one point get; no aggregation on read.
-</div>
+<div class="pt-8 text-base space-y-3">
 
-<div class="pt-8 flex justify-center">
+<v-clicks>
 
-<svg viewBox="0 0 880 220" style="width:72%">
-  <defs>
-    <pattern id="rawTiles" x="0" y="0" width="5" height="34" patternUnits="userSpaceOnUse">
-      <rect x="0" y="0" width="3" height="34" fill="rgba(244,114,182,0.45)"/>
-    </pattern>
-    <pattern id="megaNested" x="0" y="0" width="6" height="34" patternUnits="userSpaceOnUse">
-      <rect x="0" y="0" width="3.5" height="34" fill="rgba(251,191,36,0.40)"/>
-    </pattern>
-  </defs>
+- small windows are fully in Flink state &mdash; carried from MegaTile
+- &ldquo;upload&rdquo; batch IRs into Flink state
+- Flink maintains large-window running sums
+- on new event &mdash; update small-window tiles, large-window megatiles, and all running sums &middot; emit if changed
+- on eviction &mdash; drop older-than-necessary tiles (small + large), refresh running sums &middot; emit if changed
 
-  <text x="100" y="40" text-anchor="middle" style="font-size:13px" fill="#fbcfe8" font-weight="600">tiling</text>
-  <rect x="20" y="60" width="160" height="34" fill="url(#rawTiles)" stroke="rgba(244,114,182,0.7)" rx="2"/>
-  <text x="100" y="120" text-anchor="middle" style="font-size:14px" fill="#fbcfe8" font-weight="700">500+</text>
-  <text x="100" y="140" text-anchor="middle" style="font-size:11px" fill="#9ca3af">tiles in flight</text>
-
-  <path d="M200 80 L 320 80" stroke="#9ca3af" stroke-width="1.5" fill="none" marker-end="url(#arr2)"/>
-
-  <text x="430" y="40" text-anchor="middle" style="font-size:13px" fill="#fde68a" font-weight="600">MegaTile</text>
-  <rect x="350" y="60" width="160" height="34" fill="url(#megaNested)" stroke="rgba(251,191,36,0.7)" rx="2"/>
-  <text x="430" y="120" text-anchor="middle" style="font-size:14px" fill="#fde68a" font-weight="700">~250</text>
-  <text x="430" y="140" text-anchor="middle" style="font-size:11px" fill="#9ca3af">nested in 1 batch + 2 daily</text>
-
-  <path d="M530 80 L 650 80" stroke="#9ca3af" stroke-width="1.5" fill="none" marker-end="url(#arr2)"/>
-
-  <text x="760" y="40" text-anchor="middle" style="font-size:13px" fill="#86efac" font-weight="600">GigaTile</text>
-  <rect x="700" y="60" width="120" height="34" fill="rgba(34,197,94,0.32)" stroke="#22c55e" stroke-width="1.5" rx="2"/>
-  <text x="760" y="80" text-anchor="middle" style="font-size:11px" fill="#dcfce7" font-weight="600">vector</text>
-  <text x="760" y="120" text-anchor="middle" style="font-size:14px" fill="#86efac" font-weight="700">1</text>
-  <text x="760" y="140" text-anchor="middle" style="font-size:11px" fill="#9ca3af">finalized</text>
-
-  <text x="440" y="200" text-anchor="middle" style="font-size:13px" fill="#86efac" font-weight="600">
-    1 read &middot; no decode, no merge
-  </text>
-</svg>
+</v-clicks>
 
 </div>
 
