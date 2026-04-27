@@ -58,15 +58,15 @@ Each one moves work off the hot path or onto cheaper hardware.
 <div class="pt-8 space-y-6 text-lg">
 
 <div v-click>
-<span class="text-purple-400 font-semibold">Online &middot; serving</span> &mdash; MegaTile &rarr; GigaTile <span class="opacity-50">(15 min)</span>
+<span class="text-purple-400 font-semibold">Online optimizations</span> <span class="opacity-50">(15 min)</span>
 </div>
 
 <div v-click>
-<span class="text-blue-400 font-semibold">Offline &middot; backfill</span> &mdash; UnionJoin <span class="opacity-50">(7 min)</span>
+<span class="text-blue-400 font-semibold">Offline optimizations</span> <span class="opacity-50">(7 min)</span>
 </div>
 
 <div v-click>
-<span class="text-emerald-400 font-semibold">Offline &middot; cluster</span> &mdash; Crucible <span class="opacity-50">(5 min)</span>
+<span class="text-emerald-400 font-semibold">Cluster level optimizations</span> <span class="opacity-50">(5 min)</span>
 </div>
 
 <div v-click class="pt-6 text-sm opacity-60">
@@ -160,237 +160,81 @@ MegaTile and GigaTile come next.
 
 ---
 
-# Stage 1 &middot; Raw events in KV
+# Constraints
 
-<div class="pt-6 text-base">
-Store events directly. Fetcher reads all events in the window and aggregates at read time.
+<div class="pt-12 grid grid-cols-2 gap-x-12 gap-y-10">
+
+<div class="border-l-4 border-purple-400 pl-5">
+<div class="text-xs uppercase tracking-wider text-purple-300 font-semibold">low latency &middot; high RPS</div>
+<div class="text-base pt-3 opacity-90">feature reads sit on the user request path &mdash; every read costs RPS budget</div>
 </div>
 
-<div class="pt-8 grid grid-cols-2 gap-12 text-sm">
-
-<div class="border-l-2 border-emerald-400 pl-3">
-<div class="font-semibold text-emerald-400 uppercase text-xs">pro</div>
-<div class="opacity-80 pt-1">simple. always fresh — no aggregation lag.</div>
+<div class="border-l-4 border-blue-400 pl-5">
+<div class="text-xs uppercase tracking-wider text-blue-300 font-semibold">sub-second freshness</div>
+<div class="text-base pt-3 opacity-90">event &rarr; feature visible in seconds, not minutes</div>
 </div>
 
-<div class="border-l-2 border-pink-400 pl-3">
-<div class="font-semibold text-pink-400 uppercase text-xs">con</div>
-<div class="opacity-80 pt-1">aggregation cost on every read. read latency scales with event volume.</div>
+<div class="border-l-4 border-yellow-400 pl-5">
+<div class="text-xs uppercase tracking-wider text-yellow-300 font-semibold">bootstrap</div>
+<div class="text-base pt-3 opacity-90">a 90-day window endpoint is ready same day &mdash; not after waiting 90 days</div>
 </div>
 
-</div>
-
----
-
-# Stage 2 &middot; Batch compaction
-
-<div class="pt-4 text-base">
-Spark precomputes the IR daily. <code>FinalBatchIr(collapsed, tailHops)</code>.
-</div>
-
-<div class="pt-6 flex justify-center">
-
-<svg viewBox="0 0 760 200" style="width:50%">
-  <rect x="40" y="40" width="200" height="120" fill="rgba(96,165,250,0.18)" stroke="#60a5fa" rx="4"/>
-  <text x="140" y="35" text-anchor="middle" style="font-size:13px" fill="#bfdbfe" font-weight="600">collapsed</text>
-  <text x="140" y="105" text-anchor="middle" style="font-size:12px" fill="#bfdbfe">aggregate over</text>
-  <text x="140" y="123" text-anchor="middle" style="font-size:11px" fill="#9ca3af">[start, batchEnd &minus; tailBuffer)</text>
-
-  <text x="280" y="35" text-anchor="middle" style="font-size:13px" fill="#fde68a" font-weight="600">tailHops &mdash; 576 nested at 5min</text>
-  <g transform="translate(280, 50)">
-    <g v-for="i in 36" :key="i">
-      <rect :x="i * 12" y="0" width="9" height="100" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" stroke-width="0.5"/>
-    </g>
-  </g>
-</svg>
-
-</div>
-
-<div class="pt-4 text-sm opacity-70 text-center">
-576 = 2 days &times; 24 hours &times; 12 (5-min slots). One KV value, deeply nested.
-</div>
-
----
-
-# Stage 3 &middot; Streaming tiling (today)
-
-<div class="pt-4 text-base">
-Flink writes per-event into hop-aligned tiles. Real-time on the head, batch covers the tail.
-</div>
-
-<div class="pt-8 grid grid-cols-2 gap-12 text-sm">
-
-<div class="border-l-2 border-emerald-400 pl-3">
-<div class="font-semibold text-emerald-400 uppercase text-xs">pro</div>
-<div class="opacity-80 pt-1">real-time. write amplification bounded per event.</div>
-</div>
-
-<div class="border-l-2 border-pink-400 pl-3">
-<div class="font-semibold text-pink-400 uppercase text-xs">con</div>
-<div class="opacity-80 pt-1">read fan-out grows linearly with window. ~288 head tiles per day per tier.</div>
+<div class="border-l-4 border-emerald-400 pl-5">
+<div class="text-xs uppercase tracking-wider text-emerald-300 font-semibold">batch correction</div>
+<div class="text-base pt-3 opacity-90">a corrected source partition propagates to features same day</div>
 </div>
 
 </div>
 
 ---
 
-# The cost at scale
+# MegaTile algorithm
 
-<div class="pt-12 grid grid-cols-3 gap-6 text-center">
+<div class="pt-2 text-xs opacity-50 text-center">click &rarr; build</div>
 
-<div>
-<div class="text-5xl font-semibold text-pink-300">500+</div>
-<div class="text-sm pt-3 opacity-80">head tiles<br/>per window per counter</div>
+<div class="pt-4 text-sm text-center opacity-90">
+<span class="text-blue-300 font-semibold">small</span> &middot; window &le; 48h
+&nbsp;&nbsp;&middot;&nbsp;&nbsp;
+<span class="text-purple-300 font-semibold">large</span> &middot; window &gt; 48h
 </div>
 
-<div>
-<div class="text-5xl font-semibold text-pink-300">&times; 1000</div>
-<div class="text-sm pt-3 opacity-80">counters<br/>per query</div>
-</div>
-
-<div>
-<div class="text-5xl font-semibold text-pink-300">&times; 1000</div>
-<div class="text-sm pt-3 opacity-80">candidates<br/>per recsys query</div>
-</div>
-
-</div>
-
-<div class="pt-14 text-center">
-<div class="text-3xl font-semibold text-pink-400">= 500M tile fetches per query</div>
-<div class="text-sm opacity-60 pt-3">read latency directly impacts topline metrics</div>
-</div>
-
----
-
-# KV stores without range scans
-
-<div class="pt-4 text-base">
-Most production KV backends don't range-scan efficiently. The fetcher enumerates tile
-starts and issues N point gets per (entity, tier).
-</div>
-
-<div class="pt-6 flex justify-center">
-
-<svg viewBox="0 0 760 240" style="width:50%">
-  <defs>
-    <marker id="arrFan" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
-      <path d="M0,0 L0,5 L7,2.5 z" fill="#9ca3af"/>
-    </marker>
-  </defs>
-
-  <rect x="30" y="100" width="120" height="40" fill="rgba(244,114,182,0.18)" stroke="#f472b6" rx="4"/>
-  <text x="90" y="125" text-anchor="middle" style="font-size:13px" fill="#fbcfe8">fetcher</text>
-
-  <g stroke="#9ca3af" stroke-width="0.8" fill="none" opacity="0.7" marker-end="url(#arrFan)">
-    <line x1="155" y1="118" x2="320" y2="20"/>
-    <line x1="155" y1="118" x2="320" y2="50"/>
-    <line x1="155" y1="118" x2="320" y2="80"/>
-    <line x1="155" y1="118" x2="320" y2="110"/>
-    <line x1="155" y1="118" x2="320" y2="140"/>
-    <line x1="155" y1="118" x2="320" y2="170"/>
-    <line x1="155" y1="118" x2="320" y2="200"/>
-    <line x1="155" y1="118" x2="320" y2="230"/>
-  </g>
-
-  <g transform="translate(330, 0)">
-    <rect x="0" y="10" width="120" height="20" fill="rgba(244,114,182,0.10)" stroke="rgba(244,114,182,0.4)" rx="2"/>
-    <text x="60" y="25" text-anchor="middle" style="font-size:10px" fill="#9ca3af">tile @ 00:05</text>
-    <rect x="0" y="40" width="120" height="20" fill="rgba(244,114,182,0.10)" stroke="rgba(244,114,182,0.4)" rx="2"/>
-    <text x="60" y="55" text-anchor="middle" style="font-size:10px" fill="#9ca3af">tile @ 00:10</text>
-    <rect x="0" y="70" width="120" height="20" fill="rgba(244,114,182,0.10)" stroke="rgba(244,114,182,0.4)" rx="2"/>
-    <text x="60" y="85" text-anchor="middle" style="font-size:10px" fill="#9ca3af">tile @ 00:15</text>
-    <rect x="0" y="100" width="120" height="20" fill="rgba(244,114,182,0.10)" stroke="rgba(244,114,182,0.4)" rx="2"/>
-    <text x="60" y="115" text-anchor="middle" style="font-size:10px" fill="#9ca3af">tile @ 00:20</text>
-    <text x="60" y="138" text-anchor="middle" style="font-size:11px" fill="#9ca3af">...</text>
-    <rect x="0" y="160" width="120" height="20" fill="rgba(244,114,182,0.10)" stroke="rgba(244,114,182,0.4)" rx="2"/>
-    <text x="60" y="175" text-anchor="middle" style="font-size:10px" fill="#9ca3af">tile @ 23:50</text>
-    <rect x="0" y="190" width="120" height="20" fill="rgba(244,114,182,0.10)" stroke="rgba(244,114,182,0.4)" rx="2"/>
-    <text x="60" y="205" text-anchor="middle" style="font-size:10px" fill="#9ca3af">tile @ 23:55</text>
-  </g>
-
-  <text x="540" y="125" style="font-size:13px" fill="#fbcfe8" font-weight="600">N point gets</text>
-  <text x="540" y="143" style="font-size:11px" fill="#9ca3af">per (entity, tier)</text>
-</svg>
-
-</div>
-
-<div class="pt-4 text-sm opacity-60 text-center">
-Latency is the dominant cost on the serving fleet, not throughput.
-</div>
-
----
-
-# MegaTile &middot; one head tile, not N
-
-<div class="pt-4 text-base">
-Collapse the streaming side. One daily entry per entity carries everything for windows &le; 48h
-and an accumulator for larger windows.
-</div>
-
-<div class="pt-6 flex justify-center">
-
-<svg viewBox="0 0 880 280" style="width:72%">
-  <defs>
-    <pattern id="manyHeadTiles" x="0" y="0" width="6" height="22" patternUnits="userSpaceOnUse">
-      <rect x="0" y="0" width="3" height="22" fill="rgba(244,114,182,0.45)"/>
-    </pattern>
-  </defs>
-  <text x="440" y="14" text-anchor="middle" style="font-size:11px" fill="#64748b">production hops: 5 min &middot; 1 day of head &rArr; 24 &times; 12 = 288</text>
-  <text x="220" y="32" text-anchor="middle" style="font-size:14px" font-weight="600" fill="#fbcfe8">before</text>
-  <rect x="40" y="80" width="100" height="22" fill="rgba(96,165,250,0.20)" stroke="#60a5fa" rx="2"/>
-  <text x="90" y="96" text-anchor="middle" style="font-size:11px" fill="#bfdbfe">batchIr</text>
-  <rect x="150" y="80" width="240" height="22" fill="url(#manyHeadTiles)" stroke="rgba(244,114,182,0.7)" rx="2"/>
-  <text x="270" y="96" text-anchor="middle" style="font-size:11px" fill="#fbcfe8">~288 head tiles</text>
-  <text x="220" y="135" text-anchor="middle" style="font-size:13px" fill="#fbcfe8">1 + ~288 reads</text>
-  <text x="220" y="155" text-anchor="middle" style="font-size:11px" fill="#9ca3af">decode + merge each</text>
-
-  <text x="660" y="32" text-anchor="middle" style="font-size:14px" font-weight="600" fill="#bbf7d0">after &mdash; MegaTile</text>
-  <rect x="490" y="80" width="100" height="22" fill="rgba(96,165,250,0.20)" stroke="#60a5fa" rx="2"/>
-  <text x="540" y="96" text-anchor="middle" style="font-size:11px" fill="#bfdbfe">batchIr</text>
-  <rect x="600" y="80" width="80" height="22" fill="rgba(74,222,128,0.22)" stroke="#4ade80" rx="2"/>
-  <text x="640" y="96" text-anchor="middle" style="font-size:11px" fill="#bbf7d0">today</text>
-  <rect x="690" y="80" width="80" height="22" fill="rgba(74,222,128,0.12)" stroke="#4ade80" rx="2"/>
-  <text x="730" y="96" text-anchor="middle" style="font-size:11px" fill="#bbf7d0">yesterday</text>
-  <text x="660" y="135" text-anchor="middle" style="font-size:13px" fill="#bbf7d0" font-weight="600">3 reads</text>
-  <text x="660" y="155" text-anchor="middle" style="font-size:11px" fill="#9ca3af">small windows: latest only</text>
-  <text x="660" y="172" text-anchor="middle" style="font-size:11px" fill="#9ca3af">large windows: merge with batch</text>
-
-  <line x1="440" y1="40" x2="440" y2="200" stroke="#374151" stroke-dasharray="2,3"/>
-
-  <text x="440" y="240" text-anchor="middle" style="font-size:13px" fill="#86efac" font-weight="600">
-    head: 1 daily read &middot; tail still inside batchIr
-  </text>
-</svg>
-
-</div>
-
----
-
-# How MegaTile splits windows
-
-<div class="pt-6 grid grid-cols-2 gap-12">
+<div class="pt-5 grid grid-cols-2 gap-6 text-sm">
 
 <div class="border-l-4 border-blue-400 pl-4">
-<div class="text-xs uppercase opacity-60">small windows</div>
-<div class="text-base pt-1 font-semibold">window &le; 48h</div>
-<div class="text-sm pt-3 opacity-80">
-Self-contained in today's daily entry. Latest entry is the answer.
-</div>
+<div class="text-xs uppercase tracking-wider text-blue-300 font-semibold">flink state &middot; small</div>
+<div class="pt-2 font-mono text-xs opacity-80">tiles[hopSize, tileStart] &rarr; baseIr</div>
+<div class="pt-1 font-mono text-xs opacity-80">cachedSmallWindowIr &mdash; running sum</div>
 </div>
 
 <div class="border-l-4 border-purple-400 pl-4">
-<div class="text-xs uppercase opacity-60">large windows + unwindowed</div>
-<div class="text-base pt-1 font-semibold">window &gt; 48h</div>
-<div class="text-sm pt-3 opacity-80">
-Daily accumulator (today + yesterday) merged with batch collapsed + tail hops at fetch time.
-</div>
+<div class="text-xs uppercase tracking-wider text-purple-300 font-semibold">flink state &middot; large</div>
+<div class="pt-2 font-mono text-xs opacity-80">largeTodayIr &mdash; today's accumulator</div>
+<div class="pt-1 font-mono text-xs opacity-80">largeYesterdayIr &mdash; for late events</div>
 </div>
 
 </div>
 
-<div class="pt-10 text-sm opacity-60">
-48h matches <code>tailBuffer</code>. Windows &lt; 2d aren't safe to move into batch when batch
-is delayed by more than 2 days &mdash; coverage gap.
+<div v-click="1" class="pt-5 grid grid-cols-2 gap-6 text-sm">
+
+<div class="border-l-4 border-yellow-400 pl-4">
+<div class="text-xs uppercase tracking-wider text-yellow-300 font-semibold">on event</div>
+<div class="pt-2 opacity-90">update touched tiles &middot; merge into cachedSmallWindowIr &middot; merge into largeTodayIr</div>
+<div class="pt-1 opacity-70">emit packed entry &rarr; <span class="font-mono text-xs">kv[entity, dayStart]</span></div>
+</div>
+
+<div class="border-l-4 border-pink-400 pl-4">
+<div class="text-xs uppercase tracking-wider text-pink-300 font-semibold">on timer</div>
+<div class="pt-2 opacity-90">eviction &middot; rebuild cachedSmallWindowIr from remaining tiles</div>
+<div class="pt-1 opacity-90">watermark &middot; rotate today &rarr; yesterday, reset today</div>
+</div>
+
+</div>
+
+<div v-click="2" class="pt-5 border-l-4 border-emerald-400 pl-4 text-sm">
+<div class="text-xs uppercase tracking-wider text-emerald-300 font-semibold">fetcher merge</div>
+<div class="pt-2 opacity-90">read <code>batch_ir</code> &middot; read 1 megatile per day for <code>d &isin; [batchDay, queryDay]</code></div>
+<div class="pt-1 opacity-70">small cols: newest non-null daily value &middot; large cols: batch collapsed + sum of dailies + tail hops</div>
+<div class="pt-3 text-emerald-300 font-semibold">multi-day stream coverage is what keeps the read correct when batch lags</div>
 </div>
 
 ---

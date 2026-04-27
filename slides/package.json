@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "slidev --open --remote 0.0.0.0",
     "build": "slidev build --base /chronon-slides-static/",
-    "deploy": "npm run build && gcloud storage rsync dist gs://chronon-slides-static --recursive --delete-unmatched-destination-objects",
+    "deploy": "npm run build && gcloud storage rsync dist gs://chronon-slides-static --recursive --delete-unmatched-destination-objects && gcloud storage objects update gs://chronon-slides-static/index.html --cache-control='no-cache, max-age=0, must-revalidate'",
     "export": "slidev export"
   },
   "dependencies": {
