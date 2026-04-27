@@ -2,11 +2,13 @@ package ai.chronon.aggregator.windowing
 
 import ai.chronon.aggregator.row.RowAggregator
 
-/** In-memory GigaTileStore for tests. Extends InMemoryTileStore with batch state. */
+import scala.collection.mutable
+
 class InMemoryGigaTileStore(windowedAgg: RowAggregator) extends InMemoryTileStore(windowedAgg) with GigaTileStore {
   private var _batchIr: FinalBatchIr = _
   private var _batchEndTs: Long = -1L
   private var _runningLargeIr: Array[Any] = windowedAgg.init
+  private val _dailyLargeIrs: mutable.Map[Long, Array[Any]] = mutable.Map.empty
 
   override def getBatchIr: FinalBatchIr = _batchIr
   override def putBatchIr(ir: FinalBatchIr): Unit = _batchIr = ir
@@ -16,4 +18,9 @@ class InMemoryGigaTileStore(windowedAgg: RowAggregator) extends InMemoryTileStor
 
   override def getRunningLargeIr: Array[Any] = _runningLargeIr
   override def putRunningLargeIr(ir: Array[Any]): Unit = _runningLargeIr = ir
+
+  override def getDailyLargeIr(dayStart: Long): Array[Any] = _dailyLargeIrs.getOrElse(dayStart, null)
+  override def putDailyLargeIr(dayStart: Long, ir: Array[Any]): Unit = _dailyLargeIrs(dayStart) = ir
+  override def removeDailyLargeIr(dayStart: Long): Unit = _dailyLargeIrs.remove(dayStart)
+  override def dailyLargeIrIterator: Iterator[(Long, Array[Any])] = _dailyLargeIrs.iterator
 }

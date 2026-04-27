@@ -49,8 +49,7 @@ class GigaTileProcessFunction(
   // Flink managed state
   private var tileState: MapState[String, Array[Byte]] = _
   private var megaTileIrState: ValueState[Array[Byte]] = _
-  private var largeTodayIrState: ValueState[Array[Byte]] = _
-  private var largeYesterdayIrState: ValueState[Array[Byte]] = _
+  private var dailyLargeIrState: MapState[java.lang.Long, Array[Byte]] = _
   private var currentDayStartState: ValueState[java.lang.Long] = _
   private var earliestTileStartState: ValueState[java.lang.Long] = _
   private var batchIrState: ValueState[Array[Byte]] = _
@@ -70,10 +69,11 @@ class GigaTileProcessFunction(
       new MapStateDescriptor[String, Array[Byte]]("giga-tile-tiles", classOf[String], classOf[Array[Byte]]))
     megaTileIrState =
       getRuntimeContext.getState(new ValueStateDescriptor[Array[Byte]]("giga-tile-ir", classOf[Array[Byte]]))
-    largeTodayIrState =
-      getRuntimeContext.getState(new ValueStateDescriptor[Array[Byte]]("giga-tile-large-today", classOf[Array[Byte]]))
-    largeYesterdayIrState = getRuntimeContext.getState(
-      new ValueStateDescriptor[Array[Byte]]("giga-tile-large-yesterday", classOf[Array[Byte]]))
+    dailyLargeIrState = getRuntimeContext.getMapState(
+      new MapStateDescriptor[java.lang.Long, Array[Byte]](
+        "giga-tile-large-daily",
+        classOf[java.lang.Long],
+        classOf[Array[Byte]]))
     currentDayStartState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Long]("giga-tile-day-start", classOf[java.lang.Long]))
     earliestTileStartState = getRuntimeContext.getState(
@@ -106,7 +106,7 @@ class GigaTileProcessFunction(
     if (lastKey == null || !lastKey.equals(currentKey)) {
       lastKey = currentKey
       flinkStore.bindFlinkState(
-        tileState, megaTileIrState, largeTodayIrState, largeYesterdayIrState,
+        tileState, megaTileIrState, dailyLargeIrState,
         currentDayStartState, earliestTileStartState,
         batchIrState, batchEndTsState, runningLargeIrState
       )
@@ -218,28 +218,28 @@ class GigaTileProcessFunction(
   }
 }
 
-/** TileStore backed by Flink state for GigaTile. Extends the mega tile state with batch IR storage. */
+/** TileStore backed by Flink state for GigaTile. Extends the mega tile state with batch IR
+  * storage and a per-day large-IR map (keyed by day-start) sized to bridge any retained gap
+  * between batchEndDay and the watermark day.
+  */
 class FlinkGigaTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec, gigaCodec: GigaTileCodec)
     extends GigaTileStore {
   private val windowedAgg = megaTileAgg.windowedAggregator
 
   private var tileState: MapState[String, Array[Byte]] = _
   private var megaTileIrState: ValueState[Array[Byte]] = _
-  private var largeTodayIrState: ValueState[Array[Byte]] = _
-  private var largeYesterdayIrState: ValueState[Array[Byte]] = _
+  private var dailyLargeIrState: MapState[java.lang.Long, Array[Byte]] = _
   private var currentDayStartState: ValueState[java.lang.Long] = _
   private var earliestTileStartState: ValueState[java.lang.Long] = _
   private var batchIrState: ValueState[Array[Byte]] = _
   private var batchEndTsState: ValueState[java.lang.Long] = _
   private var runningLargeIrState: ValueState[Array[Byte]] = _
 
-  // Decode cache (invalidated on key switch)
+  // Decode cache invalidated on key switch. Keeping per-day decoded values in an off-heap
+  // mutable map would defeat the idea of per-key Flink state, so we just memoize the values
+  // we read inside one event (typically getDailyLargeIr is called once per slot per recompute).
   private var cachedSmallDecoded: Array[Any] = _
   private var cachedSmallValid: Boolean = false
-  private var largeTodayDecoded: Array[Any] = _
-  private var largeTodayValid: Boolean = false
-  private var largeYesterdayDecoded: Array[Any] = _
-  private var largeYesterdayValid: Boolean = false
   private var batchIrDecoded: FinalBatchIr = _
   private var batchIrValid: Boolean = false
   private var runningLargeDecoded: Array[Any] = _
@@ -247,8 +247,7 @@ class FlinkGigaTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec, 
 
   def bindFlinkState(tiles: MapState[String, Array[Byte]],
                      megaTileIr: ValueState[Array[Byte]],
-                     largeToday: ValueState[Array[Byte]],
-                     largeYesterday: ValueState[Array[Byte]],
+                     dailyLargeIr: MapState[java.lang.Long, Array[Byte]],
                      dayStart: ValueState[java.lang.Long],
                      earliest: ValueState[java.lang.Long],
                      batchIr: ValueState[Array[Byte]],
@@ -256,16 +255,13 @@ class FlinkGigaTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec, 
                      runningLarge: ValueState[Array[Byte]]): Unit = {
     tileState = tiles
     megaTileIrState = megaTileIr
-    largeTodayIrState = largeToday
-    largeYesterdayIrState = largeYesterday
+    dailyLargeIrState = dailyLargeIr
     currentDayStartState = dayStart
     earliestTileStartState = earliest
     batchIrState = batchIr
     batchEndTsState = batchEndTs
     runningLargeIrState = runningLarge
     cachedSmallValid = false
-    largeTodayValid = false
-    largeYesterdayValid = false
     batchIrValid = false
     runningLargeValid = false
   }
@@ -306,24 +302,31 @@ class FlinkGigaTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec, 
     cachedSmallDecoded = ir; cachedSmallValid = true
   }
 
-  override def getLargeTodayIr: Array[Any] = {
-    if (!largeTodayValid) { largeTodayDecoded = decodeWindowedIr(largeTodayIrState); largeTodayValid = true }
-    largeTodayDecoded
-  }
-  override def putLargeTodayIr(ir: Array[Any]): Unit = {
-    largeTodayIrState.update(codec.encode(ir))
-    largeTodayDecoded = ir; largeTodayValid = true
-  }
+  // Today/yesterday accessors required by the parent TileStore trait but unused in GigaTile —
+  // routing happens through the per-day map below. Stubbed to safe defaults so a misroute is
+  // detectable downstream (empty IRs / no-op writes) instead of throwing inside Flink.
+  override def getLargeTodayIr: Array[Any] = windowedAgg.init
+  override def putLargeTodayIr(ir: Array[Any]): Unit = ()
+  override def getLargeYesterdayIr: Array[Any] = windowedAgg.init
+  override def putLargeYesterdayIr(ir: Array[Any]): Unit = ()
 
-  override def getLargeYesterdayIr: Array[Any] = {
-    if (!largeYesterdayValid) {
-      largeYesterdayDecoded = decodeWindowedIr(largeYesterdayIrState); largeYesterdayValid = true
-    }
-    largeYesterdayDecoded
+  override def getDailyLargeIr(dayStart: Long): Array[Any] = {
+    val bytes = dailyLargeIrState.get(dayStart)
+    if (bytes != null) codec.decode(bytes) else null
   }
-  override def putLargeYesterdayIr(ir: Array[Any]): Unit = {
-    largeYesterdayIrState.update(codec.encode(ir))
-    largeYesterdayDecoded = ir; largeYesterdayValid = true
+  override def putDailyLargeIr(dayStart: Long, ir: Array[Any]): Unit =
+    dailyLargeIrState.put(dayStart, codec.encode(ir))
+  override def removeDailyLargeIr(dayStart: Long): Unit =
+    dailyLargeIrState.remove(dayStart)
+  override def dailyLargeIrIterator: Iterator[(Long, Array[Any])] = {
+    val iter = dailyLargeIrState.iterator()
+    new Iterator[(Long, Array[Any])] {
+      override def hasNext: Boolean = iter.hasNext
+      override def next(): (Long, Array[Any]) = {
+        val entry = iter.next()
+        (entry.getKey.longValue(), codec.decode(entry.getValue))
+      }
+    }
   }
 
   override def getCurrentDayStart: Long = Option(currentDayStartState.value()).map(_.longValue()).getOrElse(-1L)

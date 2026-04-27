@@ -88,8 +88,7 @@ class GigaTileCodecRoundTripTest extends AnyFlatSpec {
       extends GigaTileStore {
     private val tileBytes = mutable.Map[(Long, Long), Array[Byte]]()
     private var cachedSmallBytes: Array[Byte] = codec.encode(windowedAgg.init)
-    private var largeTodayBytes: Array[Byte] = codec.encode(windowedAgg.init)
-    private var largeYesterdayBytes: Array[Byte] = codec.encode(windowedAgg.init)
+    private val dailyLargeBytes = mutable.Map[Long, Array[Byte]]()
     private var dayStart: Long = -1L
     private var earliest: Long = Long.MaxValue
     private var batchIrBytes: Array[Byte] = _
@@ -104,10 +103,12 @@ class GigaTileCodecRoundTripTest extends AnyFlatSpec {
 
     override def getCachedSmallWindowIr: Array[Any] = codec.decode(cachedSmallBytes)
     override def putCachedSmallWindowIr(ir: Array[Any]): Unit = cachedSmallBytes = codec.encode(ir)
-    override def getLargeTodayIr: Array[Any] = codec.decode(largeTodayBytes)
-    override def putLargeTodayIr(ir: Array[Any]): Unit = largeTodayBytes = codec.encode(ir)
-    override def getLargeYesterdayIr: Array[Any] = codec.decode(largeYesterdayBytes)
-    override def putLargeYesterdayIr(ir: Array[Any]): Unit = largeYesterdayBytes = codec.encode(ir)
+    // Today/yesterday are required by the parent TileStore trait but unused by GigaTile —
+    // routing happens through the per-day map below.
+    override def getLargeTodayIr: Array[Any] = windowedAgg.init
+    override def putLargeTodayIr(ir: Array[Any]): Unit = ()
+    override def getLargeYesterdayIr: Array[Any] = windowedAgg.init
+    override def putLargeYesterdayIr(ir: Array[Any]): Unit = ()
     override def getCurrentDayStart: Long = dayStart
     override def putCurrentDayStart(ts: Long): Unit = dayStart = ts
     override def getEarliestTileStart: Long = earliest
@@ -121,6 +122,12 @@ class GigaTileCodecRoundTripTest extends AnyFlatSpec {
     override def putBatchEndTs(ts: Long): Unit = batchEnd = ts
     override def getRunningLargeIr: Array[Any] = codec.decode(runningLargeBytes)
     override def putRunningLargeIr(ir: Array[Any]): Unit = runningLargeBytes = codec.encode(ir)
+
+    override def getDailyLargeIr(ds: Long): Array[Any] = dailyLargeBytes.get(ds).map(codec.decode).orNull
+    override def putDailyLargeIr(ds: Long, ir: Array[Any]): Unit = dailyLargeBytes(ds) = codec.encode(ir)
+    override def removeDailyLargeIr(ds: Long): Unit = dailyLargeBytes.remove(ds)
+    override def dailyLargeIrIterator: Iterator[(Long, Array[Any])] =
+      dailyLargeBytes.iterator.map { case (ds, b) => (ds, codec.decode(b)) }
   }
 
   /** Full giga tile pipeline with serde round-trips at every state boundary. */
