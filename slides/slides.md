@@ -598,6 +598,30 @@ Bring-your-own-cloud platform for Spark batch and Flink streaming. Single Helm c
 
 ---
 
+# Crucible &middot; scope
+
+<div class="pt-2 text-sm opacity-60">what's in the box</div>
+
+<div class="pt-6 text-base space-y-3">
+
+<v-clicks>
+
+- <span class="text-emerald-300 font-semibold">API gateway</span> &mdash; CRUD Spark / Flink jobs over HTTP/JSON
+  - submit &middot; list &middot; status &middot; kill &middot; logs &middot; metrics
+- <span class="text-emerald-300 font-semibold">one-click UIs</span> &mdash; Spark UI + Flink UI proxied per job
+  - no port-forward dance, no SSH tunnels
+- <span class="text-emerald-300 font-semibold">logs + metrics</span> &mdash; Loki + Prometheus + Grafana
+  - LogQL search across all jobs in a namespace
+- <span class="text-emerald-300 font-semibold">performance defaults</span> &mdash; tuned for shuffle-dominant workloads
+  - AQE, DRA, decommission, memory overhead, lz4/zstd split
+  - locked &middot; admin &middot; user override precedence
+
+</v-clicks>
+
+</div>
+
+---
+
 # The Spark-on-K8s tax
 
 <div class="pt-6 text-base">
@@ -624,116 +648,26 @@ The cost gap to Databricks-class platforms is mostly this tax.
 
 ---
 
-# Lever 1: NVMe DaemonSet
+# Crucible &middot; levers
 
-<div class="pt-6 text-base">
-A DaemonSet auto-discovers NVMe instance-store hardware on every node, formats it,
-mounts it, labels and taints the node.
-</div>
+<div class="pt-2 text-sm opacity-60">why each one matters</div>
 
-<div class="pt-6 space-y-3">
+<div class="pt-6 text-base space-y-3">
 
 <v-clicks>
 
-- Spark executors carry a toleration and nodeSelector for NVMe nodes &mdash; routed automatically
-- Driver stays on regular nodes (no NVMe needed for driver)
-- 3&times; faster shuffle I/O, isolated from root-disk noisy neighbors
-- Per-job config: nothing
+- <span class="text-emerald-300 font-semibold">NVMe</span> &mdash; root-disk EBS shuffle is slow + noisy
+  - DaemonSet auto-mounts &middot; executors auto-routed &middot; ~3&times; faster shuffle I/O
+- <span class="text-emerald-300 font-semibold">Graviton</span> &mdash; ARM is 60&ndash;70% cheaper than equivalent x86 spot
+  - same JVM bytecode &middot; multi-arch images &middot; tested on AWS / Azure / GCP
+- <span class="text-emerald-300 font-semibold">spot</span> &mdash; executors on spot, drivers pinned on-demand
+  - preemption can't kill the job &middot; warm pool gives sub-20s submit-to-first-task
+- <span class="text-emerald-300 font-semibold">Spark 4.1 decommission</span> &mdash; DRA without an external shuffle service
+  - executors migrate shuffle blocks before exiting on the 2-min spot notice
+  - no Celeborn / external shuffle service to operate
 
 </v-clicks>
 
-</div>
-
----
-
-# Lever 2: DRA + decommission
-
-<div class="pt-6 text-base">
-DRA + decommission, no external shuffle service.
-</div>
-
-<div class="pt-6 space-y-3">
-
-<v-clicks>
-
-- DRA without an external shuffle service
-  - <code>spark.dynamicAllocation.shuffleTracking.enabled = true</code>
-- graceful shuffle migration on 2-min spot notice
-  - <code>spark.decommission.enabled</code> + <code>storage.decommission.shuffleBlocks.enabled</code>
-- bounded burst on scale-up
-  - <code>maxPendingPods = 50</code>, <code>allocation.batch.size = 50</code>
-
-</v-clicks>
-
-</div>
-
----
-
-# Lever 3: spot + driver pinning + warm pool
-
-<div class="pt-6 text-base">
-Spot for executors. On-demand for drivers. Pre-warmed nodes for fast scheduling.
-</div>
-
-<div class="pt-6 space-y-3">
-
-<v-clicks>
-
-- Executors opt into spot per job (<code>"spot": true</code>)
-- Driver nodeSelector pins to on-demand
-  - preemption can't kill the job
-- Warm pool keeps a small set of driver-sized nodes hot
-  - Driver PriorityClass = 100, warm-pool pause pods = -1
-  - pause pods get evicted first, drivers schedule instantly
-
-</v-clicks>
-
-</div>
-
-<div class="pt-6 text-sm opacity-60">
-Sub-20s submit-to-first-task with warm pool on. ~5% spot interruption rate stops mattering &mdash; drivers stay on-demand, executors recover.
-</div>
-
----
-
-# Lever 4: ARM
-
-<div class="pt-6 text-base">
-Graviton3 (AWS), Cobalt 100 (Azure), Axion (GCP).
-</div>
-
-<div class="pt-10 grid grid-cols-2 gap-12">
-
-<div>
-<div class="text-3xl font-semibold">60&ndash;70%</div>
-<div class="text-sm pt-2 opacity-80">cheaper than equivalent x86 spot</div>
-</div>
-
-<div>
-<div class="text-3xl font-semibold">same code</div>
-<div class="text-sm pt-2 opacity-80">multi-arch images &middot; no JVM porting</div>
-</div>
-
-</div>
-
-<div class="pt-10 text-sm opacity-60">
-ARM toleration on executors. Driver stays on whichever arch is cheapest. Tested nightly on all three clouds.
-</div>
-
----
-
-# Cluster defaults &middot; `baseDefaults`
-
-<div class="pt-4 text-base opacity-80">
-<code>baseDefaults</code> in <code>pkg/k8s/sparkconfig.go</code> &mdash; the defaults every job inherits.
-</div>
-
-<div class="pt-4 text-sm opacity-60">
-[ SCREENSHOT / EXCERPT &mdash; AQE bundle, DRA, decommission, memoryOverheadFactor=0.15, lz4/zstd split, allocation tuning ]
-</div>
-
-<div class="pt-6 text-base">
-Locked keys (cluster-controlled) vs admin overrides vs user overrides &mdash; precedence order is explicit.
 </div>
 
 ---
