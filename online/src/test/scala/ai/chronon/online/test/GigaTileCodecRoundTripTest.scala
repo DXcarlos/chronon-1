@@ -287,4 +287,79 @@ class GigaTileCodecRoundTripTest extends AnyFlatSpec {
       assertEquals(s"tailHops[$i] length", denormalized.tailHops(i).length, decoded.tailHops(i).length)
     }
   }
+
+  // -----------------------------------------------------------------
+  // Gap H — GigaTileCodec.irCodec is `@transient private lazy val avroCodec = AvroCodec.of(...)`.
+  // AvroCodec.of is backed by a per-thread cache; caching the result in a lazy val means the
+  // first thread's codec is reused across all threads, leaking that thread's mutable decoder
+  // state. Mick's MegaTile fix `ced0185` switched to `private def avroCodec = ...` so each
+  // thread resolves its own codec. The same pattern in GigaTileCodec is currently safe only
+  // because Flink calls decodeBatchIr single-threaded per key — moving any decode onto a
+  // shared (e.g. fetcher / parallel-batch-ingest) path will hit this race.
+  //
+  // Reproduce by spinning N threads and decoding the same encoded batchIr concurrently. With
+  // a thread-safe codec the decoded results are all equal and no decode throws. With the
+  // lazy-val pattern, repeated runs surface either an exception or inconsistent decodes.
+  // -----------------------------------------------------------------
+  it should "FAIL: GigaTileCodec.decodeBatchIr must be thread-safe" in {
+    val batchEnd = TsUtils.round(1700000000000L, DayMillis)
+    val aggregations = Seq(
+      Builders.Aggregation(Operation.SUM, "num", AllWindows),
+      Builders.Aggregation(Operation.COUNT, "num", AllWindows),
+      Builders.Aggregation(Operation.AVERAGE, "amount", AllWindows)
+    )
+    val gb = buildGroupBy(aggregations)
+    val gigaCodec = new GigaTileCodec(gb, Schema)
+
+    val events = generateEvents(14, 5000).filter(_.ts < batchEnd)
+    val onlineAgg = new SawtoothOnlineAggregator(batchEnd, aggregations, Schema, tailBufferMillis = TailBufferMillis)
+    var batchIr = onlineAgg.init
+    events.foreach(row => batchIr = onlineAgg.update(batchIr, row))
+    val denormalized = onlineAgg.denormalizeBatchIr(onlineAgg.normalizeBatchIr(batchIr))
+    val encoded = gigaCodec.encodeBatchIr(denormalized)
+
+    val nThreads = 16
+    val iterations = 200
+    val pool = java.util.concurrent.Executors.newFixedThreadPool(nThreads)
+    val errors = java.util.concurrent.ConcurrentHashMap.newKeySet[String]()
+    val collapsedHashes = java.util.concurrent.ConcurrentHashMap.newKeySet[String]()
+    val barrier = new java.util.concurrent.CyclicBarrier(nThreads)
+    val futures = (0 until nThreads).map { _ =>
+      pool.submit(new Runnable {
+        override def run(): Unit = {
+          barrier.await()
+          var i = 0
+          while (i < iterations) {
+            try {
+              val decoded = gigaCodec.decodeBatchIr(encoded)
+              val collapsedFingerprint = decoded.collapsed.map(v => if (v == null) "null" else v.toString).mkString(",")
+              collapsedHashes.add(collapsedFingerprint)
+            } catch {
+              case t: Throwable => errors.add(s"${t.getClass.getSimpleName}: ${t.getMessage}")
+            }
+            i += 1
+          }
+        }
+      })
+    }
+    futures.foreach(_.get(60, java.util.concurrent.TimeUnit.SECONDS))
+    pool.shutdown()
+
+    assertTrue(s"concurrent decodes must not throw — observed: ${errors.toArray.mkString("; ")}", errors.isEmpty)
+    assertEquals(
+      s"all concurrent decodes must return the same collapsed fingerprint — observed ${collapsedHashes.size} distinct values",
+      1,
+      collapsedHashes.size
+    )
+
+    // Defense-in-depth assertion: prefer that irCodec resolves per call (def, not lazy val),
+    // matching Mick's MegaTileCodec fix. The runtime test above can flake; this static check
+    // pins the fix shape.
+    val irCodecField = classOf[GigaTileCodec].getDeclaredFields.find(_.getName == "irCodec")
+    assertTrue(
+      "GigaTileCodec.irCodec must be resolved per-call (def) so AvroCodec.of's per-thread cache " +
+        "isn't bypassed — it is currently a `lazy val`",
+      irCodecField.isEmpty
+    )
+  }
 }

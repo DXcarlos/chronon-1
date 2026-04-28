@@ -209,4 +209,130 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
       sum
     )
   }
+
+  // -----------------------------------------------------------------
+  // Gap E — Bootstrap underreport: emits before batch IR is loaded report a 7d window as
+  // if it equalled the streaming-since-startup partial sum. The fetcher's PUSH branch
+  // already returns null for "no streaming data", but as soon as Flink emits one vector
+  // (with batchIr still null), that under-counted vector overwrites the KV row and is
+  // served indefinitely.
+  //
+  // Correct behavior: don't emit a finalized vector for any column whose contract requires
+  // batch (large/unwindowed). Either suppress the emit entirely, or null out the batch-
+  // dependent columns until onBatchUpdate has run.
+  // -----------------------------------------------------------------
+  it should "FAIL: must not emit batch-dependent columns before batch IR has loaded" in {
+    val window = new Window(7, TimeUnit.DAYS)
+    val aggregations: Seq[Aggregation] = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(window)))
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new InMemoryGigaTileStore(megaTileAgg.windowedAggregator)
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store)
+
+    // Deliberately skip onBatchUpdate — Iceberg connected stream hasn't fired yet.
+    val day0 = TsUtils.round(1700000000000L, DayMillis)
+    val event = new TestRow(day0 + HourMillis, 5L)(0)
+    processor.advanceWatermark(event.ts)
+    val r = processor.onEvent(event, event.ts)
+
+    assertNotNull("event must produce some emit", r)
+    val sumIr = r.finalizedVector
+    val sumValue = if (sumIr == null) null else sumIr(0)
+    assertNull(
+      "7d SUM must not be emitted as the streaming-only partial sum while batchIr is unloaded — " +
+        "fetcher will serve this under-counted value indefinitely from the PUSH KV row",
+      sumValue
+    )
+  }
+
+  // -----------------------------------------------------------------
+  // Gap F — Silent drop of events older than the staleness bound. With
+  // maxBatchStalenessDays=2 and an event 5 days old, the event is dropped from BOTH the
+  // small-window path (out of retention) and the daily-slot path (older than oldestAcceptedDay).
+  // Nothing surfaces — no exception, no metric, no return signal. A consumer downstream
+  // cannot tell that data was silently lost.
+  //
+  // Correct behavior at minimum: signal the drop on the GigaEmitResult so the Flink wiring
+  // can bump a counter / log. The simplest API surface is a `droppedStaleEvent: Boolean`
+  // field on GigaEmitResult. This test asserts that signal exists; it currently doesn't.
+  // -----------------------------------------------------------------
+  it should "FAIL: events older than maxBatchStalenessDays must surface a drop signal" in {
+    val window = new Window(7, TimeUnit.DAYS)
+    val aggregations: Seq[Aggregation] = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(window)))
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new InMemoryGigaTileStore(megaTileAgg.windowedAggregator)
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store, maxBatchStalenessDays = 2)
+
+    val today = TsUtils.round(1700000000000L, DayMillis) + 12 * HourMillis
+    processor.advanceWatermark(today)
+    processor.onEvent(new TestRow(today, 1L)(0), today)
+
+    val staleEvent = new TestRow(today - 5 * DayMillis, 100L)(0)
+    val r = processor.onEvent(staleEvent, staleEvent.ts)
+
+    // GigaEmitResult does not currently expose a drop indicator. Ask reflection for a field
+    // named droppedStaleEvent (or similar) — the test fails until such a signal exists.
+    val signalField = r.getClass.getDeclaredFields
+      .find(f => f.getName.toLowerCase.contains("drop") || f.getName.toLowerCase.contains("stale"))
+    assertTrue(
+      "GigaEmitResult must expose a drop signal so callers can bump a metric / log a stale event — " +
+        s"none of the fields ${r.getClass.getDeclaredFields.map(_.getName).mkString(",")} indicate this",
+      signalField.isDefined
+    )
+  }
+
+  // -----------------------------------------------------------------
+  // Gap G — Idle-entity stale finalized vector. After events arrive, the small-window
+  // cache reflects the (eventTs - window, eventTs] interval. As wall-clock advances with
+  // no further events, the cache should age out: events whose ts falls outside the
+  // [now - window, now] interval should no longer contribute. GigaTile's PUSH KV row
+  // is whatever was last emitted, and `onTimer` deliberately doesn't re-register a
+  // processing-time eviction timer ("Don't re-register from onTimer" comment), so the
+  // KV value stays at the last-emit forever — even after the events should have aged
+  // out of the small window.
+  //
+  // The processor itself decays correctly when onEviction is called with a later ts —
+  // the bug is at the Flink wiring level (no PT timer for idle entities). Here we
+  // assert the desired contract at the processor level: a serving emit issued at
+  // (last_event + 2h) for a 1h SUM must show 0/null because the events are outside
+  // the 1h horizon. The test simulates "idle Flink wiring" by NOT calling onEviction
+  // and asks the processor for the as-of value via a no-op trigger.
+  //
+  // Without a "serve at time T" API on the processor (which the Flink wiring would
+  // need too), we exercise the proxy: the last in-state cached IR is the value the
+  // PUSH KV would serve. The test fails until either (a) the processor exposes a way
+  // to compute the as-of vector without an event, or (b) the Flink wiring keeps the
+  // cache fresh via PT timers.
+  // -----------------------------------------------------------------
+  it should "FAIL: idle entity must serve a vector that decays with wall-clock, not the last emit" in {
+    val window = new Window(1, TimeUnit.HOURS)
+    val aggregations: Seq[Aggregation] = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(window)))
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new InMemoryGigaTileStore(megaTileAgg.windowedAggregator)
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store)
+
+    val day0 = TsUtils.round(1700000000000L, DayMillis)
+    val tEvent = day0 + 6 * HourMillis
+    processor.advanceWatermark(tEvent)
+    val r1 = processor.onEvent(new TestRow(tEvent, 1L)(0), tEvent)
+    assertEquals("baseline: 1h SUM after the event is 1", 1L, r1.finalizedVector(0))
+
+    // Wall clock advances 2 hours past the event with no further events — the event is
+    // now well outside the 1h serving horizon. A read at this point must reflect that.
+    val tServe = tEvent + 2 * HourMillis
+    processor.advanceWatermark(tServe)
+
+    // The processor exposes no "serve as of T without an event" API. The PUSH KV row
+    // therefore still holds r1.finalizedVector (sum=1), even though the correct
+    // as-of-tServe answer is 0/null. Assert the contract we actually want.
+    val servedAsOfTServe: Any = {
+      val method = processor.getClass.getDeclaredMethods.find(_.getName == "serveAsOf")
+      method.map { m => m.setAccessible(true); m.invoke(processor, java.lang.Long.valueOf(tServe)) }.orNull
+    }
+    assertNotNull(
+      "GigaTileStreamProcessor must expose a serveAsOf(asOfTs) helper so Flink can " +
+        "refresh idle KV rows without waiting for a new event. Without it, idle entities " +
+        "serve stale finalized vectors indefinitely.",
+      servedAsOfTServe
+    )
+  }
 }
