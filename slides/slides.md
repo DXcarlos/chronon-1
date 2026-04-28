@@ -17,10 +17,6 @@ transition: fade
 
 Nikhil Simha Raprolu &middot; Co-founder, Zipline.ai
 
-<div class="pt-8 opacity-60 text-sm">
-Backfill, serving, and infra &mdash; 30 minutes.
-</div>
-
 ---
 layout: center
 class: text-center
@@ -34,8 +30,12 @@ class: text-center
 &mdash; Donald Knuth, 1974
 </div>
 
-<div v-click class="pt-16 text-base opacity-80 max-w-2xl mx-auto leading-relaxed">
+<div v-click class="pt-16 text-xl opacity-90 max-w-2xl mx-auto leading-relaxed">
 &ldquo;&hellip; yet we should not pass up our opportunities in that <span class="text-emerald-300 font-semibold">critical 3%</span>.&rdquo;
+</div>
+
+<div v-click class="pt-10 text-sm opacity-60 max-w-2xl mx-auto">
+thousands of scientists &middot; billions of users &middot; trillions in transactions &middot; 10s of billions in revenue
 </div>
 
 ---
@@ -58,10 +58,6 @@ class: text-center
 
 <div v-click>
 <span class="text-yellow-300 font-semibold">Orchestration</span> <span class="opacity-50">(3 min)</span>
-</div>
-
-<div v-click class="pt-6 text-sm opacity-60">
-Recap &middot; Q&amp;A
 </div>
 
 </div>
@@ -519,7 +515,7 @@ For each query, aggregate the matching events:
 
 ---
 
-# Cost delta
+# UnionJoin in production
 
 <div class="pt-10 text-lg space-y-6">
 
@@ -622,8 +618,6 @@ Bring-your-own-cloud platform for Spark batch and Flink streaming. Single Helm c
 </div>
 
 ---
-
----
 layout: center
 class: text-center
 ---
@@ -632,7 +626,7 @@ class: text-center
 
 # <span class="text-yellow-300">Orchestration</span>
 
-<div class="pt-4 text-base opacity-60">Zipline</div>
+<div class="pt-4 text-base opacity-60">Zipline &middot; feature iteration</div>
 
 ---
 
@@ -659,7 +653,7 @@ class: text-center
 
 ---
 
-# Recap
+# Conclusion
 
 <div class="pt-16 space-y-12 text-lg">
 
@@ -670,8 +664,7 @@ the whole stack has to move together &mdash; <span class="opacity-70">orchestrat
 </div>
 
 <div>
-performance is how users <em>feel</em> Chronon
-<div class="pt-3 opacity-70">it's why they put up with all the API abstractions</div>
+performance is UX
 </div>
 
 </v-clicks>
