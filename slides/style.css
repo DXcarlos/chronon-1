@@ -2,3 +2,13 @@
 #slidev-goto-dialog {
   display: none !important;
 }
+
+/* Top-level bullet lists — hide the marker (too noisy). Nested bullets keep theirs. */
+.slidev-page ul:not(ul ul):not(ol ul) > li,
+.slidev-page ol:not(ul ol):not(ol ol) > li {
+  list-style: none;
+}
+.slidev-page ul:not(ul ul):not(ol ul),
+.slidev-page ol:not(ul ol):not(ol ol) {
+  padding-left: 0;
+}
