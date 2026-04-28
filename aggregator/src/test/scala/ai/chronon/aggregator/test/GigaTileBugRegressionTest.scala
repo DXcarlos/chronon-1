@@ -335,4 +335,146 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
       servedAsOfTServe
     )
   }
+
+  // -----------------------------------------------------------------
+  // Gap I — Tombstone signal when the finalized vector is fully empty.
+  //
+  // After a 1h-windowed entity goes idle for 2h, the rebuilt cache is all-null. The
+  // resulting finalized vector encodes to a row of nulls. GigaTile writes that row to the
+  // PUSH KV table with no signal that it is semantically "empty". Two consequences:
+  //   1. Idle keys accumulate as zero-rows in KV indefinitely (no TTL on the values).
+  //   2. The fetcher cannot distinguish "Flink emitted an empty row for this key" from
+  //      "Flink never emitted for this key" — both serve nulls — so a freshly-decayed key
+  //      cannot be tombstoned via DELETE.
+  //
+  // The contract: GigaEmitResult should expose `isEmpty` (or equivalent) when the packed
+  // IR has every column null, so the Flink wiring can choose to issue a KV DELETE instead
+  // of a PUT-with-nulls. Currently no such field exists.
+  // -----------------------------------------------------------------
+  it should "FAIL: emit must signal a tombstone when the finalized vector is fully empty" in {
+    val window = new Window(1, TimeUnit.HOURS)
+    val aggregations: Seq[Aggregation] = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(window)))
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new InMemoryGigaTileStore(megaTileAgg.windowedAggregator)
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store)
+
+    val day0 = TsUtils.round(1700000000000L, DayMillis)
+    val tEvent = day0 + 6 * HourMillis
+    processor.advanceWatermark(tEvent)
+    processor.onEvent(new TestRow(tEvent, 1L)(0), tEvent)
+
+    // Eviction well past the window — every retained tile is stale, cache rebuilt to empty.
+    val tDecay = tEvent + 2 * HourMillis
+    processor.advanceWatermark(tDecay)
+    val emit = processor.onEviction(tDecay)
+    assertNotNull("eviction past window must still produce an emit", emit.finalizedVector)
+    val allNull = emit.finalizedVector.forall(_ == null)
+    assertTrue("baseline: every column should be null after the window decays", allNull)
+
+    // Once that's true, a tombstone signal is what lets the writer DELETE the KV row.
+    val tombstoneField = emit.getClass.getDeclaredFields
+      .find(f => Set("isEmpty", "tombstone", "isTombstone", "shouldDelete").contains(f.getName))
+    assertTrue(
+      "GigaEmitResult must expose a tombstone signal so Flink can DELETE the PUSH KV row " +
+        "for fully-decayed entities — instead of writing a row of nulls that lives forever. " +
+        s"Available fields: ${emit.getClass.getDeclaredFields.map(_.getName).mkString(",")}",
+      tombstoneField.isDefined
+    )
+  }
+
+  // -----------------------------------------------------------------
+  // Gap J — Idle entity post-batch-advance: stale row served indefinitely.
+  //
+  // Architectural gap, not a processor-internal bug. The Iceberg connected stream emits a
+  // BatchIrRow only for entities present in the new batch. An entity X that had events
+  // weeks ago and went silent has no row in the new batch, so processElement2 is never
+  // called for X. processElement1 also never fires (no Kafka events). Result:
+  //   - X's `batchEndTs` in Flink state stays at the OLD batch end.
+  //   - X's daily-slot map keeps the old streaming events.
+  //   - recomputeRunningLargeIr (when an eviction does fire) merges the OLD batch + OLD
+  //     slots, reproducing the stale value.
+  //
+  // The fetcher then serves X's stale row — even though every event for X is now outside
+  // every retained window. Worst case: a 7d window keeps reporting X's events from a year
+  // ago because the entity never received a per-key signal that the world moved on.
+  //
+  // Correct behavior requires a *broadcast* batch-advance signal that reaches every key
+  // (or some equivalent: scheduled per-key TTL, periodic null heartbeat from a side
+  // input). This test asserts a `onGlobalBatchAdvance` API exists on the processor; it
+  // currently does not.
+  // -----------------------------------------------------------------
+  it should "FAIL: idle entity must receive a global batch-advance signal so its KV row decays after weeks of silence" in {
+    val window = new Window(7, TimeUnit.DAYS)
+    val aggregations: Seq[Aggregation] = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(window)))
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new InMemoryGigaTileStore(megaTileAgg.windowedAggregator)
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store)
+
+    val day0 = TsUtils.round(1700000000000L, DayMillis)
+    val day20 = day0 + 20 * DayMillis
+
+    // Batch covers up to day0; this entity has events on day 0 and then goes silent.
+    val onlineAgg = new SawtoothOnlineAggregator(day0, aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val emptyBatch = onlineAgg.denormalizeBatchIr(onlineAgg.finalizeSnapshot(onlineAgg.init))
+    processor.onBatchUpdate(emptyBatch, day0, day0)
+
+    val event = new TestRow(day0 + HourMillis, 5L)(0)
+    processor.advanceWatermark(event.ts)
+    processor.onEvent(event, event.ts)
+
+    // 20 days pass globally. Other entities trigger batch advances; this entity never does.
+    // No per-key signal reaches the processor — exactly the production gap.
+    processor.advanceWatermark(day20 + 12 * HourMillis)
+
+    // The processor should expose a broadcast / heartbeat hook that lets Flink wiring tell
+    // every key's state that the global batch boundary has moved, even without an entity-
+    // specific BatchIrRow. Without it, the serving value for this idle key remains stale.
+    val advanceMethod = processor.getClass.getDeclaredMethods
+      .find(m =>
+        Set("onGlobalBatchAdvance", "advanceBatchBoundary", "heartbeatBatchEnd").contains(m.getName))
+    assertTrue(
+      "GigaTileStreamProcessor must expose a global batch-advance hook (e.g. onGlobalBatchAdvance(newBatchEnd)) " +
+        "so idle keys not present in the new batch can still decay their state. Currently the only path to update " +
+        "batchEndTs is processElement2, which never fires for entities not in the batch — their KV rows stay " +
+        s"stale indefinitely. Available methods: ${processor.getClass.getDeclaredMethods.map(_.getName).filterNot(_.startsWith("$")).distinct.mkString(",")}",
+      advanceMethod.isDefined
+    )
+  }
+
+  // -----------------------------------------------------------------
+  // Gap K — Decay produces a stable empty-emit only when irEqual is configured.
+  //
+  // With the default `irEqual = (_, _) => false`, every eviction past window decay emits
+  // the same all-null vector — burning O(idle_entities × eviction_interval) KV writes
+  // per day. With a value-aware irEqual, the second decay emit is suppressed correctly.
+  //
+  // This is more efficiency than correctness, but it ALSO masks a write-amplification bug
+  // that's user-visible (KV write traffic, write quota exhaustion). The processor should
+  // suppress consecutive all-empty emits even under the default no-op irEqual — those
+  // are guaranteed equivalent by construction.
+  // -----------------------------------------------------------------
+  it should "FAIL: consecutive all-empty eviction emits must be suppressed even under default irEqual" in {
+    val window = new Window(1, TimeUnit.HOURS)
+    val aggregations: Seq[Aggregation] = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(window)))
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new InMemoryGigaTileStore(megaTileAgg.windowedAggregator)
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store) // default irEqual
+
+    val day0 = TsUtils.round(1700000000000L, DayMillis)
+    val tEvent = day0 + 6 * HourMillis
+    processor.advanceWatermark(tEvent)
+    processor.onEvent(new TestRow(tEvent, 1L)(0), tEvent)
+
+    // Two evictions past the window — both rebuild to all-null.
+    val firstDecay = processor.onEviction(tEvent + 2 * HourMillis)
+    val secondDecay = processor.onEviction(tEvent + 3 * HourMillis)
+
+    assertNotNull("first decay emit must exist (transitions from non-null to all-null)", firstDecay.finalizedVector)
+    assertTrue("first decay emit should be all-null", firstDecay.finalizedVector.forall(_ == null))
+    assertNull(
+      "second decay emit must be suppressed — both rebuilds produce identical all-null vectors and " +
+        "burning a KV write per eviction past idle adds up to traffic quota exhaustion at scale",
+      secondDecay.finalizedVector
+    )
+  }
 }
