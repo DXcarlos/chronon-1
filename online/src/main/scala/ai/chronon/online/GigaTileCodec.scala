@@ -41,7 +41,9 @@ class GigaTileCodec(groupBy: GroupBy, inputSchema: Seq[(String, DataType)]) {
     StructType.from(s"${groupBy.getMetaData.cleanName}_IR", megaTileAgg.batchIrSchema)
   private val irAvroSchema: String = AvroConversions.fromChrononSchema(irSchema).toString()
 
-  @transient private lazy val irCodec: AvroCodec = AvroCodec.of(irAvroSchema)
+  // AvroCodec.of is backed by a per-thread cache; resolving per call defers to that cache so
+  // concurrent decodes (e.g. parallel batch ingestion) don't share one mutable decoder.
+  private def irCodec: AvroCodec = AvroCodec.of(irAvroSchema)
   @transient private lazy val irRowConverter: Any => Array[Any] =
     AvroConversions.genericRecordToChrononRowConverter(irSchema)
 

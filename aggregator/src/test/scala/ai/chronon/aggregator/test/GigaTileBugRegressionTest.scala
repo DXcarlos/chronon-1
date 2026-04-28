@@ -269,15 +269,14 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
     val staleEvent = new TestRow(today - 5 * DayMillis, 100L)(0)
     val r = processor.onEvent(staleEvent, staleEvent.ts)
 
-    // GigaEmitResult does not currently expose a drop indicator. Ask reflection for a field
-    // named droppedStaleEvent (or similar) — the test fails until such a signal exists.
-    val signalField = r.getClass.getDeclaredFields
-      .find(f => f.getName.toLowerCase.contains("drop") || f.getName.toLowerCase.contains("stale"))
     assertTrue(
-      "GigaEmitResult must expose a drop signal so callers can bump a metric / log a stale event — " +
-        s"none of the fields ${r.getClass.getDeclaredFields.map(_.getName).mkString(",")} indicate this",
-      signalField.isDefined
+      "stale event drop must be observable on GigaEmitResult so the Flink wiring can " +
+        "bump a counter / log instead of silently losing data",
+      r.droppedStaleEvent
     )
+    // Sanity: a fresh event at `today` must not be flagged as a drop.
+    val freshResult = processor.onEvent(new TestRow(today + MinuteMillis, 1L)(0), today + MinuteMillis)
+    assertTrue("a fresh event must not be flagged as dropped", !freshResult.droppedStaleEvent)
   }
 
   // -----------------------------------------------------------------
@@ -317,22 +316,20 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
     assertEquals("baseline: 1h SUM after the event is 1", 1L, r1.finalizedVector(0))
 
     // Wall clock advances 2 hours past the event with no further events — the event is
-    // now well outside the 1h serving horizon. A read at this point must reflect that.
+    // now well outside the 1h serving horizon. The Flink wiring should be able to refresh
+    // the KV row without waiting for a new event by calling serveAsOf(asOfTs).
     val tServe = tEvent + 2 * HourMillis
-    processor.advanceWatermark(tServe)
-
-    // The processor exposes no "serve as of T without an event" API. The PUSH KV row
-    // therefore still holds r1.finalizedVector (sum=1), even though the correct
-    // as-of-tServe answer is 0/null. Assert the contract we actually want.
-    val servedAsOfTServe: Any = {
-      val method = processor.getClass.getDeclaredMethods.find(_.getName == "serveAsOf")
-      method.map { m => m.setAccessible(true); m.invoke(processor, java.lang.Long.valueOf(tServe)) }.orNull
-    }
-    assertNotNull(
-      "GigaTileStreamProcessor must expose a serveAsOf(asOfTs) helper so Flink can " +
-        "refresh idle KV rows without waiting for a new event. Without it, idle entities " +
-        "serve stale finalized vectors indefinitely.",
-      servedAsOfTServe
+    val served = processor.serveAsOf(tServe)
+    assertNotNull("serveAsOf must produce an emit result", served)
+    val sumValue = if (served.finalizedVector == null) null else served.finalizedVector(0)
+    assertNull(
+      "serveAsOf 2h after the event must decay the 1h SUM to null — the event is outside " +
+        "the 1h horizon at the new as-of",
+      sumValue
+    )
+    assertTrue(
+      "serveAsOf result must signal isEmpty=true when every column has decayed",
+      served.isEmpty
     )
   }
 
@@ -371,14 +368,10 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
     val allNull = emit.finalizedVector.forall(_ == null)
     assertTrue("baseline: every column should be null after the window decays", allNull)
 
-    // Once that's true, a tombstone signal is what lets the writer DELETE the KV row.
-    val tombstoneField = emit.getClass.getDeclaredFields
-      .find(f => Set("isEmpty", "tombstone", "isTombstone", "shouldDelete").contains(f.getName))
     assertTrue(
-      "GigaEmitResult must expose a tombstone signal so Flink can DELETE the PUSH KV row " +
-        "for fully-decayed entities — instead of writing a row of nulls that lives forever. " +
-        s"Available fields: ${emit.getClass.getDeclaredFields.map(_.getName).mkString(",")}",
-      tombstoneField.isDefined
+      "GigaEmitResult must expose isEmpty=true for fully-decayed emits so Flink can DELETE " +
+        "the PUSH KV row instead of writing a row of nulls that lives forever",
+      emit.isEmpty
     )
   }
 
@@ -426,18 +419,22 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
     // No per-key signal reaches the processor — exactly the production gap.
     processor.advanceWatermark(day20 + 12 * HourMillis)
 
-    // The processor should expose a broadcast / heartbeat hook that lets Flink wiring tell
-    // every key's state that the global batch boundary has moved, even without an entity-
-    // specific BatchIrRow. Without it, the serving value for this idle key remains stale.
-    val advanceMethod = processor.getClass.getDeclaredMethods
-      .find(m =>
-        Set("onGlobalBatchAdvance", "advanceBatchBoundary", "heartbeatBatchEnd").contains(m.getName))
-    assertTrue(
-      "GigaTileStreamProcessor must expose a global batch-advance hook (e.g. onGlobalBatchAdvance(newBatchEnd)) " +
-        "so idle keys not present in the new batch can still decay their state. Currently the only path to update " +
-        "batchEndTs is processElement2, which never fires for entities not in the batch — their KV rows stay " +
-        s"stale indefinitely. Available methods: ${processor.getClass.getDeclaredMethods.map(_.getName).filterNot(_.startsWith("$")).distinct.mkString(",")}",
-      advanceMethod.isDefined
+    // Simulate the global signal: advance the per-key batchEndTs without a per-key BatchIrRow.
+    val newBatchEnd = day20 - 5 * DayMillis // global batch is now ~15 days fresher
+    val advanced = processor.onGlobalBatchAdvance(newBatchEnd, day20 + 12 * HourMillis)
+    assertNotNull("onGlobalBatchAdvance must produce an emit", advanced)
+
+    // After advancement, the in-state batchEndTs must reflect the new boundary so the next
+    // recompute uses the correct horizon.
+    assertEquals(
+      "store.batchEndTs must advance to the new boundary so future eviction filters slots correctly",
+      newBatchEnd,
+      store.getBatchEndTs
+    )
+    // And the day-0 slot (now well behind the new batchEnd) must be pruned from state.
+    assertNull(
+      "daily slot for day 0 must be pruned once it falls before the new batchEndDay",
+      store.getDailyLargeIr(TsUtils.round(event.ts, DayMillis))
     )
   }
 

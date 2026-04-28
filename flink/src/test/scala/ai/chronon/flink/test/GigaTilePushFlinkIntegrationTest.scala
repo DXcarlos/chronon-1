@@ -194,19 +194,18 @@ class GigaTilePushFlinkIntegrationTest extends AnyFlatSpec with BeforeAndAfter {
     results should not be empty
     results.forall(_.status) shouldBe true
 
-    // Decode the finalized vector using the output codec
-    val latestResult = results.maxBy(_.tsMillis)
-    val decoded = servingInfo.outputCodec.decodeMap(latestResult.valueBytes)
-
-    // Should have the output field for SUM(double_val, 1d)
-    decoded should not be null
-    decoded should not be empty
-
-    // The SUM should be the sum of all double_val events (5.0 + 3.0 = 8.0)
-    val sumFieldName = decoded.keys.find(_.contains("double_val")).get
-    val sumValue = decoded(sumFieldName)
-    sumValue should not be null
-    sumValue.asInstanceOf[Double] shouldBe 8.0
+    // The pipeline now decays idle entities via re-registered eviction timers, so the
+    // tsMillis-latest emit at end-of-stream is a tombstone (all-null). Pick the latest
+    // emit whose SUM is non-null to verify the aggregation itself is correct.
+    val sumFieldName = servingInfo.outputCodec.decodeMap(results.head.valueBytes).keys
+      .find(_.contains("double_val")).get
+    val nonEmpty = results.toSeq.flatMap { wr =>
+      val decoded = servingInfo.outputCodec.decodeMap(wr.valueBytes)
+      Option(decoded(sumFieldName)).map(v => (wr.tsMillis, v.asInstanceOf[Double]))
+    }
+    nonEmpty should not be empty
+    val (_, latestSum) = nonEmpty.maxBy(_._1)
+    latestSum shouldBe 8.0
   }
 
   it should "handle multiple entities with correct key isolation" in {
@@ -229,23 +228,25 @@ class GigaTilePushFlinkIntegrationTest extends AnyFlatSpec with BeforeAndAfter {
     results should not be empty
     results.forall(_.status) shouldBe true
 
-    // Group by key and pick the latest write per entity
-    val latestPerKey = results
+    // Group by key and pick the latest non-empty write per entity. Idle decay timers fire
+    // at end-of-stream and tombstone each key with an all-null vector after 1d window
+    // expiration; the test verifies the SUM aggregation, not the decay, so filter to non-
+    // null sums per key.
+    val sumFieldName = servingInfo.outputCodec.decodeMap(results.head.valueBytes).keys
+      .find(_.contains("double_val")).get
+    val latestSumPerKey: Set[Double] = results
       .groupBy(r => util.Arrays.hashCode(r.keyBytes))
-      .map { case (_, writes) => writes.maxBy(_.tsMillis) }
-
-    // Each entity should have output
-    latestPerKey.size shouldBe 2
-
-    // Decode each and verify distinct values
-    val sums = latestPerKey.map { wr =>
-      val decoded = servingInfo.outputCodec.decodeMap(wr.valueBytes)
-      val sumField = decoded.keys.find(_.contains("double_val")).get
-      decoded(sumField).asInstanceOf[Double]
-    }.toSet
-
+      .values
+      .flatMap { writes =>
+        val nonEmpty = writes.toSeq.flatMap { wr =>
+          val decoded = servingInfo.outputCodec.decodeMap(wr.valueBytes)
+          Option(decoded(sumFieldName)).map(v => (wr.tsMillis, v.asInstanceOf[Double]))
+        }
+        if (nonEmpty.isEmpty) None else Some(nonEmpty.maxBy(_._1)._2)
+      }
+      .toSet
     // Alice: 10.0 + 5.0 = 15.0, Bob: 20.0
-    sums shouldBe Set(15.0, 20.0)
+    latestSumPerKey shouldBe Set(15.0, 20.0)
   }
 }
 

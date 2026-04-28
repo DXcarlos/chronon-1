@@ -154,6 +154,7 @@ class GigaTileStreamProcessor(
     // trade-off when the late event was not in the prior batch's source data.
     val eventDayStart = TsUtils.round(eventTs, DayMillis)
     val oldestAcceptedDay = currentDayStart - maxStalenessMillis
+    var droppedStaleEvent = false
     if (eventDayStart >= oldestAcceptedDay) {
       val existing = store.getDailyLargeIr(eventDayStart)
       val dayIr = if (existing != null) existing else windowedAgg.init
@@ -164,9 +165,12 @@ class GigaTileStreamProcessor(
       updateLargeWindowColumns(runningIr, row)
       store.putRunningLargeIr(runningIr)
       dirty = true
+    } else {
+      droppedStaleEvent = true
     }
 
-    if (dirty) GigaEmitResult(packAndFinalize()) else GigaEmitResult(null)
+    if (dirty) GigaEmitResult(packAndFinalize(), droppedStaleEvent = droppedStaleEvent)
+    else GigaEmitResult(null, droppedStaleEvent = droppedStaleEvent)
   }
 
   /** Watermark-driven day transition. Updates currentDayStart and rebuilds the small-window
@@ -198,12 +202,77 @@ class GigaTileStreamProcessor(
     recomputeRunningLargeIr(timerTs, currentDayStart)
 
     val packed = pack()
-    if (lastEvictionPackedIr != null && irEqual(lastEvictionPackedIr, packed)) {
-      GigaEmitResult(null)
+    val packedIsEmpty = isAllNull(packed)
+    val previousWasEmpty = lastEvictionPackedIr != null && isAllNull(lastEvictionPackedIr)
+    if (packedIsEmpty && previousWasEmpty) {
+      // Both rebuilds produced all-null vectors — nothing has changed and nothing more can
+      // decay until a new event arrives. Suppress to avoid burning a KV write per eviction
+      // for fully-decayed idle entities.
+      GigaEmitResult(null, isEmpty = true)
+    } else if (lastEvictionPackedIr != null && irEqual(lastEvictionPackedIr, packed)) {
+      GigaEmitResult(null, isEmpty = packedIsEmpty)
     } else {
       lastEvictionPackedIr = windowedAgg.clone(packed)
-      GigaEmitResult(windowedAgg.finalize(packed))
+      GigaEmitResult(windowedAgg.finalize(packed), isEmpty = packedIsEmpty)
     }
+  }
+
+  /** Serve-as-of helper for the Flink wiring: decay an idle entity's state at the requested
+    * as-of timestamp without requiring a new event. Same semantics as onEviction but named
+    * for the use case so callers don't get confused.
+    */
+  def serveAsOf(asOfTs: Long): GigaEmitResult = onEviction(asOfTs)
+
+  /** Global batch-advance hook for entities not present in a new batch row.
+    *
+    * The Iceberg connected stream emits a BatchIrRow only for entities included in the new
+    * batch. Idle entities receive no per-key signal that the global batchEnd has moved, so
+    * their batchEndTs in state stays stale forever. This method lets the Flink wiring
+    * broadcast a batch boundary advance: it advances batchEndTs (without loading a new
+    * batch IR), prunes daily slots covered by the new boundary, and recomputes the running
+    * IR so the next emit reflects the new horizon.
+    *
+    * Caller responsibility: only call this for entities the global batch is known to cover.
+    * Calling for an entity whose events are NOT in batch will delete those events from
+    * state without batch backfilling them — a real correctness loss.
+    */
+  def onGlobalBatchAdvance(newBatchEnd: Long, currentWatermark: Long): GigaEmitResult = {
+    val oldBatchEnd = store.getBatchEndTs
+    if (newBatchEnd <= oldBatchEnd) return GigaEmitResult(null)
+
+    store.putBatchEndTs(newBatchEnd)
+
+    var currentDayStart = store.getCurrentDayStart
+    if (currentDayStart < 0) {
+      currentDayStart = newBatchEnd
+      store.putCurrentDayStart(currentDayStart)
+    }
+
+    val batchEndDay = TsUtils.round(newBatchEnd, DayMillis)
+    val toRemove = mutable.ArrayBuffer.empty[Long]
+    val iter = store.dailyLargeIrIterator
+    while (iter.hasNext) {
+      val (dayStart, _) = iter.next()
+      if (dayStart < batchEndDay) toRemove += dayStart
+    }
+    toRemove.foreach(store.removeDailyLargeIr)
+
+    recomputeRunningLargeIr(currentWatermark, currentDayStart)
+    val packed = pack()
+    val packedIsEmpty = isAllNull(packed)
+    GigaEmitResult(windowedAgg.finalize(packed), needsEvictionTimer = true, isEmpty = packedIsEmpty)
+  }
+
+  /** True when every column in the packed pre-finalize IR is null. Used by the eviction
+    * suppress path and surfaced on GigaEmitResult so the Flink writer can DELETE the KV row.
+    */
+  private def isAllNull(packed: Array[Any]): Boolean = {
+    var i = 0
+    while (i < packed.length) {
+      if (packed(i) != null) return false
+      i += 1
+    }
+    true
   }
 
   /** Process a new batch IR from the Iceberg connected stream.
@@ -353,10 +422,18 @@ class GigaTileStreamProcessor(
   private def pack(): Array[Any] = {
     val cachedIr = store.getCachedSmallWindowIr
     val runningIr = store.getRunningLargeIr
+    // Until a batch IR has loaded, the running IR for batch-dependent columns is just the
+    // streaming-since-startup partial sum — emitting that would write an under-counted row
+    // to the PUSH KV that the fetcher then serves indefinitely. Null those columns out so
+    // the writer can either suppress the emit or write nulls for batch-dependent fields.
+    val batchAvailable = store.getBatchIr != null
     val packed = new Array[Any](windowedAgg.length)
     var col = 0
     while (col < windowedAgg.length) {
-      packed(col) = if (isNoBatch(col)) cachedIr(col) else runningIr(col)
+      packed(col) =
+        if (isNoBatch(col)) cachedIr(col)
+        else if (batchAvailable) runningIr(col)
+        else null
       col += 1
     }
     packed
@@ -381,5 +458,14 @@ class GigaTileStreamProcessor(
 
 case class GigaEmitResult(
     finalizedVector: Array[Any],
-    needsEvictionTimer: Boolean = false
+    needsEvictionTimer: Boolean = false,
+    // True when the packed pre-finalize IR has every column null. The Flink wiring uses this
+    // to (a) DELETE the PUSH KV row instead of writing a row of nulls and (b) decide whether
+    // to keep re-registering decay timers — once a key is fully empty, no further decay is
+    // possible until a new event arrives.
+    isEmpty: Boolean = false,
+    // True when this onEvent call dropped its event because eventTs was older than the
+    // staleness bound. Surfaced so the Flink wiring can bump a metric / log instead of
+    // silently losing data.
+    droppedStaleEvent: Boolean = false
 )

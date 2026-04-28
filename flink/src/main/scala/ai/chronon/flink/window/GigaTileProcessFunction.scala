@@ -207,9 +207,20 @@ class GigaTileProcessFunction(
                               System.currentTimeMillis()))
       }
 
-      // Don't re-register from onTimer. Each event in processElement1 registers the next
-      // eviction timer. Without new events, there's nothing to correct (sawtooth doesn't
-      // grow). This also prevents an infinite timer loop at end-of-stream when watermark = MAX.
+      // Re-register the next eviction timer so idle keys keep decaying without waiting for
+      // a new event. The natural termination is `result.isEmpty`: once every column has
+      // decayed to null there's nothing more to correct, and no new timer is needed until a
+      // fresh event arrives. Without re-registration, an entity that goes silent serves the
+      // last emit forever — even after every event has aged out of every window.
+      if (!result.isEmpty) {
+        val interval = processor.minEvictionInterval
+        // Guard against integer overflow at end-of-stream (watermark = Long.MaxValue): if
+        // the next timer would wrap into the negative range, skip — Flink would either
+        // refuse the registration or fire it immediately, looping forever.
+        if (timestamp <= Long.MaxValue - interval) {
+          ctx.timerService().registerEventTimeTimer(timestamp + interval)
+        }
+      }
     } catch {
       case e: Exception =>
         logger.error(s"Error in giga tile eviction for groupBy=${groupBy.getMetaData.getName}", e)
