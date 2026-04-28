@@ -94,7 +94,8 @@ Recap &middot; Q&amp;A
     <text x="478" y="287" style="font-size:11px" fill="#94a3b8" text-anchor="middle">batchIr &middot; 1 KV read</text>
     <text x="790" y="287" style="font-size:11px" fill="#94a3b8" text-anchor="middle">streaming hops &middot; 48 KV reads</text>
     <text x="940" y="257" style="font-size:20px" fill="#fbcfe8" text-anchor="middle" font-weight="700">97</text>
-    <text x="1050" y="257" style="font-size:20px" fill="#fbcfe8" text-anchor="middle" font-weight="700">49</text>
+    <text x="1050" y="251" style="font-size:13px" fill="#fbcfe8" text-anchor="middle" font-weight="700">1 get + 1 scan</text>
+    <text x="1050" y="267" style="font-size:13px" fill="#fbcfe8" text-anchor="middle" font-weight="700">/ N gets</text>
   </g>
   <g v-click="4">
     <text x="20" y="368" style="font-size:17px" fill="#bbf7d0" font-weight="600">MegaTile</text>
@@ -268,10 +269,6 @@ Recap &middot; Q&amp;A
   - KV sees pure deltas &mdash; old bulkload reuploaded every key nightly even when the IR was unchanged
 - <span class="text-emerald-300">search-index hydration</span>
   - same vector, different sink &mdash; Elasticsearch / Vespa
-- <span class="text-emerald-300">broader KV backends</span>
-  - plain key&rarr;value semantics &mdash; adding a new backend stops being a months-long project
-- <span class="text-emerald-300">cold serving</span>
-  - Iceberg stream emits keys for batch-only entities &mdash; full key superset, no bootstrap RPC
 
 </v-clicks>
 
