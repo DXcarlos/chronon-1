@@ -12,3 +12,8 @@
 .slidev-page ol:not(ul ol):not(ol ol) {
   padding-left: 0;
 }
+/* Breathing room between top-level bullets (sub-bullets stay tight) */
+.slidev-page ul:not(ul ul):not(ol ul) > li:not(:last-child),
+.slidev-page ol:not(ul ol):not(ol ol) > li:not(:last-child) {
+  margin-bottom: 0.9em;
+}
