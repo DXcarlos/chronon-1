@@ -276,6 +276,44 @@ Recap &middot; Q&amp;A
 
 ---
 
+# Flink 2.0 &middot; disaggregated state
+
+<div class="pt-2 text-sm opacity-60">GigaTile holds more state &mdash; ForSt makes that affordable</div>
+
+<div class="pt-6 text-base space-y-3">
+
+<v-clicks>
+
+- <span class="text-emerald-300 font-semibold">ForSt</span> &mdash; new state backend (FLIP-423)
+  - primary state on S3 / HDFS, local disk as cache
+  - replaces all-on-local-disk RocksDB
+- decouples state size from TaskManager disk
+  - hundreds of TBs viable &middot; checkpoints lightweight
+  - rescaling no longer downloads full state
+- <span class="text-blue-300 font-semibold">unblocks</span> Iceberg-loaded batchIrs in Flink
+  - large batchIr state lives in Flink without disk pressure
+  - elastic on K8s &middot; fast cold start from S3
+- caveats &mdash; experimental in 2.0
+  - full benefits need async State V2 APIs (FLIP-424/425)
+  - uncached throughput ~50% of local RocksDB &middot; cache sizing matters
+
+</v-clicks>
+
+</div>
+
+---
+layout: center
+class: text-center
+---
+
+<div class="text-sm uppercase tracking-[0.3em] opacity-50">part 2</div>
+
+# <span class="text-blue-400">Offline</span> optimizations
+
+<div class="pt-4 text-base opacity-60">Sawtooth &middot; UnionJoin</div>
+
+---
+
 # The problem
 
 <div class="pt-6 text-base">
@@ -368,191 +406,51 @@ For each query, aggregate the matching events:
 
 ---
 
-# Sawtooth &middot; the shuffle DAG
-
-<div class="pt-2 flex justify-center">
-
-<svg viewBox="0 0 900 540" style="width:80%">
-
-  <rect x="240" y="18" width="480" height="84" fill="rgba(96,165,250,0.06)" stroke="rgba(96,165,250,0.25)" stroke-width="0.7" rx="4"/>
-  <rect x="240" y="108" width="480" height="186" fill="rgba(250,204,21,0.06)" stroke="rgba(250,204,21,0.25)" stroke-width="0.7" rx="4"/>
-  <rect x="240" y="300" width="480" height="222" fill="rgba(110,231,183,0.06)" stroke="rgba(110,231,183,0.25)" stroke-width="0.7" rx="4"/>
-
-  <text x="755" y="60" style="font-size:13px" fill="#bfdbfe" font-weight="700">layer 1</text>
-  <text x="755" y="78" style="font-size:11px" fill="#94a3b8">tile IRs</text>
-  <text x="755" y="92" style="font-size:11px" fill="#bfdbfe">1 shuffle</text>
-
-  <text x="755" y="190" style="font-size:13px" fill="#fef3c7" font-weight="700">layer 2</text>
-  <text x="755" y="208" style="font-size:11px" fill="#94a3b8">tail IRs</text>
-  <text x="755" y="222" style="font-size:11px" fill="#fef3c7">3 shuffles</text>
-
-  <text x="755" y="400" style="font-size:13px" fill="#bbf7d0" font-weight="700">layer 3</text>
-  <text x="755" y="418" style="font-size:11px" fill="#94a3b8">per-query IRs</text>
-  <text x="755" y="432" style="font-size:11px" fill="#bbf7d0">4 shuffles</text>
-
-  <text x="160" y="34" style="font-size:13px" fill="#cbd5e1" font-weight="600" text-anchor="end">events</text>
-  <circle cx="300" cy="30" r="6" fill="#cbd5e1"/>
-  <circle cx="430" cy="30" r="6" fill="#cbd5e1"/>
-  <circle cx="560" cy="30" r="6" fill="#cbd5e1"/>
-  <circle cx="690" cy="30" r="6" fill="#cbd5e1"/>
-
-  <g stroke="rgba(96,165,250,0.55)" stroke-width="0.9" fill="none">
-    <line x1="300" y1="36" x2="560" y2="84"/>
-    <line x1="430" y1="36" x2="690" y2="84"/>
-    <line x1="560" y1="36" x2="300" y2="84"/>
-    <line x1="690" y1="36" x2="430" y2="84"/>
-    <line x1="300" y1="36" x2="430" y2="84"/>
-    <line x1="690" y1="36" x2="560" y2="84"/>
-  </g>
-
-  <text x="160" y="94" style="font-size:13px" fill="#bfdbfe" font-weight="600" text-anchor="end">tile IRs</text>
-  <circle cx="300" cy="90" r="6" fill="#bfdbfe"/>
-  <circle cx="430" cy="90" r="6" fill="#bfdbfe"/>
-  <circle cx="560" cy="90" r="6" fill="#bfdbfe"/>
-  <circle cx="690" cy="90" r="6" fill="#bfdbfe"/>
-
-  <g stroke="rgba(250,204,21,0.5)" stroke-width="0.9" fill="none">
-    <line x1="300" y1="96" x2="560" y2="144"/>
-    <line x1="430" y1="96" x2="690" y2="144"/>
-    <line x1="560" y1="96" x2="300" y2="144"/>
-    <line x1="690" y1="96" x2="430" y2="144"/>
-    <line x1="300" y1="96" x2="690" y2="144"/>
-    <line x1="690" y1="96" x2="300" y2="144"/>
-  </g>
-  <circle cx="300" cy="150" r="4" fill="rgba(254,243,199,0.7)"/>
-  <circle cx="430" cy="150" r="4" fill="rgba(254,243,199,0.7)"/>
-  <circle cx="560" cy="150" r="4" fill="rgba(254,243,199,0.7)"/>
-  <circle cx="690" cy="150" r="4" fill="rgba(254,243,199,0.7)"/>
-
-  <g stroke="rgba(250,204,21,0.5)" stroke-width="0.9" fill="none">
-    <line x1="300" y1="155" x2="560" y2="204"/>
-    <line x1="430" y1="155" x2="690" y2="204"/>
-    <line x1="560" y1="155" x2="300" y2="204"/>
-    <line x1="690" y1="155" x2="430" y2="204"/>
-    <line x1="430" y1="155" x2="300" y2="204"/>
-    <line x1="560" y1="155" x2="690" y2="204"/>
-  </g>
-  <circle cx="300" cy="210" r="4" fill="rgba(254,243,199,0.7)"/>
-  <circle cx="430" cy="210" r="4" fill="rgba(254,243,199,0.7)"/>
-  <circle cx="560" cy="210" r="4" fill="rgba(254,243,199,0.7)"/>
-  <circle cx="690" cy="210" r="4" fill="rgba(254,243,199,0.7)"/>
-
-  <g stroke="rgba(250,204,21,0.5)" stroke-width="0.9" fill="none">
-    <line x1="300" y1="215" x2="560" y2="264"/>
-    <line x1="430" y1="215" x2="690" y2="264"/>
-    <line x1="560" y1="215" x2="300" y2="264"/>
-    <line x1="690" y1="215" x2="430" y2="264"/>
-    <line x1="300" y1="215" x2="690" y2="264"/>
-    <line x1="690" y1="215" x2="300" y2="264"/>
-  </g>
-
-  <text x="160" y="274" style="font-size:13px" fill="#fef3c7" font-weight="600" text-anchor="end">tail IRs</text>
-  <circle cx="300" cy="270" r="6" fill="#fef3c7"/>
-  <circle cx="430" cy="270" r="6" fill="#fef3c7"/>
-  <circle cx="560" cy="270" r="6" fill="#fef3c7"/>
-  <circle cx="690" cy="270" r="6" fill="#fef3c7"/>
-
-  <g stroke="rgba(110,231,183,0.5)" stroke-width="0.9" fill="none">
-    <line x1="300" y1="276" x2="560" y2="324"/>
-    <line x1="430" y1="276" x2="690" y2="324"/>
-    <line x1="560" y1="276" x2="300" y2="324"/>
-    <line x1="690" y1="276" x2="430" y2="324"/>
-    <line x1="300" y1="276" x2="690" y2="324"/>
-    <line x1="690" y1="276" x2="300" y2="324"/>
-  </g>
-  <circle cx="300" cy="330" r="4" fill="rgba(187,247,208,0.7)"/>
-  <circle cx="430" cy="330" r="4" fill="rgba(187,247,208,0.7)"/>
-  <circle cx="560" cy="330" r="4" fill="rgba(187,247,208,0.7)"/>
-  <circle cx="690" cy="330" r="4" fill="rgba(187,247,208,0.7)"/>
-
-  <g stroke="rgba(110,231,183,0.5)" stroke-width="0.9" fill="none">
-    <line x1="300" y1="335" x2="560" y2="384"/>
-    <line x1="430" y1="335" x2="690" y2="384"/>
-    <line x1="560" y1="335" x2="300" y2="384"/>
-    <line x1="690" y1="335" x2="430" y2="384"/>
-    <line x1="430" y1="335" x2="300" y2="384"/>
-    <line x1="560" y1="335" x2="690" y2="384"/>
-  </g>
-  <circle cx="300" cy="390" r="4" fill="rgba(187,247,208,0.7)"/>
-  <circle cx="430" cy="390" r="4" fill="rgba(187,247,208,0.7)"/>
-  <circle cx="560" cy="390" r="4" fill="rgba(187,247,208,0.7)"/>
-  <circle cx="690" cy="390" r="4" fill="rgba(187,247,208,0.7)"/>
-
-  <g stroke="rgba(110,231,183,0.5)" stroke-width="0.9" fill="none">
-    <line x1="300" y1="395" x2="560" y2="444"/>
-    <line x1="430" y1="395" x2="690" y2="444"/>
-    <line x1="560" y1="395" x2="300" y2="444"/>
-    <line x1="690" y1="395" x2="430" y2="444"/>
-    <line x1="300" y1="395" x2="690" y2="444"/>
-    <line x1="690" y1="395" x2="300" y2="444"/>
-  </g>
-  <circle cx="300" cy="450" r="4" fill="rgba(187,247,208,0.7)"/>
-  <circle cx="430" cy="450" r="4" fill="rgba(187,247,208,0.7)"/>
-  <circle cx="560" cy="450" r="4" fill="rgba(187,247,208,0.7)"/>
-  <circle cx="690" cy="450" r="4" fill="rgba(187,247,208,0.7)"/>
-
-  <g stroke="rgba(110,231,183,0.5)" stroke-width="0.9" fill="none">
-    <line x1="300" y1="455" x2="560" y2="504"/>
-    <line x1="430" y1="455" x2="690" y2="504"/>
-    <line x1="560" y1="455" x2="300" y2="504"/>
-    <line x1="690" y1="455" x2="430" y2="504"/>
-    <line x1="430" y1="455" x2="300" y2="504"/>
-    <line x1="560" y1="455" x2="690" y2="504"/>
-  </g>
-
-  <text x="160" y="514" style="font-size:13px" fill="#bbf7d0" font-weight="600" text-anchor="end">results</text>
-  <circle cx="300" cy="510" r="6" fill="#bbf7d0"/>
-  <circle cx="430" cy="510" r="6" fill="#bbf7d0"/>
-  <circle cx="560" cy="510" r="6" fill="#bbf7d0"/>
-  <circle cx="690" cy="510" r="6" fill="#bbf7d0"/>
-
-</svg>
-
-</div>
-
-<div class="pt-3 text-center text-base text-pink-300 font-semibold">8 shuffles &middot; kryo-encoded Java IRs</div>
-
----
-
 # Sawtooth &middot; the 3 layers
 
-<div class="pt-2 text-xs opacity-50 text-center">click &rarr; reveal shuffle counts</div>
+<div class="pt-4 flex justify-center">
+<div class="space-y-3 w-full max-w-[1000px]">
 
-<div class="pt-6 space-y-6">
+<v-clicks>
 
-<div class="grid grid-cols-[1fr_auto] gap-12 items-center border-l-4 border-blue-400 pl-6">
+<div class="grid grid-cols-[1fr_auto] gap-6 items-center border-l-4 border-blue-400 pl-5 pr-4 py-3">
 <div>
-<div class="text-xs uppercase tracking-wider text-blue-300 font-semibold">layer 1 &middot; tile IRs</div>
-<div class="text-lg pt-2">pre-aggregate events into 5-min tiles, one row per key</div>
-<div class="font-mono text-sm opacity-60 pt-1">(key, event) &rarr; (key, [tile_ir])</div>
+<div class="text-base font-bold text-blue-200">layer 1 &middot; <code>hopsAggregate</code></div>
+<div class="pt-1.5 text-base opacity-90">pre-aggregate events into 5m + 1h + 1d hop tiles per key</div>
+<div class="pt-1.5 font-mono text-sm opacity-65">events: (key, ts, payload) &rarr; (key, [hop_ir])</div>
 </div>
-<div v-click="1" class="text-3xl font-semibold text-blue-300 whitespace-nowrap pr-4">1 shuffle</div>
+<div class="text-2xl font-semibold text-blue-300 whitespace-nowrap">1 shuffle</div>
 </div>
 
-<div class="grid grid-cols-[1fr_auto] gap-12 items-center border-l-4 border-yellow-400 pl-6">
+<div class="grid grid-cols-[1fr_auto] gap-6 items-center border-l-4 border-yellow-400 pl-5 pr-4 py-3">
 <div>
-<div class="text-xs uppercase tracking-wider text-yellow-300 font-semibold">layer 2 &middot; tail IRs</div>
-<div class="text-lg pt-2">merge tiles into per-bucket tails &mdash; reuse across adjacent buckets</div>
-<div class="font-mono text-sm opacity-60 pt-1">(key, [tile_ir]) &#x22c8; (key, [head_start]) &rarr; ((key, head_start), tail_ir)</div>
+<div class="text-base font-bold text-yellow-100">layer 2 &middot; <code>computeWindows</code></div>
+<div class="pt-1.5 text-base opacity-90">for each key, fold tiles into one tail IR per query's 5m head bucket</div>
+<div class="pt-1.5 font-mono text-sm opacity-65">(key, [hop_ir]) &#x22c8; (key, [headStart]) &rarr; ((key, headStart), tail_ir)</div>
+<div class="font-mono text-xs opacity-50 italic">headStart := round_down(query.ts, 5m)</div>
 </div>
-<div v-click="1" class="text-3xl font-semibold text-yellow-300 whitespace-nowrap pr-4">3 shuffles</div>
+<div class="text-2xl font-semibold text-yellow-200 whitespace-nowrap">3 shuffles</div>
 </div>
 
-<div class="grid grid-cols-[1fr_auto] gap-12 items-center border-l-4 border-emerald-400 pl-6">
+<div class="grid grid-cols-[1fr_auto] gap-6 items-center border-l-4 border-emerald-400 pl-5 pr-4 py-3">
 <div>
-<div class="text-xs uppercase tracking-wider text-emerald-300 font-semibold">layer 3 &middot; per-query IRs</div>
-<div class="text-lg pt-2">extend each tail with head events for queries in the bucket</div>
-<div class="font-mono text-sm opacity-60 pt-1">((key, head_start), tail_ir) &#x22c8; queries &#x22c8; events &rarr; results</div>
+<div class="text-base font-bold text-emerald-200">layer 3 &middot; <code>cumulate</code></div>
+<div class="pt-1.5 text-base opacity-90">for each query, fold head events onto the bucket's tail</div>
+<div class="pt-1.5 font-mono text-sm opacity-65">((k, hStart), tail_ir) &#x22c8; ((k, hStart), queries) &#x22c8; ((k, hStart), head_events)</div>
+<div class="font-mono text-sm opacity-65 pl-3">&rarr; (k, query_ts, result)</div>
 </div>
-<div v-click="1" class="text-3xl font-semibold text-emerald-300 whitespace-nowrap pr-4">4 shuffles</div>
+<div class="text-2xl font-semibold text-emerald-200 whitespace-nowrap">4 shuffles</div>
 </div>
 
-</div>
+</v-clicks>
 
-<div v-click="1" class="pt-10 text-center">
+<div v-click class="pt-5 text-center">
 <span class="text-base opacity-70">total: </span>
-<span class="text-3xl font-semibold text-pink-300">8 shuffles</span>
+<span class="text-2xl font-semibold text-pink-300">8 shuffles</span>
 <span class="text-base opacity-70"> of kryo-encoded Java IRs</span>
+</div>
+
+</div>
 </div>
 
 ---
@@ -598,11 +496,9 @@ For each query, aggregate the matching events:
 
 # UnionJoin topology
 
-<div class="pt-2 text-xs opacity-60 text-center">click &rarr; to advance</div>
-
 <div class="pt-2 flex justify-center">
 
-<svg viewBox="0 0 760 360" style="width:60%">
+<svg viewBox="0 0 760 360" style="width:90%">
   <defs>
     <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
       <path d="M0,0 L0,6 L9,3 z" fill="#9ca3af"/>
@@ -649,57 +545,56 @@ For each query, aggregate the matching events:
 
 # Cost delta
 
-<div class="grid grid-cols-2 gap-12 pt-6">
+<div class="pt-10 text-xl space-y-6">
 
-<div>
-<div class="text-sm uppercase opacity-60">before</div>
-<div class="text-3xl font-semibold text-pink-300">8 shuffles</div>
-<div class="text-sm pt-2 opacity-80">
-kryo-encoded Java objects, three cogroups, two re-keyings
-</div>
-</div>
+<v-clicks>
 
-<div>
-<div class="text-sm uppercase opacity-60">after</div>
-<div class="text-3xl font-semibold text-emerald-400">1 shuffle</div>
-<div class="text-sm pt-2 opacity-80">
-Spark-native exchange, then in-partition compute
-</div>
-</div>
+- 8 shuffles &rarr; <span class="text-emerald-400 font-semibold">1 shuffle</span>
+  - kryo-encoded Java IRs &rarr; Spark-native exchange
+- in-partition compute &mdash; no cross-machine cogroups
+- <span class="text-emerald-400 font-semibold">~10&times;</span> faster in production
+- default for PITC aggregations
+
+</v-clicks>
 
 </div>
 
-<div class="pt-14 text-center">
-<div class="text-5xl font-semibold text-emerald-400">~10&times; faster</div>
-<div class="text-sm pt-3 opacity-70">in production &middot; UnionJoin is now the default for PITC aggregations</div>
-</div>
+---
+layout: center
+class: text-center
+---
+
+<div class="text-sm uppercase tracking-[0.3em] opacity-50">part 3</div>
+
+# <span class="text-emerald-400">Cluster-level</span> optimizations
+
+<div class="pt-4 text-base opacity-60">Crucible &middot; Spark on K8s</div>
 
 ---
 
 # Crucible
 
-<div class="pt-6 text-base">
+<div class="pt-4 text-base">
 Bring-your-own-cloud platform for Spark batch and Flink streaming. Single Helm chart into EKS / AKS / GKE.
 </div>
 
-<div class="pt-10 grid grid-cols-3 gap-6">
+<div class="pt-8 text-sm opacity-70">napkin math &middot; shuffle-dominant Spark, $/vCPU&middot;hr</div>
 
-<div class="border-l-4 border-emerald-400 pl-4">
-<div class="text-3xl font-semibold">16&times;</div>
-<div class="text-sm pt-2 opacity-80">cheaper than Databricks Serverless</div>
-</div>
+<div class="pt-3">
 
-<div class="border-l-4 border-blue-400 pl-4">
-<div class="text-3xl font-semibold">your VPC</div>
-<div class="text-sm pt-2 opacity-80">no cross-cloud egress</div>
-</div>
-
-<div class="border-l-4 border-purple-400 pl-4">
-<div class="text-3xl font-semibold">list price</div>
-<div class="text-sm pt-2 opacity-80">EC2 / VM rates, ARM spot eligible</div>
-</div>
+| platform | $/vCPU&middot;hr | notes |
+|---|---|---|
+| <span class="text-pink-300">Databricks Serverless Jobs</span> | <span class="text-pink-300 font-semibold">~$0.20</span> | $0.37/DBU &middot; ~0.5 vCPU/DBU |
+| <span class="text-yellow-200">EMR Serverless (Graviton)</span> | <span class="text-yellow-200 font-semibold">~$0.06</span> | published vCPU + memory rates |
+| <span class="text-emerald-300">Spark on K8s &middot; Graviton spot + NVMe</span> | <span class="text-emerald-300 font-semibold">~$0.025</span> | m7gd spot &middot; NVMe shuffle, no EBS |
 
 </div>
+
+<div class="pt-6 text-base text-center">
+<span class="text-emerald-400 font-semibold">~8&times; cheaper</span> than Databricks Serverless &middot; <span class="text-emerald-400 font-semibold">~3&times;</span> than EMR Serverless
+</div>
+
+<div class="pt-3 text-xs opacity-50 text-center">shuffle-heavy gap widens further &mdash; Databricks/EMR shuffle to remote/EBS, NVMe is free with the instance</div>
 
 ---
 
