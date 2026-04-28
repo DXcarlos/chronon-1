@@ -265,6 +265,7 @@ Recap &middot; Q&amp;A
   - no merge on read &mdash; inference can fetch directly; clients can be pure Python
 - <span class="text-emerald-300">continuous writes</span>
   - midnight batch-upload spike disappears &mdash; writes only when value changes
+  - KV sees pure deltas &mdash; old bulkload reuploaded every key nightly even when the IR was unchanged
 - <span class="text-emerald-300">search-index hydration</span>
   - same vector, different sink &mdash; Elasticsearch / Vespa
 - <span class="text-emerald-300">broader KV backends</span>
