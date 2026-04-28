@@ -205,11 +205,9 @@ Recap &middot; Q&amp;A
 
 # GigaTile architecture
 
-<div class="pt-2 text-xs opacity-60 text-center">click &rarr; to build</div>
+<div class="pt-4 flex justify-center">
 
-<div class="pt-2 flex justify-center">
-
-<svg viewBox="0 0 800 360" style="width:60%">
+<svg viewBox="0 0 800 360" style="width:92%">
   <defs>
     <marker id="arrG" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
       <path d="M0,0 L0,6 L9,3 z" fill="#9ca3af"/>
@@ -257,37 +255,24 @@ Recap &middot; Q&amp;A
 
 # What GigaTile unblocks
 
-<div class="pt-4 grid grid-cols-2 gap-x-8 gap-y-5 text-sm">
+<div class="pt-6 text-base space-y-3">
 
-<div class="border-l-2 border-emerald-400 pl-3">
-<div class="font-semibold text-emerald-400">cost</div>
-<div class="opacity-80 pt-1">KV size and serving fleet shrink proportionally with read fan-out.</div>
-</div>
+<v-clicks>
 
-<div class="border-l-2 border-emerald-400 pl-3">
-<div class="font-semibold text-emerald-400">read-side compute</div>
-<div class="opacity-80 pt-1">No merge on read. Inference can fetch directly; clients can be pure Python.</div>
-</div>
+- <span class="text-emerald-300">cost</span>
+  - KV size and serving fleet shrink proportionally with read fan-out
+- <span class="text-emerald-300">read-side compute</span>
+  - no merge on read &mdash; inference can fetch directly; clients can be pure Python
+- <span class="text-emerald-300">continuous writes</span>
+  - midnight batch-upload spike disappears &mdash; writes only when value changes
+- <span class="text-emerald-300">search-index hydration</span>
+  - same vector, different sink &mdash; Elasticsearch / Vespa
+- <span class="text-emerald-300">broader KV backends</span>
+  - plain key&rarr;value semantics &mdash; adding a new backend stops being a months-long project
+- <span class="text-emerald-300">cold serving</span>
+  - Iceberg stream emits keys for batch-only entities &mdash; full key superset, no bootstrap RPC
 
-<div class="border-l-2 border-emerald-400 pl-3">
-<div class="font-semibold text-emerald-400">continuous writes</div>
-<div class="opacity-80 pt-1">Midnight batch-upload spike disappears. Writes only when value changes.</div>
-</div>
-
-<div class="border-l-2 border-emerald-400 pl-3">
-<div class="font-semibold text-emerald-400">search-index hydration</div>
-<div class="opacity-80 pt-1">Same vector, different sink &mdash; Elasticsearch / Vespa.</div>
-</div>
-
-<div class="border-l-2 border-emerald-400 pl-3">
-<div class="font-semibold text-emerald-400">broader KV backends</div>
-<div class="opacity-80 pt-1">Plain key&rarr;value semantics. Adding a new backend stops being a months-long project.</div>
-</div>
-
-<div class="border-l-2 border-emerald-400 pl-3">
-<div class="font-semibold text-emerald-400">cold serving</div>
-<div class="opacity-80 pt-1">Iceberg stream emits keys for batch-only entities &mdash; full key superset, no bootstrap RPC.</div>
-</div>
+</v-clicks>
 
 </div>
 
@@ -430,27 +415,18 @@ For each query, aggregate the matching events:
 
 # Fully distributed sawtooth &middot; temporalEvents
 
-<div class="pt-8 text-lg leading-relaxed opacity-90">
-Run the 3 layers across the cluster. Events and queries for the same key never land on the same machine.
-</div>
+<div class="pt-8 text-base space-y-3">
 
-<div class="pt-14 grid grid-cols-2 gap-16">
+<v-clicks>
 
-<div class="border-l-2 border-emerald-400 pl-5">
-<div class="font-semibold text-emerald-400 uppercase text-xs">benefit</div>
-<div class="pt-4">
-<div class="text-2xl font-semibold text-emerald-300">handles any-skew</div>
-<div class="text-sm opacity-70 pt-2">a key with millions of events still parallelizes &mdash; the layers fan out across executors</div>
-</div>
-</div>
+- run the 3 layers across the cluster
+  - events + queries for the same key never land on the same machine
+- <span class="text-emerald-300">handles any-skew</span>
+  - a key with millions of events still parallelizes &mdash; layers fan out across executors
+- <span class="text-pink-300">cost: 8 shuffles</span>
+  - kryo-encoded Java IRs, back and forth between two partitionings
 
-<div class="border-l-2 border-pink-400 pl-5">
-<div class="font-semibold text-pink-400 uppercase text-xs">cost</div>
-<div class="pt-4">
-<div class="text-2xl font-semibold text-pink-300">8 shuffles</div>
-<div class="text-sm opacity-70 pt-2">kryo-encoded Java IRs, back and forth between two partitionings</div>
-</div>
-</div>
+</v-clicks>
 
 </div>
 
@@ -458,27 +434,19 @@ Run the 3 layers across the cluster. Events and queries for the same key never l
 
 # Semi distributed sawtooth &middot; UnionJoin
 
-<div class="pt-8 text-lg leading-relaxed opacity-90">
-Most workloads aren't pathologically skewed. Collapse the per-key sawtooth onto one machine &mdash; sawtooth handles moderate skew fine in a single partition.
-</div>
+<div class="pt-8 text-base space-y-3">
 
-<div class="pt-14 grid grid-cols-2 gap-16">
+<v-clicks>
 
-<div class="border-l-2 border-emerald-400 pl-5">
-<div class="font-semibold text-emerald-400 uppercase text-xs">benefit</div>
-<div class="pt-4">
-<div class="text-2xl font-semibold text-emerald-300">1 shuffle</div>
-<div class="text-sm opacity-70 pt-2">Spark-native exchange, then sawtooth runs in-memory per partition</div>
-</div>
-</div>
+- most workloads aren't pathologically skewed
+  - collapse the per-key sawtooth onto one machine
+  - sawtooth handles moderate skew fine in a single partition
+- <span class="text-emerald-300">1 shuffle</span>
+  - Spark-native exchange, then sawtooth runs in-memory per partition
+- <span class="text-pink-300">trade-off: key fits in memory</span>
+  - a single key with millions of events can OOM the executor
 
-<div class="border-l-2 border-pink-400 pl-5">
-<div class="font-semibold text-pink-400 uppercase text-xs">trade-off</div>
-<div class="pt-4">
-<div class="text-2xl font-semibold text-pink-300">key fits in memory</div>
-<div class="text-sm opacity-70 pt-2">a single key with millions of events can OOM the executor</div>
-</div>
-</div>
+</v-clicks>
 
 </div>
 
