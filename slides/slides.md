@@ -22,6 +22,23 @@ Backfill, serving, and infra &mdash; 30 minutes.
 </div>
 
 ---
+layout: center
+class: text-center
+---
+
+<div class="text-2xl italic opacity-90 leading-relaxed max-w-2xl mx-auto">
+&ldquo;Premature optimization is the root of all evil.&rdquo;
+</div>
+
+<div class="pt-4 text-sm opacity-50">
+&mdash; Donald Knuth, 1974
+</div>
+
+<div v-click class="pt-16 text-base opacity-80 max-w-2xl mx-auto leading-relaxed">
+&ldquo;&hellip; yet we should not pass up our opportunities in that <span class="text-emerald-300 font-semibold">critical 3%</span>.&rdquo;
+</div>
+
+---
 
 # Agenda
 
@@ -37,6 +54,10 @@ Backfill, serving, and infra &mdash; 30 minutes.
 
 <div v-click>
 <span class="text-emerald-400 font-semibold">Cluster level optimizations</span> <span class="opacity-50">(5 min)</span>
+</div>
+
+<div v-click>
+<span class="text-yellow-300 font-semibold">Orchestration</span> <span class="opacity-50">(3 min)</span>
 </div>
 
 <div v-click class="pt-6 text-sm opacity-60">
@@ -129,7 +150,7 @@ Recap &middot; Q&amp;A
 
 # Constraints
 
-<div class="pt-10 text-xl space-y-6">
+<div class="pt-10 text-lg space-y-6">
 
 <v-clicks>
 
@@ -167,7 +188,7 @@ Recap &middot; Q&amp;A
 
 # MegaTile in production
 
-<div class="pt-10 text-xl space-y-6">
+<div class="pt-10 text-lg space-y-6">
 
 <v-clicks>
 
@@ -268,7 +289,7 @@ Recap &middot; Q&amp;A
   - midnight batch-upload spike disappears &mdash; writes only when value changes
   - KV sees pure deltas &mdash; old bulkload reuploaded every key nightly even when the IR was unchanged
 - <span class="text-emerald-300">search-index hydration</span>
-  - same vector, different sink &mdash; Elasticsearch / Vespa
+  - search indexes need features to be pushed to them
 
 </v-clicks>
 
@@ -320,13 +341,17 @@ class: text-center
 
 **Inputs**
 
+<v-clicks>
+
 - `queries` &mdash; `(key, ts)` rows
 - `events` &mdash; `(key, payload, ts)` rows
 - window `w` + aggregation `agg` &mdash; e.g., 7-day sum
 
+</v-clicks>
+
 </div>
 
-<div class="pt-8 text-base">
+<div v-click class="pt-8 text-base">
 
 **Output**
 
@@ -334,7 +359,7 @@ For each query, aggregate the matching events:
 
 </div>
 
-<div class="pt-3 font-mono text-base">
+<div v-after class="pt-3 font-mono text-base">
 <code>result(key, query.ts) = agg(payload) where event.ts &isin; [query.ts &minus; w, query.ts)</code>
 </div>
 
@@ -494,64 +519,12 @@ For each query, aggregate the matching events:
 
 ---
 
-# UnionJoin topology
-
-<div class="pt-2 flex justify-center">
-
-<svg viewBox="0 0 760 360" style="width:90%">
-  <defs>
-    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L9,3 z" fill="#9ca3af"/>
-    </marker>
-  </defs>
-
-  <g v-click="1">
-    <rect x="20" y="40" width="140" height="60" fill="rgba(96,165,250,0.18)" stroke="#60a5fa" rx="4"/>
-    <text x="90" y="75" text-anchor="middle" style="font-size:14px" fill="#bfdbfe">left (queries)</text>
-    <rect x="20" y="240" width="140" height="60" fill="rgba(244,114,182,0.18)" stroke="#f472b6" rx="4"/>
-    <text x="90" y="275" text-anchor="middle" style="font-size:14px" fill="#fbcfe8">right (events)</text>
-  </g>
-
-  <g v-click="2">
-    <path d="M165 70 Q 220 70 235 165" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
-    <path d="M165 270 Q 220 270 235 195" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
-    <rect x="245" y="140" width="120" height="60" fill="rgba(156,163,175,0.18)" stroke="#9ca3af" rx="4"/>
-    <text x="305" y="175" text-anchor="middle" style="font-size:14px" fill="#e5e7eb">union</text>
-  </g>
-
-  <g v-click="3">
-    <path d="M370 170 L 420 170" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
-    <rect x="425" y="100" width="160" height="40" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" rx="4"/>
-    <text x="505" y="125" text-anchor="middle" style="font-size:13px" fill="#fde68a">key=A: [t1, t3, t7, ...]</text>
-    <rect x="425" y="155" width="160" height="40" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" rx="4"/>
-    <text x="505" y="180" text-anchor="middle" style="font-size:13px" fill="#fde68a">key=B: [t2, t4, t9, ...]</text>
-    <rect x="425" y="210" width="160" height="40" fill="rgba(251,191,36,0.18)" stroke="#fbbf24" rx="4"/>
-    <text x="505" y="235" text-anchor="middle" style="font-size:13px" fill="#fde68a">key=C: [t1, t5, t8, ...]</text>
-    <text x="505" y="85" text-anchor="middle" style="font-size:11px" fill="#fcd34d">groupBy + time-sort</text>
-  </g>
-
-  <g v-click="4">
-    <path d="M590 170 L 625 170" stroke="#9ca3af" fill="none" marker-end="url(#arr)"/>
-    <rect x="630" y="140" width="110" height="60" fill="rgba(74,222,128,0.18)" stroke="#4ade80" rx="4"/>
-    <text x="685" y="165" text-anchor="middle" style="font-size:13px" fill="#bbf7d0">sawtooth</text>
-    <text x="685" y="183" text-anchor="middle" style="font-size:11px" fill="#86efac">all windows</text>
-  </g>
-
-</svg>
-
-</div>
-
----
-
 # Cost delta
 
-<div class="pt-10 text-xl space-y-6">
+<div class="pt-10 text-lg space-y-6">
 
 <v-clicks>
 
-- 8 shuffles &rarr; <span class="text-emerald-400 font-semibold">1 shuffle</span>
-  - kryo-encoded Java IRs &rarr; Spark-native exchange
-- in-partition compute &mdash; no cross-machine cogroups
 - <span class="text-emerald-400 font-semibold">~10&times;</span> faster in production
 - default for PITC aggregations
 
@@ -608,8 +581,9 @@ Bring-your-own-cloud platform for Spark batch and Flink streaming. Single Helm c
 
 - <span class="text-emerald-300 font-semibold">API gateway</span> &mdash; CRUD Spark / Flink jobs over HTTP/JSON
   - submit &middot; list &middot; status &middot; kill &middot; logs &middot; metrics
+- <span class="text-emerald-300 font-semibold">immediate feedback</span> &mdash; Databricks-Serverless-class startup
+  - warm pool reserved for drivers &middot; sub-20s submit-to-first-task
 - <span class="text-emerald-300 font-semibold">one-click UIs</span> &mdash; Spark UI + Flink UI proxied per job
-  - no port-forward dance, no SSH tunnels
 - <span class="text-emerald-300 font-semibold">logs + metrics</span> &mdash; Loki + Prometheus + Grafana
   - LogQL search across all jobs in a namespace
 - <span class="text-emerald-300 font-semibold">performance defaults</span> &mdash; tuned for shuffle-dominant workloads
@@ -618,32 +592,6 @@ Bring-your-own-cloud platform for Spark batch and Flink streaming. Single Helm c
 
 </v-clicks>
 
-</div>
-
----
-
-# The Spark-on-K8s tax
-
-<div class="pt-6 text-base">
-What you get out of the box:
-</div>
-
-<div class="pt-6 space-y-3">
-
-<v-clicks>
-
-- Cold start &mdash; minutes from submit to first task
-- Shuffle on root-disk EBS / Premium SSD &mdash; slow + noisy
-- No safe spot &mdash; one preemption kills the job
-- No DRA without an external shuffle service (Celeborn, etc.)
-- Driver evicted before executors when memory pressure hits
-
-</v-clicks>
-
-</div>
-
-<div class="pt-8 text-base opacity-80">
-The cost gap to Databricks-class platforms is mostly this tax.
 </div>
 
 ---
@@ -658,6 +606,9 @@ The cost gap to Databricks-class platforms is mostly this tax.
 
 - <span class="text-emerald-300 font-semibold">NVMe</span> &mdash; root-disk EBS shuffle is slow + noisy
   - DaemonSet auto-mounts &middot; executors auto-routed &middot; ~3&times; faster shuffle I/O
+- <span class="text-emerald-300 font-semibold">lz4 / zstd split</span> &mdash; codec per path, not one default
+  - lz4 on local spill &middot; cheap CPU pairs with NVMe's IOPS headroom
+  - zstd on shuffle wire &middot; ~2&times; denser, network is scarcer than NVMe bytes
 - <span class="text-emerald-300 font-semibold">Graviton</span> &mdash; ARM is 60&ndash;70% cheaper than equivalent x86 spot
   - same JVM bytecode &middot; multi-arch images &middot; tested on AWS / Azure / GCP
 - <span class="text-emerald-300 font-semibold">spot</span> &mdash; executors on spot, drivers pinned on-demand
@@ -672,42 +623,56 @@ The cost gap to Databricks-class platforms is mostly this tax.
 
 ---
 
-# Recap
+---
+layout: center
+class: text-center
+---
 
-<div class="pt-8 grid grid-cols-3 gap-6">
+<div class="text-sm uppercase tracking-[0.3em] opacity-50">part 4</div>
 
-<div class="border-l-4 border-blue-400 pl-4">
-<div class="text-xs uppercase opacity-60">backfill</div>
-<div class="text-xl font-semibold pt-1">3 shuffles &rarr; 1</div>
-<div class="text-sm pt-2 opacity-80">one union + groupBy + mapPartitions</div>
-</div>
+# <span class="text-yellow-300">Orchestration</span>
 
-<div class="border-l-4 border-purple-400 pl-4">
-<div class="text-xs uppercase opacity-60">serving</div>
-<div class="text-xl font-semibold pt-1">N reads &rarr; 1</div>
-<div class="text-sm pt-2 opacity-80">push merge to write</div>
-</div>
+<div class="pt-4 text-base opacity-60">Zipline</div>
 
-<div class="border-l-4 border-emerald-400 pl-4">
-<div class="text-xs uppercase opacity-60">substrate</div>
-<div class="text-xl font-semibold pt-1">x86 EBS &rarr; ARM NVMe spot</div>
-<div class="text-sm pt-2 opacity-80">list-price hardware, no egress</div>
-</div>
+---
+
+# Zipline orchestrator
+
+<div class="pt-2 text-sm opacity-60">why feature iteration gets fast</div>
+
+<div class="pt-6 text-base space-y-3">
+
+<v-clicks>
+
+- adding a new feature must be fast &mdash; the whole point of Chronon
+  - hours to first backfill, not days
+- <span class="text-yellow-300 font-semibold">Chronon-native</span> &mdash; understands joins, group-bys, time ranges
+  - dedups subgraphs across features &middot; reuses materialized intermediates
+  - drives maximal reuse, never recomputes what is already there
+- <span class="text-yellow-300 font-semibold">small Spark jobs, spot-tolerant</span>
+  - short jobs fit inside spot intervals &middot; failure blast radius is small
+  - many small &gt; one large &mdash; better packing, fewer stragglers
+
+</v-clicks>
 
 </div>
 
 ---
 
-# Where the work is
+# Recap
 
-<div class="pt-8 space-y-4 text-base">
+<div class="pt-16 space-y-12 text-lg">
 
 <v-clicks>
 
-- **UnionJoin** &mdash; <code>chronon</code> main &middot; <code>spark/.../join/UnionJoin.scala</code>
-- **MegaTile** &mdash; <code>chronon</code> branch <code>nikhil/megatile</code> &middot; design doc <code>docs/source/megatile.md</code>
-- **GigaTile** &mdash; <code>chronon</code> branch <code>nikhil/gigatile</code> &middot; design doc <code>docs/source/gigatile.md</code>
-- **Crucible** &mdash; <code>crucible</code> &middot; <code>pkg/k8s/sparkconfig.go</code>, <code>helm/crucible</code>
+<div>
+the whole stack has to move together &mdash; <span class="opacity-70">orchestrator + chronon + spark + flink + compute cluster</span>
+</div>
+
+<div>
+performance is how users <em>feel</em> Chronon
+<div class="pt-3 opacity-70">it's why they put up with all the API abstractions</div>
+</div>
 
 </v-clicks>
 
