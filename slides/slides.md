@@ -368,6 +368,152 @@ For each query, aggregate the matching events:
 
 ---
 
+# Sawtooth &middot; the shuffle DAG
+
+<div class="pt-2 flex justify-center">
+
+<svg viewBox="0 0 900 540" style="width:80%">
+
+  <rect x="240" y="18" width="480" height="84" fill="rgba(96,165,250,0.06)" stroke="rgba(96,165,250,0.25)" stroke-width="0.7" rx="4"/>
+  <rect x="240" y="108" width="480" height="186" fill="rgba(250,204,21,0.06)" stroke="rgba(250,204,21,0.25)" stroke-width="0.7" rx="4"/>
+  <rect x="240" y="300" width="480" height="222" fill="rgba(110,231,183,0.06)" stroke="rgba(110,231,183,0.25)" stroke-width="0.7" rx="4"/>
+
+  <text x="755" y="60" style="font-size:13px" fill="#bfdbfe" font-weight="700">layer 1</text>
+  <text x="755" y="78" style="font-size:11px" fill="#94a3b8">tile IRs</text>
+  <text x="755" y="92" style="font-size:11px" fill="#bfdbfe">1 shuffle</text>
+
+  <text x="755" y="190" style="font-size:13px" fill="#fef3c7" font-weight="700">layer 2</text>
+  <text x="755" y="208" style="font-size:11px" fill="#94a3b8">tail IRs</text>
+  <text x="755" y="222" style="font-size:11px" fill="#fef3c7">3 shuffles</text>
+
+  <text x="755" y="400" style="font-size:13px" fill="#bbf7d0" font-weight="700">layer 3</text>
+  <text x="755" y="418" style="font-size:11px" fill="#94a3b8">per-query IRs</text>
+  <text x="755" y="432" style="font-size:11px" fill="#bbf7d0">4 shuffles</text>
+
+  <text x="160" y="34" style="font-size:13px" fill="#cbd5e1" font-weight="600" text-anchor="end">events</text>
+  <circle cx="300" cy="30" r="6" fill="#cbd5e1"/>
+  <circle cx="430" cy="30" r="6" fill="#cbd5e1"/>
+  <circle cx="560" cy="30" r="6" fill="#cbd5e1"/>
+  <circle cx="690" cy="30" r="6" fill="#cbd5e1"/>
+
+  <g stroke="rgba(96,165,250,0.55)" stroke-width="0.9" fill="none">
+    <line x1="300" y1="36" x2="560" y2="84"/>
+    <line x1="430" y1="36" x2="690" y2="84"/>
+    <line x1="560" y1="36" x2="300" y2="84"/>
+    <line x1="690" y1="36" x2="430" y2="84"/>
+    <line x1="300" y1="36" x2="430" y2="84"/>
+    <line x1="690" y1="36" x2="560" y2="84"/>
+  </g>
+
+  <text x="160" y="94" style="font-size:13px" fill="#bfdbfe" font-weight="600" text-anchor="end">tile IRs</text>
+  <circle cx="300" cy="90" r="6" fill="#bfdbfe"/>
+  <circle cx="430" cy="90" r="6" fill="#bfdbfe"/>
+  <circle cx="560" cy="90" r="6" fill="#bfdbfe"/>
+  <circle cx="690" cy="90" r="6" fill="#bfdbfe"/>
+
+  <g stroke="rgba(250,204,21,0.5)" stroke-width="0.9" fill="none">
+    <line x1="300" y1="96" x2="560" y2="144"/>
+    <line x1="430" y1="96" x2="690" y2="144"/>
+    <line x1="560" y1="96" x2="300" y2="144"/>
+    <line x1="690" y1="96" x2="430" y2="144"/>
+    <line x1="300" y1="96" x2="690" y2="144"/>
+    <line x1="690" y1="96" x2="300" y2="144"/>
+  </g>
+  <circle cx="300" cy="150" r="4" fill="rgba(254,243,199,0.7)"/>
+  <circle cx="430" cy="150" r="4" fill="rgba(254,243,199,0.7)"/>
+  <circle cx="560" cy="150" r="4" fill="rgba(254,243,199,0.7)"/>
+  <circle cx="690" cy="150" r="4" fill="rgba(254,243,199,0.7)"/>
+
+  <g stroke="rgba(250,204,21,0.5)" stroke-width="0.9" fill="none">
+    <line x1="300" y1="155" x2="560" y2="204"/>
+    <line x1="430" y1="155" x2="690" y2="204"/>
+    <line x1="560" y1="155" x2="300" y2="204"/>
+    <line x1="690" y1="155" x2="430" y2="204"/>
+    <line x1="430" y1="155" x2="300" y2="204"/>
+    <line x1="560" y1="155" x2="690" y2="204"/>
+  </g>
+  <circle cx="300" cy="210" r="4" fill="rgba(254,243,199,0.7)"/>
+  <circle cx="430" cy="210" r="4" fill="rgba(254,243,199,0.7)"/>
+  <circle cx="560" cy="210" r="4" fill="rgba(254,243,199,0.7)"/>
+  <circle cx="690" cy="210" r="4" fill="rgba(254,243,199,0.7)"/>
+
+  <g stroke="rgba(250,204,21,0.5)" stroke-width="0.9" fill="none">
+    <line x1="300" y1="215" x2="560" y2="264"/>
+    <line x1="430" y1="215" x2="690" y2="264"/>
+    <line x1="560" y1="215" x2="300" y2="264"/>
+    <line x1="690" y1="215" x2="430" y2="264"/>
+    <line x1="300" y1="215" x2="690" y2="264"/>
+    <line x1="690" y1="215" x2="300" y2="264"/>
+  </g>
+
+  <text x="160" y="274" style="font-size:13px" fill="#fef3c7" font-weight="600" text-anchor="end">tail IRs</text>
+  <circle cx="300" cy="270" r="6" fill="#fef3c7"/>
+  <circle cx="430" cy="270" r="6" fill="#fef3c7"/>
+  <circle cx="560" cy="270" r="6" fill="#fef3c7"/>
+  <circle cx="690" cy="270" r="6" fill="#fef3c7"/>
+
+  <g stroke="rgba(110,231,183,0.5)" stroke-width="0.9" fill="none">
+    <line x1="300" y1="276" x2="560" y2="324"/>
+    <line x1="430" y1="276" x2="690" y2="324"/>
+    <line x1="560" y1="276" x2="300" y2="324"/>
+    <line x1="690" y1="276" x2="430" y2="324"/>
+    <line x1="300" y1="276" x2="690" y2="324"/>
+    <line x1="690" y1="276" x2="300" y2="324"/>
+  </g>
+  <circle cx="300" cy="330" r="4" fill="rgba(187,247,208,0.7)"/>
+  <circle cx="430" cy="330" r="4" fill="rgba(187,247,208,0.7)"/>
+  <circle cx="560" cy="330" r="4" fill="rgba(187,247,208,0.7)"/>
+  <circle cx="690" cy="330" r="4" fill="rgba(187,247,208,0.7)"/>
+
+  <g stroke="rgba(110,231,183,0.5)" stroke-width="0.9" fill="none">
+    <line x1="300" y1="335" x2="560" y2="384"/>
+    <line x1="430" y1="335" x2="690" y2="384"/>
+    <line x1="560" y1="335" x2="300" y2="384"/>
+    <line x1="690" y1="335" x2="430" y2="384"/>
+    <line x1="430" y1="335" x2="300" y2="384"/>
+    <line x1="560" y1="335" x2="690" y2="384"/>
+  </g>
+  <circle cx="300" cy="390" r="4" fill="rgba(187,247,208,0.7)"/>
+  <circle cx="430" cy="390" r="4" fill="rgba(187,247,208,0.7)"/>
+  <circle cx="560" cy="390" r="4" fill="rgba(187,247,208,0.7)"/>
+  <circle cx="690" cy="390" r="4" fill="rgba(187,247,208,0.7)"/>
+
+  <g stroke="rgba(110,231,183,0.5)" stroke-width="0.9" fill="none">
+    <line x1="300" y1="395" x2="560" y2="444"/>
+    <line x1="430" y1="395" x2="690" y2="444"/>
+    <line x1="560" y1="395" x2="300" y2="444"/>
+    <line x1="690" y1="395" x2="430" y2="444"/>
+    <line x1="300" y1="395" x2="690" y2="444"/>
+    <line x1="690" y1="395" x2="300" y2="444"/>
+  </g>
+  <circle cx="300" cy="450" r="4" fill="rgba(187,247,208,0.7)"/>
+  <circle cx="430" cy="450" r="4" fill="rgba(187,247,208,0.7)"/>
+  <circle cx="560" cy="450" r="4" fill="rgba(187,247,208,0.7)"/>
+  <circle cx="690" cy="450" r="4" fill="rgba(187,247,208,0.7)"/>
+
+  <g stroke="rgba(110,231,183,0.5)" stroke-width="0.9" fill="none">
+    <line x1="300" y1="455" x2="560" y2="504"/>
+    <line x1="430" y1="455" x2="690" y2="504"/>
+    <line x1="560" y1="455" x2="300" y2="504"/>
+    <line x1="690" y1="455" x2="430" y2="504"/>
+    <line x1="430" y1="455" x2="300" y2="504"/>
+    <line x1="560" y1="455" x2="690" y2="504"/>
+  </g>
+
+  <text x="160" y="514" style="font-size:13px" fill="#bbf7d0" font-weight="600" text-anchor="end">results</text>
+  <circle cx="300" cy="510" r="6" fill="#bbf7d0"/>
+  <circle cx="430" cy="510" r="6" fill="#bbf7d0"/>
+  <circle cx="560" cy="510" r="6" fill="#bbf7d0"/>
+  <circle cx="690" cy="510" r="6" fill="#bbf7d0"/>
+
+</svg>
+
+</div>
+
+<div class="pt-3 text-center text-base text-pink-300 font-semibold">8 shuffles &middot; kryo-encoded Java IRs</div>
+
+---
+
 # Sawtooth &middot; the 3 layers
 
 <div class="pt-2 text-xs opacity-50 text-center">click &rarr; reveal shuffle counts</div>
