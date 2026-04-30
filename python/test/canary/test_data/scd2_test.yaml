@@ -1,0 +1,62 @@
+---
+# Test fixture for staging_queries/azure/scd2_test.py.
+#
+# Same input table feeds two confs: the mutation conf (azure.scd2_test.mut_v1__0)
+# and the snapshot conf (azure.scd2_test.snap_v1__0). Run ExpectationsRunner once
+# per conf with --start-date 2024-01-10 --end-date 2024-01-15.
+#
+# Fixture covers the canonical SCD2 patterns:
+#   id=1: update on 2024-01-10 (Alice -> Alicia)         — mutation: 1 before + 1 after on 01-10
+#   id=2: insert on 2024-01-12 (Bob)                     — mutation: 1 after on 01-12
+#   id=3: insert on 2024-01-13 + delete on 2024-01-15    — mutations: 1 after on 01-13, 1 before on 01-15
+
+__schema__.default.test_scd2_user:
+  - [id, long]
+  - [name, string]
+  - [record_begin_timestamp, timestamp]
+  - [record_end_timestamp, timestamp]
+
+default.test_scd2_user:
+  # id=1, version 1: superseded on 2024-01-10
+  - [1, "Alice",   !epoch 2024-01-08T00:00:00Z, !epoch 2024-01-10T00:00:00Z]
+  # id=1, version 2: current
+  - [1, "Alicia",  !epoch 2024-01-10T00:00:00Z, null]
+  # id=2: inserted on 01-12, current
+  - [2, "Bob",     !epoch 2024-01-12T00:00:00Z, null]
+  # id=3: inserted on 01-13, deleted on 01-15
+  - [3, "Charlie", !epoch 2024-01-13T00:00:00Z, !epoch 2024-01-15T00:00:00Z]
+
+# Mutations conf output: every mutation event whose ds (= mutation_ts::date) falls in [start, end].
+# Column order: id, name, record_begin_timestamp, record_end_timestamp, mutation_ts, is_before, ds
+__expected__.data.azure_scd2_test_mut_v1__0:
+  # 2024-01-10: id=1 update -> 1 "before" row (Alice deactivated) + 1 "after" row (Alicia activated)
+  - [1, "Alice",   !epoch 2024-01-08T00:00:00Z, !epoch 2024-01-10T00:00:00Z, 1704844800000, true,  "2024-01-10"]
+  - [1, "Alicia",  !epoch 2024-01-10T00:00:00Z, null,                         1704844800000, false, "2024-01-10"]
+  # 2024-01-12: id=2 insert
+  - [2, "Bob",     !epoch 2024-01-12T00:00:00Z, null,                         1705017600000, false, "2024-01-12"]
+  # 2024-01-13: id=3 insert
+  - [3, "Charlie", !epoch 2024-01-13T00:00:00Z, !epoch 2024-01-15T00:00:00Z, 1705104000000, false, "2024-01-13"]
+  # 2024-01-15: id=3 delete -> 1 "before" row
+  - [3, "Charlie", !epoch 2024-01-13T00:00:00Z, !epoch 2024-01-15T00:00:00Z, 1705276800000, true,  "2024-01-15"]
+
+# Snapshot conf output: one row per (active entity, day) for every day in [start, end].
+# Column order: id, name, record_begin_timestamp, record_end_timestamp, ds
+__expected__.data.azure_scd2_test_snap_v1__0:
+  # 2024-01-10: only Alicia is active (Alice's end_ts = 01-10 is NOT > 01-10)
+  - [1, "Alicia",  !epoch 2024-01-10T00:00:00Z, null,                         "2024-01-10"]
+  # 2024-01-11
+  - [1, "Alicia",  !epoch 2024-01-10T00:00:00Z, null,                         "2024-01-11"]
+  # 2024-01-12: Bob joins
+  - [1, "Alicia",  !epoch 2024-01-10T00:00:00Z, null,                         "2024-01-12"]
+  - [2, "Bob",     !epoch 2024-01-12T00:00:00Z, null,                         "2024-01-12"]
+  # 2024-01-13: Charlie joins
+  - [1, "Alicia",  !epoch 2024-01-10T00:00:00Z, null,                         "2024-01-13"]
+  - [2, "Bob",     !epoch 2024-01-12T00:00:00Z, null,                         "2024-01-13"]
+  - [3, "Charlie", !epoch 2024-01-13T00:00:00Z, !epoch 2024-01-15T00:00:00Z,  "2024-01-13"]
+  # 2024-01-14
+  - [1, "Alicia",  !epoch 2024-01-10T00:00:00Z, null,                         "2024-01-14"]
+  - [2, "Bob",     !epoch 2024-01-12T00:00:00Z, null,                         "2024-01-14"]
+  - [3, "Charlie", !epoch 2024-01-13T00:00:00Z, !epoch 2024-01-15T00:00:00Z,  "2024-01-14"]
+  # 2024-01-15: Charlie leaves (end_ts = 01-15 is NOT > 01-15)
+  - [1, "Alicia",  !epoch 2024-01-10T00:00:00Z, null,                         "2024-01-15"]
+  - [2, "Bob",     !epoch 2024-01-12T00:00:00Z, null,                         "2024-01-15"]

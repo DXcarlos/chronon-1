@@ -1,0 +1,77 @@
+{
+  "engineType": 0,
+  "metaData": {
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_default_test_scd2_user_with_offset_0\", \"spec\": \"default.test_scd2_user/record_begin_timestamp={{ macros.ds_add(ds, 0) }}\"}]}",
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.coalesce.factor": "10",
+          "spark.chronon.partition.column": "ds",
+          "spark.chronon.partition.format": "yyyy-MM-dd",
+          "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_azure.AzureFormatProvider",
+          "spark.chronon.table_write.format": "iceberg",
+          "spark.default.parallelism": "10",
+          "spark.driver.cores": "1",
+          "spark.driver.memory": "512m",
+          "spark.executor.cores": "1",
+          "spark.executor.memory": "512m",
+          "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
+          "spark.sql.catalog.spark_catalog.credential": "{OC_CREDENTIAL}",
+          "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "vended-credentials",
+          "spark.sql.catalog.spark_catalog.scope": "PRINCIPAL_ROLE:engine",
+          "spark.sql.catalog.spark_catalog.type": "rest",
+          "spark.sql.catalog.spark_catalog.uri": "https://vejlulx-azure-oc.snowflakecomputing.com/polaris/api/catalog",
+          "spark.sql.catalog.spark_catalog.warehouse": "demo-v2",
+          "spark.sql.shuffle.partitions": "10"
+        }
+      },
+      "env": {
+        "common": {
+          "ARTIFACT_PREFIX": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net",
+          "AUTH_SCOPE": "api://dev-zipline-auth",
+          "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+          "CLOUD_PROVIDER": "azure",
+          "CUSTOMER_ID": "dev",
+          "EVAL_URL": "https://dev-azure.zipline.ai/services/eval",
+          "FRONTEND_URL": "https://dev-azure.zipline.ai",
+          "HUB_URL": "https://dev-orch-azure.zipline.ai",
+          "OC_CREDENTIAL_VAULT_URI": "https://dev-zipline-secrets.vault.azure.net/secrets/oc-catalog-credential",
+          "SNOWFLAKE_JDBC_URL": "jdbc:snowflake://VEJLULX-AZURE.snowflakecomputing.com/?user=demo_batch_service&db=Demo&schema=public&warehouse=demo_wh",
+          "SNOWFLAKE_PRIVATE_KEY_VAULT_URI": "https://demo-service-writer-pkey.vault.azure.net/secrets/snowflake-private-key",
+          "SPARK_CLUSTER_NAME": "http://kyuubi-dev.westus.cloudapp.azure.com:10099",
+          "VERSION": "latest",
+          "WAREHOUSE_PREFIX": "abfss://dev-zipline-warehouse@ziplineai2.dfs.core.windows.net"
+        }
+      },
+      "offlineSchedule": "@daily",
+      "stepDays": 30
+    },
+    "name": "azure.scd2_test.mut_v1__0",
+    "outputNamespace": "data",
+    "sourceFile": "staging_queries/azure/scd2_test.py",
+    "team": "azure",
+    "version": "0"
+  },
+  "query": "\nSELECT\n    *,\n    CAST(unix_timestamp(record_begin_timestamp) * 1000 AS BIGINT) AS mutation_ts,\n    FALSE AS is_before,\n    CAST(record_begin_timestamp AS DATE) AS ds\nFROM default.test_scd2_user\nWHERE CAST(record_begin_timestamp AS DATE) BETWEEN {{ start_date }} AND {{ end_date }}\n\nUNION ALL\n\nSELECT\n    *,\n    CAST(unix_timestamp(record_end_timestamp) * 1000 AS BIGINT) AS mutation_ts,\n    TRUE AS is_before,\n    CAST(record_end_timestamp AS DATE) AS ds\nFROM default.test_scd2_user\nWHERE record_end_timestamp IS NOT NULL\n  AND CAST(record_end_timestamp AS DATE) BETWEEN {{ start_date }} AND {{ end_date }}\n",
+  "tableDependencies": [
+    {
+      "endOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "startOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "tableInfo": {
+        "partitionColumn": "record_begin_timestamp",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
+        "table": "default.test_scd2_user",
+        "timePartitioned": 1
+      }
+    }
+  ]
+}
