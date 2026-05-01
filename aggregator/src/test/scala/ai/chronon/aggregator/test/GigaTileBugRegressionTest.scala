@@ -451,21 +451,25 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
   // are guaranteed equivalent by construction.
   // -----------------------------------------------------------------
   // -----------------------------------------------------------------
-  // Gap L — Multi-window per-column merge. Slots that fall outside a smaller window must
-  // not contribute to that column even when a larger window on the same key still needs them.
+  // Gap L — Multi-window per-column merge for *large* windows. Slots that fall outside a
+  // smaller large-window must not contribute to that column even when a larger large-window
+  // on the same key still needs them.
   //
-  // Scenario: aggregations {SUM(num,1d), SUM(num,7d)} on the same input. Batch is broken,
-  // events arrive on day 0. Query at day 4 12:00. The 1d window at day 4 12:00 covers
-  // [day 3 12:00, day 4 12:00] — slot day 0 is entirely outside, must contribute 0 to 1d.
-  // The 7d window at day 4 12:00 covers [day -2 12:00, day 4 12:00] — slot day 0 is inside,
-  // must contribute its events to 7d.
+  // Both windows must be > tailBufferMillis (2d) so they go through the daily-slot path; a
+  // small window (≤ 2d) goes through the tile path and never reads slots.
   //
-  // Without per-column window-overlap filtering, slot day 0 was merged into BOTH columns,
-  // over-counting 1d sum. The fix in recomputeRunningLargeIr applies a per-column predicate.
+  // Scenario: aggregations {SUM(num,3d), SUM(num,14d)} on the same input. Batch is frozen
+  // at day 0. Events arrive on day 0. Query at day 4 12:00. The 3d window covers
+  // [day 1 12:00, day 4 12:00] — slot day 0 is entirely outside, must contribute 0 to 3d.
+  // The 14d window covers [day -9 12:00, day 4 12:00] — slot day 0 is inside, must
+  // contribute its events to 14d.
+  //
+  // Without per-column window-overlap filtering, slot day 0 is merged into BOTH columns,
+  // over-counting 3d. The fix in recomputeRunningLargeIr applies a per-column predicate.
   // -----------------------------------------------------------------
-  it should "must not over-count 1d when slot is in 7d but outside 1d (multi-window stale-batch)" in {
+  it should "FAIL: must not over-count 3d when slot is in 14d but outside 3d (multi-window stale-batch)" in {
     val aggregations: Seq[Aggregation] = Seq(
-      Builders.Aggregation(Operation.SUM, "num", Seq(new Window(1, TimeUnit.DAYS), new Window(7, TimeUnit.DAYS)))
+      Builders.Aggregation(Operation.SUM, "num", Seq(new Window(3, TimeUnit.DAYS), new Window(14, TimeUnit.DAYS)))
     )
     val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
     val store = new InMemoryGigaTileStore(megaTileAgg.windowedAggregator)
@@ -477,32 +481,76 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
     val emptyBatch = onlineAgg.denormalizeBatchIr(onlineAgg.finalizeSnapshot(onlineAgg.init))
     processor.onBatchUpdate(emptyBatch, day0, day0)
 
-    // Three day-0 events at 09:00, 10:00, 11:00 (sum=6).
+    // Three day-0 events at 09:00, 10:00, 11:00 (each value 2 → sum=6).
     Seq(day0 + 9 * HourMillis, day0 + 10 * HourMillis, day0 + 11 * HourMillis).foreach { ts =>
       processor.advanceWatermark(ts)
       processor.onEvent(new TestRow(ts, 2L)(0), ts)
     }
 
-    // Batch never advances. Query at day 4 12:00 — slot day 0 is in the 7d window but
-    // outside the 1d window (1d window starts day 3 12:00, slot ends day 1 00:00).
+    // Batch never advances. Query at day 4 12:00 — slot day 0 is in the 14d window but
+    // outside the 3d window (3d window starts day 1 12:00, slot ends day 1 00:00).
     val queryTs = day0 + 4 * DayMillis + 12 * HourMillis
     processor.advanceWatermark(queryTs)
     val r = processor.onEviction(queryTs)
     assertNotNull("eviction must emit", r.finalizedVector)
 
-    // SUM(num,1d) is column 0, SUM(num,7d) is column 1 in the windowed aggregator's column
-    // ordering (window order matches the aggregations spec).
-    val sum1d = r.finalizedVector(0)
-    val sum7d = r.finalizedVector(1)
+    // SUM(num,3d) = col 0, SUM(num,14d) = col 1.
+    val sum3d = r.finalizedVector(0)
+    val sum14d = r.finalizedVector(1)
     assertEquals(
-      "1d SUM at day 4 12:00 must be null/0 — events on day 0 are outside the 1d window",
+      "3d SUM at day 4 12:00 must be null — events on day 0 are entirely before day 1 12:00 " +
+        "(3d window start). Without per-column window-overlap filtering, slot day 0's events " +
+        "leak into the 3d column.",
       null,
-      sum1d
+      sum3d
     )
     assertEquals(
-      "7d SUM at day 4 12:00 must include the day 0 events (within 7d window)",
+      "14d SUM at day 4 12:00 must include the day 0 events (within 14d window)",
       6L,
-      sum7d
+      sum14d
+    )
+  }
+
+  // -----------------------------------------------------------------
+  // Gap M — Slot eviction by largest window. A slot whose [dayStart, dayStart+1d) is
+  // entirely older than (queryTs - maxWindowMillis) cannot contribute to any column under
+  // any circumstance — pure pollution that grows Flink state unboundedly when batch never
+  // refreshes (gap J's broken-batch scenario).
+  //
+  // Pure window-bound check, independent of batchEndDay. Eviction must drop these slots
+  // from state every time recompute runs so total state per entity is bounded by the
+  // largest window, not by maxBatchStalenessDays.
+  // -----------------------------------------------------------------
+  it should "FAIL: slots older than the largest window must be evicted from state" in {
+    val largestWindow = new Window(7, TimeUnit.DAYS)
+    val aggregations: Seq[Aggregation] = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(largestWindow)))
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new InMemoryGigaTileStore(megaTileAgg.windowedAggregator)
+    // Permissive staleness bound so we can demonstrate eviction is driven by window size,
+    // not by the staleness bound.
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store, maxBatchStalenessDays = 100)
+
+    val day0 = TsUtils.round(1700000000000L, DayMillis)
+    // Empty batch at day0; batch never refreshes after this.
+    val onlineAgg = new SawtoothOnlineAggregator(day0, aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val emptyBatch = onlineAgg.denormalizeBatchIr(onlineAgg.finalizeSnapshot(onlineAgg.init))
+    processor.onBatchUpdate(emptyBatch, day0, day0)
+
+    // One event on day 0 → slot day 0 created.
+    processor.advanceWatermark(day0 + HourMillis)
+    processor.onEvent(new TestRow(day0 + HourMillis, 1L)(0), day0 + HourMillis)
+    assertNotNull("slot day 0 must exist after the event", store.getDailyLargeIr(day0))
+
+    // Query 10 days later — slot day 0 ends at day 1 00:00, which is well before
+    // (queryTs - 7d) = day 3 12:00. Slot is useless to any column. Recompute must evict it.
+    val queryTs = day0 + 10 * DayMillis + 12 * HourMillis
+    processor.advanceWatermark(queryTs)
+    processor.onEviction(queryTs)
+
+    assertNull(
+      "slot day 0 must be evicted from state once it's older than the largest window — " +
+        "without this, slots accumulate unboundedly when batch never advances (Gap J's broken-batch case)",
+      store.getDailyLargeIr(day0)
     )
   }
 
