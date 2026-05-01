@@ -38,7 +38,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
 
     val node = new GroupByBackfillNode().setGroupBy(eraseExecutionInfo)
 
-    toNode(metaData, _.setGroupByBackfill(node), semanticGroupBy(groupBy))
+    toNode(metaData, _.setGroupByBackfill(node), semanticGroupByForBatch(groupBy))
   }
 
   private def semanticGroupBy(groupBy: GroupBy): GroupBy = {
@@ -55,6 +55,18 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
     semanticGroupBy
   }
 
+  /** Variant for batch nodes (backfill, upload, uploadToKV). Batch outputs are byte-identical
+    * across online strategies — the streaming side reads/writes them differently but the
+    * underlying batch artifacts don't change. Without this, flipping `onlineStrategy` (e.g.
+    * DEFAULT ↔ STREAMING_MEGATILES) causes BatchNodeRunner to archive and re-run every batch
+    * job downstream of the GroupBy for no observable change in output data.
+    */
+  private def semanticGroupByForBatch(groupBy: GroupBy): GroupBy = {
+    val gb = semanticGroupBy(groupBy)
+    gb.unsetOnlineStrategy()
+    gb
+  }
+
   def uploadNode: Node = {
     val stepDays = 1 // GBUs write out data per day
     val metaData =
@@ -65,7 +77,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
                           Some(stepDays))
 
     val node = new GroupByUploadNode().setGroupBy(eraseExecutionInfo)
-    toNode(metaData, _.setGroupByUpload(node), semanticGroupBy(groupBy))
+    toNode(metaData, _.setGroupByUpload(node), semanticGroupByForBatch(groupBy))
   }
 
   def uploadToKVNode: Node = {
@@ -91,7 +103,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
       )
 
     val node = new GroupByUploadToKVNode().setGroupBy(eraseExecutionInfo)
-    toNode(metaData, _.setGroupByUploadToKV(node), semanticGroupBy(groupBy))
+    toNode(metaData, _.setGroupByUploadToKV(node), semanticGroupByForBatch(groupBy))
   }
 
   def streamingNode: Option[Node] = {
