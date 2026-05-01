@@ -450,6 +450,62 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
   // suppress consecutive all-empty emits even under the default no-op irEqual — those
   // are guaranteed equivalent by construction.
   // -----------------------------------------------------------------
+  // -----------------------------------------------------------------
+  // Gap L — Multi-window per-column merge. Slots that fall outside a smaller window must
+  // not contribute to that column even when a larger window on the same key still needs them.
+  //
+  // Scenario: aggregations {SUM(num,1d), SUM(num,7d)} on the same input. Batch is broken,
+  // events arrive on day 0. Query at day 4 12:00. The 1d window at day 4 12:00 covers
+  // [day 3 12:00, day 4 12:00] — slot day 0 is entirely outside, must contribute 0 to 1d.
+  // The 7d window at day 4 12:00 covers [day -2 12:00, day 4 12:00] — slot day 0 is inside,
+  // must contribute its events to 7d.
+  //
+  // Without per-column window-overlap filtering, slot day 0 was merged into BOTH columns,
+  // over-counting 1d sum. The fix in recomputeRunningLargeIr applies a per-column predicate.
+  // -----------------------------------------------------------------
+  it should "must not over-count 1d when slot is in 7d but outside 1d (multi-window stale-batch)" in {
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.SUM, "num", Seq(new Window(1, TimeUnit.DAYS), new Window(7, TimeUnit.DAYS)))
+    )
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new InMemoryGigaTileStore(megaTileAgg.windowedAggregator)
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store)
+
+    val day0 = TsUtils.round(1700000000000L, DayMillis)
+    // Empty batch at day0 to wire batchEndTs without contributing values.
+    val onlineAgg = new SawtoothOnlineAggregator(day0, aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val emptyBatch = onlineAgg.denormalizeBatchIr(onlineAgg.finalizeSnapshot(onlineAgg.init))
+    processor.onBatchUpdate(emptyBatch, day0, day0)
+
+    // Three day-0 events at 09:00, 10:00, 11:00 (sum=6).
+    Seq(day0 + 9 * HourMillis, day0 + 10 * HourMillis, day0 + 11 * HourMillis).foreach { ts =>
+      processor.advanceWatermark(ts)
+      processor.onEvent(new TestRow(ts, 2L)(0), ts)
+    }
+
+    // Batch never advances. Query at day 4 12:00 — slot day 0 is in the 7d window but
+    // outside the 1d window (1d window starts day 3 12:00, slot ends day 1 00:00).
+    val queryTs = day0 + 4 * DayMillis + 12 * HourMillis
+    processor.advanceWatermark(queryTs)
+    val r = processor.onEviction(queryTs)
+    assertNotNull("eviction must emit", r.finalizedVector)
+
+    // SUM(num,1d) is column 0, SUM(num,7d) is column 1 in the windowed aggregator's column
+    // ordering (window order matches the aggregations spec).
+    val sum1d = r.finalizedVector(0)
+    val sum7d = r.finalizedVector(1)
+    assertEquals(
+      "1d SUM at day 4 12:00 must be null/0 — events on day 0 are outside the 1d window",
+      null,
+      sum1d
+    )
+    assertEquals(
+      "7d SUM at day 4 12:00 must include the day 0 events (within 7d window)",
+      6L,
+      sum7d
+    )
+  }
+
   it should "FAIL: consecutive all-empty eviction emits must be suppressed even under default irEqual" in {
     val window = new Window(1, TimeUnit.HOURS)
     val aggregations: Seq[Aggregation] = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(window)))

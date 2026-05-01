@@ -321,12 +321,14 @@ class FlinkGigaTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec, 
   override def getLargeYesterdayIr: Array[Any] = windowedAgg.init
   override def putLargeYesterdayIr(ir: Array[Any]): Unit = ()
 
+  // Daily slot IRs are base-aggregator-shaped (one column per (op, input)) — fanned out
+  // to per-window columns at recompute time via baseIrIndices.
   override def getDailyLargeIr(dayStart: Long): Array[Any] = {
     val bytes = dailyLargeIrState.get(dayStart)
-    if (bytes != null) codec.decode(bytes) else null
+    if (bytes != null) codec.decodeBaseIr(bytes) else null
   }
   override def putDailyLargeIr(dayStart: Long, ir: Array[Any]): Unit =
-    dailyLargeIrState.put(dayStart, codec.encode(ir))
+    dailyLargeIrState.put(dayStart, codec.encodeBaseIr(ir))
   override def removeDailyLargeIr(dayStart: Long): Unit =
     dailyLargeIrState.remove(dayStart)
   override def dailyLargeIrIterator: Iterator[(Long, Array[Any])] = {
@@ -335,7 +337,7 @@ class FlinkGigaTileStore(megaTileAgg: MegaTileAggregator, codec: MegaTileCodec, 
       override def hasNext: Boolean = iter.hasNext
       override def next(): (Long, Array[Any]) = {
         val entry = iter.next()
-        (entry.getKey.longValue(), codec.decode(entry.getValue))
+        (entry.getKey.longValue(), codec.decodeBaseIr(entry.getValue))
       }
     }
   }

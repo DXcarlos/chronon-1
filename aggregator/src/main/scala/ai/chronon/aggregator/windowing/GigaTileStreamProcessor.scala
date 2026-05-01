@@ -152,13 +152,18 @@ class GigaTileStreamProcessor(
     // see them immediately), and recomputeRunningLargeIr will drop their daily slot at the
     // next eviction — matching the original "incremental shows it, eviction may drop it"
     // trade-off when the late event was not in the prior batch's source data.
+    //
+    // Daily slot IRs are sized to the BASE aggregator (one column per (op, input)) — not
+    // the windowed aggregator. The same SUM(num) value covers every windowed SUM(num, W)
+    // column when fanned out at recompute time via baseIrIndices. Saves N× state and
+    // update cost when the same input appears in many window sizes.
     val eventDayStart = TsUtils.round(eventTs, DayMillis)
     val oldestAcceptedDay = currentDayStart - maxStalenessMillis
     var droppedStaleEvent = false
     if (eventDayStart >= oldestAcceptedDay) {
       val existing = store.getDailyLargeIr(eventDayStart)
-      val dayIr = if (existing != null) existing else windowedAgg.init
-      updateLargeWindowColumns(dayIr, row)
+      val dayIr = if (existing != null) existing else baseAgg.init
+      baseAgg.update(dayIr, row)
       store.putDailyLargeIr(eventDayStart, dayIr)
 
       val runningIr = store.getRunningLargeIr
@@ -352,20 +357,45 @@ class GigaTileStreamProcessor(
       windowedAgg.init
     }
 
+    // Slot eviction (state size): drop slots whose [dayStart, dayStart+1d) is entirely older
+    // than the largest column window — they cannot contribute to any column.
+    // Per-column merge (correctness): for retained slots, fan out from base-IR shape to each
+    // windowed column via baseIrIndices, but only for columns whose own window overlaps the
+    // slot's date range. Otherwise we'd over-count smaller-window columns by an entire day's
+    // worth of out-of-window events.
     val batchEndDay = if (batchEndTs > 0) TsUtils.round(batchEndTs, DayMillis) else Long.MinValue
+    val maxWindowMillis = megaTileAgg.maxWindowMillis
+    val columnWindowMillis = megaTileAgg.columnWindowMillis
+    val baseIrIndices = megaTileAgg.baseIrIndicesArray
+    val toEvict = mutable.ArrayBuffer.empty[Long]
     val iter = store.dailyLargeIrIterator
     while (iter.hasNext) {
       val (dayStart, dayIr) = iter.next()
-      if (dayStart >= batchEndDay && dayIr != null) {
+      val slotEnd = dayStart + DayMillis
+      // Slot entirely outside the largest window — useful to no column. Drop from state.
+      if (maxWindowMillis > 0 && slotEnd <= queryTs - maxWindowMillis) {
+        toEvict += dayStart
+      } else if (dayStart >= batchEndDay && dayIr != null) {
         var col = 0
         while (col < windowedAgg.length) {
-          if (!isNoBatch(col) && dayIr(col) != null) {
-            runningIr(col) = windowedAgg.columnAggregators(col).merge(runningIr(col), dayIr(col))
+          if (!isNoBatch(col)) {
+            val baseSlotValue = dayIr(baseIrIndices(col))
+            if (baseSlotValue != null) {
+              // Per-column window overlap: slot's [dayStart, slotEnd) must intersect the
+              // column's window [queryTs - colWindow, queryTs]. Unwindowed columns
+              // (colWindow < 0) always include all events ever.
+              val colWindow = columnWindowMillis(col)
+              val include = colWindow < 0 || slotEnd > queryTs - colWindow
+              if (include) {
+                runningIr(col) = windowedAgg.columnAggregators(col).merge(runningIr(col), baseSlotValue)
+              }
+            }
           }
           col += 1
         }
       }
     }
+    toEvict.foreach(store.removeDailyLargeIr)
 
     // Some column aggregators (FIRST, LAST, and similar non-mutating reducers) return one of
     // their merge inputs by reference. Without re-cloning, runningIr columns can end up

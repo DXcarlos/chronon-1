@@ -123,11 +123,13 @@ class GigaTileCodecRoundTripTest extends AnyFlatSpec {
     override def getRunningLargeIr: Array[Any] = codec.decode(runningLargeBytes)
     override def putRunningLargeIr(ir: Array[Any]): Unit = runningLargeBytes = codec.encode(ir)
 
-    override def getDailyLargeIr(ds: Long): Array[Any] = dailyLargeBytes.get(ds).map(codec.decode).orNull
-    override def putDailyLargeIr(ds: Long, ir: Array[Any]): Unit = dailyLargeBytes(ds) = codec.encode(ir)
+    // Daily slot IRs are base-aggregator-shaped (one column per (op, input)) — fanned out
+    // to per-window columns at recompute time via baseIrIndices.
+    override def getDailyLargeIr(ds: Long): Array[Any] = dailyLargeBytes.get(ds).map(codec.decodeBaseIr).orNull
+    override def putDailyLargeIr(ds: Long, ir: Array[Any]): Unit = dailyLargeBytes(ds) = codec.encodeBaseIr(ir)
     override def removeDailyLargeIr(ds: Long): Unit = dailyLargeBytes.remove(ds)
     override def dailyLargeIrIterator: Iterator[(Long, Array[Any])] =
-      dailyLargeBytes.iterator.map { case (ds, b) => (ds, codec.decode(b)) }
+      dailyLargeBytes.iterator.map { case (ds, b) => (ds, codec.decodeBaseIr(b)) }
   }
 
   /** Full giga tile pipeline with serde round-trips at every state boundary. */
