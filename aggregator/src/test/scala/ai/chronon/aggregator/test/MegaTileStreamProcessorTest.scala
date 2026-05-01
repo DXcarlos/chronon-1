@@ -9,6 +9,7 @@ import org.junit.Assert._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.slf4j.LoggerFactory
 
+import java.time.Instant
 import scala.collection.mutable
 
 /**
@@ -83,6 +84,11 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
     (data.rows, columns.map(_.schema))
   }
 
+  def toMillis(instant: String): Long = Instant.parse(instant).toEpochMilli
+
+  def finalizeEntry(megaTileAgg: MegaTileAggregator, entry: Array[Any]): Array[Any] =
+    megaTileAgg.windowedAggregator.finalize(entry.clone())
+
   def naiveAggregate(allEvents: Array[TestRow], queryTimes: Array[Long], aggregations: Seq[Aggregation], schema: Seq[(String, DataType)]): Array[Array[Any]] = {
     val unpackedParts = aggregations.flatMap(_.unpack)
     val unpacked = unpackedParts.map(_.window).toArray
@@ -154,7 +160,7 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
         processor.advanceWatermark(event.ts)
 
         // Process event
-        val result = processor.onEvent(event, event.ts)
+        val result = processor.onEvent(event, event.ts, queryTs)
         if (result.todayEntry != null) kvStore(result.todayStart) = result.todayEntry
         if (result.yesterdayEntry != null) kvStore(result.yesterdayStart) = result.yesterdayEntry
 
@@ -315,6 +321,141 @@ class MegaTileStreamProcessorTest extends AnyFlatSpec {
     val results = streamProcessorAggregate(events, queryTimes, aggregations, schema, batchEnd)
     val naive = naiveAggregate(events, queryTimes, aggregations, schema)
     compareResults(results, naive, queryTimes, "stream_multi_day_gap")
+  }
+
+  it should "not update cached small windows for a retained late event outside the as-of horizon" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val oneDay = new Window(1, TimeUnit.DAYS)
+    val threeDays = new Window(3, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, oneDay, threeDays)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+
+    val todayStart = toMillis("2025-07-22T00:00:00Z")
+    val asOfTs = toMillis("2025-07-22T00:10:00Z")
+
+    val currentEvent = TestRow(todayStart, 1L)
+    val currentResult = processor.onEvent(currentEvent, currentEvent.ts, asOfTs)
+    val currentFinalized = finalizeEntry(megaTileAgg, currentResult.todayEntry)
+    assertEquals("1h sum after current event", 1L, currentFinalized(0))
+    assertEquals("1d sum after current event", 1L, currentFinalized(1))
+
+    val retainedButOutsideOneHour = TestRow(toMillis("2025-07-21T00:00:00Z"), 1L)
+    val lateResult = processor.onEvent(retainedButOutsideOneHour, retainedButOutsideOneHour.ts, asOfTs)
+    val lateFinalized = finalizeEntry(megaTileAgg, lateResult.todayEntry)
+
+    assertEquals("1h sum should exclude stale retained late event", 1L, lateFinalized(0))
+    assertEquals("1d sum should still include retained late event", 2L, lateFinalized(1))
+    assertNotNull("large-window yesterday entry should still be emitted", lateResult.yesterdayEntry)
+  }
+
+  it should "update cached small windows for a retained late event inside the as-of horizon" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val oneDay = new Window(1, TimeUnit.DAYS)
+    val threeDays = new Window(3, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, oneDay, threeDays)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+
+    val todayStart = toMillis("2025-07-22T00:00:00Z")
+    val asOfTs = toMillis("2025-07-22T00:10:00Z")
+
+    val currentEvent = TestRow(todayStart, 1L)
+    processor.onEvent(currentEvent, currentEvent.ts, asOfTs)
+
+    val retainedInsideOneHour = TestRow(toMillis("2025-07-21T23:30:00Z"), 1L)
+    val lateResult = processor.onEvent(retainedInsideOneHour, retainedInsideOneHour.ts, asOfTs)
+    val lateFinalized = finalizeEntry(megaTileAgg, lateResult.todayEntry)
+
+    assertEquals("1h sum should include retained late event inside as-of horizon", 2L, lateFinalized(0))
+    assertEquals("1d sum should include retained late event", 2L, lateFinalized(1))
+    assertNotNull("large-window yesterday entry should still be emitted", lateResult.yesterdayEntry)
+  }
+
+  it should "rebuild cached small windows when watermark advances into a new day" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val oneDay = new Window(1, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, oneDay)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+
+    // Before midnight, this event is inside both the 1h and 1d small-window caches.
+    val yesterdayEvent = TestRow(toMillis("2025-07-22T22:00:00Z"), 10L)
+    val yesterdayAsOfTs = toMillis("2025-07-22T23:00:00Z")
+    val yesterdayResult = processor.onEvent(yesterdayEvent, yesterdayEvent.ts, yesterdayAsOfTs)
+    val yesterdayFinalized = finalizeEntry(megaTileAgg, yesterdayResult.todayEntry)
+
+    assertEquals("sanity: previous-day 1h cache contains the event before rollover", 10L, yesterdayFinalized(0))
+    assertEquals("sanity: previous-day 1d cache contains the event before rollover", 10L, yesterdayFinalized(1))
+
+    // Day rollover advances the as-of time without a new event, so cachedSmallWindowIr
+    // must be rebuilt here instead of waiting for the next eviction.
+    processor.advanceWatermark(toMillis("2025-07-23T00:00:00Z"))
+    val todayFinalized = finalizeEntry(megaTileAgg, processor.packTodayEntry())
+
+    // After midnight, the 1h window no longer includes 22:00, but the 1d window still does.
+    assertNull("new-day 1h cache should not carry stale previous-day value", todayFinalized(0))
+    assertEquals("new-day 1d cache should be rebuilt from retained tiles", 10L, todayFinalized(1))
+  }
+
+  it should "preserve no-batch values when packing yesterday after rollover" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val threeDays = new Window(3, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, threeDays)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+
+    val midnight = toMillis("2025-07-23T00:00:00Z")
+    val beforeRollover = TestRow(toMillis("2025-07-22T23:30:00Z"), 10L)
+    processor.onEvent(beforeRollover, beforeRollover.ts, midnight)
+    processor.advanceWatermark(midnight)
+
+    val latePreviousDay = TestRow(toMillis("2025-07-22T22:00:00Z"), 5L)
+    val result = processor.onEvent(latePreviousDay, latePreviousDay.ts, midnight + 5 * 60 * 1000L)
+    val yesterdayFinalized = finalizeEntry(megaTileAgg, result.yesterdayEntry)
+
+    // Late previous-day events must update yesterday's batch-backed columns because serving merges
+    // daily contributions across N days. No-batch columns are not merged: serving picks the newest
+    // available daily row, so small-window updates for the query path belong to today's row instead.
+    assertEquals("yesterday 1h no-batch snapshot should survive the late-row overwrite", 10L, yesterdayFinalized(0))
+    assertEquals("yesterday 3d batch-backed column should include the late event", 15L, yesterdayFinalized(1))
+  }
+
+  it should "not update previous-day no-batch columns for late events when serving picks today" in {
+    val oneHour = new Window(1, TimeUnit.HOURS)
+    val threeDays = new Window(3, TimeUnit.DAYS)
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "num", Seq(oneHour, threeDays)))
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val processor = new MegaTileStreamProcessor(megaTileAgg, new InMemoryTileStore(megaTileAgg.windowedAggregator))
+    val merger = new MegaTileMerger(megaTileAgg)
+
+    val yesterdayStart = toMillis("2025-07-22T00:00:00Z")
+    val todayStart = yesterdayStart + DayMillis
+    val queryTs = toMillis("2025-07-23T00:10:00Z")
+
+    val beforeRollover = TestRow(toMillis("2025-07-22T23:30:00Z"), 10L)
+    processor.onEvent(beforeRollover, beforeRollover.ts, todayStart)
+    processor.advanceWatermark(todayStart)
+
+    val todayEvent = TestRow(toMillis("2025-07-23T00:01:00Z"), 7L)
+    processor.onEvent(todayEvent, todayEvent.ts, queryTs)
+
+    val latePreviousDay = TestRow(toMillis("2025-07-22T22:00:00Z"), 5L)
+    val lateResult = processor.onEvent(latePreviousDay, latePreviousDay.ts, queryTs)
+    val yesterdayFinalized = finalizeEntry(megaTileAgg, lateResult.yesterdayEntry)
+    assertEquals("late event should not mutate frozen previous-day 1h snapshot", 10L, yesterdayFinalized(0))
+    assertEquals("late event should still update previous-day 3d contribution", 15L, yesterdayFinalized(1))
+
+    val served =
+      merger.merge(null, Seq(todayStart -> processor.packTodayEntry(), yesterdayStart -> lateResult.yesterdayEntry),
+                   queryTs, yesterdayStart)
+    assertEquals("serving should choose today's self-contained 1h row, not merge yesterday", 17L, served(0))
+    assertEquals("batch-backed column should merge today and yesterday daily contributions", 22L, served(1))
   }
 
   it should "match naive with complex aggregations (buckets, approx_unique, histogram, last_k)" in {

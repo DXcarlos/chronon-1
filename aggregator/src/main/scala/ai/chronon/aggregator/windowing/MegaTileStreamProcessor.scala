@@ -13,7 +13,8 @@ import scala.collection.mutable
   * State layout:
   *   - Small window tiles: per-tier base IRs. Source of truth for eviction rebuilds.
   *   - cachedSmallWindowIr: sawtooth running sum, corrected on eviction.
-  *   - Large window today/yesterday IRs: per-day accumulators.
+  *   - Large window today IR and previous-day IR: large columns are per-day accumulators;
+  *     no-batch columns in previous-day IR are frozen at adjacent day rollover.
   *   - Day transitions are watermark-driven (advanceWatermark), not event-driven.
   */
 class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: TileStore) {
@@ -38,7 +39,10 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
   val hasSmallWindows: Boolean = smallWindowTiers.nonEmpty
   val minSmallWindowTileSize: Long = if (hasSmallWindows) smallWindowTiers.min else DayMillis
 
-  def onEvent(row: Row, eventTs: Long): EmitResult = {
+  /** Ingest an event at eventTs, but bound cached small-window emission as of smallWindowAsOfTs.
+    * Base tile state still uses eventTs so retained late events remain available for future rebuilds.
+    */
+  def onEvent(row: Row, eventTs: Long, smallWindowAsOfTs: Long): EmitResult = {
     var currentDayStart = store.getCurrentDayStart
     if (currentDayStart == -1L) {
       currentDayStart = TsUtils.round(eventTs, DayMillis)
@@ -50,7 +54,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
 
     // Update tiles + cachedSmallWindowIr for small-window tiers
     if (hasSmallWindows) {
-      var tilesUpdated = false
+      val acceptedTileStarts = mutable.Map.empty[Long, Long]
       val tileStarts = megaTileAgg.tileStartsForEvent(eventTs)
       for ((hopSize, tileStart) <- tileStarts) {
         if (smallWindowTiers.contains(hopSize)) {
@@ -63,23 +67,38 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
             store.putTile(hopSize, tileStart, ir)
             val earliest = store.getEarliestTileStart
             if (tileStart < earliest) store.putEarliestTileStart(tileStart)
-            tilesUpdated = true
+            acceptedTileStarts(hopSize) = tileStart
           }
         }
       }
 
-      // Sawtooth: merge event into running IR for all small-window columns.
-      if (tilesUpdated) {
-        val cachedIr = store.getCachedSmallWindowIr
+      // Sawtooth: merge event into the running IR only for columns whose tile belongs
+      // in the as-of window being emitted. The base tile remains retained even when
+      // a late event is outside a smaller current serving horizon.
+      if (acceptedTileStarts.nonEmpty) {
+        var cachedIr: Array[Any] = null
+        var cachedIrUpdated = false
         var col = 0
         while (col < windowedAgg.length) {
           if (isNoBatch(col)) {
-            windowedAgg.columnAggregators(col).update(cachedIr, row)
+            val hopSize = columnHopSize(col)
+            acceptedTileStarts.get(hopSize).foreach { tileStart =>
+              val effectiveStart = megaTileAgg.effectiveStart(col, smallWindowAsOfTs, currentDayStart)
+              // The retained base tile can accept older late events, but the sawtooth cache represents
+              // the value emitted as of smallWindowAsOfTs.
+              if (tileStart >= effectiveStart && tileStart < smallWindowAsOfTs) {
+                if (cachedIr == null) cachedIr = store.getCachedSmallWindowIr
+                windowedAgg.columnAggregators(col).update(cachedIr, row)
+                cachedIrUpdated = true
+              }
+            }
           }
           col += 1
         }
-        store.putCachedSmallWindowIr(cachedIr)
-        todayDirty = true
+        if (cachedIrUpdated) {
+          store.putCachedSmallWindowIr(cachedIr)
+          todayDirty = true
+        }
       }
     }
 
@@ -121,11 +140,14 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
     val wmDay = TsUtils.round(watermarkTs, DayMillis)
     if (wmDay > currentDayStart) {
       val newYesterday =
-        if (wmDay == currentDayStart + DayMillis) store.getLargeTodayIr
+        if (wmDay == currentDayStart + DayMillis) previousDayIrForAdjacentRollover()
         else windowedAgg.init
       store.putLargeYesterdayIr(newYesterday)
       store.putLargeTodayIr(windowedAgg.init)
       store.putCurrentDayStart(wmDay)
+      // cachedSmallWindowIr is as-of sensitive. Day rollover changes each small window's
+      // effective start, so rebuild from retained tiles instead of carrying yesterday's cache forward.
+      rebuildCachedSmallWindowIr(watermarkTs, wmDay)
     }
   }
 
@@ -138,32 +160,7 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
 
     val todayStart = currentDayStart
 
-    // Evict stale tiles
-    val staleEntries = mutable.ArrayBuffer.empty[(Long, Long)]
-    val iter = store.tileIterator
-    while (iter.hasNext) {
-      val (hopSize, tileStart, _) = iter.next()
-      if (smallWindowTiers.contains(hopSize)) {
-        val floor = megaTileAgg.retentionFloor(hopSize, timerTs, todayStart)
-        if (tileStart < floor) staleEntries += ((hopSize, tileStart))
-      }
-    }
-    staleEntries.foreach { case (h, t) => store.removeTile(h, t) }
-
-    // Rebuild cachedSmallWindowIr from remaining tiles
-    val tiles: Map[Long, mutable.Map[Long, Array[Any]]] =
-      smallWindowTiers.map(hop => hop -> mutable.Map.empty[Long, Array[Any]]).toMap
-    var newEarliest = Long.MaxValue
-    val rebuildIter = store.tileIterator
-    while (rebuildIter.hasNext) {
-      val (hopSize, tileStart, ir) = rebuildIter.next()
-      tiles.get(hopSize).foreach(_(tileStart) = ir)
-      if (tileStart < newEarliest) newEarliest = tileStart
-    }
-    store.putEarliestTileStart(newEarliest)
-
-    val rebuiltIr = megaTileAgg.buildMegaTileIr(tiles, now = timerTs, batchEnd = todayStart)
-    store.putCachedSmallWindowIr(rebuiltIr)
+    rebuildCachedSmallWindowIr(timerTs, todayStart)
 
     EmitResult(
       todayEntry = packTodayEntry(),
@@ -186,14 +183,27 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
   }
 
   def packYesterdayEntry(): Array[Any] = {
-    val largeIr = store.getLargeYesterdayIr
+    val yesterdayIr = store.getLargeYesterdayIr
     val entry = new Array[Any](windowedAgg.length)
     var col = 0
     while (col < windowedAgg.length) {
-      entry(col) = if (isNoBatch(col)) null else largeIr(col)
+      entry(col) = yesterdayIr(col)
       col += 1
     }
     entry
+  }
+
+  private def previousDayIrForAdjacentRollover(): Array[Any] = {
+    val previousDayIr = windowedAgg.clone(store.getLargeTodayIr)
+    val cachedSmallIr = store.getCachedSmallWindowIr
+    var col = 0
+    while (col < windowedAgg.length) {
+      if (isNoBatch(col)) {
+        previousDayIr(col) = windowedAgg.columnAggregators(col).clone(cachedSmallIr(col))
+      }
+      col += 1
+    }
+    previousDayIr
   }
 
   private def updateLargeWindowColumns(ir: Array[Any], row: Row): Unit = {
@@ -204,6 +214,35 @@ class MegaTileStreamProcessor(val megaTileAgg: MegaTileAggregator, val store: Ti
       }
       col += 1
     }
+  }
+
+  private def rebuildCachedSmallWindowIr(asOfTs: Long, todayStart: Long): Unit = {
+    if (!hasSmallWindows) return
+
+    // Classify stale vs retained tiles in one iterator pass. Flink-backed TileStore decodes values
+    // during iteration, so a second full scan would deserialize every retained tile again.
+    val staleEntries = mutable.ArrayBuffer.empty[(Long, Long)]
+    val tiles: Map[Long, mutable.Map[Long, Array[Any]]] =
+      smallWindowTiers.map(hop => hop -> mutable.Map.empty[Long, Array[Any]]).toMap
+    var newEarliest = Long.MaxValue
+    val iter = store.tileIterator
+    while (iter.hasNext) {
+      val (hopSize, tileStart, ir) = iter.next()
+      if (smallWindowTiers.contains(hopSize)) {
+        val floor = megaTileAgg.retentionFloor(hopSize, asOfTs, todayStart)
+        if (tileStart < floor) {
+          staleEntries += ((hopSize, tileStart))
+        } else {
+          tiles(hopSize)(tileStart) = ir
+          if (tileStart < newEarliest) newEarliest = tileStart
+        }
+      }
+    }
+    staleEntries.foreach { case (h, t) => store.removeTile(h, t) }
+    store.putEarliestTileStart(newEarliest)
+
+    val rebuiltIr = megaTileAgg.buildMegaTileIr(tiles, now = asOfTs, batchEnd = todayStart)
+    store.putCachedSmallWindowIr(rebuiltIr)
   }
 }
 

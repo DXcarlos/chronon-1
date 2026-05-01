@@ -135,11 +135,18 @@ abstract class BaseFlinkJob {
       parallelism: Int,
       sinkFn: RichAsyncFunction[AvroCodecOutput, WriteResponse],
       kvStoreCapacity: Int,
-      enableDebug: Boolean
+      enableDebug: Boolean,
+      bufferingOutputTimeMillis: Long,
+      bufferingOutputJitterMillis: Long
   ): DataStream[WriteResponse] = {
     val megaTileDS = preparedStream
       .keyBy(KeySelectorBuilder.build(groupByServingInfoParsed.groupBy))
-      .process(new MegaTileProcessFunction(groupByServingInfoParsed.groupBy, schema, enableDebug))
+      .process(
+        new MegaTileProcessFunction(groupByServingInfoParsed.groupBy,
+                                    schema,
+                                    enableDebug,
+                                    bufferingOutputTimeMillis,
+                                    bufferingOutputJitterMillis))
       .uid(s"mega-tiling-$groupByName")
       .name(s"Mega Tiling for $groupByName")
       .setParallelism(parallelism)
@@ -206,6 +213,8 @@ object FlinkJob {
   // Keep windows open for a bit longer before closing to ensure we don't lose data due to late arrivals (needed in case of
   // tiling implementation)
   val AllowedOutOfOrderness: Duration = Duration.ofMinutes(5)
+
+  val CatchupWatermarkLagSlackMillis: Long = 30 * 1000L
 
   // Set an idleness timeout to keep time moving in case of very low traffic event streams as well as late events during
   // large backlog catchups

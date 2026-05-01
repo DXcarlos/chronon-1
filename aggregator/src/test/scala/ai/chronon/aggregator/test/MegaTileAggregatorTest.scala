@@ -260,6 +260,32 @@ class MegaTileAggregatorTest extends AnyFlatSpec {
     compareResults(megaResults, naiveResults, queryTimes, "batchEnd_boundary")
   }
 
+  it should "not mutate batch tail hops across repeated serves" in {
+    val batchEnd = TsUtils.round(1700000000000L, new Window(1, TimeUnit.DAYS).millis)
+    val queryTs = batchEnd + 3600 * 1000L
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "amount" -> DoubleType)
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.AVERAGE, "amount", Seq(new Window(3, TimeUnit.DAYS)))
+    )
+
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val onlineAgg =
+      new SawtoothOnlineAggregator(batchEnd, aggregations, schema, tailBufferMillis = TailBufferMillis)
+    var batchIr = onlineAgg.init
+    batchIr = onlineAgg.update(batchIr, new TestRow(batchEnd - 26 * 3600 * 1000L, 2.0)(0))
+    batchIr = onlineAgg.update(batchIr, new TestRow(batchEnd - 25 * 3600 * 1000L, 4.0)(0))
+    val finalBatchIr = onlineAgg.finalizeSnapshot(batchIr)
+
+    val megaTileIr = megaTileAgg.buildMegaTileIr(Map.empty[Long, collection.Map[Long, Array[Any]]],
+                                                now = queryTs,
+                                                batchEnd = batchEnd)
+    val firstServe = megaTileAgg.serveMegaTile(finalBatchIr, megaTileIr, queryTs, batchEnd)
+    val secondServe = megaTileAgg.serveMegaTile(finalBatchIr, megaTileIr, queryTs, batchEnd)
+
+    assertEquals(3.0, firstServe.head.asInstanceOf[Double], Epsilon)
+    assertTrue(approxEqual(firstServe, secondServe))
+  }
+
   it should "match naive with multiple aggregation types" in {
     val (events, schema) = generateEvents(10, 10000)
     val maxTs = events.map(_.ts).max

@@ -27,7 +27,9 @@ class MegaTileCodec(groupBy: GroupBy, inputSchema: Seq[(String, DataType)]) {
 
   def encode(ir: Array[Any]): Array[Byte] = encodeFn(rowAggregator.normalize(ir))
 
-  @transient private lazy val avroCodec: AvroCodec = AvroCodec.of(avroSchema)
+  // AvroCodec.of returns a per-thread cached codec keyed by schema string, so this avoids
+  // cross-thread decoder reuse without reparsing the schema on every decode call.
+  private def avroCodec: AvroCodec = AvroCodec.of(avroSchema)
 
   def decode(bytes: Array[Byte]): Array[Any] = {
     val record = avroCodec.decode(bytes).asInstanceOf[GenericData.Record]
@@ -47,7 +49,8 @@ class MegaTileCodec(groupBy: GroupBy, inputSchema: Seq[(String, DataType)]) {
 
   def encodeBaseIr(ir: Array[Any]): Array[Byte] = baseEncodeFn(baseRowAggregator.normalize(ir))
 
-  @transient private lazy val baseAvroCodec: AvroCodec = AvroCodec.of(baseAvroSchema)
+  // Same per-thread cache behavior as avroCodec above.
+  private def baseAvroCodec: AvroCodec = AvroCodec.of(baseAvroSchema)
 
   def decodeBaseIr(bytes: Array[Byte]): Array[Any] = {
     val record = baseAvroCodec.decode(bytes).asInstanceOf[GenericData.Record]

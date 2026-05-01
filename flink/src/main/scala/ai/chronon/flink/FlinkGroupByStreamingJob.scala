@@ -45,6 +45,10 @@ class FlinkGroupByStreamingJob(eventSrc: FlinkSource[ProjectedEvent],
     .getProperty("kv_concurrency", props, topicInfo)
     .map(_.toInt)
     .getOrElse(AsyncKVStoreWriter.kvStoreConcurrency)
+  private val bufferingOutputTimeMillis =
+    FlinkUtils.getNonNegativeLongProperty("buffering_output_time_millis", props, topicInfo)
+  private val bufferingOutputJitterMillis =
+    FlinkUtils.getNonNegativeLongProperty("buffering_output_jitter_millis", props, topicInfo)
 
   // The source of our Flink application is a  topic
   val topic: String = groupByServingInfoParsed.groupBy.streamingSource.get.topic
@@ -126,7 +130,14 @@ class FlinkGroupByStreamingJob(eventSrc: FlinkSource[ProjectedEvent],
   override def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] = {
     logger.info(f"Running Mega Tiled Flink job for groupByName=${groupByName}, Topic=${topic}.")
     val preparedStream = buildSourceStream(env)
-    buildMegaTiledTail(preparedStream, inputSchema, parallelism, sinkFn, kvStoreCapacity, enableDebug)
+    buildMegaTiledTail(preparedStream,
+                       inputSchema,
+                       parallelism,
+                       sinkFn,
+                       kvStoreCapacity,
+                       enableDebug,
+                       bufferingOutputTimeMillis,
+                       bufferingOutputJitterMillis)
   }
 
   private def buildSourceStream(env: StreamExecutionEnvironment): DataStream[ProjectedEvent] = {
