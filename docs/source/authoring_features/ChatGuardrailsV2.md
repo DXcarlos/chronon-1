@@ -9,9 +9,8 @@ This guide describes a concise production pattern for making LLM chat
 applications safer with Chronon's `Join`, `Model`, `ModelTransforms`,
 `InferenceSpec`, and `DeploymentSpec` primitives.
 
-The core idea is simple: before an LLM response is trusted, and especially
-before a tool call is executed, classify the user's intent and the proposed
-action using another model over structured conversation context.
+At each safety gate, the chat service asks a second model to review the user
+request or proposed tool action using structured conversation context.
 
 ## Safety goal
 
@@ -24,7 +23,7 @@ chat history summary
 => intent / risk / verdict
 ```
 
-The output should be structured, stable, and directly actionable:
+Return a small contract that application code can branch on:
 
 ```json
 {
@@ -66,8 +65,9 @@ Run the guardrail at three points:
 
 ## Why Chronon
 
-Chronon is useful here because guardrails are not just prompts. They are
-feature pipelines with auditability requirements.
+Chronon gives the guardrail the same properties teams expect from production
+feature pipelines: consistent context assembly, versioned model outputs, and
+replayable logs.
 
 - **Point-in-time context.** A `Join` assembles the exact conversation state that
   existed when the safety decision was made.
@@ -85,7 +85,8 @@ feature pipelines with auditability requirements.
 
 ## Recommended pipeline
 
-Use two chained `ModelTransforms`, not one large prompt.
+Use one `ModelTransforms` block to write the summary and a second block to
+score the safety verdict.
 
 ```text
 JoinSource(session_context_join)
@@ -94,7 +95,7 @@ JoinSource(session_context_join)
   -> safety_verdict
 ```
 
-The summary model should produce a compact, structured safety memory:
+The summary model produces a compact safety memory:
 
 ```json
 {
@@ -108,8 +109,8 @@ The summary model should produce a compact, structured safety memory:
 }
 ```
 
-The judge model should consume that summary plus the current ask and, when
-present, the pending tool call JSON.
+The judge model reads that summary plus the current ask and, when present, the
+pending tool call JSON.
 
 ## Minimal Chronon shape
 
@@ -203,15 +204,14 @@ Model(
 ## Design rules
 
 - Preserve provenance. Keep `summary`, `current_user_ask`, `pending_tool_call`,
-  and `tool_result` as separate fields instead of flattening everything into one
-  string.
+  and `tool_result` as separate fields; each has a different trust boundary.
 - Judge tool calls before execution. A harmless-looking user request can become
   unsafe once paired with a concrete tool action.
-- Keep outputs schema-first. Application code should branch on `verdict`, not
-  parse free-form model text.
+- Keep outputs schema-first. Application code branches on `verdict`; explanatory
+  text can live in a separate field.
 - Version everything: prompt, policy, model, deployment, and summary schema.
-- Log enough to replay decisions, but avoid logging raw secrets or unnecessary
-  sensitive content.
+- Log replay identifiers, versions, labels, and compact evidence fields. Omit
+  raw secrets and unnecessary sensitive content.
 
 ## What the chat app does
 
@@ -224,6 +224,6 @@ clarify       -> ask a narrow follow-up question
 human_review  -> stop automation and escalate
 ```
 
-This separation is intentional. Chronon owns context assembly, model invocation,
-versioned outputs, and replayable logs. The chat service owns user experience,
-tool execution, and final policy enforcement.
+This split keeps responsibilities clear. Chronon assembles context, invokes the
+models, records versions, and writes replayable logs. The chat service handles
+user experience, tool execution, and final policy enforcement.
