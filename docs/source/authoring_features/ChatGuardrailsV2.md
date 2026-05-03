@@ -5,12 +5,23 @@ order: 9
 
 # Chat Guardrails v2
 
-This guide describes a concise production pattern for making LLM chat
-applications safer with Chronon's `Join`, `Model`, `ModelTransforms`,
-`InferenceSpec`, and `DeploymentSpec` primitives.
+LLM chat applications increasingly read private context, call tools, and take
+actions on behalf of users. Safety checks need the same context the assistant
+used: recent conversation, durable memory, the current request, and any pending
+tool call.
 
 At each safety gate, the chat service asks a second model to review the user
 request or proposed tool action using structured conversation context.
+
+## Chronon approach
+
+Chronon's API is a set of pluggable building blocks: `Source`, `GroupBy`,
+`Join`, `Model`, `ModelTransforms`, `InferenceSpec`, and `DeploymentSpec`. Teams
+arrange these blocks into the architecture their application needs, from low
+latency feature serving to offline evaluation and model orchestration.
+
+For chat guardrails, the same primitives assemble conversation context, run
+summary and judge models, and record versioned safety decisions.
 
 ## Safety goal
 
