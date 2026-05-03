@@ -93,3 +93,26 @@ dim_listings_pc = get_native_partition_export("dim_listings_custom_part", "dates
 dim_listings = get_select_star_export("dim_listings", "ds")
 dim_merchants = get_select_star_export("dim_merchants", "ds")
 dim_users = get_select_star_export("dim_users", "ds")
+
+dim_listing_mutations = StagingQuery(
+    query="""
+    SELECT
+        *,
+        CAST(
+            DATEDIFF('MILLISECOND', '1970-01-01'::TIMESTAMP_NTZ, ds::TIMESTAMP_NTZ)
+            + UNIFORM(0, 86400, RANDOM()) * 1000
+        AS BIGINT) AS mutation_ts,
+        (UNIFORM(0, 1, RANDOM()) = 1) AS is_before,
+        ds
+    FROM dim_listings
+    WHERE
+    DATE_TRUNC('DAY', ds) BETWEEN {{ start_date }} AND {{ end_date }}
+    """,
+    output_namespace="data",
+    engine_type=EngineType.SNOWFLAKE,
+    dependencies=[
+        TableDependency(table="dim_listings", partition_column="ds", start_offset=0, end_offset=0)
+    ],
+    version=0,
+    step_days=30,
+)

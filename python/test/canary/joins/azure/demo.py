@@ -1,4 +1,4 @@
-from group_bys.azure import dim_listings, dim_merchants, user_activities
+from group_bys.azure import dim_listings, dim_listings_with_mutations, dim_merchants, user_activities
 from staging_queries.azure import exports
 
 from ai.chronon.types import Derivation, EventSource, GroupBy, Join, JoinPart, Query, selects
@@ -102,6 +102,22 @@ derivations_v3 = Join(
     online=True,
     output_namespace="data",
     step_days=30,
+)
+
+# Join using dim_listings_with_mutations for temporal listing lookups
+v3 = Join(
+    left=source,
+    row_ids=["event_id"],
+    right_parts=[
+        JoinPart(
+            group_by=dim_listings_with_mutations.v1,
+        ),
+    ],
+    version=1,
+    online=False,
+    output_namespace="data",
+    step_days=30,
+    enable_stats_compute=True,
 )
 
 pc_v2 = Join(
