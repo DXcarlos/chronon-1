@@ -32,7 +32,7 @@ object TableDependencies {
         val lookback = if (source.dataModel == DataModel.EVENTS && !source.isCumulative) groupBy.maxWindow else None
 
         def dep(shift: Option[Window] = None, forMutations: Boolean = false): Option[TableDependency] =
-          TableDependencies.fromSource(source, lookback, shift)
+          TableDependencies.fromSource(source, lookback, shift, forMutations)
 
         (leftDataModel, groupBy.inferredAccuracy, source.dataModel) match {
 

@@ -56,16 +56,16 @@ v1 = Join(
 
 
 # Join using dim_listings_with_mutations for temporal listing lookups
-v2 = Join(
+v3_test_mutation3 = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[
         JoinPart(
-            group_by=dim_listings_with_mutations.v1,
+            group_by=dim_listings_with_mutations.v2,
         ),
     ],
     version=1,
-    online=True,
+    online=False,
     output_namespace="data",
     step_days=30,
     enable_stats_compute=True,

@@ -1,7 +1,7 @@
 from staging_queries.gcp import exports
 
 from ai.chronon.group_by import DefaultAggregation
-from ai.chronon.types import EntitySource, GroupBy, Query, selects
+from ai.chronon.types import Accuracy, EntitySource, GroupBy, Query, selects
 
 """
 Mirrors dim_listings.v1 but uses an EntitySource with a mutation_table so
@@ -36,10 +36,11 @@ source = EntitySource(
     ),
 )
 
-v1 = GroupBy(
+v2 = GroupBy(
     sources=[source],
     keys=["listing_id"],
     online=True,
     version=0,
+    accuracy=Accuracy.TEMPORAL,
     aggregations=DefaultAggregation(keys=["listing_id"], sources=[source]),
 )

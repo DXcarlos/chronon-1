@@ -2,6 +2,7 @@
   "joinParts": [
     {
       "groupBy": {
+        "accuracy": 0,
         "aggregations": [
           {
             "argMap": {},
@@ -84,22 +85,22 @@
         ],
         "metaData": {
           "columnHashes": {
-            "brief_description_last": "b99290ef54408c417d49b31a6bc3dd0b",
-            "currency_last": "09ec63daaa109f53fcf6dc6480554372",
-            "headline_last": "9d5a56bc1ecce03c555758b22b8a804d",
-            "inventory_count_last": "291b8e1155299c7583b6767644e906d8",
-            "is_active_last": "ce6a1007ced5d79a62ffde1baf27728c",
-            "is_expensive_last": "d8d38b0093465d87f481dc516ef13eb1",
-            "is_in_stock_last": "acd538321af115c9c28e1a718611e73b",
-            "listing_id": "b2f549b14b1cf2c7fa4363d7985124f2",
-            "long_description_last": "2e3d029732fc6d8c32fe3922e3b4e288",
-            "main_image_path_last": "9c99befed98228b27d2e9115495c23b3",
-            "merchant_id_last": "d095e7dffd3afcf26ce8ad63255de7c9",
-            "price_cents_last": "e62f69426f43b79f02dd4aab9b303bc2",
-            "primary_category_last": "1d3cb9116334baa7c28a68cb608dee14",
-            "secondary_image_paths_last": "2fb520e2844c869c0a5a30a8889a639f",
-            "tags_last": "54647e0fa618b4350ff994a225c1a4cd",
-            "weight_grams_last": "4bef9febe0d3fd7246f6ca8a84156b2d"
+            "brief_description_last": "0a1386de070d704b0d2c5d1c87fe519a",
+            "currency_last": "5121fca8b3fe87a914b5ee279b648e95",
+            "headline_last": "45ea540639c06959f17b71c3e554175a",
+            "inventory_count_last": "da8c9a07f97c968c72d2073a8d0f67c8",
+            "is_active_last": "1fec57d936cc463617bac897e12be096",
+            "is_expensive_last": "805f3d530ac6f8e7623c21a73a1f18b6",
+            "is_in_stock_last": "0c23362ef6a4871d3324889b1549563d",
+            "listing_id": "886183f17e4eac643e2068a1ff1c9e13",
+            "long_description_last": "3cc8017f1420a64fd7b2254dae7f1e75",
+            "main_image_path_last": "af1e43d33658f520fd74c426eb9aaf8c",
+            "merchant_id_last": "c1dd7d3842c0b00e1f65fa7bf15c11aa",
+            "price_cents_last": "97455a3821b0ffbf3ec0e5567426673c",
+            "primary_category_last": "7d771f16ef459f9b442390ce6e4941fe",
+            "secondary_image_paths_last": "815571cc5ddb0b27ad2722957f7c0080",
+            "tags_last": "127ced2578a540a522f3f437101d7726",
+            "weight_grams_last": "5b19e9ed87508482695b4e3606acfa97"
           },
           "executionInfo": {
             "clusterConf": {
@@ -170,7 +171,7 @@
             "historicalBackfill": 0,
             "onlineSchedule": "@daily"
           },
-          "name": "gcp.dim_listings_with_mutations.v1__0",
+          "name": "gcp.dim_listings_with_mutations.v2__0",
           "online": 1,
           "outputNamespace": "data",
           "team": "gcp",
@@ -314,11 +315,10 @@
         }
       },
       "offlineSchedule": "@daily",
-      "onlineSchedule": "@daily",
       "stepDays": 30
     },
-    "name": "gcp.demo.v2__1",
-    "online": 1,
+    "name": "gcp.demo.v3_test_mutation3__1",
+    "online": 0,
     "outputNamespace": "data",
     "production": 0,
     "samplePercent": 100.0,
