@@ -16,9 +16,10 @@ request or proposed tool action using structured conversation context.
 ## Chronon approach
 
 Chronon's API is a set of pluggable building blocks: `Source`, `GroupBy`,
-`Join`, `Model`, `ModelTransforms`, `InferenceSpec`, and `DeploymentSpec`. Teams
-arrange these blocks into the architecture their application needs, from low
-latency feature serving to offline evaluation and model orchestration.
+`ContextualSource`, `Join`, `Model`, `ModelTransforms`, `InferenceSpec`, and
+`DeploymentSpec`. Teams arrange these blocks into the architecture their
+application needs, from low latency feature serving to offline evaluation and
+model orchestration.
 
 For chat guardrails, the same primitives assemble conversation context, run
 summary and judge models, and record versioned safety decisions.
@@ -63,7 +64,9 @@ This design is aimed at three common failure modes:
 ```mermaid
 flowchart TD
     A[Chat turn log<br/>user, assistant, tool proposals, tool results] --> B[GroupBy<br/>recent turns + safety signals]
+    R[Request context<br/>current message + proposed tool call] --> X[ContextualSource]
     B --> C[Join<br/>session context as of gate time]
+    X --> C
 
     C --> D[ModelTransforms: Safety Summary<br/>Gemini or Gemma summarizer]
     D --> E[ModelTransforms: Intent Judge<br/>Gemma / ShieldGemma / Gemini classifier]
@@ -107,15 +110,22 @@ replayable logs.
 
 ## Recommended pipeline
 
-Use one `ModelTransforms` block to write the summary and a second block to
-score the safety verdict.
+The chat app calls the final `ModelTransforms` endpoint. The request keys
+include normal join keys plus request-time fields such as `current_message` and
+`pending_tool_call_json`.
 
 ```text
-JoinSource(session_context_join)
+chat app request
+  -> ContextualSource(current_message, pending_tool_call_json, gate_type)
+  -> JoinSource(session_context_join)
   -> ModelTransforms(summary_model)
   -> ModelTransforms(intent_judge_model)
   -> safety_verdict
 ```
+
+`ContextualSource` is the bridge for the most recent user ask and proposed tool
+call. The join output exposes those fields as contextual features, for example
+`ext_contextual_current_message` and `ext_contextual_pending_tool_call_json`.
 
 The summary model produces a compact safety memory:
 
@@ -138,6 +148,10 @@ Within a single `ModelTransforms` block, models read the same source row and run
 independently. Chain separate `ModelTransforms` blocks when one model's output
 becomes another model's input.
 
+In the chained path, Chronon passes the upstream model-transform output into the
+downstream source row. The judge can reference both the contextual join fields
+and the summary model's output in its `input_mapping`.
+
 ## Minimal Chronon shape
 
 Only the relevant pieces are shown here.
@@ -145,7 +159,21 @@ Only the relevant pieces are shown here.
 ```python
 from ai.chronon.types import (
     Model, ModelTransforms, InferenceSpec, ModelBackend,
-    DeploymentSpec, JoinSource, DataType,
+    DeploymentSpec, ContextualSource, ExternalPart, Join, JoinSource, DataType,
+)
+
+contextual_request = ContextualSource(
+    fields=[
+        ("request_id", DataType.STRING),
+        ("current_message", DataType.STRING),
+        ("pending_tool_call_json", DataType.STRING),
+        ("gate_type", DataType.STRING),
+    ]
+)
+
+session_context_join = Join(
+    ...,
+    online_external_parts=[ExternalPart(contextual_request)],
 )
 
 summary_model = Model(
@@ -160,6 +188,8 @@ summary_model = Model(
     input_mapping={
         "messages": "recent_turns_json",
         "previous_summary": "prior_safety_summary_json",
+        "current_user_ask": "ext_contextual_current_message",
+        "pending_tool_call": "ext_contextual_pending_tool_call_json",
     },
     value_fields=[
         ("safety_summary_json", DataType.STRING),
@@ -180,8 +210,8 @@ judge_model = Model(
     ),
     input_mapping={
         "summary": "summary_model__safety_summary_json",
-        "current_user_ask": "current_message",
-        "pending_tool_call": "pending_tool_call_json",
+        "current_user_ask": "ext_contextual_current_message",
+        "pending_tool_call": "ext_contextual_pending_tool_call_json",
     },
     value_fields=[
         ("verdict", DataType.STRING),
@@ -198,17 +228,28 @@ judge_model = Model(
 summary_context = ModelTransforms(
     sources=[JoinSource(session_context_join)],
     models=[summary_model],
-    passthrough_fields=["session_id", "current_message", "pending_tool_call_json"],
+    passthrough_fields=[
+        "request_id",
+        "session_id",
+        "gate_type",
+        "ext_contextual_current_message",
+        "ext_contextual_pending_tool_call_json",
+    ],
     version=1,
 )
 
 guardrail_verdict = ModelTransforms(
     sources=[summary_context],
     models=[judge_model],
-    passthrough_fields=["session_id"],
+    passthrough_fields=["request_id", "session_id", "gate_type"],
     version=1,
 )
 ```
+
+Exact model-output prefixes are assigned at compile time. In the judge mapping,
+replace `summary_model__safety_summary_json` with the compiled output field for
+the summary model. The summary block also passes through the contextual fields
+that the judge reads directly.
 
 For hosted models, most routing information belongs in `InferenceSpec`. For a
 custom Gemma-based classifier hosted on Vertex AI or SageMaker, use
