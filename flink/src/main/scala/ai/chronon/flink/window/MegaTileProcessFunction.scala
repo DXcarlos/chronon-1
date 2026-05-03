@@ -158,8 +158,10 @@ class MegaTileProcessFunction(
       .addGroup("feature_group", groupBy.getMetaData.getName)
     eventProcessingErrorCounter = metricsGroup.counter("event_processing_error")
 
-    if (emissionPolicy == MegaTileEmissionPolicy.WallClockCadence &&
-        bufferingOutputJitterMillis > 0L) {
+    if (
+      emissionPolicy == MegaTileEmissionPolicy.WallClockCadence &&
+      bufferingOutputJitterMillis > 0L
+    ) {
       logger.warn(
         s"MegaTile emission policy ${MegaTileEmissionPolicy.WallClockCadenceName} ignores " +
           s"bufferingOutputJitterMillis=$bufferingOutputJitterMillis for " +
@@ -179,10 +181,9 @@ class MegaTileProcessFunction(
     earliestTileStartState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-earliest-tile", classOf[java.lang.Long]))
     pendingDayRollEmitTileBytesState = getRuntimeContext.getMapState(
-      new MapStateDescriptor[java.lang.Long, Array[Byte]](
-        "mega-tile-pending-emit-tile-bytes",
-        classOf[java.lang.Long],
-        classOf[Array[Byte]]))
+      new MapStateDescriptor[java.lang.Long, Array[Byte]]("mega-tile-pending-emit-tile-bytes",
+                                                          classOf[java.lang.Long],
+                                                          classOf[Array[Byte]]))
     nextEvictPtTimerState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-next-evict-pt-timer", classOf[java.lang.Long]))
     nextEmitPtTimerState = getRuntimeContext.getState(
@@ -593,11 +594,7 @@ class MegaTileProcessFunction(
       todayDirtyState.clear()
     }
     if (isYesterdayDirty) {
-      emitMegaTile(keys,
-                   processor.packYesterdayEntry(),
-                   currentDayStart - processor.DayMillis,
-                   processingTsMillis,
-                   out)
+      emitMegaTile(keys, processor.packYesterdayEntry(), currentDayStart - processor.DayMillis, processingTsMillis, out)
       yesterdayDirtyState.clear()
     }
   }
