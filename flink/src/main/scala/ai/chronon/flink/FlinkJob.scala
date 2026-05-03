@@ -61,9 +61,22 @@ abstract class BaseFlinkJob {
   def runTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse]
 
   /** Run the streaming job with mega tiling enabled.
-    * Default delegates to buildMegaTiledTail. Subclasses must provide source setup.
+    *
+    * Default implementation throws — opt-in for any subclass that wants MegaTile. Concrete
+    * BaseFlinkJob subclasses in this repo (FlinkGroupByStreamingJob, ChainedGroupByJob)
+    * override and delegate to `buildMegaTiledTail`. Custom subclasses outside this repo
+    * that don't override stay source-compatible (no compile break) but will fail loudly
+    * at job startup if their GroupBy has `onlineStrategy = STREAMING_MEGATILES` — which
+    * matches chronon's serving-correctness model: a misconfigured job should not silently
+    * fall back to DEFAULT-mode output when the user explicitly asked for MegaTile.
     */
-  def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse]
+  def runMegaTiledGroupByJob(env: StreamExecutionEnvironment): DataStream[WriteResponse] =
+    throw new UnsupportedOperationException(
+      s"${getClass.getSimpleName} does not implement runMegaTiledGroupByJob. " +
+        s"GroupBy '$groupByName' has onlineStrategy=STREAMING_MEGATILES, but the Flink job " +
+        "subclass dispatched for it doesn't support mega-tiled execution. Override " +
+        "runMegaTiledGroupByJob to opt in, or unset STREAMING_MEGATILES on this GroupBy."
+    )
 
   /** Shared tail for tiled pipeline: keyBy → window aggregate → tile codec → KV write.
     * Both FlinkGroupByStreamingJob and ChainedGroupByJob use this with their respective
