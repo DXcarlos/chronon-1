@@ -1,4 +1,4 @@
-from group_bys.gcp import dim_listings, dim_merchants, user_activities
+from group_bys.gcp import dim_listings, dim_listings_with_mutations, dim_merchants, user_activities
 from staging_queries.gcp import exports
 
 from ai.chronon.types import Derivation, EventSource, GroupBy, Join, JoinPart, Query, selects
@@ -45,6 +45,23 @@ v1 = Join(
         JoinPart(
             group_by=dim_merchants.v1,
             prefix="merchant_"
+        ),
+    ],
+    version=1,
+    online=True,
+    output_namespace="data",
+    step_days=30,
+    enable_stats_compute=True,
+)
+
+
+# Join using dim_listings_with_mutations for temporal listing lookups
+v2 = Join(
+    left=source,
+    row_ids=["event_id"],
+    right_parts=[
+        JoinPart(
+            group_by=dim_listings_with_mutations.v1,
         ),
     ],
     version=1,
