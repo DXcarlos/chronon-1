@@ -47,6 +47,17 @@ Return a small contract that application code can branch on:
 }
 ```
 
+## Threat model
+
+This design is aimed at three common failure modes:
+
+- **Multi-turn jailbreaks.** The harmful intent may be spread across several
+  benign-looking turns, so the judge needs conversation memory.
+- **Indirect prompt injection.** Retrieved content, tool output, or user-provided
+  documents can contain instructions that conflict with the user's actual goal.
+- **Unsafe tool use.** The user message may look acceptable while the proposed
+  tool call would expose data, mutate state, or cross a policy boundary.
+
 ## Architecture
 
 ```mermaid
@@ -122,6 +133,10 @@ The summary model produces a compact safety memory:
 
 The judge model reads that summary plus the current ask and, when present, the
 pending tool call JSON.
+
+Within a single `ModelTransforms` block, models read the same source row and run
+independently. Chain separate `ModelTransforms` blocks when one model's output
+becomes another model's input.
 
 ## Minimal Chronon shape
 
@@ -223,6 +238,32 @@ Model(
 - Version everything: prompt, policy, model, deployment, and summary schema.
 - Log replay identifiers, versions, labels, and compact evidence fields. Omit
   raw secrets and unnecessary sensitive content.
+
+## Operational checklist
+
+- **Latency.** Run the cheapest reliable judge on every gate. Use the
+  summary-first path when history is long or the tool action is high impact.
+- **Failure handling.** Decide fail-open or fail-closed per gate before launch.
+  Tool-call gates usually deserve stricter handling than normal user turns.
+- **Shadowing.** Run new judge versions beside the current version before
+  switching enforcement.
+- **Sampling.** Log enough decisions to evaluate drift and replay incidents.
+- **Caching.** Cache repeated summaries and identical judge inputs when the chat
+  flow creates duplicate checks.
+
+## Evaluation
+
+Evaluate guardrail changes before enforcement. A useful review set includes:
+
+- multi-turn jailbreak attempts,
+- prompt injection through retrieved content or tool output,
+- safe requests that mention sensitive topics,
+- unsafe tool calls hidden behind benign phrasing,
+- production false positives and false negatives from prior versions.
+
+Use a stable taxonomy for `risk_categories`, ideally one that maps to existing
+guardrail models such as ShieldGemma, Llama Guard, or another policy classifier
+your team already evaluates.
 
 ## What the chat app does
 
