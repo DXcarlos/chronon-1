@@ -12,6 +12,11 @@ default = Team(
             "spark.chronon.partition.column": "ds",
         }
     ),
+    canaryConf=ConfigProperties(
+        common={
+            "spark.chronon.partition.column": "ds",
+        }
+    ),
     env=EnvironmentVariables(
         common={
             "VERSION": "latest",
@@ -20,6 +25,14 @@ default = Team(
             "HUB_URL": "http://localhost:3903",
             "EVAL_URL": "http://localhost:3904",
             "FETCHER_URL": "http://localhost:9000",
+        },
+    ),
+    canaryEnv=EnvironmentVariables(
+        common={
+            "VERSION": "latest",
+            "CUSTOMER_ID": "dev",
+            "FRONTEND_URL": "http://localhost:3000",
+            "HUB_URL": "http://localhost:3903",
         },
     ),
 )
@@ -134,6 +147,28 @@ aws = Team(
             }
         }
     ),
+    canaryEnv=EnvironmentVariables(
+        common={
+            "CLOUD_PROVIDER": "aws",
+            "CUSTOMER_ID": "canary",
+            "VERSION": "latest",
+            "AWS_REGION": "us-west-2",
+            "SPARK_CLUSTER_NAME": "zipline-emr-canary",
+            "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+            "WAREHOUSE_PREFIX": "s3://zipline-warehouse-canary",
+            "FLINK_STATE_URI": "s3://zipline-warehouse-canary/flink-state",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=1",
+            "FRONTEND_URL": "https://canary-aws.zipline.ai",
+            "HUB_URL": "https://canary-orch-aws.zipline.ai",
+            "EVAL_URL": "https://canary-eval-aws.zipline.ai",
+            "ENABLE_KINESIS": "true",
+            "FLINK_JARS_URI": "s3://zipline-artifacts-canary/spark-3.5.3/libs/",
+        },
+        modeEnvironments={
+            RunMode.UPLOAD: {
+            }
+        }
+    ),
     conf=ConfigProperties(
         common={
             **GlueConfiguration({
@@ -159,7 +194,44 @@ aws = Team(
             }
         }
     ),
+    canaryConf=ConfigProperties(
+        common={
+            **GlueConfiguration({
+                "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-canary/data/tables/",
+            }),
+            "spark.chronon.partition.format": "yyyy-MM-dd",
+            "spark.chronon.partition.column": "ds",
+            "spark.chronon.table_write.format": "iceberg",
+            "spark.chronon.table_write.upload.format": "ion",
+            "spark.chronon.table_write.upload.location": "s3://zipline-warehouse-canary/data/ion_uploads/",
+
+            "spark.chronon.coalesce.factor": "10",
+            "spark.default.parallelism": "10",
+            "spark.sql.shuffle.partitions": "10",
+            "spark.driver.memory": "1g",
+            "spark.driver.cores": "1",
+            "spark.executor.memory": "1g",
+            "spark.executor.cores": "1",
+            "taskmanager.memory.process.size": "4G",
+        },
+        modeConfigs={
+            RunMode.BACKFILL: {
+            }
+        }
+    ),
     clusterConf=ClusterConfigProperties(
+        common={
+            "emr.config": generate_emr_cluster_config(
+                instance_count=3,
+                subnet_name="zipline-canary-subnet-main",
+                security_group_name="zipline-canary-sg",
+                instance_type="m5.xlarge",
+                idle_timeout=7200,
+                release_label="emr-7.12.0"
+            )
+        }
+    ),
+    canaryClusterConf=ClusterConfigProperties(
         common={
             "emr.config": generate_emr_cluster_config(
                 instance_count=3,
