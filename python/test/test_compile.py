@@ -1058,3 +1058,120 @@ def test_duplicate_config_names_across_directories_detected(tmp_path, monkeypatc
         assert compiled_obj.metaData.sourceFile == "group_bys/sample_team/my_config.py", (
             "The config in obj_dict should be from the first directory encountered"
         )
+
+
+def test_imported_configs_not_recompiled(tmp_path, monkeypatch):
+    """Test that imported config objects are NOT compiled again in the importing file.
+
+    When a file imports a config object from another module (e.g., a Join imports
+    a GroupBy for use in JoinParts), the imported object should only be compiled
+    once in its original location, not again in the importing file's directory.
+
+    This prevents duplicate config errors and ensures each config is compiled
+    exactly once in its canonical location.
+    """
+    _scaffold_repo(tmp_path)
+
+    # Create a GroupBy in the group_bys directory (canonical location)
+    _write(
+        tmp_path / "group_bys" / "sample_team" / "my_groupby.py",
+        dedent(
+            """
+            from ai.chronon.types import (
+                EventSource,
+                GroupBy,
+                Query,
+                selects,
+                Aggregation,
+                Operation,
+            )
+
+            user_features = GroupBy(
+                sources=[
+                    EventSource(
+                        table="external.events",
+                        query=Query(
+                            selects=selects(event="event_id", group_by_subject="user_id"),
+                            time_column="event_time",
+                        ),
+                    )
+                ],
+                keys=["group_by_subject"],
+                aggregations=[
+                    Aggregation(
+                        input_column="event",
+                        operation=Operation.COUNT,
+                        windows=["1d"],
+                    )
+                ],
+                output_namespace="data",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+
+    # Create a Join in the joins directory that imports the GroupBy
+    _write(
+        tmp_path / "joins" / "sample_team" / "my_join.py",
+        dedent(
+            """
+            from group_bys.sample_team.my_groupby import user_features
+            from ai.chronon.types import EventSource, Join, JoinPart, Query, selects
+
+            # This Join imports user_features from group_bys
+            # The imported GroupBy should NOT be compiled again here
+            training_data = Join(
+                left=EventSource(
+                    table="external.events",
+                    query=Query(
+                        selects=selects(group_by_subject="user_id"),  # Match the GroupBy key
+                        time_column="event_time",
+                    ),
+                ),
+                right_parts=[JoinPart(group_by=user_features)],
+                row_ids=["group_by_subject"],
+                output_namespace="data",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+
+    results, has_errors, compile_context = _run_compile(tmp_path, monkeypatch, ignore_python_errors=False)
+
+    # Verify no compilation errors
+    assert not has_errors, "Compilation should succeed without duplicate errors"
+
+    from gen_thrift.api.ttypes import ConfType
+
+    group_by_result = results[ConfType.GROUP_BY]
+    join_result = results[ConfType.JOIN]
+
+    # The GroupBy should be compiled exactly once in its canonical location
+    groupby_name = "sample_team.my_groupby.user_features__1"
+    assert groupby_name in group_by_result.obj_dict, (
+        "GroupBy should be compiled from group_bys/ directory"
+    )
+    assert groupby_name not in group_by_result.error_dict, (
+        "GroupBy should not have any errors (no duplicate)"
+    )
+
+    # The Join should be compiled
+    join_name = "sample_team.my_join.training_data__1"
+    assert join_name in join_result.obj_dict, (
+        "Join should be compiled from joins/ directory"
+    )
+
+    # Verify compiled files exist in correct locations
+    groupby_path = tmp_path / "compiled" / "group_bys" / "sample_team" / "my_groupby.user_features__1"
+    join_path = tmp_path / "compiled" / "joins" / "sample_team" / "my_join.training_data__1"
+
+    assert groupby_path.exists(), f"GroupBy should be compiled to {groupby_path}"
+    assert join_path.exists(), f"Join should be compiled to {join_path}"
+
+    # Verify the GroupBy was compiled exactly once (no duplicate in joins directory)
+    # The GroupBy should only appear once in obj_dict (not duplicated from joins/)
+    assert len(group_by_result.obj_dict) == 1, (
+        f"Expected exactly 1 GroupBy, got {len(group_by_result.obj_dict)}: {list(group_by_result.obj_dict.keys())}"
+    )

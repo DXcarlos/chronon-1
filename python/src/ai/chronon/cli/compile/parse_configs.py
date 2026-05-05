@@ -1,9 +1,10 @@
+import ast
 import copy
 import glob
 import importlib
 import os
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 from ai.chronon import airflow_helpers
 from ai.chronon.cli.compile import parse_teams, serializer
@@ -13,6 +14,36 @@ from ai.chronon.cli.logger import get_logger
 from gen_thrift.api.ttypes import GroupBy, Join
 
 logger = get_logger()
+
+
+def get_imported_names(file_path: str) -> Set[str]:
+    """
+    Parse a Python file and return the set of names that are imported
+    (not defined locally). This helps us skip imported config objects.
+    """
+    try:
+        with open(file_path, 'r') as f:
+            source = f.read()
+        tree = ast.parse(source, filename=file_path)
+
+        imported_names = set()
+        for node in ast.walk(tree):
+            # from X import Y, Z
+            if isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    # alias.name is the imported name (e.g., 'group_by_v1')
+                    # alias.asname is the local name if using 'as' (e.g., 'import X as Y')
+                    imported_names.add(alias.asname if alias.asname else alias.name)
+            # import X, Y
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    imported_names.add(alias.asname if alias.asname else alias.name)
+
+        return imported_names
+    except Exception as e:
+        # If we can't parse the file, return empty set (will process all names)
+        logger.warning(f"Could not parse imports from {file_path}: {e}")
+        return set()
 
 
 def from_folder(target_classes: List[type], input_dir: str, compile_context: CompileContext) -> Dict[type, List[CompiledObj]]:
@@ -86,6 +117,7 @@ def from_file(file_path: str, target_classes: List[type], input_dir: str) -> Dic
     """
     Extract config objects from a Python file.
     Supports extracting multiple config types from a single file.
+    Skips imported objects to avoid duplicates.
 
     Args:
         file_path: Path to the Python file to parse
@@ -105,6 +137,9 @@ def from_file(file_path: str, target_classes: List[type], input_dir: str) -> Dic
 
     conf_type, team_name_with_path = module_name.split(".", 1)
     mod_path = team_name_with_path.replace("/", ".")
+
+    # Get the set of imported names to skip them
+    imported_names = get_imported_names(file_path)
 
     modules_before = set(sys.modules.keys())
     try:
@@ -127,6 +162,10 @@ def from_file(file_path: str, target_classes: List[type], input_dir: str) -> Dic
     result = {cls: {} for cls in target_classes}
 
     for var_name, obj in list(module.__dict__.items()):
+        # Skip imported names - only process objects defined in this file
+        if var_name in imported_names:
+            continue
+
         # Check if object is an instance of any target class
         for target_cls in target_classes:
             if isinstance(obj, target_cls):
