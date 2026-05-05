@@ -1,6 +1,7 @@
 {
+  "engineType": 0,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_training_set_v1_hub__0_with_offset_1\", \"spec\": \"data.aws_training_set_v1_hub__0/ds={{ macros.ds_add(ds, -1) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.aws_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -92,24 +93,21 @@
       "offlineSchedule": "@daily",
       "stepDays": 10
     },
-    "name": "aws.sample_staging_query.v1_hub__0",
+    "name": "aws.cte_example.price_tier_labels__0",
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/aws/sample_staging_query.py",
-    "tableProperties": {
-      "sample_config_json": "{\"sample_key\": \"sample value\"}"
-    },
+    "sourceFile": "staging_queries/aws/cte_example.py",
     "team": "aws",
     "version": "0"
   },
-  "query": "\nSELECT\n    *\nFROM data.aws_training_set_v1_hub__0\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
+  "query": "\nWITH category_price_stats AS (\n    SELECT\n        primary_category,\n        AVG(price_cents)    AS avg_price_cents,\n        STDDEV(price_cents) AS stddev_price_cents,\n        ds\n    FROM data.aws_exports_dim_listings__0\n    WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n    GROUP BY primary_category, ds\n),\nlabeled_listings AS (\n    SELECT\n        l.listing_id,\n        l.merchant_id,\n        l.primary_category,\n        l.price_cents,\n        l.inventory_count,\n        l.is_active,\n        l.ds,\n        CASE\n            WHEN l.price_cents > s.avg_price_cents + 2 * s.stddev_price_cents THEN 'high'\n            WHEN l.price_cents < s.avg_price_cents - 2 * s.stddev_price_cents THEN 'low'\n            ELSE 'normal'\n        END AS price_tier\n    FROM data.aws_exports_dim_listings__0 l\n    JOIN category_price_stats s\n        ON l.primary_category = s.primary_category\n       AND l.ds = s.ds\n    WHERE l.ds BETWEEN {{ start_date }} AND {{ end_date }}\n)\nSELECT * FROM labeled_listings\n",
   "tableDependencies": [
     {
       "endOffset": {
-        "length": 1,
+        "length": 0,
         "timeUnit": 1
       },
       "startOffset": {
-        "length": 1,
+        "length": 0,
         "timeUnit": 1
       },
       "tableInfo": {
@@ -118,7 +116,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.aws_training_set_v1_hub__0"
+        "table": "data.aws_exports_dim_listings__0"
       }
     }
   ]

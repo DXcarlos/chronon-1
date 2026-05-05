@@ -1,26 +1,7 @@
 {
-  "aggregations": [
-    {
-      "argMap": {},
-      "inputColumn": "fake-col",
-      "operation": 7,
-      "windows": [
-        {
-          "length": 7,
-          "timeUnit": 1
-        }
-      ]
-    }
-  ],
-  "keyColumns": [
-    "user_id"
-  ],
+  "engineType": 1,
   "metaData": {
-    "columnHashes": {
-      "fake-col_sum_7d": "e1027371477091af9763625eba432862",
-      "user_id": "f9e37dd13f049bc14f9303f34a4314cc"
-    },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -58,6 +39,7 @@
           "CLOUD_PROVIDER": "gcp",
           "CUSTOMER_ID": "canary",
           "ENABLE_PUBSUB": "true",
+          "EVAL_URL": "http://localhost:3904",
           "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
           "FRONTEND_URL": "http://localhost:3000",
           "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -75,6 +57,7 @@
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "canary",
             "ENABLE_PUBSUB": "true",
+            "EVAL_URL": "http://localhost:3904",
             "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
             "FRONTEND_URL": "http://localhost:3000",
             "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
@@ -87,29 +70,33 @@
           }
         }
       },
-      "historicalBackfill": 0,
-      "onlineSchedule": "@daily"
+      "offlineSchedule": "@daily",
+      "stepDays": 30
     },
-    "name": "gcp.demo.fake_groupby__0",
-    "online": 1,
+    "name": "gcp.cte_example.price_tier_labels__0",
     "outputNamespace": "data",
-    "sourceFile": "joins/gcp/demo.py",
+    "sourceFile": "staging_queries/gcp/cte_example.py",
     "team": "gcp",
     "version": "0"
   },
-  "sources": [
+  "query": "\nWITH category_price_stats AS (\n    SELECT\n        primary_category,\n        AVG(price_cents)    AS avg_price_cents,\n        STDDEV(price_cents) AS stddev_price_cents,\n        ds\n    FROM data.gcp_exports_dim_listings__0\n    WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n    GROUP BY primary_category, ds\n),\nlabeled_listings AS (\n    SELECT\n        l.listing_id,\n        l.merchant_id,\n        l.primary_category,\n        l.price_cents,\n        l.inventory_count,\n        l.is_active,\n        l.ds,\n        CASE\n            WHEN l.price_cents > s.avg_price_cents + 2 * s.stddev_price_cents THEN 'high'\n            WHEN l.price_cents < s.avg_price_cents - 2 * s.stddev_price_cents THEN 'low'\n            ELSE 'normal'\n        END AS price_tier\n    FROM data.gcp_exports_dim_listings__0 l\n    JOIN category_price_stats s\n        ON l.primary_category = s.primary_category\n       AND l.ds = s.ds\n    WHERE l.ds BETWEEN {{ start_date }} AND {{ end_date }}\n)\nSELECT * FROM labeled_listings\n",
+  "tableDependencies": [
     {
-      "events": {
-        "query": {
-          "selects": {
-            "fake-col": "fake-col",
-            "listing_id": "listing_id",
-            "row_id": "event_id",
-            "user_id": "user_id"
-          },
-          "timeColumn": "event_time_ms"
+      "endOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "startOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "tableInfo": {
+        "partitionColumn": "ds",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
         },
-        "table": "data.gcp_exports_user_activities__0"
+        "table": "data.gcp_exports_dim_listings__0"
       }
     }
   ]

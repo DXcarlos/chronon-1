@@ -1,6 +1,7 @@
 {
+  "engineType": 0,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_demo_derivations_v1__2_with_offset_0\", \"spec\": \"data.aws_demo_derivations_v1__2/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.aws_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_aws_exports_dim_merchants__0_with_offset_0\", \"spec\": \"data.aws_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -61,6 +62,7 @@
           "CLOUD_PROVIDER": "aws",
           "CUSTOMER_ID": "canary",
           "ENABLE_KINESIS": "true",
+          "EVAL_URL": "https://canary-eval-aws.zipline.ai",
           "FLINK_JARS_URI": "s3://zipline-artifacts-canary/spark-3.5.3/libs/",
           "FLINK_STATE_URI": "s3://zipline-warehouse-canary/flink-state",
           "FRONTEND_URL": "https://canary-aws.zipline.ai",
@@ -77,6 +79,7 @@
             "CLOUD_PROVIDER": "aws",
             "CUSTOMER_ID": "canary",
             "ENABLE_KINESIS": "true",
+            "EVAL_URL": "https://canary-eval-aws.zipline.ai",
             "FLINK_JARS_URI": "s3://zipline-artifacts-canary/spark-3.5.3/libs/",
             "FLINK_STATE_URI": "s3://zipline-warehouse-canary/flink-state",
             "FRONTEND_URL": "https://canary-aws.zipline.ai",
@@ -87,15 +90,16 @@
           }
         }
       },
-      "offlineSchedule": "@daily"
+      "offlineSchedule": "@daily",
+      "stepDays": 10
     },
-    "name": "aws.demo.v1_s__0",
+    "name": "aws.cte_example.merchant_listing_summary__0",
     "outputNamespace": "data",
-    "sourceFile": "joins/aws/demo.py",
+    "sourceFile": "staging_queries/aws/cte_example.py",
     "team": "aws",
     "version": "0"
   },
-  "query": "\nSELECT\n    *,\n    case when rand() < 0.5 then 0 else 1 end as label\nFROM data.aws_demo_derivations_v1__2\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
+  "query": "\nWITH active_listings AS (\n    SELECT\n        listing_id,\n        merchant_id,\n        primary_category,\n        price_cents,\n        inventory_count,\n        ds\n    FROM data.aws_exports_dim_listings__0\n    WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n      AND is_active = true\n),\nmerchant_stats AS (\n    SELECT\n        merchant_id,\n        primary_category,\n        COUNT(listing_id)    AS active_listing_count,\n        SUM(inventory_count) AS total_inventory,\n        AVG(price_cents)     AS avg_price_cents,\n        ds\n    FROM active_listings\n    GROUP BY merchant_id, primary_category, ds\n),\nmerchant_dim AS (\n    SELECT\n        merchant_id,\n        primary_category,\n        ds\n    FROM data.aws_exports_dim_merchants__0\n    WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n)\nSELECT\n    m.merchant_id,\n    m.primary_category,\n    COALESCE(s.active_listing_count, 0) AS active_listing_count,\n    COALESCE(s.total_inventory, 0)      AS total_inventory,\n    s.avg_price_cents,\n    m.ds\nFROM merchant_dim m\nLEFT JOIN merchant_stats s\n    ON m.merchant_id = s.merchant_id\n   AND m.primary_category = s.primary_category\n   AND m.ds = s.ds\n",
   "tableDependencies": [
     {
       "endOffset": {
@@ -112,7 +116,25 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.aws_demo_derivations_v1__2"
+        "table": "data.aws_exports_dim_listings__0"
+      }
+    },
+    {
+      "endOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "startOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "tableInfo": {
+        "partitionColumn": "ds",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
+        "table": "data.aws_exports_dim_merchants__0"
       }
     }
   ]
