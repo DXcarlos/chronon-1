@@ -1,4 +1,3 @@
-import ast
 import copy
 import glob
 import importlib
@@ -16,36 +15,6 @@ from gen_thrift.api.ttypes import GroupBy, Join
 logger = get_logger()
 
 
-def get_imported_names(file_path: str) -> Set[str]:
-    """
-    Parse a Python file and return the set of names that are imported
-    (not defined locally). This helps us skip imported config objects.
-    """
-    try:
-        with open(file_path, 'r') as f:
-            source = f.read()
-        tree = ast.parse(source, filename=file_path)
-
-        imported_names = set()
-        for node in ast.walk(tree):
-            # from X import Y, Z
-            if isinstance(node, ast.ImportFrom):
-                for alias in node.names:
-                    # alias.name is the imported name (e.g., 'group_by_v1')
-                    # alias.asname is the local name if using 'as' (e.g., 'import X as Y')
-                    imported_names.add(alias.asname if alias.asname else alias.name)
-            # import X, Y
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    imported_names.add(alias.asname if alias.asname else alias.name)
-
-        return imported_names
-    except Exception as e:
-        # If we can't parse the file, return empty set (will process all names)
-        logger.warning(f"Could not parse imports from {file_path}: {e}")
-        return set()
-
-
 def from_folder(target_classes: List[type], input_dir: str, compile_context: CompileContext) -> Dict[type, List[CompiledObj]]:
     """
     Recursively consumes a folder, and constructs a map of
@@ -54,6 +23,12 @@ def from_folder(target_classes: List[type], input_dir: str, compile_context: Com
     """
 
     python_files = glob.glob(os.path.join(input_dir, "**/*.py"), recursive=True)
+    # Visit shallowest paths first, then alphabetical within depth. Combined
+    # with the dependency-ordered CONFIG_INFOS in CompileContext, this keeps
+    # "first sighting" == "canonical file" for the id()-based dedup in
+    # from_file: a utility module like joins/util.py is processed before
+    # joins/team/data.py that imports from it.
+    python_files.sort(key=lambda p: (p.count(os.sep), p))
 
     # Results keyed by class type
     results = {cls: [] for cls in target_classes}
@@ -61,7 +36,9 @@ def from_folder(target_classes: List[type], input_dir: str, compile_context: Com
     for f in python_files:
         try:
             # Get objects of all target types from this file
-            multi_type_results = from_file(f, target_classes, input_dir)
+            multi_type_results = from_file(
+                f, target_classes, input_dir, compile_context.seen_obj_ids
+            )
 
             # Process each type's results
             for target_cls, objects_dict in multi_type_results.items():
@@ -113,16 +90,37 @@ def from_folder(target_classes: List[type], input_dir: str, compile_context: Com
     return results
 
 
-def from_file(file_path: str, target_classes: List[type], input_dir: str) -> Dict[type, Dict[str, Any]]:
+def from_file(
+    file_path: str,
+    target_classes: List[type],
+    input_dir: str,
+    seen_obj_ids: Set[int],
+) -> Dict[type, Dict[str, Any]]:
     """
     Extract config objects from a Python file.
     Supports extracting multiple config types from a single file.
-    Skips imported objects to avoid duplicates.
+
+    `seen_obj_ids` carries object identities across all files in the compile
+    run. The first file we encounter an object in becomes its canonical
+    location; any later file that imports the same object will see its id()
+    already in the set and skip it. This is what prevents duplicate-config
+    errors when a Join file imports a GroupBy — both files have the GroupBy
+    in their `module.__dict__`, but only the file scanned first claims it.
+
+    Scan order is enforced by:
+      - `CONFIG_INFOS` in compile_context — dependency-first (group_bys
+        before joins, etc.), so an imported config's home directory is
+        visited before any directory that might import from it.
+      - `from_folder` — shallowest path first, alphabetical within depth,
+        so utility modules win over the team-specific files that import
+        from them.
 
     Args:
         file_path: Path to the Python file to parse
         target_classes: List of config classes to search for (e.g., [GroupBy, Join])
         input_dir: Root directory for the config type
+        seen_obj_ids: Mutable set of id()s for objects already claimed by an
+            earlier file in this compile run. Updated in place.
 
     Returns:
         Nested dict: {GroupBy: {name: obj}, Join: {name: obj}, ...}
@@ -137,9 +135,6 @@ def from_file(file_path: str, target_classes: List[type], input_dir: str) -> Dic
 
     conf_type, team_name_with_path = module_name.split(".", 1)
     mod_path = team_name_with_path.replace("/", ".")
-
-    # Get the set of imported names to skip them
-    imported_names = get_imported_names(file_path)
 
     modules_before = set(sys.modules.keys())
     try:
@@ -162,13 +157,18 @@ def from_file(file_path: str, target_classes: List[type], input_dir: str) -> Dic
     result = {cls: {} for cls in target_classes}
 
     for var_name, obj in list(module.__dict__.items()):
-        # Skip imported names - only process objects defined in this file
-        if var_name in imported_names:
-            continue
-
         # Check if object is an instance of any target class
         for target_cls in target_classes:
             if isinstance(obj, target_cls):
+                # Identity dedup: an imported config object appears in
+                # `module.__dict__` of every file that imports it. Only the
+                # first file to see it (via the dependency-ordered scan)
+                # should compile it; later sightings are imports and get
+                # skipped here.
+                if id(obj) in seen_obj_ids:
+                    break
+                seen_obj_ids.add(id(obj))
+
                 copied_obj = copy.deepcopy(obj)
 
                 name = f"{mod_path}.{var_name}"
