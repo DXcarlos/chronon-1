@@ -1,7 +1,8 @@
 from group_bys.gcp import dim_listings, dim_listings_with_mutations, dim_merchants, user_activities
 from staging_queries.gcp import exports
 
-from ai.chronon.types import Derivation, EventSource, GroupBy, Join, JoinPart, Query, selects
+from ai.chronon.types import Derivation, EventSource, GroupBy, Join, JoinPart, Query, selects, Aggregation, Operation, \
+    Window, TimeUnit
 
 """
 This Join combines user activity events with:
@@ -142,3 +143,12 @@ derivations_v1 = Join(
     offline_schedule="0 4 * * *",
     online_schedule="0 3 * * *"
 )
+
+fake_groupby = GroupBy(
+    sources=[source],
+    keys=["user_id"],
+    online=True,
+    version=0,
+    aggregations=[
+    Aggregation(input_column="fake-col", operation=Operation.SUM, windows=[Window(length=7, time_unit=TimeUnit.DAYS)])
+])
