@@ -292,7 +292,7 @@ object Driver {
         partitionSteps.zipWithIndex.foreach { case (stepRange, idx) =>
           logger.info(s"Processing range $stepRange (${idx + 1}/${partitionSteps.length})")
           UnionJoin.computeJoinAndSave(args.joinConf, stepRange)(tableUtils)
-          logger.info(s"Wrote range $stepRange (${idx + 1}/${partitionSteps.length})")
+          logger.info(s"Processed range $stepRange (${idx + 1}/${partitionSteps.length})")
         }
 
         return
@@ -321,20 +321,27 @@ object Driver {
 
       val finalStepDays = args.effectiveStepDays(args.joinConf.metaData)
 
-      val df = join.computeJoin(finalStepDays, args.startPartition.toOption)
+      join.computeJoinOpt(finalStepDays, args.startPartition.toOption) match {
+        case Some(df) =>
+          if (args.shouldExport()) {
+            args.exportTableToLocal(args.joinConf.metaData.outputTable, tableUtils)
+          }
 
-      if (args.shouldExport()) {
-        args.exportTableToLocal(args.joinConf.metaData.outputTable, tableUtils)
+          if (args.shouldPerformValidate()) {
+            val keys = CompareJob.getJoinKeys(args.joinConf, tableUtils)
+            args.validateResult(df, keys, tableUtils)
+          }
+
+          df.show(numRows = 3, truncate = 0, vertical = true)
+          logger.info(
+            s"\nShowing three rows of output above.\nQuery table `${args.joinConf.metaData.outputTable}` for more.\n")
+
+        case None =>
+          logger.info(
+            s"Join ${args.joinConf.metaData.name} produced no rows for the requested range. " +
+              "Skipping export, validation, and preview."
+          )
       }
-
-      if (args.shouldPerformValidate()) {
-        val keys = CompareJob.getJoinKeys(args.joinConf, tableUtils)
-        args.validateResult(df, keys, tableUtils)
-      }
-
-      df.show(numRows = 3, truncate = 0, vertical = true)
-      logger.info(
-        s"\nShowing three rows of output above.\nQuery table `${args.joinConf.metaData.outputTable}` for more.\n")
     }
   }
 

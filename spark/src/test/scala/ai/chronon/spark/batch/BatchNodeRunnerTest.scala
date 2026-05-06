@@ -298,18 +298,45 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     assertEquals("runFromArgs should return 0 on success", 0, exitCode)
   }
 
-  it should "short circuit and throw exception when missing partitions are present" in {
+  it should "delegate execution without preflighting missing input partitions" in {
 
     val configPath = createTestConfigFile(twoDaysAgo, today) // today's partition doesn't exist
     val node = ThriftJsonCodec.fromJsonFile[Node](configPath, check = true)
-    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+
+    var didRun = false
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi) {
+      override def run(metadata: MetaData, conf: NodeContent, maybeRange: Option[PartitionRange]): Unit = {
+        didRun = true
+      }
+    }
 
     val exitCode = runner.runFromArgs(twoDaysAgo, today, None)
 
-    assertEquals("runFromArgs should return 1 on failure", 1, exitCode)
+    assertTrue("Runner should call run instead of failing a physical partition preflight", didRun)
+    assertEquals("runFromArgs should return 0 when delegated execution succeeds", 0, exitCode)
   }
 
-  it should "handle empty partition ranges correctly" in {
+  it should "fail before execution when a required input table is absent" in {
+    val missingInputTable = "test_db.missing_required_input"
+    spark.sql(s"DROP TABLE IF EXISTS $missingInputTable")
+
+    val configPath = createTestConfigFile(yesterday, yesterday, inputTable = missingInputTable)
+    val node = ThriftJsonCodec.fromJsonFile[Node](configPath, check = true)
+
+    var didRun = false
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi) {
+      override def run(metadata: MetaData, conf: NodeContent, maybeRange: Option[PartitionRange]): Unit = {
+        didRun = true
+      }
+    }
+
+    val exitCode = runner.runFromArgs(yesterday, yesterday, None)
+
+    assertFalse("Runner should fail before invoking node execution", didRun)
+    assertEquals("runFromArgs should return 1 when a required input table is absent", 1, exitCode)
+  }
+
+  it should "skip monolith join output when the left range is empty" in {
 
     // Use a date range where no partitions exist
     val futureDate1 = tableUtils.partitionSpec.after(today)
@@ -321,7 +348,18 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
 
     val exitCode = runner.runFromArgs(futureDate1, futureDate2, None)
 
-    assertEquals("runFromArgs should return 1 on failure due to missing all partitions", 1, exitCode)
+    assertEquals("runFromArgs should return 0 when the join has no rows to write", 0, exitCode)
+  }
+
+  it should "return None from legacy join computeJoinOpt when the left range is empty" in {
+    val futureDate1 = tableUtils.partitionSpec.after(today)
+    val futureDate2 = tableUtils.partitionSpec.after(futureDate1)
+
+    spark.sql("DROP TABLE IF EXISTS test_db.output_table")
+    val joinConf = createTestNodeContent().getMonolithJoin.join
+    val join = new ai.chronon.spark.Join(joinConf, futureDate2, tableUtils)
+
+    join.computeJoinOpt(Some(1), Some(futureDate1)) shouldBe None
   }
 
   it should "correctly identify missing vs available partitions" in {
@@ -1262,6 +1300,42 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
 
     noException should be thrownBy runner.run(metadata, nodeContent, Option(range))
+  }
+
+  it should "fail when join output table is absent" in {
+    val joinOutputTable = "test_db.missing_join_output"
+    spark.sql(s"DROP TABLE IF EXISTS $joinOutputTable")
+
+    val joinConf = Builders.Join(
+      metaData = Builders.MetaData(namespace = "test_db", name = "missing_stats_join"),
+      left = Builders.Source.events(Builders.Query(), table = joinOutputTable),
+      joinParts = Seq.empty
+    )
+
+    val joinStatsNode = new JoinStatsComputeNode().setJoin(joinConf)
+    val nodeContent = new NodeContent()
+    nodeContent.setJoinStatsCompute(joinStatsNode)
+
+    val tableDep = TableDependencies.fromTable(
+      joinOutputTable,
+      new Query().setPartitionColumn("ds").setPartitionFormat("yyyy-MM-dd")
+    )
+
+    implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+    val metadata = MetaDataUtils.layer(
+      baseMetadata = new MetaData().setOutputNamespace("test_db").setTeam("test_team"),
+      modeName = "backfill",
+      nodeName = "test_db__missing_stats_join__stats_compute",
+      tableDependencies = Seq(tableDep),
+      stepDays = Some(1),
+      outputTableOverride = Some("test_db.missing_stats_join__stats_output")
+    )
+
+    val node = new Node().setMetaData(metadata).setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    an[Exception] should be thrownBy runner.run(metadata, nodeContent, Option(range))
   }
 
   override def afterAll(): Unit = {

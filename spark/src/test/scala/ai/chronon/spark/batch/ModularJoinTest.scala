@@ -4,6 +4,7 @@ import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.Extensions._
 import ai.chronon.api._
+import ai.chronon.api.planner.JoinPlanner
 import ai.chronon.planner._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark._
@@ -277,5 +278,105 @@ class ModularJoinTest extends SparkTestBase {
       finalDiff.show(50, truncate = false)
     }
     assertEquals(0, finalDiff.count())
+  }
+
+  it should "skip sparse downstream stages when left source partitions are absent" in {
+    import spark.implicits._
+
+    val sparseLeftTable = s"$namespace.sparse_left_events"
+    val sparseRightTable = s"$namespace.sparse_right_events"
+    val sparseBootstrapTable = s"$namespace.sparse_bootstrap"
+
+    spark.sql(s"DROP TABLE IF EXISTS $sparseLeftTable")
+    spark.sql(s"DROP TABLE IF EXISTS $sparseRightTable")
+    spark.sql(s"DROP TABLE IF EXISTS $sparseBootstrapTable")
+
+    val leftSource = Builders.Source.events(
+      query = Builders.Query(
+        selects = Builders.Selects("user", "ts"),
+        partitionColumn = "ds",
+        timeColumn = "ts",
+        startPartition = monthAgo
+      ),
+      table = sparseLeftTable
+    )
+
+    val groupBySource = Builders.Source.events(
+      query = Builders.Query(
+        selects = Builders.Selects("user", "value"),
+        partitionColumn = "ds",
+        timeColumn = "ts",
+        startPartition = monthAgo
+      ),
+      table = sparseRightTable
+    )
+
+    val groupBy = Builders.GroupBy(
+      sources = Seq(groupBySource),
+      keyColumns = Seq("user"),
+      aggregations = Seq(
+        Builders.Aggregation(
+          operation = Operation.SUM,
+          inputColumn = "value",
+          windows = Seq(new Window(1, TimeUnit.DAYS))
+        )
+      ),
+      metaData = Builders.MetaData(name = "sparse.user_value", namespace = namespace, team = "chronon")
+    )
+
+    val joinPart = Builders.JoinPart(groupBy = groupBy)
+    val bootstrapPart = Builders.BootstrapPart(
+      query = Builders.Query(
+        selects = Builders.Selects("user", "ts", "boot_value"),
+        startPartition = monthAgo,
+        endPartition = monthAgo
+      ),
+      table = sparseBootstrapTable,
+      keyColumns = Seq("user", "ts")
+    )
+
+    val joinConf = Builders.Join(
+      left = leftSource,
+      joinParts = Seq(joinPart),
+      bootstrapParts = Seq(bootstrapPart),
+      derivations = Seq(Builders.Derivation("constant_value", "1")),
+      metaData = Builders.MetaData(name = "test.sparse_modular_features", namespace = namespace, team = "chronon")
+    )
+
+    val nodes = new JoinPlanner(joinConf)(tableUtils.partitionSpec).offlineNodes
+    nodes.foreach(node => spark.sql(s"DROP TABLE IF EXISTS ${node.metaData.outputTable}"))
+
+    val bootstrapNode = nodes.find(_.content.isSetJoinBootstrap).get
+    val joinPartNode = nodes.find(_.content.isSetJoinPart).get
+    val mergeNode = nodes.find(_.content.isSetJoinMerge).get
+    val derivationNode = nodes.find(_.content.isSetJoinDerivation).get
+
+    val dateRange = new DateRange()
+      .setStartDate(monthAgo)
+      .setEndDate(monthAgo)
+    val partitionRange = PartitionRange(monthAgo, monthAgo)(tableUtils.partitionSpec)
+
+    val leftSourceOutputTable = JoinUtils.computeFullLeftSourceTableName(joinConf)
+    Seq(("old_user", 1L, dayAndMonthBefore)).toDF("user", "ts", "ds").save(sparseLeftTable)
+    Seq(("old_user", 1L, 10L, dayAndMonthBefore)).toDF("user", "ts", "value", "ds").save(sparseRightTable)
+    Seq(("old_user", 1L, "old_boot", dayAndMonthBefore))
+      .toDF("user", "ts", "boot_value", "ds")
+      .save(sparseBootstrapTable)
+    Seq(("old_user", 1L, dayAndMonthBefore)).toDF("user", "ts", "ds").save(leftSourceOutputTable)
+    Seq(("old_user", 1L, "old_boot", dayAndMonthBefore))
+      .toDF("user", "ts", "boot_value", "ds")
+      .save(bootstrapNode.metaData.outputTable)
+
+    new JoinBootstrapJob(bootstrapNode.content.getJoinBootstrap, bootstrapNode.metaData, dateRange).run()
+    val joinPartResult = new JoinPartJob(joinPartNode.content.getJoinPart, joinPartNode.metaData, dateRange).run()
+    new MergeJob(mergeNode.content.getJoinMerge, mergeNode.metaData, dateRange, Seq(joinPart)).run()
+    new JoinDerivationJob(derivationNode.content.getJoinDerivation, derivationNode.metaData, dateRange).run()
+
+    assertTrue(joinPartResult.isEmpty)
+    assertTrue(tableUtils.tableReachable(bootstrapNode.metaData.outputTable))
+    assertEquals(0, tableUtils.scanDf(null, bootstrapNode.metaData.outputTable, range = Some(partitionRange)).count())
+    assertFalse(tableUtils.tableReachable(joinPartNode.metaData.outputTable))
+    assertFalse(tableUtils.tableReachable(mergeNode.metaData.outputTable))
+    assertFalse(tableUtils.tableReachable(derivationNode.metaData.outputTable))
   }
 }

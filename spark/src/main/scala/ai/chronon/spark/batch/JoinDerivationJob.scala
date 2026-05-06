@@ -8,6 +8,7 @@ import ai.chronon.planner.JoinDerivationNode
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.JoinUtils
 import org.apache.spark.sql.functions.{coalesce, col, expr}
+import org.slf4j.{Logger, LoggerFactory}
 
 /*
 For entities with Derivations (`GroupBy` and `Join`), we produce the pre-derivation `base` table first,
@@ -21,12 +22,13 @@ Source -> True left table -> Bootstrap table (sourceTable here)
 class JoinDerivationJob(node: JoinDerivationNode, metaData: MetaData, range: DateRange)(implicit
     tableUtils: TableUtils) {
   implicit val partitionSpec = tableUtils.partitionSpec
+  @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   private val join = node.join
   private val dateRange = range.toPartitionRange
   private val derivations = join.derivations.toScala
 
-  // The true left table is the source table for the join's left side
-  private val trueLeftTable = JoinUtils.computeFullLeftSourceTableName(join)
+  // The join left input table is the source table for the join's left side
+  private val leftInputTable = JoinUtils.computeFullLeftSourceTableName(join)
 
   // The base table is the output of the merge job
   private val baseTable = join.metaData.outputTable
@@ -36,7 +38,13 @@ class JoinDerivationJob(node: JoinDerivationNode, metaData: MetaData, range: Dat
 
   def run(): Unit = tableUtils.withJobDescription(s"JoinDerivationJob(${join.metaData.name}) $dateRange") {
 
-    val leftDf = tableUtils.scanDf(query = null, table = trueLeftTable, range = Some(dateRange))
+    val leftDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(dateRange))
+    if (leftDf.isEmpty) {
+      logger.info(
+        s"Join left input table $leftInputTable is empty for range $dateRange, skipping derivation computation")
+      return
+    }
+
     val trueLeftCols = leftDf.columns
 
     val baseDf = tableUtils.scanDf(query = null, table = baseTable, range = Some(dateRange))

@@ -310,6 +310,9 @@ abstract class JoinBase(val joinConfCloned: api.Join,
 
     // check if left source has any data covering the requested range
     val leftSpec = leftSource.query.partitionSpec(tableUtils.partitionSpec)
+    if (!tableUtils.tableReachable(leftSource.table)) {
+      throw new IllegalStateException(s"Join left table ${leftSource.table} is missing.")
+    }
     val leftLastPartition = tableUtils.lastAvailablePartition(
       leftSource.table,
       tablePartitionSpec = Option(leftSpec)
@@ -339,7 +342,7 @@ abstract class JoinBase(val joinConfCloned: api.Join,
 
     if (unfilledRanges.isEmpty) {
       logger.info(s"\nThere is no data to compute based on end partition of ${rangeToFill.end}.\n\n Exiting..")
-      return Some(finalResult)
+      return if (tableUtils.tableReachable(outputTable, ignoreFailure = true)) Some(finalResult) else None
     }
 
     stepDays.foreach(metrics.gauge("step_days", _))
@@ -354,8 +357,10 @@ abstract class JoinBase(val joinConfCloned: api.Join,
     val wholeRange = PartitionRange(unfilledRanges.minBy(_.start).start, unfilledRanges.maxBy(_.end).end)
 
     val leftDataOpt = leftDf(joinConfCloned, wholeRange, tableUtils)
-    require(leftDataOpt.nonEmpty,
-            s"left side of the join ${joinConfCloned.metaData.name} produced empty data in range $wholeRange")
+    if (leftDataOpt.isEmpty) {
+      logger.info(s"Left side of the join ${joinConfCloned.metaData.name} produced no rows in range $wholeRange.")
+      return None
+    }
 
     val runSmallMode = JoinUtils.runSmallMode(tableUtils, leftDataOpt.get)
 

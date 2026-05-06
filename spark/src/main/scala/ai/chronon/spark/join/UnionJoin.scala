@@ -193,15 +193,31 @@ object UnionJoin {
     }
   }
 
-  def computeJoin(joinConf: api.Join, dateRange: PartitionRange)(implicit tableUtils: TableUtils): DataFrame = {
+  private def validateStandaloneJoin(joinConf: api.Join): Unit = {
 
     val disclaimer = "Support is coming soon."
     require(joinConf.left.isSetEvents, s"Only events sources are supported on the left side of the join. $disclaimer")
     require(!joinConf.isSetBootstrapParts, s"Bootstraps on fast mode are not supported yet. $disclaimer")
     require(joinConf.getJoinParts.size() == 1, s"Only one join-part is supported on fast mode. $disclaimer")
+  }
+
+  def computeJoin(joinConf: api.Join, dateRange: PartitionRange)(implicit tableUtils: TableUtils): DataFrame =
+    computeJoinOpt(joinConf, dateRange).get
+
+  def computeJoinOpt(joinConf: api.Join, dateRange: PartitionRange)(implicit
+      tableUtils: TableUtils): Option[DataFrame] = {
+    validateStandaloneJoin(joinConf)
 
     val joinPart = joinConf.getJoinParts.get(0)
-    val leftDf = JoinUtils.leftDf(joinConf, dateRange, tableUtils).get
+    val leftDfOpt = JoinUtils.leftDf(joinConf, dateRange, tableUtils)
+
+    if (leftDfOpt.isEmpty) {
+      logger.info(
+        s"Left side of union join ${joinConf.metaData.name} produced no rows in range $dateRange. Skipping output write.")
+      return None
+    }
+
+    val leftDf = leftDfOpt.get
 
     val groupByDerivedDf = computeJoinPart(leftDf, joinPart, dateRange, produceFinalJoinOutput = true)
     val nonValueColumns = joinPart.rightToLeft.keys.toSet ++
@@ -219,9 +235,9 @@ object UnionJoin {
       // This keeps the fast path aligned with the regular join/derivation codepath
       // and ensures partition/time/key columns remain writable/readable downstream.
       val finalOutputColumns = derivations.finalOutputColumn(prefixedDf.columns, ensureKeys = leftDf.columns.toSeq)
-      prefixedDf.select(finalOutputColumns: _*)
+      Some(prefixedDf.select(finalOutputColumns: _*))
     } else {
-      prefixedDf
+      Some(prefixedDf)
     }
   }
 
@@ -235,9 +251,10 @@ object UnionJoin {
   def computeJoinAndSave(joinConf: api.Join, dateRange: PartitionRange, semanticHash: Option[String] = None)(implicit
       tableUtils: TableUtils): Unit =
     tableUtils.withJobDescription(s"UnionJoin(${joinConf.metaData.name}) $dateRange") {
-      val resultDf = computeJoin(joinConf, dateRange)
-      logger.info(s"Saving output to ${joinConf.metaData.outputTable}")
-      resultDf.save(joinConf.metaData.outputTable, semanticHash = semanticHash)
+      computeJoinOpt(joinConf, dateRange).foreach { resultDf =>
+        logger.info(s"Saving output to ${joinConf.metaData.outputTable}")
+        resultDf.save(joinConf.metaData.outputTable, semanticHash = semanticHash)
+      }
     }
 
 }

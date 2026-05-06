@@ -205,7 +205,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 
       UnionJoin.computeJoinAndSave(joinConf, range, semanticHash)(tableUtils)
 
-      logger.info(s"Successfully wrote range: $range")
+      logger.info(s"Successfully processed range: $range")
 
     } else {
       val join = new Join(joinConf, range.end, tableUtils)
@@ -217,9 +217,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           df.show(numRows = 3, truncate = 0, vertical = true)
 
         case None =>
-          throw new IllegalArgumentException(
-            s"Join produced no results for range $range. Ensure that the input data is all present"
-          )
+          logger.info(s"Join '$joinName' produced no rows for range $range. Skipping output write.")
       }
     }
   }
@@ -597,6 +595,47 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     node.metaData.name.toLowerCase.contains("sensor")
   }
 
+  private def logMissingInputPartitions(metadata: MetaData, range: PartitionRange): Unit = {
+    if (!metadata.isSetExecutionInfo || !metadata.executionInfo.isSetTableDependencies) {
+      return
+    }
+
+    val requiredInputTables = metadata.executionInfo.getTableDependencies.asScala
+      .filterNot(td => td.isSetIsSoftNodeDependency && td.isSoftNodeDependency)
+      .map(_.tableInfo.table)
+      .distinct
+
+    val missingInputTables = requiredInputTables.filterNot(tableUtils.tableReachable(_, ignoreFailure = true))
+    if (missingInputTables.nonEmpty) {
+      throw new IllegalStateException(
+        s"Required input tables are missing for '${metadata.name}': ${missingInputTables.mkString(", ")}"
+      )
+    }
+
+    Try(computeInputTablePartitionStatuses(metadata, range, tableUtils).filterNot(_.ready).toSeq) match {
+      case Success(missingTables) if missingTables.nonEmpty =>
+        val missingTablesMessage = missingTables
+          .map { tps =>
+            s"Table: ${tps.name}, last available: ${tps.lastAvailablePartition.getOrElse("none")}, required end: ${tps.requiredEnd}"
+          }
+          .mkString("\n")
+
+        logger.warn(
+          s"Continuing batch node runner for '${metadata.name}' despite input tables missing partitions for the " +
+            "requested range. BatchNodeRunner is expected to run after orchestrator dependency allocation, so missing " +
+            "upstream output partitions may indicate that upstream steps succeeded without producing rows for those " +
+            s"partitions:\n$missingTablesMessage"
+        )
+      case Success(_) =>
+      case Failure(e) =>
+        logger.warn(
+          s"Unable to inspect input table partition readiness for '${metadata.name}'. Continuing because dependency " +
+            "readiness is handled by the orchestrator.",
+          e
+        )
+    }
+  }
+
   def runFromArgs(
       startDs: String,
       endDs: String,
@@ -606,9 +645,8 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       val metadata = node.metaData
       val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
 
-      val inputTablePartitionStatuses = computeInputTablePartitionStatuses(metadata, range, tableUtils)
-
       logger.info(s"Starting batch node runner for '${metadata.name}'")
+      logMissingInputPartitions(metadata, range)
 
       // drop table if semantic hash doesn't match
       val outputTable = node.metaData.outputTable
@@ -620,62 +658,47 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
         su.checkSemanticHashAndArchive(outputTable, incomingSemanticHash)
       } else None
 
-      val notReadyTables = inputTablePartitionStatuses.filterNot(_.ready)
+      try {
+        run(metadata, node.content, Option(range))
+      } catch {
+        case e: Exception =>
+          archivedTableOpt.foreach { archivedTable =>
+            try {
+              // Another writer may have already succeeded with the new semantic hash.
+              // Only rollback if the output table is missing or still has the old hash.
+              val currentHash = if (tableUtils.tableReachable(outputTable)) {
+                tableUtils.getTableProperties(outputTable).flatMap(_.get(Constants.SemanticHashKey))
+              } else None
 
-      if (notReadyTables.nonEmpty) {
-        throw new RuntimeException(
-          "The following input tables are not ready for the requested range " +
-            "(if the table exists, check logs above for credential or connectivity errors):\n" +
-            notReadyTables
-              .map { tps =>
-                s"Table: ${tps.name}, last available: ${tps.lastAvailablePartition.getOrElse("none")}, required end: ${tps.requiredEnd}"
-              }
-              .mkString("\n")
-        )
-      } else {
-
-        try {
-          run(metadata, node.content, Option(range))
-        } catch {
-          case e: Exception =>
-            archivedTableOpt.foreach { archivedTable =>
-              try {
-                // Another writer may have already succeeded with the new semantic hash.
-                // Only rollback if the output table is missing or still has the old hash.
-                val currentHash = if (tableUtils.tableReachable(outputTable)) {
-                  tableUtils.getTableProperties(outputTable).flatMap(_.get(Constants.SemanticHashKey))
-                } else None
-
-                if (currentHash.contains(incomingSemanticHash)) {
-                  logger.info(
-                    s"Skipping rollback for $outputTable: another writer already produced it with hash $incomingSemanticHash")
-                } else {
-                  if (tableUtils.tableReachable(outputTable)) {
-                    tableUtils.sql(s"DROP TABLE IF EXISTS $outputTable")
-                  }
-                  tableUtils.renameTable(archivedTable, outputTable)
-                  logger.info(s"Rolled back archival: restored $archivedTable to $outputTable")
+              if (currentHash.contains(incomingSemanticHash)) {
+                logger.info(
+                  s"Skipping rollback for $outputTable: another writer already produced it with hash $incomingSemanticHash")
+              } else {
+                if (tableUtils.tableReachable(outputTable)) {
+                  tableUtils.sql(s"DROP TABLE IF EXISTS $outputTable")
                 }
-              } catch {
-                case rollbackEx: Exception =>
-                  logger.error(s"Failed to rollback archival for $outputTable from $archivedTable", rollbackEx)
+                tableUtils.renameTable(archivedTable, outputTable)
+                logger.info(s"Rolled back archival: restored $archivedTable to $outputTable")
               }
+            } catch {
+              case rollbackEx: Exception =>
+                logger.error(s"Failed to rollback archival for $outputTable from $archivedTable", rollbackEx)
             }
-            throw e
-        }
-
-        try {
-
-          postJobActions(metadata = metadata, range = range, tableStatsDataset = tableStatsDataset)
-
-          if (!isSensorNode) {
-            su.setSemanticHash(outputTable, incomingSemanticHash)
           }
-        } catch {
-          case e: Exception =>
-            // Don't fail the job if post-job actions fail
-            logger.error(s"Post-job actions failed for '${metadata.name}'", e)
+          throw e
+      }
+
+      try {
+
+        postJobActions(metadata = metadata, range = range, tableStatsDataset = tableStatsDataset)
+
+        if (!isSensorNode) {
+          su.setSemanticHash(outputTable, incomingSemanticHash)
         }
+      } catch {
+        case e: Exception =>
+          // Don't fail the job if post-job actions fail
+          logger.error(s"Post-job actions failed for '${metadata.name}'", e)
       }
     } match {
       case Success(_) => {

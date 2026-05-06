@@ -37,6 +37,10 @@ class JoinBootstrapJob(node: JoinBootstrapNode, metaData: MetaData, range: DateR
     // `f"${source.table}_${ThriftJsonCodec.md5Digest(sourceWithFilter)}"` Logic should  be computed by orchestrator
     // and passed to both jobs
     val leftDf = tableUtils.scanDf(query = null, table = leftSourceTable, range = Some(dateRange))
+    if (leftDf.isEmpty) {
+      logger.info(s"Left source table $leftSourceTable is empty for range $dateRange, skipping bootstrap computation")
+      return
+    }
 
     val bootstrapInfo = BootstrapInfo.from(join, dateRange, tableUtils, Option(leftDf.schema))
 

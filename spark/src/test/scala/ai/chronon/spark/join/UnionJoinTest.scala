@@ -81,6 +81,53 @@ class UnionJoinTest extends BaseJoinTest {
     outputData.length shouldBe queriesData.length
   }
 
+  it should "skip computeJoinAndSave when the left side has no rows" in {
+    val viewsSchema = List(
+      Column("user", api.StringType, 1),
+      Column("item", api.StringType, 1),
+      Column("time_spent_ms", api.LongType, 5000)
+    )
+
+    val viewsTable = s"$namespace.empty_left_union_right"
+    DataFrameGen
+      .events(spark, viewsSchema, count = 100, partitions = 3)
+      .save(viewsTable)
+
+    val start = tableUtils.partitionSpec.minus(today, new Window(7, TimeUnit.DAYS))
+    val viewsSource = Builders.Source.events(
+      table = viewsTable,
+      topic = "",
+      query = Builders.Query(selects = Builders.Selects("time_spent_ms"), startPartition = start)
+    )
+
+    val viewsGroupBy = Builders
+      .GroupBy(
+        sources = Seq(viewsSource),
+        keyColumns = Seq("item"),
+        aggregations = Seq(Builders.Aggregation(operation = Operation.AVERAGE, inputColumn = "time_spent_ms")),
+        metaData = Builders.MetaData(name = "unit_test.empty_left_union_views", namespace = namespace)
+      )
+      .setAccuracy(Accuracy.TEMPORAL)
+
+    val itemQueriesTable = s"$namespace.empty_left_union_queries"
+    DataFrameGen
+      .events(spark, List(Column("item", api.StringType, 1)), count = 100, partitions = 3)
+      .save(itemQueriesTable)
+
+    val joinConf = Builders.Join(
+      left = Builders.Source.events(Builders.Query(startPartition = start), table = itemQueriesTable),
+      joinParts = Seq(Builders.JoinPart(groupBy = viewsGroupBy, prefix = "user")),
+      metaData = Builders.MetaData(name = "test.empty_left_union_join", namespace = namespace, team = "item_team")
+    )
+
+    spark.sql(s"DROP TABLE IF EXISTS ${joinConf.metaData.outputTable}")
+    val futurePartition = tableUtils.partitionSpec.after(today)
+    val dateRange = PartitionRange(futurePartition, futurePartition)(tableUtils.partitionSpec)
+
+    noException should be thrownBy UnionJoin.computeJoinAndSave(joinConf, dateRange)
+    tableUtils.tableReachable(joinConf.metaData.outputTable, ignoreFailure = true) shouldBe false
+  }
+
   it should "test UnionJoin with GroupBy and Join derivations" in {
 
     val eventsSchema = List(
