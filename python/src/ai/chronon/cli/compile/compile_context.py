@@ -33,24 +33,29 @@ class ConfigInfo:
 # Canonical enumeration of chronon conf types. Drives compile discovery,
 # output layout, and validator wiring. Keep this as a module-level constant
 # so tests and tooling can derive folder names from the same source of truth.
+# Order is dependency-first: each conf type comes before the types that
+# can reference it. Combined with the id()-based dedup in `parse_configs`,
+# this guarantees that a config imported from another file is recorded at
+# its canonical location (the file that defines it) rather than at the
+# first importer the scanner happens to visit.
 CONFIG_INFOS: List[ConfigInfo] = [
-    ConfigInfo(folder_name="joins", cls=Join, config_type=ConfType.JOIN),
-    ConfigInfo(
-        folder_name="group_bys",
-        cls=GroupBy,
-        config_type=ConfType.GROUP_BY,
-    ),
     ConfigInfo(
         folder_name="staging_queries",
         cls=StagingQuery,
         config_type=ConfType.STAGING_QUERY,
     ),
     ConfigInfo(
+        folder_name="group_bys",
+        cls=GroupBy,
+        config_type=ConfType.GROUP_BY,
+    ),
+    ConfigInfo(folder_name="joins", cls=Join, config_type=ConfType.JOIN),
+    ConfigInfo(folder_name="models", cls=Model, config_type=ConfType.MODEL),
+    ConfigInfo(
         folder_name="model_transforms",
         cls=ModelTransforms,
         config_type=ConfType.MODEL_TRANSFORMS,
     ),
-    ConfigInfo(folder_name="models", cls=Model, config_type=ConfType.MODEL),
     ConfigInfo(
         folder_name="teams_metadata", cls=MetaData, config_type=None
     ),  # only for team metadata
@@ -72,6 +77,14 @@ class CompileContext:
         self.force: bool = force
 
         self.config_infos: List[ConfigInfo] = CONFIG_INFOS
+
+        # Identity dedup across the whole compile run. `parse_configs.from_file`
+        # adds an object's id() the first time it's encountered and skips any
+        # later sightings, so a config imported from another module gets
+        # compiled exactly once at its canonical location instead of being
+        # re-compiled (and reported as a duplicate) in every file that imports
+        # it.
+        self.seen_obj_ids: set = set()
 
         self.compile_status = CompileStatus(use_live=False, format=format)
 

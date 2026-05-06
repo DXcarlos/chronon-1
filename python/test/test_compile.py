@@ -80,6 +80,7 @@ def test_parse_configs_relative_source_file():
     mock_compile_context.validator = MagicMock()
     mock_compile_context.validator.validate_obj.return_value = []
     mock_compile_context.compile_status = MagicMock()
+    mock_compile_context.seen_obj_ids = set()
 
     # Configure mocks
     with patch('ai.chronon.cli.compile.parse_configs.from_file') as mock_from_file, \
@@ -925,20 +926,25 @@ def test_parsing_errors_included_in_results(tmp_path, monkeypatch):
     from gen_thrift.api.ttypes import ConfType
 
     group_by_result = results[ConfType.GROUP_BY]
-    join_result = results[ConfType.JOIN]
+    # Parsing errors are attributed to the first target class processed by
+    # the multi-type scan, which is StagingQuery (CONFIG_INFOS is ordered
+    # dependency-first: staging_queries -> group_bys -> joins -> ...).
+    staging_query_result = results[ConfType.STAGING_QUERY]
 
     # The valid config should compile successfully
     assert "sample_team.good_config.valid_groupby__1" in group_by_result.obj_dict, (
         "Valid config should be compiled"
     )
 
-    # The invalid config should have errors recorded in JOIN results
-    # (parsing errors are attributed to first target class)
+    # The invalid config should have errors recorded under the first target class
     bad_file_path = "group_bys/sample_team/bad_config.py"
-    has_parsing_error = any(bad_file_path in key for key in join_result.error_dict.keys())
+    has_parsing_error = any(
+        bad_file_path in key for key in staging_query_result.error_dict.keys()
+    )
     assert has_parsing_error, (
-        f"Parsing errors should be recorded in error_dict (under Join config type). "
-        f"Found keys: {list(join_result.error_dict.keys())}"
+        f"Parsing errors should be recorded in error_dict (under the first target class, "
+        f"which is StagingQuery per CONFIG_INFOS ordering). "
+        f"Found keys: {list(staging_query_result.error_dict.keys())}"
     )
 
 
@@ -1050,13 +1056,14 @@ def test_duplicate_config_names_across_directories_detected(tmp_path, monkeypatc
     assert "group_bys" in error_message
     assert "staging_queries" in error_message
 
-    # The first config CAN be in obj_dict (it's the duplicate from staging_queries that's rejected)
-    # Just verify we have exactly one copy in obj_dict (the first one)
+    # The first config CAN be in obj_dict (it's the duplicate from group_bys that's rejected).
+    # Scan order is dependency-first per CONFIG_INFOS: staging_queries before group_bys,
+    # so the staging_queries copy wins and is what lands in obj_dict.
     if duplicate_name in group_by_result.obj_dict:
-        # Verify it's from the first directory (group_bys)
         compiled_obj = group_by_result.obj_dict[duplicate_name]
-        assert compiled_obj.metaData.sourceFile == "group_bys/sample_team/my_config.py", (
-            "The config in obj_dict should be from the first directory encountered"
+        assert compiled_obj.metaData.sourceFile == "staging_queries/sample_team/my_config.py", (
+            "The config in obj_dict should be from the first directory encountered "
+            "(staging_queries, since CONFIG_INFOS visits dependencies before referencers)"
         )
 
 
