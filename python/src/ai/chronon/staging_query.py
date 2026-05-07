@@ -181,6 +181,7 @@ def StagingQuery(
     step_days: Optional[int] = None,
     recompute_days: Optional[int] = None,
     additional_partitions: List[str] = None,
+    environments: Optional[List[str]] = None,
 ) -> ttypes.StagingQuery:
     """
     Creates a StagingQuery object for executing arbitrary SQL queries with templated date parameters.
@@ -237,9 +238,17 @@ def StagingQuery(
         X days later) or when you want partially mature aggregations (i.e. a 7 day window, but start computing it from
         day 1, and refresh it for the next 6 days)
     :type recompute_days: int
+    :param environments:
+        List of environment names where this StagingQuery should be deployed/available.
+        Defaults to ['prod']. Used to control which environments can access this StagingQuery configuration.
+    :type environments: List[str]
     :return:
         A StagingQuery object
     """
+    # Initialize environments with default if not provided
+    if environments is None:
+        environments = ['prod']
+
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()
 
@@ -317,6 +326,7 @@ def StagingQuery(
         tableProperties=table_properties,
         version=str(version) if version is not None else None,
         additionalOutputPartitionColumns=additional_partitions,
+        environments=environments,
     )
 
     thrift_deps = []

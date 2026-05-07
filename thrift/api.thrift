@@ -329,6 +329,8 @@ struct MetaData {
     // users can put anything they want in here, but the compiler shouldn't
     103: optional string customJson
 
+    104: optional list<string> environments
+
     // enable job to compute consistency metrics
     200: optional bool consistencyCheck
 
