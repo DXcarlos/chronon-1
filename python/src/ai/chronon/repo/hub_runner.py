@@ -30,10 +30,19 @@ from ai.chronon.repo.auth import get_user_email
 from ai.chronon.repo.constants import VALID_CLOUDS, RunMode
 from ai.chronon.repo.utils import print_possible_confs, upload_to_blob_store
 from ai.chronon.repo.zipline_hub import ZiplineHub
-from gen_thrift.api.ttypes import DataKind
+from gen_thrift.api.ttypes import DataKind, Environment
 from gen_thrift.planner.ttypes import Mode
 
 logger = logging.getLogger(__name__)
+
+
+def _env_string_to_enum(env_str: str) -> int:
+    """Convert environment string to enum value."""
+    env_map = {
+        'prod': Environment.PROD,
+        'canary': Environment.CANARY,
+    }
+    return env_map.get(env_str.lower(), Environment.PROD)
 
 
 def _validate_at_most_daily_schedule(schedule_expression: str) -> Optional[str]:
@@ -380,9 +389,9 @@ def redeploy_streaming(repo, confs, hub_url=None, use_auth=True, format: Format 
 
 
 def submit_schedule_all(
-    repo, cloud, customer_id, hub_url=None, use_auth=True, format: Format = Format.TEXT
+    repo, cloud, customer_id, env='prod', hub_url=None, use_auth=True, format: Format = Format.TEXT
 ):
-    """Deploy schedules for all changed confs that have schedules defined."""
+    """Deploy schedules for all changed confs that have schedules defined and match the specified environment."""
     zipline_hub = _get_zipline_hub(
         hub_url,
         get_hub_conf_from_metadata_conf(
@@ -411,9 +420,22 @@ def submit_schedule_all(
     # Collect confs with schedules
     confs_with_schedules = []
     skipped_confs = []
+    env_filtered_confs = []
+
+    # Convert env string to enum value for comparison
+    env_enum = _env_string_to_enum(env)
 
     for name, conf in diff_confs.items():
         try:
+            # Check if conf's environments field includes the specified env
+            metadata_map = get_metadata_map(conf.localPath)
+            conf_environments = metadata_map.get("environments", [Environment.PROD])
+
+            # Skip confs that don't match the specified environment
+            if env_enum not in conf_environments:
+                env_filtered_confs.append(name)
+                continue
+
             schedule_modes = get_schedule_modes(conf.localPath)
 
             # Skip confs without any schedules
@@ -442,11 +464,12 @@ def submit_schedule_all(
             skipped_confs.append(name)
 
     if not confs_with_schedules:
-        print_info(
-            f"No changed confs with schedules found. "
-            f"{len(skipped_confs)} conf(s) changed but have no schedules defined.",
-            format=format,
-        )
+        message_parts = [f"No changed confs with schedules found for environment '{env}'."]
+        if env_filtered_confs:
+            message_parts.append(f"{len(env_filtered_confs)} conf(s) filtered out due to environment mismatch.")
+        if skipped_confs:
+            message_parts.append(f"{len(skipped_confs)} conf(s) changed but have no schedules defined.")
+        print_info(" ".join(message_parts), format=format)
         return
 
     # Deploy schedules via batch API
@@ -504,13 +527,21 @@ def submit_schedule_all(
                     f"  ✓ {conf_name}", ", ".join(schedule_info), format=format
                 )
 
-    if skipped_confs:
-        print_info(
-            f"\n{len(skipped_confs)} conf(s) skipped (no schedules defined): "
-            f"{', '.join(skipped_confs[:5])}"
-            f"{'...' if len(skipped_confs) > 5 else ''}",
-            format=format,
+    info_parts = []
+    if env_filtered_confs:
+        info_parts.append(
+            f"{len(env_filtered_confs)} conf(s) skipped (environment mismatch): "
+            f"{', '.join(env_filtered_confs[:5])}"
+            f"{'...' if len(env_filtered_confs) > 5 else ''}"
         )
+    if skipped_confs:
+        info_parts.append(
+            f"{len(skipped_confs)} conf(s) skipped (no schedules defined): "
+            f"{', '.join(skipped_confs[:5])}"
+            f"{'...' if len(skipped_confs) > 5 else ''}"
+        )
+    if info_parts:
+        print_info("\n" + "\n".join(info_parts), format=format)
 
 
 def submit_workflow(
@@ -731,11 +762,19 @@ def schedule(
 @jsonify_exceptions_if_json_format
 @cloud_provider_option
 @customer_id_option
+@click.option(
+    "--env",
+    help="Environment to deploy schedules for (only schedules confs whose environments field includes this value)",
+    type=click.Choice(['prod', 'canary'], case_sensitive=False),
+    default='prod',
+    show_default=True,
+)
 @handle_dry_run_compile
 def schedule_all(
     repo,
     cloud,
     customer_id,
+    env,
     hub_url=None,
     use_auth=True,
     format: Format = Format.TEXT,
@@ -776,7 +815,7 @@ def schedule_all(
         print_success("No compilation changes detected.", format=format)
 
     submit_schedule_all(
-        repo, cloud, customer_id, hub_url=hub_url, use_auth=use_auth, format=format
+        repo, cloud, customer_id, env=env, hub_url=hub_url, use_auth=use_auth, format=format
     )
 
 

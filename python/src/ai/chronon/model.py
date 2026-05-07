@@ -202,15 +202,16 @@ def Model(
         Additional metadata that does not directly affect computation, but is useful for management.
     :type tags: Dict[str, str]
     :param environments:
-        List of environment names where this Model should be deployed/available.
-        Defaults to ['prod']. Used to control which environments can access this Model configuration.
+        List of environments where this Model should be deployed/available.
+        Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     :type environments: List[str]
     :return:
         A Model object
     """
-    # Initialize environments with default if not provided
+    # Initialize and validate environments
     if environments is None:
         environments = ['prod']
+    environments = utils.convert_environments_to_enum(environments)
 
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()
@@ -278,12 +279,13 @@ def ModelTransforms(
      - output_namespace: Namespace for the model output
      - table_properties: Additional table properties for the model output
      - tags: Additional metadata tags
-     - environments: List of environment names where this ModelTransforms should be deployed/available.
-        Defaults to ['prod']. Used to control which environments can access this ModelTransforms configuration.
+     - environments: List of environments where this ModelTransforms should be deployed/available.
+        Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     """
-    # Initialize environments with default if not provided
+    # Initialize and validate environments
     if environments is None:
         environments = ['prod']
+    environments = utils.convert_environments_to_enum(environments)
 
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()

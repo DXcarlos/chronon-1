@@ -284,6 +284,11 @@ enum EngineType {
 
 }
 
+enum Environment {
+    PROD = 0,
+    CANARY = 1,
+}
+
 /**
 * contains configs params that don't change the contents of the output.
 **/
@@ -329,7 +334,7 @@ struct MetaData {
     // users can put anything they want in here, but the compiler shouldn't
     103: optional string customJson
 
-    104: optional list<string> environments
+    104: optional list<Environment> environments
 
     // enable job to compute consistency metrics
     200: optional bool consistencyCheck

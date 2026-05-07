@@ -239,15 +239,16 @@ def StagingQuery(
         day 1, and refresh it for the next 6 days)
     :type recompute_days: int
     :param environments:
-        List of environment names where this StagingQuery should be deployed/available.
-        Defaults to ['prod']. Used to control which environments can access this StagingQuery configuration.
+        List of environments where this StagingQuery should be deployed/available.
+        Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     :type environments: List[str]
     :return:
         A StagingQuery object
     """
-    # Initialize environments with default if not provided
+    # Initialize and validate environments
     if environments is None:
         environments = ['prod']
+    environments = utils.convert_environments_to_enum(environments)
 
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()

@@ -19,6 +19,7 @@ from rich.text import Text
 
 from ai.chronon.cli.formatter import Format
 from ai.chronon.repo.hub_runner import hub, redeploy_streaming
+from gen_thrift.api.ttypes import Environment
 
 
 def _plain(text: str) -> str:
@@ -817,3 +818,484 @@ class TestHubRunner:
         assert apply_payload['user'] == "test@example.com"
         assert len(apply_payload['affectedConfs']) == 1
         assert apply_payload['affectedConfs'][0]['confName'] == "aws.my_conf.v1"
+
+    @patch('ai.chronon.repo.hub_runner.get_metadata_map')
+    @patch('ai.chronon.repo.hub_runner.get_schedule_modes')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.compute_and_upload_diffs')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    @patch('ai.chronon.repo.hub_runner.ZiplineHub')
+    def test_schedule_all_filters_by_environment(
+        self,
+        mock_zipline_hub,
+        mock_get_current_branch,
+        mock_build_hashmap,
+        mock_compute_diffs,
+        mock_get_schedule_modes,
+        mock_get_metadata_map,
+        canary,
+    ):
+        """Test that submit_schedule_all filters confs based on environment."""
+        from ai.chronon.repo.hub_runner import (
+            ScheduleModes,
+            submit_schedule_all,
+        )
+        from gen_thrift.api.ttypes import Conf
+
+        mock_get_current_branch.return_value = "test-branch"
+        mock_build_hashmap.return_value = {}
+
+        # Create test confs: one with prod, one with canary, one with both
+        prod_conf = Conf(name="test_team.prod_join", localPath="/path/to/prod", hash="hash1")
+        canary_conf = Conf(name="test_team.canary_join", localPath="/path/to/canary", hash="hash2")
+        both_conf = Conf(name="test_team.both_join", localPath="/path/to/both", hash="hash3")
+
+        mock_compute_diffs.return_value = {
+            "test_team.prod_join": prod_conf,
+            "test_team.canary_join": canary_conf,
+            "test_team.both_join": both_conf,
+        }
+
+        # Set up environments for each conf
+        def get_metadata_side_effect(path):
+            if "prod" in path:
+                return {"environments": [Environment.PROD], "executionInfo": {"offlineSchedule": "@daily"}}
+            elif "canary" in path:
+                return {"environments": [Environment.CANARY], "executionInfo": {"offlineSchedule": "@daily"}}
+            elif "both" in path:
+                return {"environments": [Environment.PROD, Environment.CANARY], "executionInfo": {"offlineSchedule": "@daily"}}
+            return {}
+
+        mock_get_metadata_map.side_effect = get_metadata_side_effect
+
+        # Mock schedules
+        mock_get_schedule_modes.return_value = ScheduleModes(
+            offline_schedule="@daily",
+            online_schedule="None"
+        )
+
+        # Mock ZiplineHub
+        mock_hub_instance = mock_zipline_hub.return_value
+        mock_hub_instance.call_schedule_all_api.return_value = {
+            "totalCount": 2,
+            "successCount": 2,
+            "failureCount": 0,
+            "results": []
+        }
+
+        # Test with env='prod'
+        submit_schedule_all(
+            repo=canary,
+            cloud='gcp',
+            customer_id=None,
+            env='prod',
+            hub_url=None,
+            use_auth=False
+        )
+
+        # Should schedule prod_join and both_join, but not canary_join
+        call_args = mock_hub_instance.call_schedule_all_api.call_args[0][0]
+        conf_names = [conf["conf_name"] for conf in call_args]
+        assert "test_team.prod_join" in conf_names
+        assert "test_team.both_join" in conf_names
+        assert "test_team.canary_join" not in conf_names
+
+    @patch('ai.chronon.repo.hub_runner.get_metadata_map')
+    @patch('ai.chronon.repo.hub_runner.get_schedule_modes')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.compute_and_upload_diffs')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    @patch('ai.chronon.repo.hub_runner.ZiplineHub')
+    def test_schedule_all_with_canary_environment(
+        self,
+        mock_zipline_hub,
+        mock_get_current_branch,
+        mock_build_hashmap,
+        mock_compute_diffs,
+        mock_get_schedule_modes,
+        mock_get_metadata_map,
+        canary,
+    ):
+        """Test that submit_schedule_all correctly filters for canary environment."""
+        from ai.chronon.repo.hub_runner import (
+            ScheduleModes,
+            submit_schedule_all,
+        )
+        from gen_thrift.api.ttypes import Conf
+
+        mock_get_current_branch.return_value = "test-branch"
+        mock_build_hashmap.return_value = {}
+
+        prod_conf = Conf(name="test_team.prod_join", localPath="/path/to/prod", hash="hash1")
+        canary_conf = Conf(name="test_team.canary_join", localPath="/path/to/canary", hash="hash2")
+        both_conf = Conf(name="test_team.both_join", localPath="/path/to/both", hash="hash3")
+
+        mock_compute_diffs.return_value = {
+            "test_team.prod_join": prod_conf,
+            "test_team.canary_join": canary_conf,
+            "test_team.both_join": both_conf,
+        }
+
+        def get_metadata_side_effect(path):
+            if "prod" in path:
+                return {"environments": [Environment.PROD], "executionInfo": {"offlineSchedule": "@daily"}}
+            elif "canary" in path:
+                return {"environments": [Environment.CANARY], "executionInfo": {"offlineSchedule": "@daily"}}
+            elif "both" in path:
+                return {"environments": [Environment.PROD, Environment.CANARY], "executionInfo": {"offlineSchedule": "@daily"}}
+            return {}
+
+        mock_get_metadata_map.side_effect = get_metadata_side_effect
+
+        mock_get_schedule_modes.return_value = ScheduleModes(
+            offline_schedule="@daily",
+            online_schedule="None"
+        )
+
+        mock_hub_instance = mock_zipline_hub.return_value
+        mock_hub_instance.call_schedule_all_api.return_value = {
+            "totalCount": 2,
+            "successCount": 2,
+            "failureCount": 0,
+            "results": []
+        }
+
+        # Test with env='canary'
+        submit_schedule_all(
+            repo=canary,
+            cloud='gcp',
+            customer_id=None,
+            env='canary',
+            hub_url=None,
+            use_auth=False
+        )
+
+        # Should schedule canary_join and both_join, but not prod_join
+        call_args = mock_hub_instance.call_schedule_all_api.call_args[0][0]
+        conf_names = [conf["conf_name"] for conf in call_args]
+        assert "test_team.canary_join" in conf_names
+        assert "test_team.both_join" in conf_names
+        assert "test_team.prod_join" not in conf_names
+
+    @patch('ai.chronon.repo.hub_runner.get_metadata_map')
+    @patch('ai.chronon.repo.hub_runner.get_schedule_modes')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.compute_and_upload_diffs')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    @patch('ai.chronon.repo.hub_runner.ZiplineHub')
+    def test_schedule_all_defaults_to_prod_environment(
+        self,
+        mock_zipline_hub,
+        mock_get_current_branch,
+        mock_build_hashmap,
+        mock_compute_diffs,
+        mock_get_schedule_modes,
+        mock_get_metadata_map,
+        canary,
+    ):
+        """Test that confs without environments field default to ['prod']."""
+        from ai.chronon.repo.hub_runner import (
+            ScheduleModes,
+            submit_schedule_all,
+        )
+        from gen_thrift.api.ttypes import Conf
+
+        mock_get_current_branch.return_value = "test-branch"
+        mock_build_hashmap.return_value = {}
+
+        # Conf without environments field
+        legacy_conf = Conf(name="test_team.legacy_join", localPath="/path/to/legacy", hash="hash1")
+
+        mock_compute_diffs.return_value = {
+            "test_team.legacy_join": legacy_conf,
+        }
+
+        # Return metadata without environments field (should default to ['prod'])
+        mock_get_metadata_map.return_value = {
+            "executionInfo": {"offlineSchedule": "@daily"}
+        }
+
+        mock_get_schedule_modes.return_value = ScheduleModes(
+            offline_schedule="@daily",
+            online_schedule="None"
+        )
+
+        mock_hub_instance = mock_zipline_hub.return_value
+        mock_hub_instance.call_schedule_all_api.return_value = {
+            "totalCount": 1,
+            "successCount": 1,
+            "failureCount": 0,
+            "results": []
+        }
+
+        # Test with env='prod' (default)
+        submit_schedule_all(
+            repo=canary,
+            cloud='gcp',
+            customer_id=None,
+            env='prod',
+            hub_url=None,
+            use_auth=False
+        )
+
+        # Should schedule legacy_join since it defaults to prod
+        call_args = mock_hub_instance.call_schedule_all_api.call_args[0][0]
+        conf_names = [conf["conf_name"] for conf in call_args]
+        assert "test_team.legacy_join" in conf_names
+
+    @patch('ai.chronon.repo.hub_runner.get_metadata_map')
+    @patch('ai.chronon.repo.hub_runner.get_schedule_modes')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.compute_and_upload_diffs')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    @patch('ai.chronon.repo.hub_runner.ZiplineHub')
+    def test_schedule_all_no_matching_environment(
+        self,
+        mock_zipline_hub,
+        mock_get_current_branch,
+        mock_build_hashmap,
+        mock_compute_diffs,
+        mock_get_schedule_modes,
+        mock_get_metadata_map,
+        canary,
+    ):
+        """Test that submit_schedule_all reports when no confs match the environment."""
+        from ai.chronon.repo.hub_runner import (
+            ScheduleModes,
+            submit_schedule_all,
+        )
+        from gen_thrift.api.ttypes import Conf
+
+        mock_get_current_branch.return_value = "test-branch"
+        mock_build_hashmap.return_value = {}
+
+        # Only prod confs
+        prod_conf = Conf(name="test_team.prod_join", localPath="/path/to/prod", hash="hash1")
+
+        mock_compute_diffs.return_value = {
+            "test_team.prod_join": prod_conf,
+        }
+
+        mock_get_metadata_map.return_value = {
+            "environments": [Environment.PROD],
+            "executionInfo": {"offlineSchedule": "@daily"}
+        }
+
+        mock_get_schedule_modes.return_value = ScheduleModes(
+            offline_schedule="@daily",
+            online_schedule="None"
+        )
+
+        mock_hub_instance = mock_zipline_hub.return_value
+
+        # Test with env='canary' (should not match any confs)
+        submit_schedule_all(
+            repo=canary,
+            cloud='gcp',
+            customer_id=None,
+            env='canary',
+            hub_url=None,
+            use_auth=False
+        )
+
+        # Should NOT call schedule API since no confs match
+        mock_hub_instance.call_schedule_all_api.assert_not_called()
+
+    @patch('ai.chronon.repo.hub_runner.submit_schedule_all')
+    @patch('ai.chronon.click_helpers.__compile')
+    def test_schedule_all_command_accepts_env_parameter(
+        self,
+        mock_compile,
+        mock_submit_schedule_all,
+        canary,
+    ):
+        """Test that schedule-all command accepts --env parameter."""
+        mock_compile.return_value = ({}, False, {"added": [], "changed": [], "deleted": []})
+
+        runner = CliRunner()
+
+        # Test with --env prod
+        result = self._run_and_print(runner, hub, [
+            'schedule-all',
+            '--repo', canary,
+            '--cloud', 'gcp',
+            '--no-use-auth',
+            '--env', 'prod',
+        ])
+        assert result.exit_code == 0
+
+        # Verify submit_schedule_all was called with env='prod'
+        call_kwargs = mock_submit_schedule_all.call_args[1]
+        assert call_kwargs['env'] == 'prod'
+
+        # Test with --env canary
+        result = self._run_and_print(runner, hub, [
+            'schedule-all',
+            '--repo', canary,
+            '--cloud', 'gcp',
+            '--no-use-auth',
+            '--env', 'canary',
+        ])
+        assert result.exit_code == 0
+
+        # Verify submit_schedule_all was called with env='canary'
+        call_kwargs = mock_submit_schedule_all.call_args[1]
+        assert call_kwargs['env'] == 'canary'
+
+    @patch('ai.chronon.repo.hub_runner.submit_schedule_all')
+    @patch('ai.chronon.click_helpers.__compile')
+    def test_schedule_all_command_rejects_invalid_env(
+        self,
+        mock_compile,
+        mock_submit_schedule_all,
+        canary,
+    ):
+        """Test that schedule-all command rejects invalid --env values."""
+        mock_compile.return_value = ({}, False, {"added": [], "changed": [], "deleted": []})
+
+        runner = CliRunner()
+
+        # Test with invalid env value
+        result = self._run_and_print(runner, hub, [
+            'schedule-all',
+            '--repo', canary,
+            '--cloud', 'gcp',
+            '--no-use-auth',
+            '--env', 'invalid',
+        ])
+
+        # Should fail with exit code 2 (invalid option)
+        assert result.exit_code == 2
+        assert "Invalid value for '--env'" in result.output or "'invalid' is not one of" in result.output
+
+        # submit_schedule_all should NOT be called
+        mock_submit_schedule_all.assert_not_called()
+
+
+class TestEnvironmentValidation:
+    """Test environment string validation in API functions."""
+
+    def test_join_accepts_valid_environments(self):
+        """Test that Join accepts 'prod' and 'canary' strings."""
+        from ai.chronon.join import Join
+        from ai.chronon.query import Query
+        from gen_thrift.api.ttypes import EventSource, Source
+
+        left = Source(events=EventSource(table="test.table", query=Query(selects={"a": "a"})))
+
+        # Should not raise for valid environments
+        join = Join(
+            left=left,
+            right_parts=[],
+            row_ids="id",
+            environments=['prod']
+        )
+        assert join.metaData.environments == [0]  # Environment.PROD
+
+        join = Join(
+            left=left,
+            right_parts=[],
+            row_ids="id",
+            environments=['canary']
+        )
+        assert join.metaData.environments == [1]  # Environment.CANARY
+
+        join = Join(
+            left=left,
+            right_parts=[],
+            row_ids="id",
+            environments=['prod', 'canary']
+        )
+        assert join.metaData.environments == [0, 1]
+
+        # Test case insensitivity
+        join = Join(
+            left=left,
+            right_parts=[],
+            row_ids="id",
+            environments=['PROD', 'Canary']
+        )
+        assert join.metaData.environments == [0, 1]
+
+    def test_join_rejects_invalid_environment(self):
+        """Test that Join raises ValueError for invalid environment strings."""
+        from ai.chronon.join import Join
+        from ai.chronon.query import Query
+        from gen_thrift.api.ttypes import EventSource, Source
+        import pytest
+
+        left = Source(events=EventSource(table="test.table", query=Query(selects={"a": "a"})))
+
+        with pytest.raises(ValueError) as exc_info:
+            Join(
+                left=left,
+                right_parts=[],
+                row_ids="id",
+                environments=['invalid']
+            )
+        assert "Invalid environment 'invalid'" in str(exc_info.value)
+        assert "Must be one of: ['prod', 'canary']" in str(exc_info.value)
+
+    def test_group_by_rejects_invalid_environment(self):
+        """Test that GroupBy raises ValueError for invalid environment strings."""
+        from ai.chronon.group_by import GroupBy
+        from ai.chronon.query import Query
+        from gen_thrift.api.ttypes import EventSource, Source
+        import pytest
+
+        source = Source(events=EventSource(table="test.table", query=Query(selects={"a": "a"})))
+
+        with pytest.raises(ValueError) as exc_info:
+            GroupBy(
+                sources=[source],
+                keys=['a'],
+                aggregations=None,
+                environments=['staging']
+            )
+        assert "Invalid environment 'staging'" in str(exc_info.value)
+
+    def test_staging_query_rejects_invalid_environment(self):
+        """Test that StagingQuery raises ValueError for invalid environment strings."""
+        from ai.chronon.staging_query import StagingQuery
+        import pytest
+
+        with pytest.raises(ValueError) as exc_info:
+            StagingQuery(
+                query="SELECT * FROM table",
+                environments=['dev']
+            )
+        assert "Invalid environment 'dev'" in str(exc_info.value)
+
+    def test_model_rejects_invalid_environment(self):
+        """Test that Model raises ValueError for invalid environment strings."""
+        from ai.chronon.model import Model
+        import pytest
+
+        with pytest.raises(ValueError) as exc_info:
+            Model(
+                version="v1",
+                environments=['test']
+            )
+        assert "Invalid environment 'test'" in str(exc_info.value)
+
+    def test_utils_convert_environments_to_enum(self):
+        """Test the shared utils.convert_environments_to_enum function."""
+        from ai.chronon.utils import convert_environments_to_enum
+        from gen_thrift.api.ttypes import Environment
+        import pytest
+
+        # Test valid inputs
+        assert convert_environments_to_enum(['prod']) == [Environment.PROD]
+        assert convert_environments_to_enum(['canary']) == [Environment.CANARY]
+        assert convert_environments_to_enum(['prod', 'canary']) == [Environment.PROD, Environment.CANARY]
+
+        # Test case insensitivity
+        assert convert_environments_to_enum(['PROD']) == [Environment.PROD]
+        assert convert_environments_to_enum(['Canary']) == [Environment.CANARY]
+        assert convert_environments_to_enum(['PrOd', 'CaNaRy']) == [Environment.PROD, Environment.CANARY]
+
+        # Test invalid input
+        with pytest.raises(ValueError) as exc_info:
+            convert_environments_to_enum(['staging'])
+        assert "Invalid environment 'staging'" in str(exc_info.value)
+        assert "Must be one of: ['prod', 'canary']" in str(exc_info.value)

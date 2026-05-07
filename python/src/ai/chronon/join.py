@@ -399,17 +399,18 @@ def Join(
         monolith planner (MonolithJoinPlanner).
     :type modular_execution: bool
     :param environments:
-        List of environment names where this join should be deployed/available.
-        Defaults to ['prod']. Used to control which environments can access this join configuration.
+        List of environments where this join should be deployed/available.
+        Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     :type environments: List[str]
     """
     # Normalize row_ids
     if isinstance(row_ids, str):
         row_ids = [row_ids]
 
-    # Initialize environments with default if not provided
+    # Initialize and validate environments
     if environments is None:
         environments = ['prod']
+    environments = utils.convert_environments_to_enum(environments)
 
     assert version is None or isinstance(version, int), (
         f"Version must be an integer or None, but found {type(version).__name__}"

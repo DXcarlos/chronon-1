@@ -636,15 +636,16 @@ def GroupBy(
     :param step_days
         The maximum number of days to output at once
     :param environments:
-        List of environment names where this GroupBy should be deployed/available.
-        Defaults to ['prod']. Used to control which environments can access this GroupBy configuration.
+        List of environments where this GroupBy should be deployed/available.
+        Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     :type environments: List[str]
     :return:
         A GroupBy object containing specified aggregations.
     """
-    # Initialize environments with default if not provided
+    # Initialize and validate environments
     if environments is None:
         environments = ['prod']
+    environments = utils.convert_environments_to_enum(environments)
 
     assert sources, "Sources are not specified"
 
