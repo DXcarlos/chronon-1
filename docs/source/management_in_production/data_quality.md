@@ -48,6 +48,8 @@ v1 = Join(
 
 When enabled, Chronon adds stats compute and upload nodes to the Join workflow. These nodes compute feature-level statistics from the Join output and publish them for downstream data quality monitoring. In Zipline, the computed statistics are surfaced in the UI under **Offline > Metrics**.
 
+![Join feature data quality metrics in Zipline](../../images/dataquality.gif)
+
 #### 3. Statistics Extraction (Iceberg Tables)
 
 For Iceberg tables, Chronon leverages Iceberg's built-in partition-level statistics stored in manifest files. The extraction process reads these manifest files directly without scanning the actual data, making metrics extraction highly efficient.
