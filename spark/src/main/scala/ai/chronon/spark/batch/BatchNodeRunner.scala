@@ -523,79 +523,11 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     }
   }
 
-  case class TablePartitionStatus(name: String,
-                                  firstAvailablePartition: Option[String],
-                                  lastAvailablePartition: Option[String],
-                                  ready: Boolean,
-                                  requiredEnd: String,
-                                  semanticHash: Option[String])
-
-  /** Computes partition statuses for input tables using lastAvailablePartition >= required end.
-    * Works uniformly for dense, sparse, Hive, Iceberg, timestamp columns.
-    */
-  private[batch] def computeInputTablePartitionStatuses(
-      metadata: MetaData,
-      range: PartitionRange,
-      tableUtils: TableUtils
-  ): Iterable[TablePartitionStatus] = {
-    val inputTableDependencies: Map[String, Array[TableDependency]] =
-      Option(metadata.executionInfo.getTableDependencies)
-        .map(_.asScala.toArray)
-        .getOrElse(Array.empty)
-        .map(td => td.tableInfo.table -> td)
-        .groupBy(_._1)
-        .mapValues(_.map(_._2))
-        .toMap
-
-    inputTableDependencies
-      .filterNot(_._2.forall(td => td.isSetIsSoftNodeDependency && td.isSoftNodeDependency))
-      .map { case (table, deps) =>
-        val inputPartitionSpec = deps.head.tableInfo.partitionSpec(tableUtils.partitionSpec)
-
-        val firstPartition =
-          tableUtils.firstAvailablePartition(table, partitionSpec = inputPartitionSpec)
-        val lastPartition = tableUtils.lastAvailablePartition(table, tablePartitionSpec = Some(inputPartitionSpec))
-
-        // Compute the maximum required end across all dependencies for this table
-        val requiredEnd = deps
-          .flatMap { td =>
-            DependencyResolver
-              .computeInputRange(range, td)
-              .map(_.translate(tableUtils.partitionSpec))
-              .map(_.end)
-          }
-          .toSeq
-          .sorted
-          .lastOption
-          .getOrElse(range.end)
-
-        val ready = lastPartition.exists(_ >= requiredEnd)
-
-        // Collect semanticHash values from all dependencies for this table
-        val semanticHashes = deps.flatMap { td =>
-          if (td.isSetSemanticHash && td.semanticHash.nonEmpty) {
-            Some(td.semanticHash)
-          } else {
-            None
-          }
-        }.toSet
-
-        val semanticHash = if (semanticHashes.size > 1) {
-          logger.error(s"Table $table has inconsistent semanticHash values across dependencies: $semanticHashes")
-          None
-        } else {
-          semanticHashes.headOption
-        }
-
-        TablePartitionStatus(table, firstPartition, lastPartition, ready, requiredEnd, semanticHash)
-      }
-  }
-
   private[batch] def isSensorNode: Boolean = {
     node.metaData.name.toLowerCase.contains("sensor")
   }
 
-  private def logMissingInputPartitions(metadata: MetaData, range: PartitionRange): Unit = {
+  private def checkInputTablesExist(metadata: MetaData): Unit = {
     if (!metadata.isSetExecutionInfo || !metadata.executionInfo.isSetTableDependencies) {
       return
     }
@@ -611,29 +543,6 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
         s"Required input tables are missing for '${metadata.name}': ${missingInputTables.mkString(", ")}"
       )
     }
-
-    Try(computeInputTablePartitionStatuses(metadata, range, tableUtils).filterNot(_.ready).toSeq) match {
-      case Success(missingTables) if missingTables.nonEmpty =>
-        val missingTablesMessage = missingTables
-          .map { tps =>
-            s"Table: ${tps.name}, last available: ${tps.lastAvailablePartition.getOrElse("none")}, required end: ${tps.requiredEnd}"
-          }
-          .mkString("\n")
-
-        logger.warn(
-          s"Continuing batch node runner for '${metadata.name}' despite input tables missing partitions for the " +
-            "requested range. BatchNodeRunner is expected to run after orchestrator dependency allocation, so missing " +
-            "upstream output partitions may indicate that upstream steps succeeded without producing rows for those " +
-            s"partitions:\n$missingTablesMessage"
-        )
-      case Success(_) =>
-      case Failure(e) =>
-        logger.warn(
-          s"Unable to inspect input table partition readiness for '${metadata.name}'. Continuing because dependency " +
-            "readiness is handled by the orchestrator.",
-          e
-        )
-    }
   }
 
   def runFromArgs(
@@ -646,7 +555,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
 
       logger.info(s"Starting batch node runner for '${metadata.name}'")
-      logMissingInputPartitions(metadata, range)
+      checkInputTablesExist(metadata)
 
       // drop table if semantic hash doesn't match
       val outputTable = node.metaData.outputTable
