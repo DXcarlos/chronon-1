@@ -11,6 +11,7 @@
 *.iml
 *.db
 .idea/
+.codex/
 .ijwb/
 **/local_warehouse/
 .eclipse

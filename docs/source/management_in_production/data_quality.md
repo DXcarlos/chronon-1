@@ -11,7 +11,7 @@ Chronon automatically computes and stores data quality metrics for both offline 
 
 Chronon's data quality system provides two modes of metrics collection:
 
-1. **Offline Batch Metrics**: Statistics extracted from materialized feature tables and persisted to a KV store for later retrieval and analysis. These metrics are computed automatically at the end of each batch job run.
+1. **Offline Batch Metrics**: Statistics extracted from materialized feature tables and persisted to a KV store for later retrieval and analysis. These metrics are computed automatically at the end of each batch job run. For Join definitions, setting `enable_stats_compute=True` also creates a downstream data quality workflow that computes feature statistics for the Join output.
 
 2. **Near Real-Time Streaming Metrics**: Feature-level null rates and counts collected during feature fetching operations, providing immediate visibility into data quality as features are served.
 
@@ -31,7 +31,24 @@ The metrics extraction process:
 - Skips sensor nodes since they don't produce output data
 - Requires the `--tableStatsDataset` parameter to be provided when running the batch job
 
-#### 2. Statistics Extraction (Iceberg Tables)
+#### 2. Join Feature Data Quality
+
+For Join feature sets, enable downstream feature statistics by setting `enable_stats_compute=True` on the Join definition:
+
+```python
+v1 = Join(
+    left=source,
+    right_parts=[
+        JoinPart(group_by=user_features.v1),
+    ],
+    online=True,
+    enable_stats_compute=True,
+)
+```
+
+When enabled, Chronon adds stats compute and upload nodes to the Join workflow. These nodes compute feature-level statistics from the Join output and publish them for downstream data quality monitoring. In Zipline, the computed statistics are surfaced in the UI under **Offline > Metrics**.
+
+#### 3. Statistics Extraction (Iceberg Tables)
 
 For Iceberg tables, Chronon leverages Iceberg's built-in partition-level statistics stored in manifest files. The extraction process reads these manifest files directly without scanning the actual data, making metrics extraction highly efficient.
 
@@ -41,7 +58,7 @@ The extraction process:
 3. Aggregates file-level statistics by partition
 4. Excludes partition columns from statistics (since they have fixed values within a partition)
 
-#### 3. Metrics Computed
+#### 4. Metrics Computed
 
 Chronon currently computes the following metrics per partition per column:
 
@@ -55,7 +72,7 @@ Future support may include:
 - **Distinct Counts**: Approximate number of unique values (framework in place)
 - **Min/Max Values**: Value ranges for numeric and comparable types (extracted but not yet persisted)
 
-#### 4. Storage Format
+#### 5. Storage Format
 
 Metrics are stored in the KV store with the following structure:
 
@@ -267,6 +284,7 @@ For users of **Zipline**, data quality metrics are natively supported with:
 
 - **Automatic Collection**: Metrics are automatically collected for all feature pipelines without additional configuration
 - **Dashboards & Visualizations**: Pre-built UI for exploring data quality trends over time
+- **Join Feature Metrics**: Join feature statistics enabled with `enable_stats_compute=True` are shown in the Zipline UI under **Offline > Metrics**
 - **Alerting**: Configurable alerts for data quality issues (e.g., spike in null counts, row count anomalies)
 - **Schema Evolution Tracking**: Automatic tracking of schema changes with impact analysis
 - **Historical Analysis**: Long-term retention and advanced analytics on data quality trends
