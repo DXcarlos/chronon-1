@@ -28,7 +28,7 @@ import copy
 @pytest.fixture(scope="module",autouse=True)
 def clean_imports_and_path():
     original_path = copy.copy(sys.path)
-    modules_to_clean = ['joins', 'staging_queries', 'group_bys', 'models', "model_transforms"]
+    modules_to_clean = ['joins', 'staging_queries', 'group_bys', 'models', "inferences"]
     yield
     sys.path = original_path
     to_clean = [mod_name for mod_name in sys.modules if any([mod_name.startswith(m) for m in modules_to_clean])]

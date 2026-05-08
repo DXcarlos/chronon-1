@@ -24,9 +24,9 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
 
   private def createTrainNode: Option[Node] = {
     val result = for {
-      trainingConf <- Option(model.trainingConf)
-      trainingDataSource <- Option(trainingConf.trainingDataSource)
-      trainingDataWindow <- Option(trainingConf.trainingDataWindow)
+      train <- Option(model.train)
+      trainingDataSource <- Option(train.data)
+      trainingDataWindow <- Option(train.window)
       tableDeps <- TableDependencies.fromSource(trainingDataSource, maxWindowOpt = Option(trainingDataWindow))
     } yield {
       val metaData =
@@ -45,7 +45,7 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
   }
 
   def createEndpointNode: Node = {
-    val tableDeps = if (model.isSetTrainingConf) {
+    val tableDeps = if (model.isSetTrain) {
       val trainingNode = createTrainNode.get
       val tableDep = new TableDependency()
         .setTableInfo(

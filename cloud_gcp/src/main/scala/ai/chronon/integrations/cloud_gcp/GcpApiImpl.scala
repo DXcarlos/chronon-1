@@ -315,8 +315,8 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
   override def generateModelPlatformProvider: ModelPlatformProvider = {
     // TODO - in a followup, we can extend to support multiple model platforms which need not be GCP based (e.g. OpenAI)
     new ModelPlatformProvider {
-      override def getPlatform(modelBackend: ModelBackend, backendParams: Map[String, String]): ModelPlatform = {
-        modelBackend match {
+      override def getPlatform(backend: ModelBackend, backendParams: Map[String, String]): ModelPlatform = {
+        backend match {
           case ModelBackend.VertexAI =>
             // Get configuration once and reuse it
             val projectId = getOrElseThrow(GcpProjectId, conf)
@@ -333,7 +333,7 @@ class GcpApiImpl(conf: Map[String, String]) extends Api(conf) {
                 if (existingPlatform != null) existingPlatform else newPlatform
             }
           case _ =>
-            throw new UnsupportedOperationException(s"Model backend $modelBackend is not supported by GcpApiImpl")
+            throw new UnsupportedOperationException(s"Model backend $backend is not supported by GcpApiImpl")
         }
       }
     }

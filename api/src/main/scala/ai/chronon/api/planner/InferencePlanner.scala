@@ -1,32 +1,32 @@
 package ai.chronon.api.planner
 
-import ai.chronon.api.{ModelTransforms, PartitionSpec, TableDependency, TableInfo}
+import ai.chronon.api.{Inference, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.api.Extensions.{MetadataOps, WindowUtils}
 import ai.chronon.api.ScalaJavaConversions.IterableOps
 import ai.chronon.api.planner.TableDependencies.{fromSource, fromTable}
-import ai.chronon.planner.{ConfPlan, ModelTransformsBackfillNode, ModelTransformsUploadNode, Node}
+import ai.chronon.planner.{ConfPlan, InferenceBackfillNode, InferenceUploadNode, Node}
 import ai.chronon.planner
 
 import scala.collection.JavaConverters._
 
-class ModelTransformsPlanner(modelTransforms: ModelTransforms)(implicit outputPartitionSpec: PartitionSpec)
-    extends ConfPlanner[ModelTransforms](modelTransforms)(outputPartitionSpec) {
+class InferencePlanner(inference: Inference)(implicit outputPartitionSpec: PartitionSpec)
+    extends ConfPlanner[Inference](inference)(outputPartitionSpec) {
 
-  private def eraseExecutionInfo: ModelTransforms = {
-    val result = modelTransforms.deepCopy()
+  private def eraseExecutionInfo: Inference = {
+    val result = inference.deepCopy()
     result.metaData.unsetExecutionInfo()
     result
   }
 
-  private def semanticModelTransforms(modelTransforms: ModelTransforms): ModelTransforms = {
-    val semantic = modelTransforms.deepCopy()
+  private def semanticInference(inference: Inference): Inference = {
+    val semantic = inference.deepCopy()
     semantic.unsetMetaData()
     semantic
   }
 
   def backfillNode: Node = {
     val sourceDeps =
-      Option(modelTransforms.sources)
+      Option(inference.features)
         .map(_.toScala.toSeq)
         .getOrElse(Seq.empty)
         .flatMap { source =>
@@ -48,11 +48,11 @@ class ModelTransformsPlanner(modelTransforms: ModelTransforms)(implicit outputPa
         }
 
     // add model dependencies - we depend on the deployed model endpoint for models that are custom and trained by us
-    val modelDeps = Option(modelTransforms.models)
+    val modelDeps = Option(inference.models)
       .map(_.toScala.toSeq)
       .getOrElse(Seq.empty)
       .flatMap { model =>
-        if (model.isSetTrainingConf) {
+        if (model.isSetTrain) {
           val deployNodeName = model.metaData.outputTable + "__model_deploy"
           val deployNodeTableDep = new TableDependency()
             .setTableInfo(
@@ -72,40 +72,40 @@ class ModelTransformsPlanner(modelTransforms: ModelTransforms)(implicit outputPa
 
     val metaData =
       MetaDataUtils.layer(
-        modelTransforms.metaData,
-        "model_transforms_backfill",
-        modelTransforms.metaData.name + "__model_transforms_backfill",
+        inference.metaData,
+        "inference_backfill",
+        inference.metaData.name + "__inference_backfill",
         tableDeps,
-        outputTableOverride = Some(modelTransforms.metaData.outputTable)
+        outputTableOverride = Some(inference.metaData.outputTable)
       )
 
-    val node = new ModelTransformsBackfillNode().setModelTransforms(modelTransforms)
+    val node = new InferenceBackfillNode().setInference(inference)
 
-    val copy = semanticModelTransforms(modelTransforms)
+    val copy = semanticInference(inference)
 
-    toNode(metaData, _.setModelTransformsBackfill(node), copy)
+    toNode(metaData, _.setInferenceBackfill(node), copy)
   }
 
   def uploadNode: Node = {
     val stepDays = 1 // Default step days for metadata upload
 
     // Create table dependencies only for JoinSource sources - we ensure join metadata is uploaded before proceeding
-    val allDeps = TableDependencies.fromJoinSources(modelTransforms.sources)
+    val allDeps = TableDependencies.fromJoinSources(inference.features)
 
     val metaData =
       MetaDataUtils.layer(
-        modelTransforms.metaData,
-        "model_transforms_upload",
-        modelTransforms.metaData.name + "__model_transforms_upload",
+        inference.metaData,
+        "inference_upload",
+        inference.metaData.name + "__inference_upload",
         allDeps,
         Some(stepDays)
       )
 
-    val node = new ModelTransformsUploadNode().setModelTransforms(eraseExecutionInfo)
+    val node = new InferenceUploadNode().setInference(eraseExecutionInfo)
 
-    val copy = semanticModelTransforms(modelTransforms)
+    val copy = semanticInference(inference)
 
-    toNode(metaData, _.setModelTransformsUpload(node), copy)
+    toNode(metaData, _.setInferenceUpload(node), copy)
   }
 
   override def buildPlan: ConfPlan = {
@@ -123,7 +123,7 @@ class ModelTransformsPlanner(modelTransforms: ModelTransforms)(implicit outputPa
   }
 }
 
-object ModelTransformsPlanner {
-  def apply(modelTransforms: ModelTransforms)(implicit outputPartitionSpec: PartitionSpec): ModelTransformsPlanner =
-    new ModelTransformsPlanner(modelTransforms)(outputPartitionSpec)
+object InferencePlanner {
+  def apply(inference: Inference)(implicit outputPartitionSpec: PartitionSpec): InferencePlanner =
+    new InferencePlanner(inference)(outputPartitionSpec)
 }

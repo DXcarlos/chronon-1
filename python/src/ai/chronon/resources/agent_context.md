@@ -31,7 +31,7 @@ You are an expert in Chronon (feature definition API) and Zipline (CLI/platform)
   - Step 10: Validate with zipline eval
 - [Adding GroupBy to Join](#when-user-wants-to-add-groupby-to-a-join)
 - [Creating StagingQuery](#when-user-wants-to-create-a-stagingquery)
-- [Creating Model or ModelTransforms](#when-user-wants-to-create-a-model-or-modeltransforms) ⭐
+- [Creating Model or Inference](#when-user-wants-to-create-a-model-or-inference) ⭐
   - Pattern A: Pre-trained model inference (embeddings)
   - Pattern A2: Text generation with LLMs (Gemini, etc.)
   - Pattern B: Custom model with training + deployment
@@ -856,9 +856,9 @@ v1 = StagingQuery(
 
 ---
 
-### When User Wants to Create a Model or ModelTransforms
+### When User Wants to Create a Model or Inference
 
-Models and ModelTransforms enable ML inference in Chronon pipelines. There are three main patterns:
+Models and Inference enable ML inference in Chronon pipelines. There are three main patterns:
 
 **A) Embedding inference with pre-trained models** (e.g., Gemini embedding-001, Titan)
 **A2) Text generation with LLMs** (e.g., Gemini Flash/Pro for summarization, descriptions)
@@ -867,29 +867,29 @@ Models and ModelTransforms enable ML inference in Chronon pipelines. There are t
 #### Understanding the Relationship
 
 ```
-GroupBy → Join → ModelTransforms → enriched data with predictions
+GroupBy → Join → Inference → enriched data with predictions
                       ↓
                    Model (defines inference/training specs)
 ```
 
 - **Model**: Defines the ML model (inference specs, training specs, deployment specs)
-- **ModelTransforms**: Applies the Model to Join output, producing enriched data with predictions
+- **Inference**: Applies the Model to Join output, producing enriched data with predictions
 
 #### How Vertex AI Prediction Works in Zipline
 
-Understanding the request/response flow is essential for setting `input_mapping`, `value_fields`, and `output_mapping` correctly.
+Understanding the request/response flow is essential for setting `inputs`, `output_fields`, and `outputs` correctly.
 
 **Request flow:**
-- The `instance` key in `input_mapping` is a SQL expression whose result becomes the raw Vertex AI instance object
-- Zipline sends: `{"instances": [<result_of_instance_expression>], "parameters": {<extra model_backend_params>}}`
-- Any `model_backend_params` keys other than `model_name` and `model_type` are passed as `parameters`
+- The `instance` key in `inputs` is a SQL expression whose result becomes the raw Vertex AI instance object
+- Zipline sends: `{"instances": [<result_of_instance_expression>], "parameters": {<extra params>}}`
+- Any `params` keys other than `model_name` and `model_type` are passed as `parameters`
 
 **Response flow:**
 - Vertex AI returns: `{"predictions": [{...}, {...}]}`
-- `value_fields` defines the Spark schema used to parse each prediction object
-- `output_mapping` uses Spark SQL expressions to navigate the parsed struct to the desired output field
+- `output_fields` defines the Spark schema used to parse each prediction object
+- `outputs` uses Spark SQL expressions to navigate the parsed struct to the desired output field
 
-**output_mapping column name convention:**
+**outputs column name convention:**
 ```
 {team}_{model_file}_{model_var}__{version}__{field}
 ```
@@ -902,7 +902,7 @@ Use this for models that are already trained (Vertex AI embeddings, Bedrock mode
 **Step 1: Define the Model**
 
 ```python
-from ai.chronon.types import InferenceSpec, Model, ModelBackend
+from ai.chronon.types import ModelRuntime, Model, ModelBackend
 from ai.chronon.data_types import DataType
 
 # Define output schema (from model docs)
@@ -913,23 +913,23 @@ embeddings = DataType.STRUCT("embeddings", ("statistics", statistics), ("values"
 # For GCP/Vertex AI
 item_description_model = Model(
     version="1",
-    inference_spec=InferenceSpec(
-        model_backend=ModelBackend.VERTEXAI,
-        model_backend_params={
+    runtime=ModelRuntime(
+        backend=ModelBackend.VERTEXAI,
+        params={
             "model_name": "gemini-embedding-001",
             "model_type": "publisher",  # Pre-trained model from Google
         }
     ),
     # How to prepare input from join columns
-    input_mapping={
+    inputs={
         "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))",
     },
     # How to extract output from model response
-    output_mapping={
+    outputs={
         "item_embedding": "gcp_listing_item_description_model__1__embeddings.values"
     },
     # Schema of model output (from API docs)
-    value_fields=[
+    output_fields=[
         ("embeddings", embeddings),
     ]
 )
@@ -937,35 +937,35 @@ item_description_model = Model(
 # For AWS/Bedrock
 item_description_model = Model(
     version="1",
-    inference_spec=InferenceSpec(
-        model_backend=ModelBackend.SAGEMAKER,
-        model_backend_params={
+    runtime=ModelRuntime(
+        backend=ModelBackend.SAGEMAKER,
+        params={
             "model_name": "amazon-titan-embed-text-v1",
             "model_type": "bedrock",  # Pre-trained model from AWS
         }
     ),
-    input_mapping={
+    inputs={
         "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))",
     },
-    output_mapping={
+    outputs={
         "item_embedding": "aws_listing_item_description_model__1__embeddings.values"
     },
-    value_fields=[
+    output_fields=[
         ("embeddings", embeddings),
     ]
 )
 ```
 
-**Step 2: Create ModelTransforms**
+**Step 2: Create Inference**
 
-**IMPORTANT**: ModelTransforms can only consume **Joins** via JoinSource, not GroupBys directly. If you want to apply a model to GroupBy output, you must:
+**IMPORTANT**: Inference can only consume **Joins** via JoinSource, not GroupBys directly. If you want to apply a model to GroupBy output, you must:
 1. Create a Join that includes the GroupBy as a JoinPart
 2. Reference that Join in the JoinSource
 
-ModelTransforms applies the model to Join output:
+Inference applies the model to Join output:
 
 ```python
-from ai.chronon.types import JoinSource, ModelTransforms, Query
+from ai.chronon.types import JoinSource, Inference, Query
 from ai.chronon.data_types import DataType
 
 # Reference the join to use as input
@@ -977,12 +977,12 @@ source = JoinSource(
     )
 )
 
-v1 = ModelTransforms(
-    sources=[source],  # Can have multiple sources
+v1 = Inference(
+    features=[source],  # Can have multiple feature sources
     models=[item_description_model],  # Can have multiple models
     # Fields to pass through from source (alongside predictions)
-    passthrough_fields=["user_id", "listing_id", "listing_id_is_active"],
-    # Input fields to the model (must match input_mapping)
+    passthrough=["user_id", "listing_id", "listing_id_is_active"],
+    # Input fields to the model (must match inputs)
     key_fields=[
         ("listing_id_headline", DataType.STRING),
         ("listing_id_long_description", DataType.STRING),
@@ -1011,7 +1011,7 @@ predictions[i].candidates[0].content.parts[0].text
 ```
 
 ```python
-from ai.chronon.types import InferenceSpec, Model, ModelBackend
+from ai.chronon.types import ModelRuntime, Model, ModelBackend
 from ai.chronon.data_types import DataType
 
 # Define output schema matching the Gemini predict response
@@ -1021,9 +1021,9 @@ candidate = DataType.STRUCT("candidate", ("content", content_inner), ("finishRea
 
 short_description_model = Model(
     version="1",
-    inference_spec=InferenceSpec(
-        model_backend=ModelBackend.VERTEXAI,
-        model_backend_params={
+    runtime=ModelRuntime(
+        backend=ModelBackend.VERTEXAI,
+        params={
             "model_name": "gemini-1.5-flash-001",
             "model_type": "publisher",
             "maxOutputTokens": "128",   # Passed as parameters to Vertex AI
@@ -1031,25 +1031,25 @@ short_description_model = Model(
         },
     ),
     # Input uses Gemini's contents API (role/parts structure)
-    input_mapping={
+    inputs={
         "instance": "named_struct('contents', array(named_struct('role', 'user', 'parts', array(named_struct('text', CONCAT('Write a concise short product description: ', long_description))))))",
     },
-    output_mapping={
+    outputs={
         # Navigate: predictions[i] → candidates[0].content.parts[0].text
         "short_description": "gcp_listing_short_description_model__1__candidates[0].content.parts[0].text",
     },
-    value_fields=[
+    output_fields=[
         ("candidates", DataType.LIST(candidate)),
     ],
 )
 ```
 
-**Step 2: Create ModelTransforms**
+**Step 2: Create Inference**
 
 Same as Pattern A — reference a Join via JoinSource:
 
 ```python
-from ai.chronon.types import JoinSource, ModelTransforms, Query
+from ai.chronon.types import JoinSource, Inference, Query
 from ai.chronon.data_types import DataType
 
 source = JoinSource(
@@ -1059,10 +1059,10 @@ source = JoinSource(
     )
 )
 
-v1 = ModelTransforms(
-    sources=[source],
+v1 = Inference(
+    features=[source],
     models=[short_description_model],
-    passthrough_fields=["listing_id", "headline"],
+    passthrough=["listing_id", "headline"],
     key_fields=[("long_description", DataType.STRING)],
     version=1,
     output_namespace="data",
@@ -1072,7 +1072,7 @@ v1 = ModelTransforms(
 **Output**: Produces a `short_description: string` column alongside the passthrough fields.
 
 **Key notes:**
-- `maxOutputTokens`, `temperature`, and other generation params go in `model_backend_params` — they're passed as Vertex AI `parameters`
+- `maxOutputTokens`, `temperature`, and other generation params go in `params` — they're passed as Vertex AI `parameters`
 - The `instance` expression must use the Gemini contents API format (role/parts structure)
 - The response navigates nested candidates → content → parts → text
 
@@ -1105,7 +1105,7 @@ v1 = StagingQuery(
 **Step 2: Define the Model with Training + Deployment**
 
 ```python
-from ai.chronon.types import DeploymentSpec, DeploymentStrategyType, EndpointConfig, EventSource, InferenceSpec, Model, ModelBackend, Query, ResourceConfig, RolloutStrategy, ServingContainerConfig, TimeUnit, TrainingSpec, Window, selects
+from ai.chronon.types import Serve, DeploymentStrategyType, EndpointConfig, EventSource, ModelRuntime, Model, ModelBackend, Query, Resources, RolloutStrategy, ServingContainerConfig, TimeUnit, Train, Window, selects
 from ai.chronon.data_types import DataType
 
 # Define training data source
@@ -1127,58 +1127,58 @@ label_source = EventSource(
 # GCP/Vertex AI version
 ctr_model = Model(
     version="1.0",
-    inference_spec=InferenceSpec(
-        model_backend=ModelBackend.VERTEXAI,
-        model_backend_params={
+    runtime=ModelRuntime(
+        backend=ModelBackend.VERTEXAI,
+        params={
             "model_name": "test_ctr_model",
             "model_type": "custom",  # Your custom trained model
         }
     ),
     # How to prepare input for inference
-    input_mapping={
+    inputs={
         "instance": "named_struct('user_id_click_event_average_7d', user_id_click_event_average_7d, 'listing_price_cents', listing_id_price_cents, 'price_log', price_log, 'price_bucket', price_bucket)",
     },
     # How to extract predictions
-    output_mapping={
+    outputs={
         "ctr": "gcp_click_through_rate_ctr_model__1_0__score"
     },
     # Schema of model output
-    value_fields=[
+    output_fields=[
         ("score", DataType.DOUBLE),
     ],
-    model_artifact_base_uri="gs://zipline-warehouse-models",
+    artifact_uri="gs://zipline-warehouse-models",
     # Training configuration
-    training_conf=TrainingSpec(
-        training_data_source=label_source,
-        training_data_window=Window(length=1, time_unit=TimeUnit.DAYS),
+    train=Train(
+        data=label_source,
+        window=Window(length=1, time_unit=TimeUnit.DAYS),
         schedule="@daily",  # Train daily
         image="us-docker.pkg.dev/vertex-ai/training/xgboost-cpu.2-1:latest",
-        python_module="trainer.train",  # Your training script
-        resource_config=ResourceConfig(
+        entrypoint="trainer.train",  # Your training script
+        resources=Resources(
             min_replica_count=1,
             max_replica_count=1,
             machine_type="n1-standard-4"
         ),
-        job_configs={
+        params={
             "max-depth": "4",
             "eta": "0.1",
             "num-boost-round": "50"
         }
     ),
     # Deployment configuration
-    deployment_conf=DeploymentSpec(
-        container_config=ServingContainerConfig(
+    serve=Serve(
+        container=ServingContainerConfig(
             image="us-central1-docker.pkg.dev/project/repo/ctr-predictor:v1"
         ),
-        endpoint_config=EndpointConfig(
+        endpoint=EndpointConfig(
             endpoint_name="test_ctr_model"
         ),
-        resource_config=ResourceConfig(
+        resources=Resources(
             min_replica_count=1,
             max_replica_count=3,
             machine_type="n1-standard-4"
         ),
-        rollout_strategy=RolloutStrategy(
+        rollout=RolloutStrategy(
             rollout_type=DeploymentStrategyType.IMMEDIATE,
         )
     )
@@ -1187,71 +1187,71 @@ ctr_model = Model(
 # AWS/SageMaker version
 ctr_model = Model(
     version="1.0",
-    inference_spec=InferenceSpec(
-        model_backend=ModelBackend.SAGEMAKER,
-        model_backend_params={
+    runtime=ModelRuntime(
+        backend=ModelBackend.SAGEMAKER,
+        params={
             "model_name": "test_ctr_model",
             "model_type": "custom",
         }
     ),
-    input_mapping={
+    inputs={
         "instance": "named_struct('user_id_click_event_average_7d', user_id_click_event_average_7d, 'listing_price_cents', listing_id_price_cents, 'price_log', price_log, 'price_bucket', price_bucket)",
     },
-    output_mapping={
+    outputs={
         "ctr": "score"
     },
-    value_fields=[
+    output_fields=[
         ("score", DataType.DOUBLE),
     ],
-    model_artifact_base_uri="s3://zipline-warehouse-models",
-    training_conf=TrainingSpec(
-        training_data_source=label_source,
-        training_data_window=Window(length=1, time_unit=TimeUnit.DAYS),
+    artifact_uri="s3://zipline-warehouse-models",
+    train=Train(
+        data=label_source,
+        window=Window(length=1, time_unit=TimeUnit.DAYS),
         schedule="@daily",
         image="763104351884.dkr.ecr.us-east-1.amazonaws.com/xgboost-training:latest",
-        python_module="trainer.train",
-        resource_config=ResourceConfig(
+        entrypoint="trainer.train",
+        resources=Resources(
             min_replica_count=1,
             max_replica_count=1,
             machine_type="ml.m5.xlarge"
         ),
-        job_configs={
+        params={
             "max-depth": "4",
             "eta": "0.1",
             "num-boost-round": "50"
         }
     ),
-    deployment_conf=DeploymentSpec(
-        container_config=ServingContainerConfig(
+    serve=Serve(
+        container=ServingContainerConfig(
             image="763104351884.dkr.ecr.us-east-1.amazonaws.com/xgboost-inference:latest"
         ),
-        endpoint_config=EndpointConfig(
+        endpoint=EndpointConfig(
             endpoint_name="test_ctr_model"
         ),
-        resource_config=ResourceConfig(
+        resources=Resources(
             min_replica_count=3,
             max_replica_count=10,
             machine_type="ml.m5.xlarge"
         ),
-        rollout_strategy=RolloutStrategy(
+        rollout=RolloutStrategy(
             rollout_type=DeploymentStrategyType.IMMEDIATE,
         )
     )
 )
 ```
 
-**Step 3: Create ModelTransforms for Inference**
+**Step 3: Create Inference**
 
 ```python
-from ai.chronon.types import JoinSource, ModelTransforms
+from ai.chronon.types import JoinSource, Inference
 from ai.chronon.data_types import DataType
 
 source = JoinSource(join=demo.derivations_v1)
 
-v1 = ModelTransforms(
-    sources=[source],
+v1 = Inference(
+    features=[source],
     models=[ctr_model],
-    passthrough_fields=["user_id", "listing_id", "user_id_click_event_average_7d", "listing_id_price_cents", "price_log", "price_bucket"],
+    passthrough=["user_id", "listing_id", "user_id_click_event_average_7d", "listing_id_price_cents", "price_log", "price_bucket"],
     key_fields=[
         ("user_id_click_event_average_7d", DataType.DOUBLE),
         ("listing_id_price_cents", DataType.LONG),
@@ -1265,32 +1265,32 @@ v1 = ModelTransforms(
 
 #### Key Concepts
 
-**Model `input_mapping`**:
+**Model `inputs`**:
 - SQL expression that transforms join columns into model input format
 - Uses `named_struct()` to create structured input
 - Column names must match what the model expects
 
-**Model `output_mapping`**:
+**Model `outputs`**:
 - Extracts specific fields from model output
 - Output column name follows pattern: `{team}_{model_file}_{model_var}__{version}__{field}`
 - Example: `gcp_listing_item_description_model__1__embeddings.values`
 
-**Model `value_fields`**:
+**Model `output_fields`**:
 - Defines the schema of model output
 - Used to parse model response
 - Must match actual model output format (check model API docs)
 
-**ModelTransforms `key_fields`**:
+**Inference `key_fields`**:
 - Input fields to the model (must be present in source Join)
-- Must align with `input_mapping` in the Model
+- Must align with `inputs` in the Model
 
-**ModelTransforms `passthrough_fields`**:
+**Inference `passthrough`**:
 - Fields from source to include in output (alongside predictions)
 - Useful for IDs, labels, or other context
 
 #### Training Workflow
 
-For custom models with `training_conf`:
+For custom models with `train`:
 
 1. **Package training code**: Create a source distribution
    ```bash
@@ -1307,11 +1307,11 @@ For custom models with `training_conf`:
    ```
 
 3. **Training execution**: Platform (Vertex AI / SageMaker) pulls package and runs training
-   - Fetches data from `training_data_source`
-   - Runs within `training_data_window`
-   - Saves artifacts to `model_artifact_base_uri`
+   - Fetches data from `data`
+   - Runs within `window`
+   - Saves artifacts to `artifact_uri`
 
-4. **Deployment**: Platform deploys model to endpoint using `deployment_conf`
+4. **Deployment**: Platform deploys model to endpoint using `serve`
 
 #### Common Use Cases
 
@@ -1952,7 +1952,7 @@ v1 = GroupBy(
 
 ### Pattern: ML Inference with Embeddings (Complete Pipeline)
 ```python
-# From: python/test/canary - shows GroupBy → Join → Model → ModelTransforms
+# From: python/test/canary - shows GroupBy → Join → Model → Inference
 
 # Step 1: Create GroupBys with features
 from ai.chronon.types import EntitySource, GroupBy, Query, selects
@@ -1997,7 +1997,7 @@ demo_join = Join(
 )
 
 # Step 3: Define the Model (Vertex AI embedding)
-from ai.chronon.types import InferenceSpec, Model, ModelBackend
+from ai.chronon.types import ModelRuntime, Model, ModelBackend
 from ai.chronon.data_types import DataType
 
 statistics = DataType.STRUCT("statistics", ("truncated", DataType.BOOLEAN), ("token_count", DataType.INT))
@@ -2006,30 +2006,30 @@ embeddings = DataType.STRUCT("embeddings", ("statistics", statistics), ("values"
 
 item_description_model = Model(
     version="1",
-    inference_spec=InferenceSpec(
-        model_backend=ModelBackend.VERTEXAI,
-        model_backend_params={
+    runtime=ModelRuntime(
+        backend=ModelBackend.VERTEXAI,
+        params={
             "model_name": "gemini-embedding-001",
             "model_type": "publisher"
         }
     ),
-    input_mapping={
+    inputs={
         # Combine headline and description
         "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))"
     },
-    output_mapping={
+    outputs={
         "item_embedding": "gcp_listing_item_description_model__1__embeddings.values"
     },
-    value_fields=[
+    output_fields=[
         ("embeddings", embeddings)
     ]
 )
 
-# Step 4: Create ModelTransforms to apply inference
-from ai.chronon.types import JoinSource, ModelTransforms
+# Step 4: Create Inference to apply inference
+from ai.chronon.types import JoinSource, Inference
 
-model_transforms = ModelTransforms(
-    sources=[
+inference = Inference(
+    features=[
         JoinSource(
             join=demo_join,
             query=Query(
@@ -2040,7 +2040,7 @@ model_transforms = ModelTransforms(
     ],
     models=[item_description_model],
     # Pass through IDs and other context
-    passthrough_fields=["user_id", "listing_id", "listing_id_is_active"],
+    passthrough=["user_id", "listing_id", "listing_id_is_active"],
     # Input fields to the model
     key_fields=[
         ("listing_id_headline", DataType.STRING),
@@ -2057,7 +2057,7 @@ model_transforms = ModelTransforms(
 1. **GroupBys** aggregate/passthrough raw data
 2. **Join** combines features from multiple GroupBys
 3. **Model** defines how to call ML inference (embeddings)
-4. **ModelTransforms** applies the model to join output, producing enriched data
+4. **Inference** applies the model to join output, producing enriched data
 
 **Use cases:** Semantic search, recommendations, similarity matching
 
@@ -2083,8 +2083,8 @@ user_features_gb = GroupBy(
     accuracy=Accuracy.TEMPORAL
 )
 
-# Step 2: Create a wrapper Join to enable ModelTransforms consumption
-# (ModelTransforms can't consume GroupBys directly)
+# Step 2: Create a wrapper Join to enable Inference consumption
+# (Inference can't consume GroupBys directly)
 from ai.chronon.types import EventSource, Join, JoinPart
 
 wrapper_join = Join(
@@ -2105,13 +2105,13 @@ wrapper_join = Join(
     version=1  # TEMPORARY: Always include version=1
 )
 
-# Step 3: Apply model via ModelTransforms
-from ai.chronon.types import JoinSource, ModelTransforms
+# Step 3: Apply model via Inference
+from ai.chronon.types import JoinSource, Inference
 
-v1 = ModelTransforms(
-    sources=[JoinSource(join=wrapper_join)],
+v1 = Inference(
+    features=[JoinSource(join=wrapper_join)],
     models=[embedding_model],
-    passthrough_fields=["user_id", "user_id_event_category_last30_30d"],
+    passthrough=["user_id", "user_id_event_category_last30_30d"],
     key_fields=[
         ("user_id_event_category_last30_30d", DataType.LIST(DataType.STRING))
     ],
@@ -2121,7 +2121,7 @@ v1 = ModelTransforms(
 ```
 
 **Key points:**
-- ModelTransforms requires a Join as input (via JoinSource)
+- Inference requires a Join as input (via JoinSource)
 - If your source is a GroupBy, create a simple wrapper Join
 - The wrapper Join's left side can be the same event stream used by the GroupBy
 - Column names from GroupBys in Joins are prefixed with key names (e.g., `user_id_event_category_last30_30d`)
@@ -3006,7 +3006,7 @@ Work from features with no dependencies toward features that depend on others:
 #### Step 4: Handle Special Cases
 
 **Embeddings:**
-- Tecton embedding features → Chronon `Model` + `ModelTransforms`
+- Tecton embedding features → Chronon `Model` + `Inference`
 - May require creating separate Model definition
 
 **Multi-Entity Features:**
@@ -3122,10 +3122,10 @@ Use this checklist for each Tecton feature being migrated:
 | Create GroupBy | Resolve table name (list-tables if unsure), then get metadata |
 | Add to Join | Check if production |
 | Create Chained GroupBy | Create parent Join first |
-| Create Model (embeddings) | Define inference_spec, input_mapping, output_mapping; value_fields = embeddings struct |
-| Create Model (text generation / LLM) | Use candidates response schema for value_fields; navigate candidates[0].content.parts[0].text in output_mapping |
-| Create Model (trainable) | Create training labels (StagingQuery), define training_conf |
-| Create ModelTransforms | Reference Join as source, define key_fields |
+| Create Model (embeddings) | Define runtime, inputs, outputs; output_fields = embeddings struct |
+| Create Model (text generation / LLM) | Use candidates response schema for output_fields; navigate candidates[0].content.parts[0].text in outputs |
+| Create Model (trainable) | Create training labels (StagingQuery), define train |
+| Create Inference | Reference Join as source, define key_fields |
 | Debug null data | Check timestamp format |
 | Debug wrong value | Query raw data for key |
 | Create StagingQuery | Understand the ETL logic needed |

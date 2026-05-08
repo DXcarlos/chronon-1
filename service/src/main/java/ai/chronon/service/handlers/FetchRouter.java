@@ -27,10 +27,10 @@ public class FetchRouter {
         }
     }
 
-    public static class ModelTransformsFetcherFunction implements BiFunction<JavaFetcher, List<JavaRequest>, CompletableFuture<List<JavaResponse>>> {
+    public static class InferenceFetcherFunction implements BiFunction<JavaFetcher, List<JavaRequest>, CompletableFuture<List<JavaResponse>>> {
         @Override
         public CompletableFuture<List<JavaResponse>> apply(JavaFetcher fetcher, List<JavaRequest> requests) {
-            return fetcher.fetchModelTransforms(requests);
+            return fetcher.fetchInference(requests);
         }
     }
 
@@ -40,7 +40,7 @@ public class FetchRouter {
 
         router.post("/groupby/:name").handler(new FetchHandler(fetcher, new GroupByFetcherFunction()));
         router.post("/join/:name").handler(new FetchHandler(fetcher, new JoinFetcherFunction()));
-        router.post("/modeltransforms/:name").handler(new FetchHandler(fetcher, new ModelTransformsFetcherFunction()));
+        router.post("/infer/:name").handler(new FetchHandler(fetcher, new InferenceFetcherFunction()));
 
         return router;
     }

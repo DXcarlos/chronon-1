@@ -2,7 +2,7 @@ package ai.chronon.integrations.cloud_gcp
 
 import ai.chronon.api.Extensions.SourceOps
 import ai.chronon.api.commonConstants.{END_DS_KEYWORD, INPUT_TABLE_KEYWORD, START_DS_KEYWORD}
-import ai.chronon.api.{JobStatusType, PartitionSpec, ResourceConfig, ServingContainerConfig, TrainingSpec}
+import ai.chronon.api.{JobStatusType, PartitionSpec, Resources, ServingContainerConfig, Train}
 import ai.chronon.online.metrics.FlexibleExecutionContext
 import ai.chronon.online.{DeployModelRequest, ModelJobStatus, TrainingRequest}
 import com.google.api.core.ApiFuture
@@ -50,20 +50,20 @@ class VertexOrchestration(project: String, location: String) extends Serializabl
   def submitTrainingJob(trainingRequest: TrainingRequest): Future[String] = {
     Future {
       val model = trainingRequest.model
-      require(model.getTrainingConf != null, "Model must have training configuration")
-      require(model.getModelArtifactBaseUri != null, "Model must have modelArtifactBaseUri set")
+      require(model.getTrain != null, "Model must have training configuration")
+      require(model.getArtifactUri != null, "Model must have artifactUri set")
 
-      val trainingSpec = model.getTrainingConf
-      val inferenceSpec = model.getInferenceSpec
-      val modelName = Option(inferenceSpec.getModelBackendParams.get("model_name"))
-        .getOrElse(throw new IllegalArgumentException("model_name is required in modelBackendParams"))
+      val trainingSpec = model.getTrain
+      val runtime = model.getRuntime
+      val modelName = Option(runtime.getParams.get("model_name"))
+        .getOrElse(throw new IllegalArgumentException("model_name is required in params"))
       val version = model.metaData.version
       val date = trainingRequest.date
 
       // Build paths according to specification
-      val modelArtifactBaseUri = model.getModelArtifactBaseUri
-      val pythonPackageUri = s"$modelArtifactBaseUri/builds/$modelName-$version.tar.gz"
-      val outputDir = s"$modelArtifactBaseUri/training_output/$modelName-$version/$date"
+      val artifactUri = model.getArtifactUri
+      val pythonPackageUri = s"$artifactUri/builds/$modelName-$version.tar.gz"
+      val outputDir = s"$artifactUri/training_output/$modelName-$version/$date"
 
       logger.info(
         s"Submitting training job for $modelName-$version; Python pkg: $pythonPackageUri; Model output dir: $outputDir")
@@ -155,14 +155,14 @@ class VertexOrchestration(project: String, location: String) extends Serializabl
     val model = deployModelRequest.model
     val version = deployModelRequest.version
     val date = deployModelRequest.date
-    val deploymentSpec = model.getDeploymentConf
-    val resourceConfig = deploymentSpec.getResourceConfig
-    val containerConfig = deploymentSpec.getContainerConfig
-    val modelName = Option(model.getInferenceSpec.getModelBackendParams.get("model_name"))
-      .getOrElse(throw new IllegalArgumentException("model_name is required in modelBackendParams"))
+    val deploymentSpec = model.getServe
+    val resourceConfig = deploymentSpec.getResources
+    val containerConfig = deploymentSpec.getContainer
+    val modelName = Option(model.getRuntime.getParams.get("model_name"))
+      .getOrElse(throw new IllegalArgumentException("model_name is required in params"))
 
     // lookup endpoint
-    val endpointConfig = deploymentSpec.getEndpointConfig
+    val endpointConfig = deploymentSpec.getEndpoint
     val endpointFuture = findEndpointByName(endpointConfig.getEndpointName) match {
       case Some(endpointResourceName) =>
         logger.info(s"Found existing endpoint: $endpointResourceName")
@@ -174,8 +174,8 @@ class VertexOrchestration(project: String, location: String) extends Serializabl
     }
 
     // Build model artifact URI
-    val modelArtifactBaseUri = model.getModelArtifactBaseUri
-    val modelArtifactUri = s"$modelArtifactBaseUri/training_output/$modelName-$version/$date/model"
+    val artifactUri = model.getArtifactUri
+    val modelArtifactUri = s"$artifactUri/training_output/$modelName-$version/$date/model"
 
     // upload model then deploy
     for {
@@ -218,7 +218,7 @@ class VertexOrchestration(project: String, location: String) extends Serializabl
   private def deployModelToEndpoint(endpointResourceName: String,
                                     modelResourceName: String,
                                     deployedModelDisplayName: String,
-                                    resourceConfig: ResourceConfig): Future[String] = {
+                                    resourceConfig: Resources): Future[String] = {
     Future {
       try {
         logger.info(s"""
@@ -323,14 +323,14 @@ object VertexOrchestration {
     FutureConverters.toScala(completableFuture)
   }
 
-  def buildCustomJob(trainingSpec: TrainingSpec,
+  def buildCustomJob(trainingSpec: Train,
                      modelName: String,
                      version: String,
                      date: String,
                      pythonPackageUri: String,
                      outputDir: String): CustomJob = {
     // Build PythonPackageSpec
-    val pythonModule = Option(trainingSpec.getPythonModule).getOrElse("trainer.train")
+    val pythonModule = Option(trainingSpec.getEntrypoint).getOrElse("trainer.train")
     val pythonPackageSpecBuilder = PythonPackageSpec
       .newBuilder()
       .setExecutorImageUri(trainingSpec.getImage)
@@ -338,20 +338,20 @@ object VertexOrchestration {
       .setPythonModule(pythonModule)
 
     // Add job configs as args
-    if (trainingSpec.getJobConfigs != null) {
-      trainingSpec.getJobConfigs.asScala.foreach { case (key, value) =>
+    if (trainingSpec.getParams != null) {
+      trainingSpec.getParams.asScala.foreach { case (key, value) =>
         pythonPackageSpecBuilder.addArgs(s"--$key=$value")
       }
     }
 
-    pythonPackageSpecBuilder.addArgs(s"${INPUT_TABLE_KEYWORD}=${trainingSpec.getTrainingDataSource.table}")
-    val startDs = PartitionSpec.daily.minus(date, trainingSpec.trainingDataWindow)
+    pythonPackageSpecBuilder.addArgs(s"${INPUT_TABLE_KEYWORD}=${trainingSpec.getData.table}")
+    val startDs = PartitionSpec.daily.minus(date, trainingSpec.getWindow)
     val endDs = date
     pythonPackageSpecBuilder.addArgs(s"$START_DS_KEYWORD=$startDs")
     pythonPackageSpecBuilder.addArgs(s"$END_DS_KEYWORD=$endDs")
 
     // Build MachineSpec
-    val resourceConfig = trainingSpec.getResourceConfig
+    val resourceConfig = trainingSpec.getResources
     val machineSpecBuilder = MachineSpec.newBuilder()
     if (resourceConfig != null) {
       machineSpecBuilder.setMachineType(resourceConfig.getMachineType)
@@ -401,14 +401,14 @@ object VertexOrchestration {
       .newBuilder()
       .setImageUri(containerConfig.getImage)
 
-    val healthRoute = Option(containerConfig.getServingHealthRoute).getOrElse("/health")
-    val predictRoute = Option(containerConfig.getServingPredictRoute).getOrElse("/predict")
+    val healthRoute = Option(containerConfig.getHealthRoute).getOrElse("/health")
+    val inferRoute = Option(containerConfig.getInferRoute).getOrElse("/infer")
     containerSpecBuilder.setHealthRoute(healthRoute)
-    containerSpecBuilder.setPredictRoute(predictRoute)
+    containerSpecBuilder.setPredictRoute(inferRoute)
 
     // Add environment variables if present
-    if (containerConfig.getServingContainerEnvVars != null && !containerConfig.getServingContainerEnvVars.isEmpty) {
-      containerConfig.getServingContainerEnvVars.asScala.foreach { case (key, value) =>
+    if (containerConfig.getEnv != null && !containerConfig.getEnv.isEmpty) {
+      containerConfig.getEnv.asScala.foreach { case (key, value) =>
         containerSpecBuilder.addEnv(EnvVar.newBuilder().setName(key).setValue(value).build())
       }
     }
@@ -424,7 +424,7 @@ object VertexOrchestration {
 
   def buildDeployedModel(modelResourceName: String,
                          deployedModelDisplayName: String,
-                         resourceConfig: ResourceConfig): DeployedModel = {
+                         resourceConfig: Resources): DeployedModel = {
     // Build machine spec
     val machineSpec = MachineSpec
       .newBuilder()

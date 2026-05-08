@@ -198,8 +198,8 @@ def get_conf_type(conf):
         return "groupbys"
     elif "compiled/models" in conf:
         return "models"
-    elif "compiled/model_transforms" in conf:
-        return "modeltransforms"
+    elif "compiled/inferences" in conf:
+        return "inferences"
     else:
         raise ValueError(f"Unsupported conf type: {conf}")
 
@@ -922,11 +922,7 @@ def fetch(conf, repo, hub_url, use_auth, format, force, fetcher_url, schema, key
     conf_type = get_conf_type(conf)
     target = utils.get_metadata_name_from_conf(repo, conf)
 
-    # TODO: fix this workaround to just use conf_type directly singular
-    if conf_type == "modeltransforms":
-        endpoint = "/v1/fetch/{conf_type}".format(conf_type=conf_type)
-    else:
-        endpoint = "/v1/fetch/{conf_type}".format(conf_type=conf_type[:-1])
+    endpoint = "/v1/fetch/{conf_type}".format(conf_type=conf_type[:-1])
     if schema:
         if conf_type != "joins":
             raise ValueError("Schema fetch is only supported for joins")

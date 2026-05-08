@@ -7,8 +7,8 @@ import ai.chronon.online.{
   ModelJobStatus,
   ModelOperation,
   ModelPlatform,
-  PredictRequest,
-  PredictResponse,
+  InferRequest,
+  InferResponse,
   SubmitTrainingJob,
   TrainingRequest
 }
@@ -42,12 +42,12 @@ class VertexPlatform(project: String, location: String, webClient: Option[WebCli
 
   private val endpointNameToIdCache = new ConcurrentHashMap[String, String]()
 
-  override def predict(predictRequest: PredictRequest): Future[PredictResponse] = {
-    val promise = Promise[PredictResponse]()
+  override def infer(inferRequest: InferRequest): Future[InferResponse] = {
+    val promise = Promise[InferResponse]()
 
     try {
       val modelParams =
-        Option(predictRequest.model.inferenceSpec.modelBackendParams)
+        Option(inferRequest.model.runtime.params)
           .map(_.asScala.toMap)
           .getOrElse(Map.empty)
       val modelType = modelParams.getOrElse("model_type", "publisher")
@@ -57,8 +57,8 @@ class VertexPlatform(project: String, location: String, webClient: Option[WebCli
         case Some(name) => name
         case None =>
           promise.success(
-            PredictResponse(predictRequest,
-                            Failure(new IllegalArgumentException("model_name is required in modelBackendParams"))))
+            InferResponse(inferRequest,
+                            Failure(new IllegalArgumentException("model_name is required in params"))))
           return promise.future
       }
 
@@ -67,7 +67,7 @@ class VertexPlatform(project: String, location: String, webClient: Option[WebCli
         case Some(template) => template
         case None =>
           promise.success(
-            PredictResponse(predictRequest,
+            InferResponse(inferRequest,
                             Failure(new IllegalArgumentException(s"Unsupported model_type: $modelType"))))
           return promise.future
       }
@@ -76,7 +76,7 @@ class VertexPlatform(project: String, location: String, webClient: Option[WebCli
         val endpointIdOrNull = lookupCustomEndpointId(modelName)
         if (endpointIdOrNull == null) {
           promise.success(
-            PredictResponse(predictRequest,
+            InferResponse(inferRequest,
                             Failure(new IllegalArgumentException(s"Endpoint not found for model: $modelName"))))
           return promise.future
         }
@@ -86,35 +86,35 @@ class VertexPlatform(project: String, location: String, webClient: Option[WebCli
         urlTemplate.format(modelName)
 
       // Validate all inputs have 'instance' key
-      val missingInstanceIndices = predictRequest.inputRequests.zipWithIndex.collect {
+      val missingInstanceIndices = inferRequest.inputRequests.zipWithIndex.collect {
         case (inputRequest, index) if !inputRequest.contains("instance") => index
       }
 
       if (missingInstanceIndices.nonEmpty) {
         val errorMsg = s"Missing 'instance' key in input requests at indices: ${missingInstanceIndices.mkString(", ")}"
-        promise.success(PredictResponse(predictRequest, Failure(new IllegalArgumentException(errorMsg))))
+        promise.success(InferResponse(inferRequest, Failure(new IllegalArgumentException(errorMsg))))
         return promise.future
       }
 
-      val requestBody = VertexHttpUtils.createPredictionRequestBody(predictRequest.inputRequests, modelParams)
+      val requestBody = VertexHttpUtils.createPredictionRequestBody(inferRequest.inputRequests, modelParams)
 
       httpClient.makeHttpRequest(url, PostMethod, Some(requestBody)) { response =>
         if (response != null) {
           if (response.statusCode() == 200) {
             val responseBody = response.bodyAsJsonObject()
             val results = VertexHttpUtils.extractPredictionResults(responseBody)
-            promise.success(PredictResponse(predictRequest, Success(results)))
+            promise.success(InferResponse(inferRequest, Success(results)))
           } else {
             val errorMsg = s"HTTP Request failed: ${response.statusCode()}: ${response.bodyAsString()}"
-            promise.success(PredictResponse(predictRequest, Failure(new RuntimeException(errorMsg))))
+            promise.success(InferResponse(inferRequest, Failure(new RuntimeException(errorMsg))))
           }
         } else {
-          promise.success(PredictResponse(predictRequest, Failure(new RuntimeException("HTTP Request failed"))))
+          promise.success(InferResponse(inferRequest, Failure(new RuntimeException("HTTP Request failed"))))
         }
       }
     } catch {
       case e: Exception =>
-        promise.success(PredictResponse(predictRequest, Failure(e)))
+        promise.success(InferResponse(inferRequest, Failure(e)))
     }
 
     promise.future

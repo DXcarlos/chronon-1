@@ -84,6 +84,7 @@ object Constants {
   val GroupByFolder = "group_bys"
   val StagingQueryFolder = "staging_queries"
   val ModelFolder = "models"
+  val InferenceFolder = "inferences"
 
   // KV store related constants
   // continuation key to help with list pagination

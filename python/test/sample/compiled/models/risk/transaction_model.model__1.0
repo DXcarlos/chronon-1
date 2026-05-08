@@ -1,10 +1,4 @@
 {
-  "inferenceSpec": {
-    "modelBackend": 0,
-    "modelBackendParams": {
-      "model_type": "xgboost"
-    }
-  },
   "metaData": {
     "executionInfo": {
       "conf": {
@@ -54,5 +48,11 @@
     "sourceFile": "models/risk/transaction_model.py",
     "team": "risk",
     "version": "1.0"
+  },
+  "runtime": {
+    "backend": 0,
+    "params": {
+      "model_type": "xgboost"
+    }
   }
 }

@@ -313,8 +313,8 @@ abstract class Api(userConf: Map[String, String]) extends Serializable {
     }
 }
 
-case class PredictRequest(model: Model, inputRequests: Seq[Map[String, AnyRef]])
-case class PredictResponse(predictRequest: PredictRequest, outputs: Try[Seq[Map[String, AnyRef]]])
+case class InferRequest(model: Model, inputRequests: Seq[Map[String, AnyRef]])
+case class InferResponse(inferRequest: InferRequest, outputs: Try[Seq[Map[String, AnyRef]]])
 case class TrainingRequest(trainingSource: Source, model: Model, date: String, window: Window)
 case class DeployModelRequest(model: Model, version: String, date: String)
 
@@ -328,19 +328,19 @@ case class ModelJobStatus(jobStatusType: JobStatusType, message: String)
   */
 trait ModelPlatform extends Serializable {
 
-  /** Trigger one/more online predictions for a given model.
+  /** Trigger one or more online inference calls for a given model.
     * The mapping from the input keys (using Spark expression eval) as well as the output mapping (also using Spark
     * expression eval) is done outside the ModelPlatform implementation.
     *
     * Currently, this supports both online batch inference calls and Spark job driven batch inference calls. In the
-    * future we might carve out the bulk batch predictions into a separate `batchPredict` method. The current approach
+    * future we might carve out the bulk batch inference path into a separate method. The current approach
     * is chosen to maximize compatibility with prospective model backend platforms that might not support both modes.
     */
-  def predict(predictRequest: PredictRequest): Future[PredictResponse]
+  def infer(inferRequest: InferRequest): Future[InferResponse]
 
   /** Used to trigger a model training job for a given model and training source. The implementation
     * will use the training source and input transforms to generate a training dataset to feed model training.
-    * The Model's TrainingSpec can be used to configure model parameters such as hyperparameters, compute resources, etc.
+    * The Model's Train can be used to configure model parameters such as hyperparameters, compute resources, etc.
     */
   def submitTrainingJob(trainingRequest: TrainingRequest): Future[String]
 

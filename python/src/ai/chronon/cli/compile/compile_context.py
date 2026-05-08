@@ -15,7 +15,7 @@ from gen_thrift.api.ttypes import (
     Join,
     MetaData,
     Model,
-    ModelTransforms,
+    Inference,
     StagingQuery,
     Team,
 )
@@ -46,9 +46,9 @@ CONFIG_INFOS: List[ConfigInfo] = [
         config_type=ConfType.STAGING_QUERY,
     ),
     ConfigInfo(
-        folder_name="model_transforms",
-        cls=ModelTransforms,
-        config_type=ConfType.MODEL_TRANSFORMS,
+        folder_name="inferences",
+        cls=Inference,
+        config_type=ConfType.INFERENCE,
     ),
     ConfigInfo(folder_name="models", cls=Model, config_type=ConfType.MODEL),
     ConfigInfo(

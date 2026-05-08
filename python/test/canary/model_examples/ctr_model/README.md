@@ -25,7 +25,7 @@ Pushing to Artifact Registry...
 Image URI: us-central1-docker.pkg.dev/canary-443022/canary-images/ctr-predictor:v1
 ```
 
-This image URI is what we have set in the test/canary/models/gcp/click_through_rate.py file under the DeploymentSpec.
+This image URI is what we have set in the test/canary/models/gcp/click_through_rate.py file under the Serve.
 
 ## Testing
 Once the model is deployed, you can trigger an inference call via curl / GCloud's Vertex Model Web UI. URL looks like:

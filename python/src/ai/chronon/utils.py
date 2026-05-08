@@ -28,7 +28,7 @@ import gen_thrift.api.ttypes as api
 
 # Common type definition for any source type used across the codebase
 ANY_SOURCE_TYPE = Union[
-    api.Source, api.EventSource, api.EntitySource, api.JoinSource, api.ModelTransforms
+    api.Source, api.EventSource, api.EntitySource, api.JoinSource, api.Inference
 ]
 
 chronon_root_path = ""  # passed from compile.py
@@ -45,8 +45,8 @@ def normalize_source(source: ANY_SOURCE_TYPE, output_namespace: str = None) -> a
         if output_namespace and not source.join.metaData.outputNamespace:
             source.join.metaData.outputNamespace = output_namespace
         return api.Source(joinSource=source)
-    elif isinstance(source, api.ModelTransforms):
-        return api.Source(modelTransforms=source)
+    elif isinstance(source, api.Inference):
+        return api.Source(inference=source)
     elif isinstance(source, api.Source):
         if source.entities:
             return normalize_source(source.entities, output_namespace)
@@ -54,8 +54,8 @@ def normalize_source(source: ANY_SOURCE_TYPE, output_namespace: str = None) -> a
             return normalize_source(source.events, output_namespace)
         elif source.joinSource:
             return normalize_source(source.joinSource, output_namespace)
-        elif source.modelTransforms:
-            return normalize_source(source.modelTransforms, output_namespace)
+        elif source.inference:
+            return normalize_source(source.inference, output_namespace)
         else:
             return source
     else:
@@ -268,7 +268,7 @@ def _get_team_from_caller(stack_depth=2):
 
 def _ensure_name_and_get_output_table(obj, cls, mod_prefix, full_name=False):
     """Set name via GC if missing, then return the output table name. Used by `.table`
-    property accessors on GroupBy, Join, StagingQuery, and ModelTransforms."""
+    property accessors on GroupBy, Join, StagingQuery, and Inference."""
     if not obj.metaData.name:
         __set_name(obj, cls, mod_prefix)
     return output_table_name(obj, full_name)

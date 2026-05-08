@@ -4,7 +4,7 @@ import ai.chronon.api.Constants.MetadataDataset
 import ai.chronon.api._
 import ai.chronon.online.{Api, KVStore}
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
-import ai.chronon.planner.{GroupByUploadToKVNode, JoinMetadataUpload, ModelTransformsUploadNode, NodeContent}
+import ai.chronon.planner.{GroupByUploadToKVNode, JoinMetadataUpload, InferenceUploadNode, NodeContent}
 import ai.chronon.spark.kv_store.KVUploadNodeRunner
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -119,30 +119,30 @@ class KVUploadNodeRunnerTest
     verify(fetchContext, times(2)).metadataDataset
   }
 
-  it should "handle MODEL_TRANSFORMS_UPLOAD successfully" in {
+  it should "handle INFERENCE_UPLOAD successfully" in {
     // Setup test data
-    val modelTransformsMetadata = new MetaData()
-      .setName("test_model_transforms")
+    val inferenceMetadata = new MetaData()
+      .setName("test_inference")
       .setTeam("test_team")
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(modelTransformsMetadata)
+    val inference = new Inference()
+      .setMetaData(inferenceMetadata)
 
-    val modelTransformsUpload = new ModelTransformsUploadNode()
-      .setModelTransforms(modelTransforms)
+    val inferenceUpload = new InferenceUploadNode()
+      .setInference(inference)
 
     val nodeContent = new NodeContent()
-    nodeContent.setModelTransformsUpload(modelTransformsUpload)
+    nodeContent.setInferenceUpload(inferenceUpload)
 
     val metadata = new MetaData()
     val range = None
 
-    // Execute - this will create a new MetadataStore internally and call putModelTransformsConf
+    // Execute - this will create a new MetadataStore internally and call putInferenceConf
     runner.run(metadata, nodeContent, range)
 
     // Verify that fetchContext was used (indicating MetadataStore creation and usage)
     verify(fetchContext).kvStore
-    // MetadataStore.putModelTransformsConf calls metadataDataset twice, so we expect at least one call
+    // MetadataStore.putInferenceConf calls metadataDataset twice, so we expect at least one call
     verify(fetchContext, times(2)).metadataDataset
   }
 
@@ -185,7 +185,7 @@ class KVUploadNodeRunnerTest
       runner.run(metadata, nodeContent, range)
     }
 
-    exception.getMessage should include("Expected GroupByUploadToKVNode, JoinMetadataUpload, or ModelTransformsUpload content")
+    exception.getMessage should include("Expected GroupByUploadToKVNode, JoinMetadataUpload, or InferenceUpload content")
   }
 
   it should "propagate exceptions from KVStore bulkPut" in {

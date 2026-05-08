@@ -14,26 +14,26 @@ class VertexOrchestrationTest extends AnyFlatSpec with Matchers {
 
   it should "correctly build a CustomJob with all required fields" in {
     // Setup
-    val trainingSpec = new TrainingSpec()
+    val trainingSpec = new Train()
     trainingSpec.setImage("gcr.io/my-project/trainer:v1")
-    trainingSpec.setPythonModule("trainer.main")
+    trainingSpec.setEntrypoint("trainer.main")
 
     val jobConfigs = Map("learning_rate" -> "0.001", "epochs" -> "100").asJava
-    trainingSpec.setJobConfigs(jobConfigs)
+    trainingSpec.setParams(jobConfigs)
 
-    val resourceConfig = new ResourceConfig()
+    val resourceConfig = new Resources()
     resourceConfig.setMachineType("n1-standard-4")
     resourceConfig.setMinReplicaCount(1)
-    trainingSpec.setResourceConfig(resourceConfig)
+    trainingSpec.setResources(resourceConfig)
 
     val rawTable = "random-table"
     val eventSource = new EventSource()
       .setTable(rawTable)
     val source = new Source()
     source.setEvents(eventSource)
-    trainingSpec.setTrainingDataSource(source)
+    trainingSpec.setData(source)
 
-    trainingSpec.setTrainingDataWindow(new Window().setLength(1).setTimeUnit(TimeUnit.DAYS))
+    trainingSpec.setWindow(new Window().setLength(1).setTimeUnit(TimeUnit.DAYS))
 
     val modelName = "test_model"
     val version = "v1"
@@ -76,15 +76,15 @@ class VertexOrchestrationTest extends AnyFlatSpec with Matchers {
   }
 
   it should "use default python module when not specified" in {
-    val trainingSpec = new TrainingSpec()
+    val trainingSpec = new Train()
     trainingSpec.setImage("gcr.io/my-project/trainer:v1")
 
     val eventSource = new EventSource()
       .setTable("random-table")
     val source = new Source()
     source.setEvents(eventSource)
-    trainingSpec.setTrainingDataSource(source)
-    trainingSpec.setTrainingDataWindow(new Window().setLength(1).setTimeUnit(TimeUnit.DAYS))
+    trainingSpec.setData(source)
+    trainingSpec.setWindow(new Window().setLength(1).setTimeUnit(TimeUnit.DAYS))
 
     // Don't set pythonModule
 
@@ -101,11 +101,11 @@ class VertexOrchestrationTest extends AnyFlatSpec with Matchers {
     // Setup
     val containerConfig = new ServingContainerConfig()
     containerConfig.setImage("gcr.io/my-project/predictor:v1")
-    containerConfig.setServingHealthRoute("/healthz")
-    containerConfig.setServingPredictRoute("/infer")
+    containerConfig.setHealthRoute("/healthz")
+    containerConfig.setInferRoute("/infer")
 
     val envVars = Map("MODEL_PATH" -> "/models", "BATCH_SIZE" -> "32").asJava
-    containerConfig.setServingContainerEnvVars(envVars)
+    containerConfig.setEnv(envVars)
 
     val modelName = "test_model"
     val version = "v1"
@@ -137,7 +137,7 @@ class VertexOrchestrationTest extends AnyFlatSpec with Matchers {
 
     val containerSpec = model.getContainerSpec
     containerSpec.getHealthRoute shouldBe "/health"
-    containerSpec.getPredictRoute shouldBe "/predict"
+    containerSpec.getPredictRoute shouldBe "/infer"
   }
 
   it should "correctly build a DeployedModel with dedicated resources" in {
@@ -145,7 +145,7 @@ class VertexOrchestrationTest extends AnyFlatSpec with Matchers {
     val modelResourceName = "projects/my-project/locations/us-central1/models/123456"
     val deployedModelDisplayName = "test_model"
 
-    val resourceConfig = new ResourceConfig()
+    val resourceConfig = new Resources()
     resourceConfig.setMachineType("n1-standard-4")
     resourceConfig.setMinReplicaCount(2)
     resourceConfig.setMaxReplicaCount(10)
@@ -219,7 +219,7 @@ class VertexOrchestrationTest extends AnyFlatSpec with Matchers {
     logger.info("\n" + "=" * 80)
     logger.info("Step 2: Creating endpoint (if absent)...")
     logger.info("=" * 80)
-    val endpointConfig = ctrModel.getDeploymentConf.getEndpointConfig
+    val endpointConfig = ctrModel.getServe.getEndpoint
     val endpointResourceName = Await.result(orchPlatform.createEndpoint(endpointConfig.endpointName), 5.minutes)
     logger.info(s"Endpoint resource name: $endpointResourceName")
 

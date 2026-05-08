@@ -12,13 +12,13 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
-from gen_thrift.api.ttypes import ConfType, GroupBy, Join, Model, ModelTransforms, StagingQuery
+from gen_thrift.api.ttypes import ConfType, GroupBy, Join, Model, Inference, StagingQuery
 
 JOIN_FOLDER_NAME = "joins"
 GROUP_BY_FOLDER_NAME = "group_bys"
 STAGING_QUERY_FOLDER_NAME = "staging_queries"
 MODEL_FOLDER_NAME = "models"
-MODEL_TRANSFORM_FOLDER_NAME = "model_transforms"
+INFERENCE_FOLDER_NAME = "inferences"
 # TODO - make team part of thrift API?
 TEAMS_FILE_PATH = "teams.json"
 OUTPUT_ROOT = "production"
@@ -30,7 +30,7 @@ FOLDER_NAME_TO_CLASS = {
     JOIN_FOLDER_NAME: Join,
     STAGING_QUERY_FOLDER_NAME: StagingQuery,
     MODEL_FOLDER_NAME: Model,
-    MODEL_TRANSFORM_FOLDER_NAME: ModelTransforms,
+    INFERENCE_FOLDER_NAME: Inference,
 }
 
 FOLDER_NAME_TO_CONF_TYPE = {
@@ -38,5 +38,5 @@ FOLDER_NAME_TO_CONF_TYPE = {
     JOIN_FOLDER_NAME: ConfType.JOIN,
     STAGING_QUERY_FOLDER_NAME: ConfType.STAGING_QUERY,
     MODEL_FOLDER_NAME: ConfType.MODEL,
-    MODEL_TRANSFORM_FOLDER_NAME: ConfType.MODEL_TRANSFORMS,
+    INFERENCE_FOLDER_NAME: ConfType.INFERENCE,
 }

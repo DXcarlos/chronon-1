@@ -64,12 +64,12 @@ struct JoinMetadataUpload {
     2: optional api.Join join
 }
 
-struct ModelTransformsUploadNode {
-    2: optional api.ModelTransforms modelTransforms
+struct InferenceUploadNode {
+    2: optional api.Inference inference
 }
 
-struct ModelTransformsBackfillNode {
-    2: optional api.ModelTransforms modelTransforms
+struct InferenceBackfillNode {
+    2: optional api.Inference inference
 }
 
 struct CreateModelEndpointNode {
@@ -114,8 +114,8 @@ union NodeContent {
 
     10: JoinMetadataUpload joinMetadataUpload
     11: ExternalSourceSensorNode externalSourceSensor
-    12: ModelTransformsUploadNode modelTransformsUpload
-    13: ModelTransformsBackfillNode modelTransformsBackfill
+    12: InferenceUploadNode inferenceUpload
+    13: InferenceBackfillNode inferenceBackfill
     14: CreateModelEndpointNode createModelEndpoint
     15: DeployModelNode deployModel
     16: TrainModelNode trainModel

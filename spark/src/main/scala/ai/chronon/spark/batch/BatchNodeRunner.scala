@@ -14,7 +14,7 @@ import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.submission.SparkSessionBuilder
 import ai.chronon.spark.utils.SemanticUtils
-import ai.chronon.spark.{GroupBy, GroupByUpload, Join, ModelTransformsJob}
+import ai.chronon.spark.{GroupBy, GroupByUpload, Join, InferenceJob}
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -446,24 +446,24 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             throw exception
         }
 
-      case NodeContent._Fields.MODEL_TRANSFORMS_BACKFILL =>
+      case NodeContent._Fields.INFERENCE_BACKFILL =>
         logger.info(
-          s"Running model transforms backfill for '${metadata.name}' for range: [${range.start}, ${range.end}]")
-        require(conf.getModelTransformsBackfill.isSetModelTransforms,
-                "ModelTransformsBackfillNode must have modelTransforms set")
-        val modelTransforms = conf.getModelTransformsBackfill.modelTransforms
+          s"Running inference backfill for '${metadata.name}' for range: [${range.start}, ${range.end}]")
+        require(conf.getInferenceBackfill.isSetInference,
+                "InferenceBackfillNode must have inference set")
+        val inference = conf.getInferenceBackfill.inference
 
         val modelPlatformProvider = Option(api.generateModelPlatformProvider)
           .getOrElse(
-            throw new IllegalStateException("Api with ModelPlatformProvider must be set for ModelTransforms backfill"))
+            throw new IllegalStateException("Api with ModelPlatformProvider must be set for Inference backfill"))
 
-        ModelTransformsJob.computeBackfill(
-          modelTransforms,
+        InferenceJob.computeBackfill(
+          inference,
           range,
           tableUtils,
           modelPlatformProvider
         )
-        logger.info(s"Successfully completed model transforms backfill for '${metadata.name}'")
+        logger.info(s"Successfully completed inference backfill for '${metadata.name}'")
 
       case NodeContent._Fields.JOIN_STATS_COMPUTE =>
         logger.info(s"Running join stats compute for '${metadata.name}' for range: [${range.start}, ${range.end}]")

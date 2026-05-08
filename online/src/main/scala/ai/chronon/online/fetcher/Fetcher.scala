@@ -18,7 +18,7 @@ package ai.chronon.online.fetcher
 
 import ai.chronon.api
 import ai.chronon.api.Constants.UTF8
-import ai.chronon.api.Extensions.{ExternalPartOps, JoinOps, ModelTransformsOps, StringOps, ThrowableOps}
+import ai.chronon.api.Extensions.{ExternalPartOps, JoinOps, InferenceOps, StringOps, ThrowableOps}
 import ai.chronon.api._
 import ai.chronon.online.OnlineDerivationUtil.applyDeriveFunc
 import ai.chronon.online._
@@ -243,42 +243,42 @@ class Fetcher(val kvStore: KVStore,
       .map(_.iterator.map(logResponse(_, ts)).toSeq)
   }
 
-  def fetchModelTransforms(requests: scala.Seq[Request],
-                           modelTransformsConf: Option[api.ModelTransforms] = None): Future[scala.Seq[Response]] = {
-    val modelTransformsFetcher = new ModelTransformsFetcher(modelPlatformProvider, debug)
+  def fetchInference(requests: scala.Seq[Request],
+                           inferenceConf: Option[api.Inference] = None): Future[scala.Seq[Response]] = {
+    val inferenceFetcher = new InferenceFetcher(modelPlatformProvider, debug)
 
-    modelTransformsConf match {
-      case Some(modelTransforms) =>
-        fetchModelTransformsWithConf(requests, modelTransforms, modelTransformsFetcher)
+    inferenceConf match {
+      case Some(inference) =>
+        fetchInferenceWithConf(requests, inference, inferenceFetcher)
 
       case None =>
         // Track original indices to maintain order
         val indexedRequests = requests.zipWithIndex
-        val groupedByModelTransforms = indexedRequests.groupBy { case (req, _) => req.name }
+        val groupedByInference = indexedRequests.groupBy { case (req, _) => req.name }
 
-        // Process each model transforms group
-        val futuresWithIndices = groupedByModelTransforms.map { case (modelTransformsName, requestsWithIndices) =>
+        // Process each inference group
+        val futuresWithIndices = groupedByInference.map { case (inferenceName, requestsWithIndices) =>
           val requestsOnly = requestsWithIndices.map(_._1)
           val indices = requestsWithIndices.map(_._2)
 
-          // Look up the ModelTransforms conf from metadata store
-          val modelTransformsConfTry = metadataStore.getModelTransformsConf(modelTransformsName)
+          // Look up the Inference conf from metadata store
+          val inferenceConfTry = metadataStore.getInferenceConf(inferenceName)
 
-          modelTransformsConfTry match {
-            case Success(modelTransforms) =>
-              val responseFuture = fetchModelTransformsWithConf(requestsOnly, modelTransforms, modelTransformsFetcher)
+          inferenceConfTry match {
+            case Success(inference) =>
+              val responseFuture = fetchInferenceWithConf(requestsOnly, inference, inferenceFetcher)
               // Pair responses with their original indices
               responseFuture.map(responses => responses.zip(indices))
 
             case Failure(exception) =>
-              // Failed to fetch model transforms conf - refresh cache and return failure responses
-              metadataStore.getModelTransformsConf.refresh(modelTransformsName)
+              // Failed to fetch inference conf - refresh cache and return failure responses
+              metadataStore.getInferenceConf.refresh(inferenceName)
               val failedResponses = requestsWithIndices.map { case (req, idx) =>
                 (Response(
                    req,
                    Failure(
                      new IllegalArgumentException(
-                       s"Failed to fetch model transforms conf for $modelTransformsName. Please ensure metadata upload succeeded.",
+                       s"Failed to fetch inference conf for $inferenceName. Please ensure metadata upload succeeded.",
                        exception))
                  ),
                  idx)
@@ -296,11 +296,11 @@ class Fetcher(val kvStore: KVStore,
     }
   }
 
-  private def fetchModelTransformsWithConf(
+  private def fetchInferenceWithConf(
       requests: scala.Seq[Request],
-      modelTransforms: api.ModelTransforms,
-      modelTransformsFetcher: ModelTransformsFetcher): Future[scala.Seq[Response]] = {
-    val maybeJoinSource = modelTransforms.joinSource
+      inference: api.Inference,
+      inferenceFetcher: InferenceFetcher): Future[scala.Seq[Response]] = {
+    val maybeJoinSource = inference.joinSource
 
     if (maybeJoinSource.nonEmpty) {
       val join = maybeJoinSource.get.join
@@ -310,10 +310,10 @@ class Fetcher(val kvStore: KVStore,
 
       val joinFuture = fetchJoin(joinRequests, Some(join))
       joinFuture.flatMap { joinResponses =>
-        modelTransformsFetcher.fetchJoinSourceModelTransforms(requests, modelTransforms, joinResponses)
+        inferenceFetcher.fetchJoinSourceInference(requests, inference, joinResponses)
       }
     } else {
-      modelTransformsFetcher.fetchModelTransforms(requests, modelTransforms)
+      inferenceFetcher.fetchInference(requests, inference)
     }
   }
 

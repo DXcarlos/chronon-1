@@ -1,7 +1,7 @@
 from gen_thrift.api.ttypes import JoinSource, Source
 from joins.risk import user_transactions
 
-from ai.chronon.types import InferenceSpec, Model, ModelBackend, ModelTransforms, Query, selects
+from ai.chronon.types import ModelRuntime, Model, ModelBackend, Inference, Query, selects
 
 """
 This is the "left side" of the join that will comprise our training set. It is responsible for providing the primary keys
@@ -18,15 +18,15 @@ source = Source(
 
 model = Model(
     version="1.0",
-    inference_spec=InferenceSpec(
-        model_backend=ModelBackend.VERTEXAI,
-        model_backend_params={"model_type": "xgboost"}
+    runtime=ModelRuntime(
+        backend=ModelBackend.VERTEXAI,
+        params={"model_type": "xgboost"}
     )
 )
 
-v1 = ModelTransforms(
-    sources=[source],
+v1 = Inference(
+    features=[source],
     models=[model],
-    passthrough_fields=["user_id"],
+    passthrough=["user_id"],
     version=1
 )

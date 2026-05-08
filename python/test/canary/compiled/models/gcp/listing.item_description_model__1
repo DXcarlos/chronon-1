@@ -1,12 +1,5 @@
 {
-  "inferenceSpec": {
-    "modelBackend": 0,
-    "modelBackendParams": {
-      "model_name": "gemini-embedding-001",
-      "model_type": "publisher"
-    }
-  },
-  "inputMapping": {
+  "inputs": {
     "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))"
   },
   "metaData": {
@@ -88,12 +81,9 @@
     "team": "gcp",
     "version": "1"
   },
-  "outputMapping": {
-    "item_embedding": "gcp_listing_item_description_model__1__embeddings.values"
-  },
-  "valueSchema": {
+  "outputSchema": {
     "kind": 13,
-    "name": "model_value_schema",
+    "name": "model_output_schema",
     "params": [
       {
         "dataType": {
@@ -140,5 +130,15 @@
         "name": "embeddings"
       }
     ]
+  },
+  "outputs": {
+    "item_embedding": "gcp_listing_item_description_model__1__embeddings.values"
+  },
+  "runtime": {
+    "backend": 0,
+    "params": {
+      "model_name": "gemini-embedding-001",
+      "model_type": "publisher"
+    }
   }
 }

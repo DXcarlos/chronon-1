@@ -1,13 +1,5 @@
 {
-  "inferenceSpec": {
-    "modelBackend": 1,
-    "modelBackendParams": {
-      "dimension": "512",
-      "model_name": "amazon-multimodal-embedding",
-      "model_type": "bedrock"
-    }
-  },
-  "inputMapping": {
+  "inputs": {
     "instance": "named_struct('image', named_struct('s3Uri', listing_id_main_image_path), 'text','')"
   },
   "metaData": {
@@ -108,12 +100,9 @@
     "team": "aws",
     "version": "001"
   },
-  "outputMapping": {
-    "image_embedding": "aws_listing_item_img_model__001__imageEmbedding"
-  },
-  "valueSchema": {
+  "outputSchema": {
     "kind": 13,
-    "name": "model_value_schema",
+    "name": "model_output_schema",
     "params": [
       {
         "dataType": {
@@ -144,5 +133,16 @@
         "name": "textEmbedding"
       }
     ]
+  },
+  "outputs": {
+    "image_embedding": "aws_listing_item_img_model__001__imageEmbedding"
+  },
+  "runtime": {
+    "backend": 1,
+    "params": {
+      "dimension": "512",
+      "model_name": "amazon-multimodal-embedding",
+      "model_type": "bedrock"
+    }
   }
 }

@@ -47,10 +47,10 @@ class ModelNodeRunner(api: Api) extends NodeRunner {
       }
       val modelBackend = validateModelBackend(model)
       val modelPlatform = modelPlatformProvider.getPlatform(modelBackend, Map.empty)
-      val submitTrainingRequest = TrainingRequest(trainingSource = model.trainingConf.trainingDataSource,
+      val submitTrainingRequest = TrainingRequest(trainingSource = model.train.data,
                                                   model = model,
                                                   date = date,
-                                                  window = model.getTrainingConf.trainingDataWindow)
+                                                  window = model.getTrain.window)
       val trainingJobName = Await.result(modelPlatform.submitTrainingJob(submitTrainingRequest), 10.minutes)
 
       // TODO: should hook this up with the orchestration's step checking instead of polling here
@@ -86,7 +86,7 @@ class ModelNodeRunner(api: Api) extends NodeRunner {
       val modelBackend = validateModelBackend(model)
       val modelPlatform = modelPlatformProvider.getPlatform(modelBackend, Map.empty)
 
-      val endpointConfig = model.getDeploymentConf.getEndpointConfig
+      val endpointConfig = model.getServe.getEndpoint
       val endpointResourceName = Await.result(modelPlatform.createEndpoint(endpointConfig), 10.minutes)
 
       val duration = (System.currentTimeMillis() - startTime) / 1000
@@ -196,13 +196,13 @@ class ModelNodeRunner(api: Api) extends NodeRunner {
   }
 
   private def validateModelBackend(model: Model) = {
-    val modelBackend = model.getInferenceSpec.getModelBackend
-    val backendModelType = Option(model.getInferenceSpec.getModelBackendParams)
+    val modelBackend = model.getRuntime.getBackend
+    val backendModelType = Option(model.getRuntime.getParams)
       .map(m => {
         m.asScala.toMap
       })
       .getOrElse(Map.empty[String, String])
-      .getOrElse("model_type", throw new IllegalArgumentException("model_type is required in modelBackendParams"))
+      .getOrElse("model_type", throw new IllegalArgumentException("model_type is required in runtime params"))
 
     // model_type must be "custom" for model related runs
     require(backendModelType == "custom",

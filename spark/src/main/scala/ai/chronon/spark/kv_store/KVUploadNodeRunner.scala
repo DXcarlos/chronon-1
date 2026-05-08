@@ -31,11 +31,11 @@ class KVUploadNodeRunner(api: Api) extends NodeRunner {
 
       case NodeContent._Fields.JOIN_METADATA_UPLOAD => doUploadJoinMetadata(conf)
 
-      case NodeContent._Fields.MODEL_TRANSFORMS_UPLOAD => doUploadModelTransforms(conf)
+      case NodeContent._Fields.INFERENCE_UPLOAD => doUploadInference(conf)
 
       case _ =>
         throw new IllegalArgumentException(
-          "Expected GroupByUploadToKVNode, JoinMetadataUpload, or ModelTransformsUpload content but got: " + conf.getClass.getSimpleName)
+          "Expected GroupByUploadToKVNode, JoinMetadataUpload, or InferenceUpload content but got: " + conf.getClass.getSimpleName)
     }
   }
 
@@ -61,25 +61,25 @@ class KVUploadNodeRunner(api: Api) extends NodeRunner {
     }
   }
 
-  private def doUploadModelTransforms(conf: NodeContent): Unit = {
-    val modelTransforms = conf.getModelTransformsUpload.modelTransforms
-    val modelTransformsName = modelTransforms.metaData.name
+  private def doUploadInference(conf: NodeContent): Unit = {
+    val inference = conf.getInferenceUpload.inference
+    val inferenceName = inference.metaData.name
 
     val startTime = System.currentTimeMillis()
-    logger.info(s"Starting metadata upload for ModelTransforms: $modelTransformsName")
+    logger.info(s"Starting metadata upload for Inference: $inferenceName")
 
     try {
       val fetchContext = createFetchContext()
       val metadataStore = new MetadataStore(fetchContext)
-      val putRequest = metadataStore.putModelTransformsConf(modelTransforms)
+      val putRequest = metadataStore.putInferenceConf(inference)
       Await.result(putRequest, 1.hour)
       val duration = (System.currentTimeMillis() - startTime) / 1000
       logger.info(
-        s"Successfully uploaded ModelTransforms metadata for ModelTransforms: $modelTransformsName in $duration seconds")
+        s"Successfully uploaded Inference metadata for Inference: $inferenceName in $duration seconds")
 
     } catch {
       case e: Exception =>
-        logger.error(s"Failed to upload ModelTransforms metadata for ModelTransforms: $modelTransformsName", e)
+        logger.error(s"Failed to upload Inference metadata for Inference: $inferenceName", e)
         throw e
     }
   }

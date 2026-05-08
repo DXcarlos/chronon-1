@@ -10,6 +10,14 @@ from ai.chronon.data_types import DataType, FieldsType
 from ai.chronon.utils import ANY_SOURCE_TYPE, normalize_source, normalize_sources
 
 
+def _as_sources(features):
+    if features is None:
+        return None
+    if isinstance(features, Sequence) and not isinstance(features, (str, bytes)):
+        return features
+    return [features]
+
+
 class ModelBackend:
     VERTEXAI = ttypes.ModelBackend.VertexAI
     SAGEMAKER = ttypes.ModelBackend.SageMaker
@@ -27,13 +35,13 @@ class DeploymentStrategyType:
 
 
 @dataclass
-class ResourceConfig:
+class Resources:
     min_replica_count: Optional[int] = None
     max_replica_count: Optional[int] = None
     machine_type: Optional[str] = None
 
     def to_thrift(self):
-        return ttypes.ResourceConfig(
+        return ttypes.Resources(
             minReplicaCount=self.min_replica_count,
             maxReplicaCount=self.max_replica_count,
             machineType=self.machine_type,
@@ -41,55 +49,55 @@ class ResourceConfig:
 
 
 @dataclass
-class InferenceSpec:
-    model_backend: Optional[ModelBackend] = None
-    model_backend_params: Optional[Dict[str, str]] = None
-    resource_config: Optional[ResourceConfig] = None
+class ModelRuntime:
+    backend: Optional[ModelBackend] = None
+    params: Optional[Dict[str, str]] = None
+    resources: Optional[Resources] = None
 
     def to_thrift(self):
-        return ttypes.InferenceSpec(
-            modelBackend=self.model_backend,
-            modelBackendParams=self.model_backend_params,
-            resourceConfig=self.resource_config.to_thrift() if self.resource_config else None,
+        return ttypes.ModelRuntime(
+            backend=self.backend,
+            params=self.params,
+            resources=self.resources.to_thrift() if self.resources else None,
         )
 
 
 @dataclass
-class TrainingSpec:
-    # TODO: may want to try to support staging query as a training_data_source
-    training_data_source: Optional[ANY_SOURCE_TYPE] = None
-    training_data_window: Optional[Union[common.Window, str]] = None
+class Train:
+    # TODO: may want to try to support staging query as a training data source.
+    data: Optional[ANY_SOURCE_TYPE] = None
+    window: Optional[Union[common.Window, str]] = None
     schedule: Optional[str] = None
     image: Optional[str] = None
-    python_module: Optional[str] = None
-    resource_config: Optional[ResourceConfig] = None
-    job_configs: Optional[Dict[str, str]] = None
+    entrypoint: Optional[str] = None
+    resources: Optional[Resources] = None
+    params: Optional[Dict[str, str]] = None
 
     def to_thrift(self):
-        return ttypes.TrainingSpec(
-            trainingDataSource=normalize_source(self.training_data_source) if self.training_data_source else None,
-            trainingDataWindow=window_utils.normalize_window(self.training_data_window) if self.training_data_window else None,
+        return ttypes.Train(
+            data=normalize_source(self.data) if self.data else None,
+            window=window_utils.normalize_window(self.window) if self.window else None,
             schedule=self.schedule,
             image=self.image,
-            pythonModule=self.python_module,
-            resourceConfig=self.resource_config.to_thrift() if self.resource_config else None,
-            jobConfigs=self.job_configs,
+            entrypoint=self.entrypoint,
+            resources=self.resources.to_thrift() if self.resources else None,
+            params=self.params,
         )
 
 
 @dataclass
 class ServingContainerConfig:
     image: Optional[str] = None
-    serving_health_route: Optional[str] = None
-    serving_predict_route: Optional[str] = None
-    serving_container_env_vars: Optional[Dict[str, str]] = None
+    health_route: Optional[str] = None
+    infer_route: Optional[str] = None
+    env: Optional[Dict[str, str]] = None
 
     def to_thrift(self):
         return ttypes.ServingContainerConfig(
             image=self.image,
-            servingHealthRoute=self.serving_health_route,
-            servingPredictRoute=self.serving_predict_route,
-            servingContainerEnvVars=self.serving_container_env_vars,
+            healthRoute=self.health_route,
+            inferRoute=self.infer_route,
+            env=self.env,
         )
 
 
@@ -103,6 +111,14 @@ class EndpointConfig:
             endpointName=self.endpoint_name,
             additionalConfigs=self.additional_configs,
         )
+
+
+def _endpoint_config(endpoint):
+    if endpoint is None:
+        return None
+    if isinstance(endpoint, EndpointConfig):
+        return endpoint
+    return EndpointConfig(endpoint_name=endpoint)
 
 
 @dataclass
@@ -129,86 +145,80 @@ class RolloutStrategy:
             rolloutType=self.rollout_type,
             validationTrafficPercentRamps=self.validation_traffic_percent_ramps,
             validationTrafficDurationMins=self.validation_traffic_duration_mins,
-            rolloutMetricThresholds=[m.to_thrift() for m in self.rollout_metric_thresholds] if self.rollout_metric_thresholds else None,
+            rolloutMetricThresholds=[m.to_thrift() for m in self.rollout_metric_thresholds]
+            if self.rollout_metric_thresholds
+            else None,
         )
 
 
 @dataclass
-class DeploymentSpec:
-    container_config: Optional[ServingContainerConfig] = None
-    endpoint_config: Optional[EndpointConfig] = None
-    resource_config: Optional[ResourceConfig] = None
-    rollout_strategy: Optional[RolloutStrategy] = None
+class Serve:
+    container: Optional[ServingContainerConfig] = None
+    endpoint: Optional[Union[str, EndpointConfig]] = None
+    resources: Optional[Resources] = None
+    rollout: Optional[RolloutStrategy] = None
+    image: Optional[str] = None
+    health_route: Optional[str] = None
+    infer_route: Optional[str] = None
+    env: Optional[Dict[str, str]] = None
 
     def to_thrift(self):
-        return ttypes.DeploymentSpec(
-            containerConfig=self.container_config.to_thrift() if self.container_config else None,
-            endpointConfig=self.endpoint_config.to_thrift() if self.endpoint_config else None,
-            resourceConfig=self.resource_config.to_thrift() if self.resource_config else None,
-            rolloutStrategy=self.rollout_strategy.to_thrift() if self.rollout_strategy else None,
+        container = self.container
+        if container is None and any(
+            value is not None for value in (self.image, self.health_route, self.infer_route, self.env)
+        ):
+            container = ServingContainerConfig(
+                image=self.image,
+                health_route=self.health_route,
+                infer_route=self.infer_route,
+                env=self.env,
+            )
+
+        return ttypes.Serve(
+            container=container.to_thrift() if container else None,
+            endpoint=_endpoint_config(self.endpoint).to_thrift() if self.endpoint else None,
+            resources=self.resources.to_thrift() if self.resources else None,
+            rollout=self.rollout.to_thrift() if self.rollout else None,
         )
 
 
 def Model(
     version: str,
-    inference_spec: Optional[InferenceSpec] = None,
-    input_mapping: Optional[Dict[str, str]] = None,
-    output_mapping: Optional[Dict[str, str]] = None,
-    value_fields: Optional[FieldsType] = None,
-    model_artifact_base_uri: Optional[str] = None,
-    training_conf: Optional[TrainingSpec] = None,
-    deployment_conf: Optional[DeploymentSpec] = None,
+    runtime: Optional[ModelRuntime] = None,
+    inputs: Optional[Dict[str, str]] = None,
+    outputs: Optional[Dict[str, str]] = None,
+    output_fields: Optional[FieldsType] = None,
+    artifact_uri: Optional[str] = None,
+    train: Optional[Train] = None,
+    serve: Optional[Serve] = None,
     output_namespace: Optional[str] = None,
     table_properties: Optional[Dict[str, str]] = None,
     tags: Optional[Dict[str, str]] = None,
 ) -> ttypes.Model:
     """
-    Creates a Model object for ML model inference and orchestration.
+    Creates a Model object for ML model training, deployment, and inference.
 
     :param version:
-        Version string for the model configuration
-    :type version: str
-    :param inference_spec:
-        Model + model backend specific details necessary to perform inference
-    :type inference_spec: InferenceSpec
-    :param input_mapping:
-        Spark SQL queries to transform input data to the format expected by the model
-    :type input_mapping: Dict[str, str]
-    :param output_mapping:
-        Spark SQL queries to transform model output to desired output format
-    :type output_mapping: Dict[str, str]
-    :param value_fields:
-        List of tuples of (field_name, DataType) defining the schema of the model's output values.
-        If provided, creates a STRUCT schema that will be set as the model's valueSchema.
-        Example: [('score', DataType.DOUBLE), ('category', DataType.STRING)]
-    :type value_fields: FieldsType
-    :param model_artifact_base_uri:
-        Base URI where trained model artifacts are stored
-    :type model_artifact_base_uri: str
-    :param training_conf:
-        Configs related to orchestrating model training jobs
-    :type training_conf: TrainingSpec
-    :param deployment_conf:
-        Configs related to orchestrating model deployment
-    :type deployment_conf: DeploymentSpec
-    :param output_namespace:
-        Namespace for the model output
-    :type output_namespace: str
-    :param table_properties:
-        Additional table properties for the model output
-    :type table_properties: Dict[str, str]
-    :param tags:
-        Additional metadata that does not directly affect computation, but is useful for management.
-    :type tags: Dict[str, str]
-    :return:
-        A Model object
+        Version string for the model configuration.
+    :param runtime:
+        Backend and runtime details needed to call the model.
+    :param inputs:
+        Spark SQL expressions that build model inputs from feature columns.
+    :param outputs:
+        Spark SQL expressions that map model outputs to Chronon columns.
+    :param output_fields:
+        List of tuples of (field_name, DataType) defining the model output schema.
+    :param artifact_uri:
+        Base URI where trained model artifacts are stored.
+    :param train:
+        Training job configuration.
+    :param serve:
+        Serving deployment configuration.
     """
-    # Get caller's filename to assign team
     team = utils._get_team_from_caller()
 
     assert isinstance(version, str), f"Version must be a string, but found {type(version).__name__}"
 
-    # Create metadata
     meta_data = ttypes.MetaData(
         outputNamespace=output_namespace,
         team=team,
@@ -217,70 +227,45 @@ def Model(
         version=version,
     )
 
-    model = ttypes.Model(
+    return ttypes.Model(
         metaData=meta_data,
-        inferenceSpec=inference_spec.to_thrift() if inference_spec else None,
-        inputMapping=input_mapping,
-        outputMapping=output_mapping,
-        valueSchema=DataType.STRUCT("model_value_schema", *value_fields) if value_fields else None,
-        modelArtifactBaseUri=model_artifact_base_uri,
-        trainingConf=training_conf.to_thrift() if training_conf else None,
-        deploymentConf=deployment_conf.to_thrift() if deployment_conf else None,
+        runtime=runtime.to_thrift() if runtime else None,
+        inputs=inputs,
+        outputs=outputs,
+        outputSchema=DataType.STRUCT("model_output_schema", *output_fields) if output_fields else None,
+        artifactUri=artifact_uri,
+        train=train.to_thrift() if train else None,
+        serve=serve.to_thrift() if serve else None,
     )
 
-    return model
 
-
-def _get_model_transforms_output_table_name(
-    model_transforms: ttypes.ModelTransforms, full_name: bool = False
-):
-    """Generate output table name for ModelTransforms"""
+def _get_inference_output_table_name(inference: ttypes.Inference, full_name: bool = False):
+    """Generate output table name for Inference."""
     return utils._ensure_name_and_get_output_table(
-        model_transforms, ttypes.ModelTransforms, "models", full_name
+        inference, ttypes.Inference, "inferences", full_name
     )
 
 
-def ModelTransforms(
-    sources: Sequence[ANY_SOURCE_TYPE],
+def Inference(
+    features: Union[ANY_SOURCE_TYPE, Sequence[ANY_SOURCE_TYPE]],
     models: List[ttypes.Model],
     version: int,
-    passthrough_fields: Optional[List[str]] = None,
+    passthrough: Optional[List[str]] = None,
     key_fields: Optional[FieldsType] = None,
     output_namespace: Optional[str] = None,
     table_properties: Optional[Dict[str, str]] = None,
     tags: Optional[Dict[str, str]] = None,
-) -> ttypes.ModelTransforms:
+) -> ttypes.Inference:
     """
-    ModelTransforms allows taking the output of existing sources (Event/Entity/Join) and
-    enriching them with 1 or more model outputs. This can be used in GroupBys, Joins, or hit directly
-    via the fetcher. The GroupBy path allows for async materialization of model outputs to the online KV store for low latency
-    serving. The fetcher path allows for on-demand model inference during online serving (at the cost of higher latency / more
-    model inference calls).
-
-    Attributes:
-     - sources: List of existing sources (Event/Entity/Join sources) to be enriched with model outputs
-     - models: List of Model objects that will be used for inference on the source data
-     - passthrough_fields: Fields from the source that we want to passthrough alongside the model outputs
-    - key_fields: List of tuples of (field_name, DataType) defining the schema of the key fields.
-        If provided, creates a STRUCT schema that will be set as the ModelTransforms' keySchema.
-        Example: [('user_id', DataType.STRING), ('session_id', DataType.STRING)]
-     - output_namespace: Namespace for the model output
-     - table_properties: Additional table properties for the model output
-     - tags: Additional metadata tags
+    Creates an inference config from feature sources and one or more models.
     """
-    # Get caller's filename to assign team
     team = utils._get_team_from_caller()
 
-    # Set names for Model objects if they don't have names yet
     if models:
         for model in models:
             if not model.metaData.name:
                 utils.__set_name(model, ttypes.Model, "models")
 
-    # Normalize all sources to ensure they are properly wrapped
-    normalized_sources = normalize_sources(sources)
-
-    # Create metadata
     meta_data = ttypes.MetaData(
         outputNamespace=output_namespace,
         team=team,
@@ -289,17 +274,19 @@ def ModelTransforms(
         version=str(version),
     )
 
-    model_transforms = ttypes.ModelTransforms(
-        sources=normalized_sources,
+    inference = ttypes.Inference(
+        features=normalize_sources(_as_sources(features)),
         models=models,
-        passthroughFields=passthrough_fields,
+        passthrough=passthrough,
         metaData=meta_data,
-        keySchema=DataType.STRUCT("modeltransform_key_schema", *key_fields) if key_fields else None,
+        keySchema=DataType.STRUCT("inference_key_schema", *key_fields) if key_fields else None,
     )
 
-    # Add the table property for output table name generation
-    model_transforms.__class__.table = property(
-        lambda self: _get_model_transforms_output_table_name(self, full_name=True)
+    inference.__class__.table = property(
+        lambda self: _get_inference_output_table_name(self, full_name=True)
     )
 
-    return model_transforms
+    return inference
+
+
+Infer = Inference

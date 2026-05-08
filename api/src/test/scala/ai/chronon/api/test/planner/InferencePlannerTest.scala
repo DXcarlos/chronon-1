@@ -1,61 +1,61 @@
 package ai.chronon.api.test.planner
 
 import ai.chronon.api.{Builders => B, _}
-import ai.chronon.api.planner.ModelTransformsPlanner
+import ai.chronon.api.planner.InferencePlanner
 import ai.chronon.planner.Mode
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 import scala.jdk.CollectionConverters._
 
-class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
+class InferencePlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec: PartitionSpec = PartitionSpec.daily
 
-  private def buildModelTransforms(name: String, source: Source): ModelTransforms = {
+  private def buildInference(name: String, source: Source): Inference = {
     val testModel = B.Model(
       metaData = B.MetaData(name = s"${name}_model"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test-project")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test-project")
       )
     )
 
-    B.ModelTransforms(
+    B.Inference(
       metaData = B.MetaData(
         name = name,
         namespace = "test_namespace"
       ),
-      sources = Seq(source),
+      features = Seq(source),
       models = Seq(testModel)
     )
   }
 
-  "ModelTransformsPlanner" should "create an upload node" in {
+  "InferencePlanner" should "create an upload node" in {
     val source = B.Source.events(
       query = B.Query(),
       table = "test_namespace.test_table"
     )
 
-    val modelTransforms = buildModelTransforms("test_model_transforms", source)
-    val planner = new ModelTransformsPlanner(modelTransforms)
+    val inference = buildInference("test_inference", source)
+    val planner = new InferencePlanner(inference)
     val plan = planner.buildPlan
 
     // Should create plan successfully with both upload and backfill nodes
     plan.nodes.asScala should have size 2
 
     // Find the upload node
-    val uploadNode = plan.nodes.asScala.find(_.content.isSetModelTransformsUpload)
+    val uploadNode = plan.nodes.asScala.find(_.content.isSetInferenceUpload)
 
     uploadNode should be(defined)
 
     // Upload node should have content
     uploadNode.get.content should not be null
-    uploadNode.get.content.getModelTransformsUpload should not be null
-    uploadNode.get.content.getModelTransformsUpload.modelTransforms should not be null
+    uploadNode.get.content.getInferenceUpload should not be null
+    uploadNode.get.content.getInferenceUpload.inference should not be null
 
     // Verify metadata
-    uploadNode.get.metaData.name should equal(s"${modelTransforms.metaData.name}__model_transforms_upload")
+    uploadNode.get.metaData.name should equal(s"${inference.metaData.name}__inference_upload")
 
     // Verify no table dependencies for upload node with non-JoinSource sources
     val deps = uploadNode.get.metaData.executionInfo.tableDependencies.asScala
@@ -66,7 +66,7 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
     plan.terminalNodeNames.get(Mode.DEPLOY) shouldBe uploadNode.get.metaData.name
   }
 
-  "ModelTransformsPlanner" should "handle model transforms with join source and no derivations" in {
+  "InferencePlanner" should "handle inference with join source and no derivations" in {
     val join = B.Join(
       left = B.Source.events(
         query = B.Query(),
@@ -84,21 +84,21 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
       query = B.Query()
     )
 
-    val modelTransforms = buildModelTransforms("test_model_transforms_with_join", joinSource)
-    val planner = new ModelTransformsPlanner(modelTransforms)
+    val inference = buildInference("test_inference_with_join", joinSource)
+    val planner = new InferencePlanner(inference)
     val plan = planner.buildPlan
 
     // Should create plan successfully with both upload and backfill nodes
     plan.nodes.asScala should have size 2
 
-    val uploadNode = plan.nodes.asScala.find(_.content.isSetModelTransformsUpload)
+    val uploadNode = plan.nodes.asScala.find(_.content.isSetInferenceUpload)
     uploadNode should be(defined)
 
     // Verify the node has dependencies (should include the upstream join metadata upload)
     val deps = uploadNode.get.metaData.executionInfo.tableDependencies.asScala
     deps should not be empty
 
-    val backfillNode = plan.nodes.asScala.find(_.content.isSetModelTransformsBackfill)
+    val backfillNode = plan.nodes.asScala.find(_.content.isSetInferenceBackfill)
     backfillNode should be(defined)
     val backfillDeps = backfillNode.get.metaData.executionInfo.tableDependencies.asScala
     backfillDeps should not be empty
@@ -106,7 +106,7 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
     backfillDeps.head.tableInfo.table shouldBe "test_namespace.test_join"
   }
 
-  "ModelTransformsPlanner" should "handle model transforms with join source and contains derivations" in {
+  "InferencePlanner" should "handle inference with join source and contains derivations" in {
     val join = B.Join(
       left = B.Source.events(
         query = B.Query(),
@@ -129,21 +129,21 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
       query = B.Query()
     )
 
-    val modelTransforms = buildModelTransforms("test_model_transforms_with_join", joinSource)
-    val planner = new ModelTransformsPlanner(modelTransforms)
+    val inference = buildInference("test_inference_with_join", joinSource)
+    val planner = new InferencePlanner(inference)
     val plan = planner.buildPlan
 
     // Should create plan successfully with both upload and backfill nodes
     plan.nodes.asScala should have size 2
 
-    val uploadNode = plan.nodes.asScala.find(_.content.isSetModelTransformsUpload)
+    val uploadNode = plan.nodes.asScala.find(_.content.isSetInferenceUpload)
     uploadNode should be(defined)
 
     // Verify the node has dependencies (should include the upstream join metadata upload)
     val deps = uploadNode.get.metaData.executionInfo.tableDependencies.asScala
     deps should not be empty
 
-    val backfillNode = plan.nodes.asScala.find(_.content.isSetModelTransformsBackfill)
+    val backfillNode = plan.nodes.asScala.find(_.content.isSetInferenceBackfill)
     backfillNode should be(defined)
     val backfillDeps = backfillNode.get.metaData.executionInfo.tableDependencies.asScala
     backfillDeps should not be empty
@@ -159,23 +159,23 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
       table = "test_namespace.test_table"
     )
 
-    val modelTransforms = buildModelTransforms("test_model_transforms", source)
-    val planner = new ModelTransformsPlanner(modelTransforms)
+    val inference = buildInference("test_inference", source)
+    val planner = new InferencePlanner(inference)
     val plan = planner.buildPlan
 
     // Should create plan with both nodes
     plan.nodes.asScala should have size 2
 
     // Find both nodes
-    val uploadNode = plan.nodes.asScala.find(_.content.isSetModelTransformsUpload)
-    val backfillNode = plan.nodes.asScala.find(_.content.isSetModelTransformsBackfill)
+    val uploadNode = plan.nodes.asScala.find(_.content.isSetInferenceUpload)
+    val backfillNode = plan.nodes.asScala.find(_.content.isSetInferenceBackfill)
 
     uploadNode should be(defined)
     backfillNode should be(defined)
 
     // Verify metadata
-    uploadNode.get.metaData.name should equal(s"${modelTransforms.metaData.name}__model_transforms_upload")
-    backfillNode.get.metaData.name should equal(s"${modelTransforms.metaData.name}__model_transforms_backfill")
+    uploadNode.get.metaData.name should equal(s"${inference.metaData.name}__inference_upload")
+    backfillNode.get.metaData.name should equal(s"${inference.metaData.name}__inference_backfill")
 
     // Verify terminal nodes
     plan.terminalNodeNames.asScala.size shouldBe 2
@@ -191,13 +191,13 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
       table = "test_namespace.test_table"
     )
 
-    val modelTransforms = buildModelTransforms("test_model_transforms", source)
-    val planner = new ModelTransformsPlanner(modelTransforms)
+    val inference = buildInference("test_inference", source)
+    val planner = new InferencePlanner(inference)
     val backfillNode = planner.backfillNode
 
     // Verify backfill node content
-    backfillNode.content.isSetModelTransformsBackfill shouldBe true
-    backfillNode.content.getModelTransformsBackfill.modelTransforms should not be null
+    backfillNode.content.isSetInferenceBackfill shouldBe true
+    backfillNode.content.getInferenceBackfill.inference should not be null
 
     // Verify table dependencies for events source
     val deps = backfillNode.metaData.executionInfo.tableDependencies.asScala
@@ -229,12 +229,12 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
       query = B.Query()
     )
 
-    val modelTransforms = buildModelTransforms("test_model_transforms_with_join", joinSource)
-    val planner = new ModelTransformsPlanner(modelTransforms)
+    val inference = buildInference("test_inference_with_join", joinSource)
+    val planner = new InferencePlanner(inference)
     val backfillNode = planner.backfillNode
 
     // Verify backfill node content
-    backfillNode.content.isSetModelTransformsBackfill shouldBe true
+    backfillNode.content.isSetInferenceBackfill shouldBe true
 
     // Verify table dependencies point to join output table
     val deps = backfillNode.metaData.executionInfo.tableDependencies.asScala
@@ -273,8 +273,8 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
       query = joinSourceQuery
     )
 
-    val modelTransforms = buildModelTransforms("test_model_transforms_with_query", joinSource)
-    val planner = new ModelTransformsPlanner(modelTransforms)
+    val inference = buildInference("test_inference_with_query", joinSource)
+    val planner = new InferencePlanner(inference)
     val backfillNode = planner.backfillNode
 
     // Verify table dependencies include the query information
@@ -315,22 +315,22 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
 
     val testModel = B.Model(
       metaData = B.MetaData(name = "test_model"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test-project")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test-project")
       )
     )
 
-    val modelTransforms = B.ModelTransforms(
+    val inference = B.Inference(
       metaData = B.MetaData(
-        name = "test_model_transforms_multi_source",
+        name = "test_inference_multi_source",
         namespace = "test_namespace"
       ),
-      sources = Seq(source1, source2),
+      features = Seq(source1, source2),
       models = Seq(testModel)
     )
 
-    val planner = new ModelTransformsPlanner(modelTransforms)
+    val planner = new InferencePlanner(inference)
     val backfillNode = planner.backfillNode
 
     // Verify table dependencies include both sources
@@ -354,12 +354,12 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
         name = "test_model_with_training",
         namespace = "test_namespace"
       ),
-      trainingSpec = B.TrainingSpec(
-        trainingDataSource = B.Source.events(table = "training_data_table", query = B.Query())
+      train = B.Train(
+        data = B.Source.events(table = "training_data_table", query = B.Query())
       ),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test-project")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test-project")
       )
     )
 
@@ -369,22 +369,22 @@ class ModelTransformsPlannerTest extends AnyFlatSpec with Matchers {
         name = "test_model_without_training",
         namespace = "test_namespace"
       ),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test-project")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test-project")
       )
     )
 
-    val modelTransforms = B.ModelTransforms(
+    val inference = B.Inference(
       metaData = B.MetaData(
-        name = "test_model_transforms_with_model_deps",
+        name = "test_inference_with_model_deps",
         namespace = "test_namespace"
       ),
-      sources = Seq(source),
+      features = Seq(source),
       models = Seq(modelWithTraining, modelWithoutTraining)
     )
 
-    val planner = new ModelTransformsPlanner(modelTransforms)
+    val planner = new InferencePlanner(inference)
     val backfillNode = planner.backfillNode
 
     // Verify table dependencies include both the source and the deployed model node

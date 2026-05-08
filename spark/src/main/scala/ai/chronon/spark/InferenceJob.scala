@@ -3,8 +3,8 @@ package ai.chronon.spark
 import ai.chronon.api
 import ai.chronon.api.{Constants, DataType, PartitionRange}
 import ai.chronon.api.DataModel.EVENTS
-import ai.chronon.api.Extensions.{MetadataOps, ModelTransformsOps, QueryOps, SourceOps}
-import ai.chronon.online.{ModelPlatform, ModelPlatformProvider, PredictRequest}
+import ai.chronon.api.Extensions.{MetadataOps, InferenceOps, QueryOps, SourceOps}
+import ai.chronon.online.{ModelPlatform, ModelPlatformProvider, InferRequest}
 import ai.chronon.online.serde.SparkConversions
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.Extensions._
@@ -18,7 +18,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
-object ModelTransformsJob {
+object InferenceJob {
   @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   // Batch size for processing rows per Spark task
@@ -36,12 +36,12 @@ object ModelTransformsJob {
   )
 
   def computeOutputSchema(sourceDf: DataFrame,
-                          modelTransformsConf: api.ModelTransforms,
+                          inferenceConf: api.Inference,
                           tableUtils: TableUtils): StructType = {
-    validateModelTransformsConfig(modelTransformsConf)
+    validateInferenceConfig(inferenceConf)
 
-    val models = Option(modelTransformsConf.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
-    val passthroughFields = Option(modelTransformsConf.passthroughFields).map(_.asScala.toSet).getOrElse(Set.empty)
+    val models = Option(inferenceConf.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
+    val passthroughFields = Option(inferenceConf.passthrough).map(_.asScala.toSet).getOrElse(Set.empty)
 
     // Always include partition column and time column in passthrough, even if not explicitly specified
     val requiredColumns = Set(tableUtils.partitionColumn, Constants.TimeColumn)
@@ -56,7 +56,7 @@ object ModelTransformsJob {
     // Apply input mappings using the existing applyAllMappings method
     val dfWithInputMappings = applyAllMappings(sourceDf,
                                                models,
-                                               getMappingFn = _.inputMapping,
+                                               getMappingFn = _.inputs,
                                                getPrefixFn = model => s"${model.metaData.cleanName}__input")
 
     // Add model inference output fields
@@ -72,7 +72,7 @@ object ModelTransformsJob {
     // Apply output mappings using the existing applyAllMappings method
     val dfWithOutputMappings = applyAllMappings(emptyDfAfterInference,
                                                 models,
-                                                getMappingFn = _.outputMapping,
+                                                getMappingFn = _.outputs,
                                                 getPrefixFn = model => model.metaData.cleanName)
 
     // Select only the fields we want to keep: passthrough fields + final model output fields
@@ -82,22 +82,22 @@ object ModelTransformsJob {
   }
 
   def computeBackfill(
-      modelTransformsConf: api.ModelTransforms,
+      inferenceConf: api.Inference,
       dateRange: PartitionRange,
       tableUtils: TableUtils,
       modelPlatformProvider: ModelPlatformProvider,
       timeoutMillis: Long = 60000
   ): Unit = {
 
-    validateModelTransformsConfig(modelTransformsConf)
+    validateInferenceConfig(inferenceConf)
     require(modelPlatformProvider != null, "ModelPlatformProvider cannot be null")
 
-    val outputTable = modelTransformsConf.metaData.outputTable
+    val outputTable = inferenceConf.metaData.outputTable
     logger.info(
-      s"Starting ModelTransforms backfill for ${modelTransformsConf.metaData.name} " +
+      s"Starting Inference backfill for ${inferenceConf.metaData.name} " +
         s"from ${dateRange.start} to ${dateRange.end}")
 
-    val sourceDf = readSource(modelTransformsConf, dateRange, tableUtils)
+    val sourceDf = readSource(inferenceConf, dateRange, tableUtils)
     if (sourceDf.isEmpty) {
       logger.warn(s"No source data found for range $dateRange. Skipping backfill.")
       return
@@ -105,16 +105,16 @@ object ModelTransformsJob {
     logger.info(s"Read ${sourceDf.count()} rows from source")
 
     // invoke the various models to create an enriched dataframe with model outputs
-    val resultDf = processWithModels(sourceDf, modelTransformsConf, modelPlatformProvider, timeoutMillis, tableUtils)
+    val resultDf = processWithModels(sourceDf, inferenceConf, modelPlatformProvider, timeoutMillis, tableUtils)
 
     logger.info(s"Saving results to $outputTable")
-    resultDf.save(outputTable, tableProperties = modelTransformsConf.metaData.tableProps)
+    resultDf.save(outputTable, tableProperties = inferenceConf.metaData.tableProps)
 
-    logger.info(s"Successfully completed ModelTransforms backfill for ${modelTransformsConf.metaData.name}")
+    logger.info(s"Successfully completed Inference backfill for ${inferenceConf.metaData.name}")
   }
 
   private def readSource(
-      modelTransformsConf: api.ModelTransforms,
+      inferenceConf: api.Inference,
       dateRange: PartitionRange,
       tableUtils: TableUtils
   ): DataFrame = {
@@ -138,7 +138,7 @@ object ModelTransformsJob {
       df.translatePartitionSpec(effectiveSpec, tableUtils.partitionSpec)
     }
 
-    val maybeJoinSource = modelTransformsConf.joinSource
+    val maybeJoinSource = inferenceConf.joinSource
 
     if (maybeJoinSource.nonEmpty) {
       val joinSource = maybeJoinSource.get
@@ -150,12 +150,12 @@ object ModelTransformsJob {
 
       scanTableWithPartitioning(joinSource.query, joinOutputTable)
     } else {
-      val sources = Option(modelTransformsConf.sources)
+      val sources = Option(inferenceConf.features)
         .map(_.asScala.toSeq)
         .getOrElse(Seq.empty)
-      require(sources.size == 1, "ModelTransforms must have exactly one source defined (multi-src not supported yet)")
+      require(sources.size == 1, "Inference must have exactly one source defined (multi-src not supported yet)")
       val source = sources.head
-      require(source.dataModel == EVENTS, "Only EVENTS sources are currently supported for ModelTransforms backfill")
+      require(source.dataModel == EVENTS, "Only EVENTS sources are currently supported for Inference backfill")
 
       logger.info(s"Reading from source table: ${source.table}")
 
@@ -165,14 +165,14 @@ object ModelTransformsJob {
 
   private def processWithModels(
       sourceDf: DataFrame,
-      modelTransformsConf: api.ModelTransforms,
+      inferenceConf: api.Inference,
       modelPlatformProvider: ModelPlatformProvider,
       timeoutMillis: Long,
       tableUtils: TableUtils
   ): DataFrame = {
 
-    val models = Option(modelTransformsConf.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
-    val passthroughFields = Option(modelTransformsConf.passthroughFields).map(_.asScala.toSet).getOrElse(Set.empty)
+    val models = Option(inferenceConf.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
+    val passthroughFields = Option(inferenceConf.passthrough).map(_.asScala.toSet).getOrElse(Set.empty)
 
     // Always include partition column and time column in passthrough, even if not explicitly specified
     val requiredColumns = Set(tableUtils.partitionColumn, Constants.TimeColumn)
@@ -208,7 +208,7 @@ object ModelTransformsJob {
     // apply input mappings for all models. We produce intermediate cols prefixed with the model name
     val dfWithInputMappings = applyAllMappings(sourceDf,
                                                models,
-                                               getMappingFn = _.inputMapping,
+                                               getMappingFn = _.inputs,
                                                getPrefixFn = model => s"${model.metaData.cleanName}__input")
     logger.info(s"Schema after input mappings:\n${dfWithInputMappings.schema.catalogString}")
 
@@ -218,7 +218,7 @@ object ModelTransformsJob {
 
     val dfWithOutputMappings = applyAllMappings(dfWithInferenceResults,
                                                 models,
-                                                getMappingFn = _.outputMapping,
+                                                getMappingFn = _.outputs,
                                                 getPrefixFn = model => model.metaData.cleanName)
     logger.info(s"Schema after output mappings:\n${dfWithOutputMappings.schema.catalogString}")
 
@@ -297,12 +297,12 @@ object ModelTransformsJob {
       val inputFieldIndices = extractInputFieldIndices(schema, inputPrefix)
       val expectedOutputFields = getModelOutputFields(model).map(_.name).toSeq
 
-      val inferenceSpec = model.inferenceSpec
-      require(inferenceSpec != null, s"Model ${model.metaData.name} missing inference specification")
+      val runtime = model.runtime
+      require(runtime != null, s"Model ${model.metaData.name} missing inference specification")
 
       val modelPlatform = modelPlatformProvider.getPlatform(
-        inferenceSpec.modelBackend,
-        Option(inferenceSpec.modelBackendParams).map(_.asScala.toMap).getOrElse(Map.empty)
+        runtime.backend,
+        Option(runtime.params).map(_.asScala.toMap).getOrElse(Map.empty)
       )
 
       logger.info(
@@ -317,7 +317,7 @@ object ModelTransformsJob {
         inputPrefix = inputPrefix,
         inputFieldIndices = inputFieldIndices,
         expectedOutputFields = expectedOutputFields,
-        valueSchema = DataType.fromTDataType(model.valueSchema)
+        valueSchema = DataType.fromTDataType(model.outputSchema)
       )
     }
   }
@@ -390,18 +390,18 @@ object ModelTransformsJob {
       modelPlatform: ModelPlatform,
       timeoutMillis: Long
   ): Seq[Map[String, AnyRef]] = {
-    // Create predict request
-    val predictRequest = PredictRequest(model, inputs)
+    // Create inference request
+    val inferRequest = InferRequest(model, inputs)
 
     // Call model and wait for result
-    val predictResponseFuture = modelPlatform.predict(predictRequest)
-    val predictResponse = Await.result(predictResponseFuture, timeoutMillis.milliseconds)
+    val inferResponseFuture = modelPlatform.infer(inferRequest)
+    val inferResponse = Await.result(inferResponseFuture, timeoutMillis.milliseconds)
 
-    predictResponse.outputs match {
-      case Success(predictions) =>
-        require(predictions.size == inputs.size,
-                s"Model ${model.metaData.name} returned ${predictions.size} predictions but expected ${inputs.size}")
-        predictions
+    inferResponse.outputs match {
+      case Success(modelOutputs) =>
+        require(modelOutputs.size == inputs.size,
+                s"Model ${model.metaData.name} returned ${modelOutputs.size} outputs but expected ${inputs.size}")
+        modelOutputs
 
       case Failure(exception) =>
         logger.error(s"Model ${model.metaData.name} inference failed: ${exception.getMessage}", exception)
@@ -411,17 +411,17 @@ object ModelTransformsJob {
   }
 
   private def getModelOutputFields(model: api.Model): Array[StructField] = {
-    val chrononDataType = DataType.fromTDataType(model.valueSchema)
+    val chrononDataType = DataType.fromTDataType(model.outputSchema)
     chrononDataType match {
       case structType: api.StructType =>
         SparkConversions.fromChrononSchema(structType).fields
       case other =>
-        // don't expect this as our Python api enforces StructType for model valueSchema
-        throw new IllegalStateException(s"Model ${model.metaData.name} valueSchema is not a StructType: $other")
+        // don't expect this as our Python api enforces StructType for model outputSchema
+        throw new IllegalStateException(s"Model ${model.metaData.name} outputSchema is not a StructType: $other")
     }
   }
 
-  // Determine the post-model inference schema based on the valueSchema defined on the model
+  // Determine the post-model inference schema based on the outputSchema defined on the model
   // object. We prefix these fields with '<modelName>__<field_name>' directly.
   private def determineInferenceOutputSchema(inputSchema: StructType, models: Seq[api.Model]): StructType = {
     val inferenceFields = models.flatMap { model =>
@@ -434,18 +434,18 @@ object ModelTransformsJob {
     StructType(inputSchema.fields ++ inferenceFields)
   }
 
-  private def validateModelTransformsConfig(modelTransformsConf: api.ModelTransforms): Unit = {
-    require(modelTransformsConf != null, "ModelTransforms configuration cannot be null")
+  private def validateInferenceConfig(inferenceConf: api.Inference): Unit = {
+    require(inferenceConf != null, "Inference configuration cannot be null")
 
-    // require the models listed in the ModelTransforms to have valueSchema defined
-    val models = Option(modelTransformsConf.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
+    // require the models listed in the Inference to have outputSchema defined
+    val models = Option(inferenceConf.models).map(_.asScala.toSeq).getOrElse(Seq.empty)
     models.zipWithIndex.foreach { case (model, idx) =>
-      require(model.valueSchema != null,
-              s"Model at index $idx must have valueSchema defined for ModelTransforms backfill")
-      require(model.metaData != null, s"Model at index $idx must have metaData defined for ModelTransforms backfill")
+      require(model.outputSchema != null,
+              s"Model at index $idx must have outputSchema defined for Inference backfill")
+      require(model.metaData != null, s"Model at index $idx must have metaData defined for Inference backfill")
       require(
         model.metaData.name != null && model.metaData.name.nonEmpty,
-        s"Model at index $idx must have a non-null, non-empty name in metaData for ModelTransforms backfill. " +
+        s"Model at index $idx must have a non-null, non-empty name in metaData for Inference backfill. " +
           "Please ensure the compiled model JSON has the 'metaData.name' field set."
       )
     }
@@ -458,8 +458,8 @@ object ModelTransformsJob {
 
       // If output mappings exist, keep only those fields
       // Otherwise, keep all raw model output fields
-      if (Option(model.outputMapping).exists(!_.isEmpty)) {
-        model.outputMapping.asScala.keys.map(k => s"${modelName}__$k")
+      if (Option(model.outputs).exists(!_.isEmpty)) {
+        model.outputs.asScala.keys.map(k => s"${modelName}__$k")
       } else {
         getModelOutputFields(model).map(f => s"${modelName}__${f.name}")
       }

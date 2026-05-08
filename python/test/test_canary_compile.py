@@ -76,8 +76,8 @@ _TEAM_DEFAULT_FIXTURES = [
         "data",
     ),
     (
-        "ModelTransforms (no output_namespace= -> gcp team default 'data')",
-        "compiled/model_transforms/gcp/team_default_ns_mt.v1__1",
+        "Inference (no output_namespace= -> gcp team default 'data')",
+        "compiled/inferences/gcp/team_default_ns_mt.v1__1",
         "data",
     ),
     (

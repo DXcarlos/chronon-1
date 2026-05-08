@@ -4,7 +4,7 @@ import ai.chronon.aggregator.test.Column
 import ai.chronon.api
 import ai.chronon.api.{Builders => B, _}
 import ai.chronon.api.Extensions.MetadataOps
-import ai.chronon.online.{DeployModelRequest, ModelPlatform, ModelPlatformProvider, PredictRequest, PredictResponse, TrainingRequest}
+import ai.chronon.online.{DeployModelRequest, ModelPlatform, ModelPlatformProvider, InferRequest, InferResponse, TrainingRequest}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.utils.{DataFrameGen, SparkTestBase}
@@ -16,11 +16,11 @@ import scala.collection.mutable
 import scala.concurrent.Future
 import scala.util.Success
 
-class ModelTransformsJobTest extends SparkTestBase {
+class InferenceJobTest extends SparkTestBase {
 
   implicit val tableUtils: TableUtils = TableUtils(spark)
 
-  val namespace = "test_namespace_model_transforms"
+  val namespace = "test_namespace_inference"
   val today: String = tableUtils.partitionSpec.at(System.currentTimeMillis())
   val monthAgo: String = tableUtils.partitionSpec.minus(today, new Window(30, TimeUnit.DAYS))
 
@@ -57,22 +57,22 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val model1 = B.Model(
       metaData = B.MetaData(name = "model1"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test")
       ),
-      valueSchema = model1ValueSchema,
-      inputMapping = model1InputMapping,
-      outputMapping = model1OutputMapping
+      outputSchema = model1ValueSchema,
+      inputs = model1InputMapping,
+      outputs = model1OutputMapping
     )
 
     val model2 = B.Model(
       metaData = B.MetaData(name = "model2"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.SageMaker,
-        modelBackendParams = Map("endpoint" -> "test")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.SageMaker,
+        params = Map("endpoint" -> "test")
       ),
-      valueSchema = model2ValueSchema
+      outputSchema = model2ValueSchema
     )
 
     (model1, model2)
@@ -180,23 +180,23 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val (model1, model2) = createTestModels()
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(B.MetaData(name = "test_model_transforms_basic").setOutputNamespace(namespace))
+    val inference = new Inference()
+      .setMetaData(B.MetaData(name = "test_inference_basic").setOutputNamespace(namespace))
       .setModels(Seq(model1, model2).asJava)
-      .setPassthroughFields(Seq("user_id", "item_id").asJava)
-      .setSources(Seq(source).asJava)
+      .setPassthrough(Seq("user_id", "item_id").asJava)
+      .setFeatures(Seq(source).asJava)
 
     val testPlatformProvider = createMockPlatformProvider()
 
     val dateRange = PartitionRange(monthAgo, today)(tableUtils.partitionSpec)
-    ModelTransformsJob.computeBackfill(
-      modelTransforms,
+    InferenceJob.computeBackfill(
+      inference,
       dateRange,
       tableUtils,
       testPlatformProvider
     )
 
-    val outputDf = tableUtils.loadTable(modelTransforms.metaData.outputTable)
+    val outputDf = tableUtils.loadTable(inference.metaData.outputTable)
     outputDf.count() shouldBe sourceCount
 
     verifyOutputSchema(
@@ -227,23 +227,23 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val (model1, model2) = createTestModels()
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(B.MetaData(name = "test_model_transforms_events").setOutputNamespace(namespace))
+    val inference = new Inference()
+      .setMetaData(B.MetaData(name = "test_inference_events").setOutputNamespace(namespace))
       .setModels(Seq(model1, model2).asJava)
-      .setPassthroughFields(Seq("user_id", "event_type").asJava)
-      .setSources(Seq(source).asJava)
+      .setPassthrough(Seq("user_id", "event_type").asJava)
+      .setFeatures(Seq(source).asJava)
 
     val testPlatformProvider = createMockPlatformProvider()
 
     val dateRange = PartitionRange(monthAgo, today)(tableUtils.partitionSpec)
-    ModelTransformsJob.computeBackfill(
-      modelTransforms,
+    InferenceJob.computeBackfill(
+      inference,
       dateRange,
       tableUtils,
       testPlatformProvider
     )
 
-    val outputDf = tableUtils.loadTable(modelTransforms.metaData.outputTable)
+    val outputDf = tableUtils.loadTable(inference.metaData.outputTable)
     outputDf.count() shouldBe sourceCount
 
     verifyOutputSchema(
@@ -297,23 +297,23 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val (model1, model2) = createTestModels()
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(B.MetaData(name = "test_model_transforms_query").setOutputNamespace(namespace))
+    val inference = new Inference()
+      .setMetaData(B.MetaData(name = "test_inference_query").setOutputNamespace(namespace))
       .setModels(Seq(model1, model2).asJava)
-      .setPassthroughFields(Seq("user_id", "product_id").asJava)
-      .setSources(Seq(source).asJava)
+      .setPassthrough(Seq("user_id", "product_id").asJava)
+      .setFeatures(Seq(source).asJava)
 
     val testPlatformProvider = createMockPlatformProvider()
 
     val dateRange = PartitionRange(monthAgo, today)(tableUtils.partitionSpec)
-    ModelTransformsJob.computeBackfill(
-      modelTransforms,
+    InferenceJob.computeBackfill(
+      inference,
       dateRange,
       tableUtils,
       testPlatformProvider
     )
 
-    val outputDf = tableUtils.loadTable(modelTransforms.metaData.outputTable)
+    val outputDf = tableUtils.loadTable(inference.metaData.outputTable)
     outputDf.count() shouldBe sourceCount
 
     verifyOutputSchema(
@@ -358,23 +358,23 @@ class ModelTransformsJobTest extends SparkTestBase {
       includeOutputMapping = true
     )
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(B.MetaData(name = "test_model_transforms_mappings").setOutputNamespace(namespace))
+    val inference = new Inference()
+      .setMetaData(B.MetaData(name = "test_inference_mappings").setOutputNamespace(namespace))
       .setModels(Seq(model1, model2).asJava)
-      .setPassthroughFields(Seq("user_id", "item_id").asJava)
-      .setSources(Seq(source).asJava)
+      .setPassthrough(Seq("user_id", "item_id").asJava)
+      .setFeatures(Seq(source).asJava)
 
     val testPlatformProvider = createMockPlatformProvider()
 
     val dateRange = PartitionRange(monthAgo, today)(tableUtils.partitionSpec)
-    ModelTransformsJob.computeBackfill(
-      modelTransforms,
+    InferenceJob.computeBackfill(
+      inference,
       dateRange,
       tableUtils,
       testPlatformProvider
     )
 
-    val outputDf = tableUtils.loadTable(modelTransforms.metaData.outputTable)
+    val outputDf = tableUtils.loadTable(inference.metaData.outputTable)
     outputDf.count() shouldBe sourceCount
 
     // With output mapping, model1 should have final_score instead of score (raw output is dropped)
@@ -421,27 +421,27 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val modelWithoutName = new Model()
     modelWithoutName.setMetaData(new MetaData()) // metaData exists but name is null
-    modelWithoutName.setInferenceSpec(
-      new InferenceSpec()
-        .setModelBackend(ModelBackend.VertexAI)
-        .setModelBackendParams(Map("project" -> "test").asJava)
+    modelWithoutName.setRuntime(
+      new ModelRuntime()
+        .setBackend(ModelBackend.VertexAI)
+        .setParams(Map("project" -> "test").asJava)
     )
-    val valueSchema = B.structSchema("model_output", "score" -> DoubleType)
-    modelWithoutName.setValueSchema(valueSchema)
+    val outputSchema = B.structSchema("model_output", "score" -> DoubleType)
+    modelWithoutName.setOutputSchema(outputSchema)
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(B.MetaData(name = "test_model_transforms_null_name").setOutputNamespace(namespace))
+    val inference = new Inference()
+      .setMetaData(B.MetaData(name = "test_inference_null_name").setOutputNamespace(namespace))
       .setModels(Seq(modelWithoutName).asJava)
-      .setPassthroughFields(Seq("user_id", "item_id").asJava)
-      .setSources(Seq(source).asJava)
+      .setPassthrough(Seq("user_id", "item_id").asJava)
+      .setFeatures(Seq(source).asJava)
 
     val testPlatformProvider = createMockPlatformProvider()
 
     val dateRange = PartitionRange(monthAgo, today)(tableUtils.partitionSpec)
 
     val exception = intercept[IllegalArgumentException] {
-      ModelTransformsJob.computeBackfill(
-        modelTransforms,
+      InferenceJob.computeBackfill(
+        inference,
         dateRange,
         tableUtils,
         testPlatformProvider
@@ -483,38 +483,38 @@ class ModelTransformsJobTest extends SparkTestBase {
 
     val model = B.Model(
       metaData = B.MetaData(name = "failing_model"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test")
       ),
-      valueSchema = B.structSchema("model_output",
+      outputSchema = B.structSchema("model_output",
         "score" -> DoubleType
       )
     )
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(B.MetaData(name = "test_model_transforms_failure").setOutputNamespace(namespace))
+    val inference = new Inference()
+      .setMetaData(B.MetaData(name = "test_inference_failure").setOutputNamespace(namespace))
       .setModels(Seq(model).asJava)
-      .setPassthroughFields(Seq("user_id", "item_id").asJava)
-      .setSources(Seq(source).asJava)
+      .setPassthrough(Seq("user_id", "item_id").asJava)
+      .setFeatures(Seq(source).asJava)
 
     val testPlatformProvider = new TestModelPlatformProvider()
 
-    // Mock platform that returns a successful Future but with a Failure in the PredictResponse
+    // Mock platform that returns a successful Future but with a Failure in the InferResponse
     val mockPlatform = new FailingResponseModelPlatform()
     testPlatformProvider.addPlatform(ModelBackend.VertexAI, mockPlatform)
 
     val dateRange = PartitionRange(monthAgo, today)(tableUtils.partitionSpec)
 
     // Run the backfill - it should complete but with empty model outputs
-    ModelTransformsJob.computeBackfill(
-      modelTransforms,
+    InferenceJob.computeBackfill(
+      inference,
       dateRange,
       tableUtils,
       testPlatformProvider
     )
 
-    val outputTable = modelTransforms.metaData.outputTable
+    val outputTable = inference.metaData.outputTable
     val outputDf = tableUtils.loadTable(outputTable)
 
     // Should have passthrough fields and null model outputs
@@ -561,25 +561,25 @@ class ModelTransformsJobTest extends SparkTestBase {
     val source = new Source()
     source.setJoinSource(joinSource)
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(B.MetaData(name = "test_model_transforms_empty_models").setOutputNamespace(namespace))
+    val inference = new Inference()
+      .setMetaData(B.MetaData(name = "test_inference_empty_models").setOutputNamespace(namespace))
       .setModels(Seq.empty.asJava)  // Empty models sequence
-      .setPassthroughFields(Seq("user_id", "item_id").asJava)
-      .setSources(Seq(source).asJava)
+      .setPassthrough(Seq("user_id", "item_id").asJava)
+      .setFeatures(Seq(source).asJava)
 
     val testPlatformProvider = new TestModelPlatformProvider()
 
     val dateRange = PartitionRange(monthAgo, today)(tableUtils.partitionSpec)
 
     // Run the backfill - should just pass through the specified fields
-    ModelTransformsJob.computeBackfill(
-      modelTransforms,
+    InferenceJob.computeBackfill(
+      inference,
       dateRange,
       tableUtils,
       testPlatformProvider
     )
 
-    val outputTable = modelTransforms.metaData.outputTable
+    val outputTable = inference.metaData.outputTable
     val outputDf = tableUtils.loadTable(outputTable)
 
     // Should only have passthrough fields
@@ -623,11 +623,11 @@ class ModelTransformsJobTest extends SparkTestBase {
     // Create a model with complex struct output
     val model = B.Model(
       metaData = B.MetaData(name = "struct_model"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test")
       ),
-      valueSchema = B.structSchema("model_output",
+      outputSchema = B.structSchema("model_output",
         "result" -> api.StructType.from("result_struct", Array(
           "score" -> DoubleType,
           "metadata" -> api.StructType.from("metadata_struct", Array(
@@ -638,11 +638,11 @@ class ModelTransformsJobTest extends SparkTestBase {
       )
     )
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(B.MetaData(name = "test_model_transforms_struct").setOutputNamespace(namespace))
+    val inference = new Inference()
+      .setMetaData(B.MetaData(name = "test_inference_struct").setOutputNamespace(namespace))
       .setModels(Seq(model).asJava)
-      .setPassthroughFields(Seq("user_id", "item_id").asJava)
-      .setSources(Seq(source).asJava)
+      .setPassthrough(Seq("user_id", "item_id").asJava)
+      .setFeatures(Seq(source).asJava)
 
     val testPlatformProvider = new TestModelPlatformProvider()
 
@@ -663,14 +663,14 @@ class ModelTransformsJobTest extends SparkTestBase {
     val dateRange = PartitionRange(monthAgo, today)(tableUtils.partitionSpec)
 
     // Run the backfill
-    ModelTransformsJob.computeBackfill(
-      modelTransforms,
+    InferenceJob.computeBackfill(
+      inference,
       dateRange,
       tableUtils,
       testPlatformProvider
     )
 
-    val outputTable = modelTransforms.metaData.outputTable
+    val outputTable = inference.metaData.outputTable
     val outputDf = tableUtils.loadTable(outputTable)
 
     // Verify the output schema contains the struct field
@@ -723,14 +723,14 @@ class ModelTransformsJobTest extends SparkTestBase {
       includeOutputMapping = true
     )
 
-    val modelTransforms = new ModelTransforms()
-      .setMetaData(B.MetaData(name = "test_model_transforms_schema").setOutputNamespace(namespace))
+    val inference = new Inference()
+      .setMetaData(B.MetaData(name = "test_inference_schema").setOutputNamespace(namespace))
       .setModels(Seq(model1, model2).asJava)
-      .setPassthroughFields(Seq("user_id", "item_id").asJava)
-      .setSources(Seq(source).asJava)
+      .setPassthrough(Seq("user_id", "item_id").asJava)
+      .setFeatures(Seq(source).asJava)
 
     // Compute the output schema
-    val outputSchema = ModelTransformsJob.computeOutputSchema(sourceDf, modelTransforms, tableUtils)
+    val outputSchema = InferenceJob.computeOutputSchema(sourceDf, inference, tableUtils)
 
     // Verify the schema contains exactly the expected fields
     val actualFields = outputSchema.fieldNames.toSet
@@ -769,14 +769,14 @@ class TestModelPlatform(
     responseFn: Map[String, AnyRef] => Map[String, AnyRef] = _ => Map("default_output" -> "test_result".asInstanceOf[AnyRef])
 ) extends ModelPlatform {
 
-  override def predict(predictRequest: PredictRequest): Future[PredictResponse] = {
-    val outputs = predictRequest.inputRequests.map { inputRequest =>
+  override def infer(inferRequest: InferRequest): Future[InferResponse] = {
+    val outputs = inferRequest.inputRequests.map { inputRequest =>
       responseMap.get(inputRequest) match {
         case Some(outputs) => outputs
         case None => responseFn(inputRequest)
       }
     }
-    Future.successful(PredictResponse(predictRequest, Success(outputs)))
+    Future.successful(InferResponse(inferRequest, Success(outputs)))
   }
 
   override def submitTrainingJob(trainingRequest: TrainingRequest): Future[String] = ???
@@ -785,12 +785,12 @@ class TestModelPlatform(
   override def getJobStatus(operation: ai.chronon.online.ModelOperation, id: String): Future[ai.chronon.online.ModelJobStatus] = ???
 }
 
-// Test platform that returns a successful Future with a Failure in PredictResponse.outputs
+// Test platform that returns a successful Future with a Failure in InferResponse.outputs
 class FailingResponseModelPlatform extends ModelPlatform {
-  override def predict(predictRequest: PredictRequest): Future[PredictResponse] = {
+  override def infer(inferRequest: InferRequest): Future[InferResponse] = {
     // Future succeeds, but the response contains a Failure
     Future.successful(
-      PredictResponse(predictRequest, scala.util.Failure(new RuntimeException("Model inference failed")))
+      InferResponse(inferRequest, scala.util.Failure(new RuntimeException("Model inference failed")))
     )
   }
 

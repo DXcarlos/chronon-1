@@ -13,7 +13,7 @@ from gen_thrift.api.ttypes import (
     JoinPart,
     JoinSource,
     MetaData,
-    ModelTransforms,
+    Inference,
     Source,
     Team,
 )
@@ -187,15 +187,15 @@ def test_update_metadata_does_not_overwrite_existing_join_source_namespace():
     assert inner_join.metaData.outputNamespace == "explicit_ns"
 
 
-def test_update_metadata_propagates_namespace_to_model_transforms_join_source():
-    """Same propagation should work for ModelTransforms with JoinSource."""
+def test_update_metadata_propagates_namespace_to_inference_join_source():
+    """Same propagation should work for Inference with JoinSource."""
     inner_join = Join(
         metaData=MetaData(name="test_team.parent_join", team="test_team"),
         left=Source(events=EventSource(table="some_table")),
     )
 
-    mt = ModelTransforms(
-        sources=[Source(joinSource=JoinSource(join=inner_join))],
+    mt = Inference(
+        features=[Source(joinSource=JoinSource(join=inner_join))],
         metaData=MetaData(name="test_team.my_mt", team="test_team"),
     )
 

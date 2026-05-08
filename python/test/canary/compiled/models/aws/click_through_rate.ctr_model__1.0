@@ -1,28 +1,6 @@
 {
-  "deploymentConf": {
-    "containerConfig": {
-      "image": "763104351884.dkr.ecr.us-east-1.amazonaws.com/xgboost-inference:latest"
-    },
-    "endpointConfig": {
-      "endpointName": "test_ctr_model"
-    },
-    "resourceConfig": {
-      "machineType": "ml.m5.xlarge",
-      "maxReplicaCount": 10,
-      "minReplicaCount": 3
-    },
-    "rolloutStrategy": {
-      "rolloutType": 2
-    }
-  },
-  "inferenceSpec": {
-    "modelBackend": 1,
-    "modelBackendParams": {
-      "model_name": "test_ctr_model",
-      "model_type": "custom"
-    }
-  },
-  "inputMapping": {
+  "artifactUri": "s3://zipline-warehouse-models",
+  "inputs": {
     "instance": "named_struct('user_id_click_event_average_7d', user_id_click_event_average_7d, 'listing_price_cents', listing_id_price_cents, 'price_log', price_log, 'price_bucket', price_bucket)"
   },
   "metaData": {
@@ -123,26 +101,46 @@
     "team": "aws",
     "version": "1.0"
   },
-  "modelArtifactBaseUri": "s3://zipline-warehouse-models",
-  "outputMapping": {
+  "outputSchema": {
+    "kind": 13,
+    "name": "model_output_schema",
+    "params": [
+      {
+        "dataType": {
+          "kind": 6
+        },
+        "name": "score"
+      }
+    ]
+  },
+  "outputs": {
     "ctr": "score"
   },
-  "trainingConf": {
-    "image": "763104351884.dkr.ecr.us-east-1.amazonaws.com/xgboost-training:latest",
-    "jobConfigs": {
-      "eta": "0.1",
-      "max-depth": "4",
-      "n-samples": "1000",
-      "num-boost-round": "50"
+  "runtime": {
+    "backend": 1,
+    "params": {
+      "model_name": "test_ctr_model",
+      "model_type": "custom"
+    }
+  },
+  "serve": {
+    "container": {
+      "image": "763104351884.dkr.ecr.us-east-1.amazonaws.com/xgboost-inference:latest"
     },
-    "pythonModule": "trainer.train",
-    "resourceConfig": {
+    "endpoint": {
+      "endpointName": "test_ctr_model"
+    },
+    "resources": {
       "machineType": "ml.m5.xlarge",
-      "maxReplicaCount": 1,
-      "minReplicaCount": 1
+      "maxReplicaCount": 10,
+      "minReplicaCount": 3
     },
-    "schedule": "@daily",
-    "trainingDataSource": {
+    "rollout": {
+      "rolloutType": 2
+    }
+  },
+  "train": {
+    "data": {
       "events": {
         "query": {
           "selects": {
@@ -158,21 +156,23 @@
         "table": "data.aws_ctr_labels_v1__0"
       }
     },
-    "trainingDataWindow": {
+    "entrypoint": "trainer.train",
+    "image": "763104351884.dkr.ecr.us-east-1.amazonaws.com/xgboost-training:latest",
+    "params": {
+      "eta": "0.1",
+      "max-depth": "4",
+      "n-samples": "1000",
+      "num-boost-round": "50"
+    },
+    "resources": {
+      "machineType": "ml.m5.xlarge",
+      "maxReplicaCount": 1,
+      "minReplicaCount": 1
+    },
+    "schedule": "@daily",
+    "window": {
       "length": 1,
       "timeUnit": 1
     }
-  },
-  "valueSchema": {
-    "kind": 13,
-    "name": "model_value_schema",
-    "params": [
-      {
-        "dataType": {
-          "kind": 6
-        },
-        "name": "score"
-      }
-    ]
   }
 }

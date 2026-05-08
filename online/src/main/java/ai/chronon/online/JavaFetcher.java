@@ -203,12 +203,12 @@ public class JavaFetcher {
     return convertResponsesWithTs(scalaResponses, false, startTs);
   }
 
-  public CompletableFuture<List<JavaResponse>> fetchModelTransforms(List<JavaRequest> requests) {
+  public CompletableFuture<List<JavaResponse>> fetchInference(List<JavaRequest> requests) {
     long startTs = System.currentTimeMillis();
     // Convert java requests to scala requests
     List<Fetcher.Request> scalaRequests = convertJavaRequestList(requests, false, startTs);
     // Get responses from the fetcher
-    Future<FetcherResponseWithTs<Fetcher.Response>> scalaResponses = this.fetcher.withTs(this.fetcher.fetchModelTransforms(ScalaJavaConversions.toScala(scalaRequests), Option.empty()));
+    Future<FetcherResponseWithTs<Fetcher.Response>> scalaResponses = this.fetcher.withTs(this.fetcher.fetchInference(ScalaJavaConversions.toScala(scalaRequests), Option.empty()));
     // Convert responses to CompletableFuture
     return convertResponsesWithTs(scalaResponses, false, startTs);
   }

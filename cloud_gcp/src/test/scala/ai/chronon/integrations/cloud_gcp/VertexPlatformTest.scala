@@ -1,7 +1,7 @@
 package ai.chronon.integrations.cloud_gcp
 
 import ai.chronon.api.{Builders => B, ModelBackend}
-import ai.chronon.online.PredictRequest
+import ai.chronon.online.InferRequest
 import io.vertx.core.{AsyncResult, Future => VertxFuture, Handler}
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.json.{JsonArray, JsonObject}
@@ -27,9 +27,9 @@ class VertexPlatformTest extends AnyFlatSpec with Matchers with MockitoSugar wit
 
     val model = B.Model(
       metaData = B.MetaData(name = "test_model"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map(
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map(
           "model_type" -> "publisher"
           // Missing model_name
         )
@@ -40,9 +40,9 @@ class VertexPlatformTest extends AnyFlatSpec with Matchers with MockitoSugar wit
       Map("instance" -> Map("content" -> "hello").asInstanceOf[AnyRef])
     )
 
-    val predictRequest = PredictRequest(model, inputRequests)
+    val inferRequest = InferRequest(model, inputRequests)
 
-    val responseFuture = platform.predict(predictRequest)
+    val responseFuture = platform.infer(inferRequest)
 
     whenReady(responseFuture) { response =>
       response.outputs shouldBe a[Failure[_]]
@@ -54,9 +54,9 @@ class VertexPlatformTest extends AnyFlatSpec with Matchers with MockitoSugar wit
 
     val model = B.Model(
       metaData = B.MetaData(name = "test_model"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map(
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map(
           "model_name" -> "some-model",
           "model_type" -> "unsupported_type"
         )
@@ -67,9 +67,9 @@ class VertexPlatformTest extends AnyFlatSpec with Matchers with MockitoSugar wit
       Map("instance" -> Map("content" -> "hello").asInstanceOf[AnyRef])
     )
 
-    val predictRequest = PredictRequest(model, inputRequests)
+    val inferRequest = InferRequest(model, inputRequests)
 
-    val responseFuture = platform.predict(predictRequest)
+    val responseFuture = platform.infer(inferRequest)
 
     whenReady(responseFuture) { response =>
       response.outputs shouldBe a[Failure[_]]
@@ -99,9 +99,9 @@ class VertexPlatformTest extends AnyFlatSpec with Matchers with MockitoSugar wit
 
     val model = B.Model(
       metaData = B.MetaData(name = "test_model"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map(
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map(
           "model_name" -> "text-embedding-004"
           // No model_type specified - should default to publisher
         )
@@ -112,7 +112,7 @@ class VertexPlatformTest extends AnyFlatSpec with Matchers with MockitoSugar wit
       Map("instance" -> Map("content" -> "hello").asInstanceOf[AnyRef])
     )
 
-    val predictRequest = PredictRequest(model, inputRequests)
+    val inferRequest = InferRequest(model, inputRequests)
 
     // Setup mocks to capture the URL being called
     when(mockWebClient.postAbs(any[String])).thenReturn(mockRequest)
@@ -121,7 +121,7 @@ class VertexPlatformTest extends AnyFlatSpec with Matchers with MockitoSugar wit
     when(mockFuture.onComplete(any[Handler[AsyncResult[HttpResponse[Buffer]]]])).thenReturn(mockFuture)
 
     // Execute - this will fail but we can still verify the URL was called
-    platform.predict(predictRequest)
+    platform.infer(inferRequest)
 
     // Verify that publisher URL template was used (default)
     verify(mockWebClient).postAbs("https://us-central1-aiplatform.googleapis.com/v1/projects/test-project/locations/us-central1/publishers/google/models/text-embedding-004:predict")
@@ -163,9 +163,9 @@ class VertexPlatformTest extends AnyFlatSpec with Matchers with MockitoSugar wit
 
     val model = B.Model(
       metaData = B.MetaData(name = "test_model"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map(
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map(
           "model_name" -> "text-embedding-004",
           "model_type" -> "publisher"
         )
@@ -178,9 +178,9 @@ class VertexPlatformTest extends AnyFlatSpec with Matchers with MockitoSugar wit
       Map("instance" -> Map("content" -> "world").asInstanceOf[AnyRef])
     )
 
-    val predictRequest = PredictRequest(model, inputRequests)
+    val inferRequest = InferRequest(model, inputRequests)
 
-    val responseFuture = platform.predict(predictRequest)
+    val responseFuture = platform.infer(inferRequest)
 
     whenReady(responseFuture) { response =>
       response.outputs shouldBe a[Failure[_]]

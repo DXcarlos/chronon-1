@@ -1,14 +1,5 @@
 {
-  "inferenceSpec": {
-    "modelBackend": 0,
-    "modelBackendParams": {
-      "dimension": "512",
-      "model_name": "multimodalembedding",
-      "model_type": "publisher",
-      "version": "001"
-    }
-  },
-  "inputMapping": {
+  "inputs": {
     "instance": "named_struct('image', named_struct('gcsUri', listing_id_main_image_path), 'text','')"
   },
   "metaData": {
@@ -90,12 +81,9 @@
     "team": "gcp",
     "version": "001"
   },
-  "outputMapping": {
-    "image_embedding": "gcp_listing_item_img_model__001__imageEmbedding"
-  },
-  "valueSchema": {
+  "outputSchema": {
     "kind": 13,
-    "name": "model_value_schema",
+    "name": "model_output_schema",
     "params": [
       {
         "dataType": {
@@ -126,5 +114,17 @@
         "name": "textEmbedding"
       }
     ]
+  },
+  "outputs": {
+    "image_embedding": "gcp_listing_item_img_model__001__imageEmbedding"
+  },
+  "runtime": {
+    "backend": 0,
+    "params": {
+      "dimension": "512",
+      "model_name": "multimodalembedding",
+      "model_type": "publisher",
+      "version": "001"
+    }
   }
 }

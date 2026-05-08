@@ -1352,13 +1352,13 @@ object Extensions {
     }
   }
 
-  implicit class ModelTransformsOps(transforms: ModelTransforms) {
+  implicit class InferenceOps(inference: Inference) {
     def keyNameForKvStore: String = {
-      _keyNameForKvStore(transforms.metaData, ModelFolder)
+      _keyNameForKvStore(inference.metaData, InferenceFolder)
     }
 
     def joinSource: Option[JoinSource] =
-      Option(transforms.sources)
+      Option(inference.features)
         .map(_.toScala)
         .getOrElse(Seq.empty)
         .find(_.isSetJoinSource)

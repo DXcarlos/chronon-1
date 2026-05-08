@@ -454,74 +454,95 @@ object Builders {
   object Model {
     def apply(
         metaData: MetaData = null,
-        inferenceSpec: InferenceSpec = null,
-        inputMapping: Map[String, String] = null,
-        outputMapping: Map[String, String] = null,
-        valueSchema: TDataType = null,
-        trainingSpec: TrainingSpec = null
+        runtime: ModelRuntime = null,
+        inputs: Map[String, String] = null,
+        outputs: Map[String, String] = null,
+        outputSchema: TDataType = null,
+        artifactUri: String = null,
+        train: Train = null,
+        serve: Serve = null
     ): Model = {
       val result = new Model()
       if (metaData != null)
         result.setMetaData(metaData)
-      if (inferenceSpec != null)
-        result.setInferenceSpec(inferenceSpec)
-      if (inputMapping != null)
-        result.setInputMapping(inputMapping.toJava)
-      if (outputMapping != null)
-        result.setOutputMapping(outputMapping.toJava)
-      if (valueSchema != null)
-        result.setValueSchema(valueSchema)
-      if (trainingSpec != null)
-        result.setTrainingConf(trainingSpec)
+      if (runtime != null)
+        result.setRuntime(runtime)
+      if (inputs != null)
+        result.setInputs(inputs.toJava)
+      if (outputs != null)
+        result.setOutputs(outputs.toJava)
+      if (outputSchema != null)
+        result.setOutputSchema(outputSchema)
+      if (artifactUri != null)
+        result.setArtifactUri(artifactUri)
+      if (train != null)
+        result.setTrain(train)
+      if (serve != null)
+        result.setServe(serve)
       result
     }
   }
 
-  object InferenceSpec {
+  object ModelRuntime {
     def apply(
-        modelBackend: ModelBackend = ModelBackend.VertexAI,
-        modelBackendParams: Map[String, String] = null,
-        resourceConfig: ResourceConfig = null
-    ): InferenceSpec = {
-      val result = new InferenceSpec()
-      result.setModelBackend(modelBackend)
-      if (modelBackendParams != null)
-        result.setModelBackendParams(modelBackendParams.toJava)
-      if (resourceConfig != null)
-        result.setResourceConfig(resourceConfig)
+        backend: ModelBackend = ModelBackend.VertexAI,
+        params: Map[String, String] = null,
+        resources: Resources = null
+    ): ModelRuntime = {
+      val result = new ModelRuntime()
+      result.setBackend(backend)
+      if (params != null)
+        result.setParams(params.toJava)
+      if (resources != null)
+        result.setResources(resources)
       result
     }
   }
 
-  object TrainingSpec {
+  object Train {
     def apply(
-        trainingDataSource: Source = null,
-        trainingDataWindow: Window = null
-    ): TrainingSpec = {
-      val result = new TrainingSpec()
-      if (trainingDataSource != null)
-        result.setTrainingDataSource(trainingDataSource)
-      if (trainingDataWindow != null)
-        result.setTrainingDataWindow(trainingDataWindow)
+        data: Source = null,
+        window: Window = null,
+        schedule: String = null,
+        image: String = null,
+        entrypoint: String = null,
+        resources: Resources = null,
+        params: Map[String, String] = null
+    ): Train = {
+      val result = new Train()
+      if (data != null)
+        result.setData(data)
+      if (window != null)
+        result.setWindow(window)
+      if (schedule != null)
+        result.setSchedule(schedule)
+      if (image != null)
+        result.setImage(image)
+      if (entrypoint != null)
+        result.setEntrypoint(entrypoint)
+      if (resources != null)
+        result.setResources(resources)
+      if (params != null)
+        result.setParams(params.toJava)
       result
     }
   }
 
-  object ModelTransforms {
+  object Inference {
     def apply(
-        sources: Seq[Source] = null,
+        features: Seq[Source] = null,
         models: Seq[Model] = null,
-        passthroughFields: Seq[String] = null,
+        passthrough: Seq[String] = null,
         metaData: MetaData = null,
         keySchema: TDataType = null
-    ): ModelTransforms = {
-      val result = new ModelTransforms()
-      if (sources != null)
-        result.setSources(sources.toJava)
+    ): Inference = {
+      val result = new Inference()
+      if (features != null)
+        result.setFeatures(features.toJava)
       if (models != null)
         result.setModels(models.toJava)
-      if (passthroughFields != null)
-        result.setPassthroughFields(passthroughFields.toJava)
+      if (passthrough != null)
+        result.setPassthrough(passthrough.toJava)
       if (metaData != null)
         result.setMetaData(metaData)
       if (keySchema != null)

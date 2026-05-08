@@ -13,19 +13,19 @@ class ModelPlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec: PartitionSpec = PartitionSpec.daily
 
-  private def buildModelWithTrainingSpec(name: String, trainingDataSource: Source, trainingWindow: Window): Model = {
+  private def buildModelWithTrain(name: String, trainingDataSource: Source, trainingWindow: Window): Model = {
     B.Model(
       metaData = B.MetaData(
         name = name,
         namespace = "test_namespace"
       ),
-      trainingSpec = B.TrainingSpec(
-        trainingDataSource = trainingDataSource,
-        trainingDataWindow = trainingWindow
+      train = B.Train(
+        data = trainingDataSource,
+        window = trainingWindow
       ),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test-project", "region" -> "us-central1")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test-project", "region" -> "us-central1")
       )
     )
   }
@@ -36,16 +36,16 @@ class ModelPlannerTest extends AnyFlatSpec with Matchers {
         name = name,
         namespace = "test_namespace"
       ),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test-project", "region" -> "us-central1")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test-project", "region" -> "us-central1")
       )
     )
   }
 
   "ModelPlanner" should "create trainModel, createEndpoint and deployModel nodes when trainingSpec is present" in {
     val trainingDataTable = "training_data_table"
-    val model = buildModelWithTrainingSpec("test_model_with_training", B.Source.events(table = trainingDataTable, query = Query()), new Window().setTimeUnit(TimeUnit.DAYS).setLength(5))
+    val model = buildModelWithTrain("test_model_with_training", B.Source.events(table = trainingDataTable, query = Query()), new Window().setTimeUnit(TimeUnit.DAYS).setLength(5))
     val planner = new ModelPlanner(model)
     val plan = planner.buildPlan
 
@@ -134,17 +134,17 @@ class ModelPlannerTest extends AnyFlatSpec with Matchers {
   it should "handle models with different backend types" in {
     val vertexModel = B.Model(
       metaData = B.MetaData(name = "vertex_model", namespace = "test_namespace"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.VertexAI,
-        modelBackendParams = Map("project" -> "test-project")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.VertexAI,
+        params = Map("project" -> "test-project")
       )
     )
 
     val sageMakerModel = B.Model(
       metaData = B.MetaData(name = "sagemaker_model", namespace = "test_namespace"),
-      inferenceSpec = B.InferenceSpec(
-        modelBackend = ModelBackend.SageMaker,
-        modelBackendParams = Map("region" -> "us-west-2")
+      runtime = B.ModelRuntime(
+        backend = ModelBackend.SageMaker,
+        params = Map("region" -> "us-west-2")
       )
     )
 

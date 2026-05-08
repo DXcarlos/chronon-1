@@ -1,8 +1,8 @@
 from joins.aws import demo
 from models.aws import listing
 
-# Create a listing_model transforms
-from ai.chronon.types import JoinSource, ModelTransforms, Query
+# Create a listing_inference
+from ai.chronon.types import JoinSource, Inference, Query
 
 from ai.chronon.data_types import DataType
 
@@ -14,11 +14,11 @@ source = JoinSource(
     )
 )
 
-v1 = ModelTransforms(
-    sources=[source],
+v1 = Inference(
+    features=[source],
     models=[listing.item_description_model],
     # include a couple of pass through fields from the source / join lookup
-    passthrough_fields=["user_id", "listing_id", "listing_id_is_active"],
+    passthrough=["user_id", "listing_id", "listing_id_is_active"],
     version=2,
     output_namespace="data",
     key_fields=[

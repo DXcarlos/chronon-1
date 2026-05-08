@@ -14,7 +14,7 @@ from gen_thrift.api.ttypes import (
     Join,
     MetaData,
     Model,
-    ModelTransforms,
+    Inference,
     StagingQuery,
     Team,
 )
@@ -146,7 +146,7 @@ def update_metadata(obj: Any, team_dict: Dict[str, Team]):
 
 def _walk_nodes(node: Any):
     """Generator yielding every chronon config node reachable from `node`: the node
-    itself, then all nested configs via joinParts, joinSource.join, modelTransforms,
+    itself, then all nested configs via joinParts, joinSource.join, inference,
     and models. Single source of truth for tree traversal — used by every pass in
     `update_metadata`."""
     if node is None:
@@ -163,25 +163,27 @@ def _walk_nodes(node: Any):
         if node.left:
             yield from _walk_source_nodes(node.left)
 
-    if isinstance(node, (GroupBy, ModelTransforms)):
+    if isinstance(node, GroupBy):
         for src in node.sources or []:
             yield from _walk_source_nodes(src)
 
-    if isinstance(node, ModelTransforms):
+    if isinstance(node, Inference):
+        for src in node.features or []:
+            yield from _walk_source_nodes(src)
         for m in node.models or []:
             yield from _walk_nodes(m)
 
 
 def _walk_source_nodes(source: Any):
     """Yield nested chronon nodes reachable through a Source wrapper (joinSource.join,
-    modelTransforms). Source.events / Source.entities don't wrap chronon objects so
+    inference). Source.events / Source.entities don't wrap chronon objects so
     they're handled per-pass when visiting the enclosing node, not here."""
     if source is None:
         return
     if source.joinSource and source.joinSource.join:
         yield from _walk_nodes(source.joinSource.join)
-    if source.modelTransforms:
-        yield from _walk_nodes(source.modelTransforms)
+    if source.inference:
+        yield from _walk_nodes(source.inference)
 
 
 def _propagate_namespace_onto(
@@ -193,7 +195,7 @@ def _propagate_namespace_onto(
     """Populate `metaData.team` and `metaData.outputNamespace` on a node. Falls back
     to the top-level `default_team` / `default_namespace` only when the node has no
     team set and its own team's lookup yields no namespace."""
-    if not isinstance(node, (GroupBy, Join, Model, ModelTransforms, StagingQuery)):
+    if not isinstance(node, (GroupBy, Join, Model, Inference, StagingQuery)):
         return
     if not node.metaData:
         node.metaData = MetaData()
@@ -256,8 +258,12 @@ def _resolve_namespace_placeholders_on(node: Any):
         for bp in node.bootstrapParts or []:
             bp.table = _substitute(bp.table, namespace)
 
-    if isinstance(node, (GroupBy, ModelTransforms)):
+    if isinstance(node, GroupBy):
         for src in node.sources or []:
+            _substitute_source_tables(src, namespace)
+
+    if isinstance(node, Inference):
+        for src in node.features or []:
             _substitute_source_tables(src, namespace)
 
     if isinstance(node, StagingQuery):
@@ -279,7 +285,7 @@ def _resolve_namespace_placeholders_on(node: Any):
 
 def _substitute_source_tables(source: Any, namespace: str):
     """Substitute the namespace placeholder in Source.events / Source.entities table
-    fields using `namespace`. Does NOT recurse into joinSource / modelTransforms —
+    fields using `namespace`. Does NOT recurse into joinSource / inference —
     that's the walker's job."""
     if source is None:
         return

@@ -46,13 +46,14 @@ DataType = join.DataType
 
 # model related concepts
 Model = model.Model
-ModelTransforms = model.ModelTransforms
+Inference = model.Inference
+Infer = model.Infer
 ModelBackend = model.ModelBackend
 DeploymentStrategyType = model.DeploymentStrategyType
-InferenceSpec = model.InferenceSpec
-TrainingSpec = model.TrainingSpec
-DeploymentSpec = model.DeploymentSpec
-ResourceConfig = model.ResourceConfig
+ModelRuntime = model.ModelRuntime
+Train = model.Train
+Serve = model.Serve
+Resources = model.Resources
 RolloutStrategy = model.RolloutStrategy
 ServingContainerConfig = model.ServingContainerConfig
 EndpointConfig = model.EndpointConfig

@@ -55,7 +55,7 @@ def normalize_window(w: Union[common.Window, str]) -> common.Window:
     Normalizes a window specification to a common.Window object.
 
     Accepts either a Window object directly or a string like "30d" or "24h".
-    This is used across the codebase (e.g., in GroupBy aggregations and TrainingSpec).
+    This is used across the codebase (e.g., in GroupBy aggregations and Train).
 
     Args:
         w: Either a common.Window object or a string like "7d", "24h"
