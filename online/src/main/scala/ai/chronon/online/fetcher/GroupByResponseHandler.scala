@@ -148,7 +148,8 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
                                   streamingResponses,
                                   mutations,
                                   aggregator,
-                                  batchIr)
+                                  batchIr,
+                                  requestContext.keys)
     }
   }
 
@@ -157,7 +158,8 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
                                           streamingResponses: Seq[TimedValue],
                                           mutations: Boolean,
                                           aggregator: SawtoothOnlineAggregator,
-                                          batchIr: FinalBatchIr): Array[Any] = {
+                                          batchIr: FinalBatchIr,
+                                          keys: Map[String, Any]): Array[Any] = {
 
     val selectedCodec = servingInfo.groupByOps.dataModel match {
       case DataModel.EVENTS   => servingInfo.valueAvroCodec
@@ -200,7 +202,15 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
                      |""".stripMargin)
     }
 
-    aggregator.lambdaAggregateFinalized(batchIr, streamingRows.iterator, queryTimeMs, mutations)
+    val cumulatedBatchIr = getCumulatedBatchIrFromBatchIr(batchIr, servingInfo, keys).orNull
+    if (cumulatedBatchIr != null) {
+      aggregator.lambdaAggregateFinalizedFromCumulatedBatch(cumulatedBatchIr,
+                                                            streamingRows.iterator,
+                                                            queryTimeMs,
+                                                            mutations)
+    } else {
+      aggregator.lambdaAggregateFinalized(batchIr, streamingRows.iterator, queryTimeMs, mutations)
+    }
   }
 
   private def mergeTiledIrsFromStreaming(requestContext: RequestContext,
@@ -258,7 +268,15 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
     }
 
     val aggregatorStartTime = System.currentTimeMillis()
-    val result = aggregator.lambdaAggregateFinalizedTiled(batchIr, streamingIrs, requestContext.queryTimeMs)
+    val cumulatedBatchIr = getCumulatedBatchIrFromBatchIr(batchIr, servingInfo, requestContext.keys).orNull
+    val result =
+      if (cumulatedBatchIr != null) {
+        aggregator.lambdaAggregateFinalizedTiledFromCumulatedBatch(cumulatedBatchIr,
+                                                                   streamingIrs,
+                                                                   requestContext.queryTimeMs)
+      } else {
+        aggregator.lambdaAggregateFinalizedTiled(batchIr, streamingIrs, requestContext.queryTimeMs)
+      }
     requestContext.metricsContext.distribution("group_by.aggregator.latency.millis",
                                                System.currentTimeMillis() - aggregatorStartTime)
     result
@@ -317,8 +335,15 @@ class GroupByResponseHandler(fetchContext: FetchContext, metadataStore: Metadata
     }
 
     val aggregatorStartTime = System.currentTimeMillis()
+    val cumulatedBatchIr = getCumulatedBatchIrFromBatchIr(batchIr, servingInfo, requestContext.keys).orNull
     val result =
-      servingInfo.megaTileMerger.merge(batchIr, dailyTileIrs, requestContext.queryTimeMs, servingInfo.batchEndTsMillis)
+      if (cumulatedBatchIr != null) {
+        servingInfo.megaTileMerger
+          .mergeCumulatedBatch(cumulatedBatchIr, dailyTileIrs, requestContext.queryTimeMs, servingInfo.batchEndTsMillis)
+      } else {
+        servingInfo.megaTileMerger
+          .merge(batchIr, dailyTileIrs, requestContext.queryTimeMs, servingInfo.batchEndTsMillis)
+      }
     requestContext.metricsContext.distribution("group_by.aggregator.latency.millis",
                                                System.currentTimeMillis() - aggregatorStartTime)
     result

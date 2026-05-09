@@ -75,6 +75,39 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
     val resultIr =
       if (batchIr != null) windowedAggregator.clone(batchIr.collapsed)
       else windowedAggregator.init
+
+    mergeDailyTileIrs(resultIr, dailyTileIrs, queryTs, batchEnd)
+
+    // Tail hops for large windowed columns (skips small + unwindowed)
+    if (batchIr != null) {
+      megaTileAgg.mergeTailHopsForBatchColumns(resultIr, queryTs, batchEnd, batchIr)
+    }
+
+    windowedAggregator.finalize(resultIr)
+  }
+
+  /** Merge a pre-cumulated batch tail IR + N daily streaming entries into a finalized result.
+    *
+    * This is equivalent to merge(FinalBatchIr, ...) except the selected batch tail hops
+    * have already been precomputed into one suffix per possible tail cutoff.
+    */
+  def mergeCumulatedBatch(cumulatedBatchIr: CumulatedBatchIr,
+                          dailyTileIrs: Seq[(Long, Array[Any])],
+                          queryTs: Long,
+                          batchEnd: Long): Array[Any] = {
+    val resultIr =
+      if (cumulatedBatchIr != null) megaTileAgg.selectCumulatedBatchCollapsedIr(cumulatedBatchIr)
+      else windowedAggregator.init
+
+    mergeDailyTileIrs(resultIr, dailyTileIrs, queryTs, batchEnd)
+    megaTileAgg.mergeCumulatedTailHops(resultIr, cumulatedBatchIr, queryTs)
+    windowedAggregator.finalize(resultIr)
+  }
+
+  private def mergeDailyTileIrs(ir: Array[Any],
+                                dailyTileIrs: Seq[(Long, Array[Any])],
+                                queryTs: Long,
+                                batchEnd: Long): Unit = {
     val oldestNoBatchDayStart = TsUtils.round(queryTs, DayMillis) - DayMillis
     val batchDayStart = TsUtils.round(batchEnd, DayMillis)
     val nonNullDailyTileIrs = dailyTileIrs.filter(_._2 != null).sortBy(_._1).reverse
@@ -88,24 +121,17 @@ class MegaTileMerger(megaTileAgg: MegaTileAggregator) {
         val newestAvailableIr = nonNullDailyTileIrs.collectFirst {
           case (dayStart, dayIr) if dayStart >= oldestNoBatchDayStart => dayIr
         }.orNull
-        resultIr(col) = if (newestAvailableIr != null) newestAvailableIr(col) else null
+        ir(col) = if (newestAvailableIr != null) newestAvailableIr(col) else null
       } else {
         // Large window / unwindowed: batch collapsed + streaming daily aggregates
-        // resultIr(col) already has batchIr.collapsed(col) from clone
+        // ir(col) already has either batchIr.collapsed(col) or the pre-cumulated batch tail.
         nonNullDailyTileIrs.reverseIterator.foreach { case (dayStart, dayIr) =>
           if (dayStart >= batchDayStart && dayIr(col) != null) {
-            resultIr(col) = windowedAggregator.columnAggregators(col).merge(resultIr(col), dayIr(col))
+            ir(col) = windowedAggregator.columnAggregators(col).merge(ir(col), dayIr(col))
           }
         }
       }
       col += 1
     }
-
-    // Tail hops for large windowed columns (skips small + unwindowed)
-    if (batchIr != null) {
-      megaTileAgg.mergeTailHopsForBatchColumns(resultIr, queryTs, batchEnd, batchIr)
-    }
-
-    windowedAggregator.finalize(resultIr)
   }
 }

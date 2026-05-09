@@ -1,15 +1,18 @@
 package ai.chronon.online.fetcher
 
-import ai.chronon.aggregator.windowing.FinalBatchIr
+import ai.chronon.aggregator.windowing.{CumulatedBatchIr, FinalBatchIr}
 import ai.chronon.api.GroupBy
 import ai.chronon.online.KVStore.{GetRequest, TimedValue}
 import ai.chronon.online.fetcher.FetcherCache._
 import ai.chronon.online.GroupByServingInfoParsed
-import ai.chronon.online.metrics.Metrics
+import ai.chronon.online.metrics.{FlexibleExecutionContext, Metrics}
 import com.github.benmanes.caffeine.cache.{Cache => CaffeineCache}
 import org.slf4j.{Logger, LoggerFactory}
 
-import scala.util.{Success, Try}
+import java.util.concurrent.ConcurrentHashMap
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NonFatal
+import scala.util.{Failure, Success, Try}
 
 /*
  * FetcherCache is an extension to FetcherBase that provides caching functionality. It caches KV store
@@ -26,6 +29,7 @@ trait FetcherCache {
   @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   val batchIrCacheName = "batch_cache"
+  val cumulatedBatchIrCacheName = "cumulated_batch_cache"
   val defaultBatchIrCacheSize = "10000"
 
   val configuredBatchIrCacheSize: Option[Int] =
@@ -37,12 +41,26 @@ trait FetcherCache {
   val maybeBatchIrCache: Option[BatchIrCache] =
     configuredBatchIrCacheSize
       .map(size => new BatchIrCache(batchIrCacheName, size))
+  val maybeCumulatedBatchIrCache: Option[CumulatedBatchIrCache] =
+    configuredBatchIrCacheSize
+      .map(size => new CumulatedBatchIrCache(cumulatedBatchIrCacheName, size))
+  @transient private lazy val inFlightCumulatedBatchIrBuilds =
+    new ConcurrentHashMap[BatchIrCache.Key, java.lang.Boolean]()
 
   // Caching needs to be configured globally with a cache size > 0
   def isCacheSizeConfigured: Boolean = maybeBatchIrCache.isDefined
 
   // Caching needs to be enabled for the specific groupBy
   def isCachingEnabled(groupBy: GroupBy): Boolean = false
+
+  protected def cumulatedBatchIrBuildExecutionContext: ExecutionContext =
+    FetcherCache.cumulatedBatchIrBuildExecutionContext
+
+  protected lazy val cumulatedBatchIrMetricsContext: Metrics.Context =
+    caffeineMetricsContext.withSuffix(cumulatedBatchIrCacheName)
+
+  def isCumulatedBatchIrCachingEnabled(groupBy: GroupBy): Boolean =
+    isCachingEnabled(groupBy) && GroupByServingInfoParsed.isCumulatedBatchIrCacheSafe(groupBy)
 
   protected val caffeineMetricsContext: Metrics.Context = Metrics.Context(Metrics.Environment.JoinFetching)
 
@@ -111,7 +129,69 @@ trait FetcherCache {
         cachedResponse match {
           case CachedFinalIrBatchResponse(finalBatchIr: FinalBatchIr) => finalBatchIr
           case CachedMapBatchResponse(_: Map[String, AnyRef])         => decodingFunction(batchBytes, servingInfo)
+      }
+    }
+  }
+
+  private[online] def getCumulatedBatchIrFromBatchIr(finalBatchIr: FinalBatchIr,
+                                                     servingInfo: GroupByServingInfoParsed,
+                                                     keys: Map[String, Any]): Option[CumulatedBatchIr] = {
+    if (finalBatchIr == null || !isCachingEnabled(servingInfo.groupBy) || !servingInfo.isCumulatedBatchIrCacheSafe) {
+      return None
+    }
+
+    val batchRequestCacheKey =
+      BatchIrCache.Key(servingInfo.groupByOps.batchDataset, keys, servingInfo.batchEndTsMillis)
+    maybeCumulatedBatchIrCache match {
+      case None => None
+      case Some(cache) =>
+        val cumulatedBatchIr = cache.cache.getIfPresent(batchRequestCacheKey)
+        if (cumulatedBatchIr != null) {
+          cumulatedBatchIrMetricsContext.increment("hits")
+          Some(cumulatedBatchIr)
+        } else {
+          cumulatedBatchIrMetricsContext.increment("misses")
+          scheduleCumulatedBatchIrBuild(batchRequestCacheKey,
+                                        finalBatchIr,
+                                        servingInfo,
+                                        cache,
+                                        cumulatedBatchIrMetricsContext)
+          None
         }
+    }
+  }
+
+  private def scheduleCumulatedBatchIrBuild(batchRequestCacheKey: BatchIrCache.Key,
+                                            finalBatchIr: FinalBatchIr,
+                                            servingInfo: GroupByServingInfoParsed,
+                                            cache: CumulatedBatchIrCache,
+                                            metricsContext: Metrics.Context): Unit = {
+    if (inFlightCumulatedBatchIrBuilds.putIfAbsent(batchRequestCacheKey, java.lang.Boolean.TRUE) != null) {
+      metricsContext.increment("async_build_in_flight")
+      return
+    }
+
+    metricsContext.increment("async_build_scheduled")
+    try {
+      Future {
+        val buildStartTime = System.currentTimeMillis()
+        val cumulatedBatchIr = servingInfo.cumulateBatchIrForServing(finalBatchIr)
+        cache.cache.put(batchRequestCacheKey, cumulatedBatchIr)
+        metricsContext.distribution("async_build.latency.millis", System.currentTimeMillis() - buildStartTime)
+      }(cumulatedBatchIrBuildExecutionContext).andThen {
+        case Success(_) =>
+          metricsContext.increment("async_build_successes")
+          inFlightCumulatedBatchIrBuilds.remove(batchRequestCacheKey)
+        case Failure(ex) =>
+          metricsContext.increment("async_build_failures")
+          metricsContext.incrementException(ex)(logger)
+          inFlightCumulatedBatchIrBuilds.remove(batchRequestCacheKey)
+      }(cumulatedBatchIrBuildExecutionContext)
+    } catch {
+      case NonFatal(ex) =>
+        metricsContext.increment("async_build_failures")
+        metricsContext.incrementException(ex)(logger)
+        inFlightCumulatedBatchIrBuilds.remove(batchRequestCacheKey)
     }
   }
 
@@ -146,6 +226,10 @@ trait FetcherCache {
               metricsContext.increment(s"${batchIrCacheName}_gb_hits")
               Map(batchRequest -> cachedIr)
 
+            case _ =>
+              metricsContext.increment(s"${batchIrCacheName}_gb_misses")
+              empty
+
           }
 
         case _ => empty
@@ -156,11 +240,21 @@ trait FetcherCache {
 }
 
 object FetcherCache {
+  private[online] lazy val cumulatedBatchIrBuildExecutionContext: ExecutionContext =
+    FlexibleExecutionContext.buildExecutionContext
+
   private[online] class BatchIrCache(val cacheName: String, val maximumSize: Int = 10000) {
     import BatchIrCache._
 
     val cache: CaffeineCache[Key, Value] =
       LRUCache[Key, Value](cacheName = cacheName, maximumSize = maximumSize)
+  }
+
+  private[online] class CumulatedBatchIrCache(val cacheName: String, val maximumSize: Int = 10000) {
+    import BatchIrCache._
+
+    val cache: CaffeineCache[Key, CumulatedBatchIr] =
+      LRUCache[Key, CumulatedBatchIr](cacheName = cacheName, maximumSize = maximumSize)
   }
 
   private[online] object BatchIrCache {

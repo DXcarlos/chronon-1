@@ -189,6 +189,8 @@ class GroupByFetcher(fetchContext: FetchContext, metadataStore: MetadataStore)
     // Collect cache metrics once per fetchGroupBys call; Caffeine metrics aren't tagged by groupBy
     maybeBatchIrCache.foreach(cache =>
       LRUCache.collectCaffeineCacheMetrics(caffeineMetricsContext, cache.cache, cache.cacheName))
+    maybeCumulatedBatchIrCache.foreach(cache =>
+      LRUCache.collectCaffeineCacheMetrics(caffeineMetricsContext, cache.cache, cache.cacheName))
 
     val allRequestsToFetch: Seq[GetRequest] = groupByRequestToKvRequest.flatMap {
       case (_,

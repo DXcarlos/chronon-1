@@ -49,6 +49,26 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
 
   val hopsAggregator = new HopsAggregatorBase(aggregations, inputSchema, resolution)
 
+  private[this] val emptyHopIrs = Array.empty[Array[Any]]
+  private[this] val cumulatedWindowMillis: Array[Long] =
+    windowMappings.map { mapping =>
+      val window = mapping.aggregationPart.window
+      if (window == null) 0L else window.millis
+    }
+  private[this] val cumulatedHopSizes: Array[Long] =
+    tailHopIndices.map(hopSizes)
+  private[this] val cumulatedSuffixReusable: Array[Boolean] =
+    windowMappings.map { mapping =>
+      mapping.aggregationPart.operation match {
+        case Operation.AVERAGE | Operation.VARIANCE | Operation.SKEW | Operation.KURTOSIS |
+            Operation.APPROX_UNIQUE_COUNT | Operation.APPROX_PERCENTILE | Operation.APPROX_FREQUENT_K |
+            Operation.APPROX_HEAVY_HITTERS_K | Operation.UNIQUE_TOP_K |
+            Operation.LAST_K | Operation.FIRST_K | Operation.TOP_K | Operation.BOTTOM_K =>
+          false
+        case _ => true
+      }
+    }
+
   def batchIrSchema: Array[(String, DataType)] = {
     val collapsedSchema = windowedAggregator.irSchema
 
@@ -125,6 +145,143 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
   // Ready the snapshot aggregated data to be merged with mutations data.
   def finalizeSnapshot(batchIr: BatchIr): FinalBatchIr =
     FinalBatchIr(batchIr.collapsed, Option(batchIr.tailHops).map(hopsAggregator.toTimeSortedArray).orNull)
+
+  def cumulateBatchIr(batchIr: FinalBatchIr,
+                      batchEndTs: Long,
+                      options: CumulatedBatchOptions = CumulatedBatchOptions.SawtoothServing): CumulatedBatchIr = {
+    if (batchIr == null) return null
+
+    val columns = new Array[CumulatedBatchColumn](windowedAggregator.length)
+    val collapsedValues = new Array[Any](windowedAggregator.length)
+    val suffixColumnIndices = new Array[Int](windowedAggregator.length)
+    var suffixColumnCount = 0
+    var col = 0
+    while (col < windowedAggregator.length) {
+      val columnAggregator = windowedAggregator(col)
+      val window = windowMappings(col).aggregationPart.window
+      if (window == null) {
+        val collapsed = columnAggregator.clone(batchIr.collapsed(col))
+        collapsedValues(col) = collapsed
+        columns(col) = StaticBatchColumn(collapsed)
+      } else if (options.skipSmallWindowBatchTails && window.millis <= tailBufferMillis) {
+        collapsedValues(col) = null
+        columns(col) = StaticBatchColumn(null)
+      } else {
+        val tailHops = batchIr.tailHops
+        val hopIrs = if (tailHops == null) emptyHopIrs else tailHops(tailHopIndices(col))
+        val alignedCollapsed = alignedCollapsedBoundary(batchEndTs - window.millis, col)
+        val eligibleCount = firstHopGreaterOrEqual(hopIrs, alignedCollapsed)
+        val collapsed = columnAggregator.clone(batchIr.collapsed(col))
+        collapsedValues(col) = collapsed
+
+        if (eligibleCount == 0) {
+          columns(col) = StaticBatchColumn(collapsed)
+        } else {
+          val timestamps = new Array[Long](eligibleCount)
+          val values = new Array[Any](eligibleCount)
+          val baseIrIndex = baseIrIndices(col)
+          if (cumulatedSuffixReusable(col)) {
+            var tailSuffix: Any = null
+            var idx = eligibleCount - 1
+            while (idx >= 0) {
+              val hopIr = hopIrs(idx)
+              timestamps(idx) = hopTimestamp(hopIr)
+              val hopValue = columnAggregator.clone(hopIr(baseIrIndex))
+              tailSuffix = columnAggregator.merge(hopValue, tailSuffix)
+              values(idx) = columnAggregator.clone(tailSuffix)
+              idx -= 1
+            }
+          } else {
+            var startIdx = 0
+            while (startIdx < eligibleCount) {
+              timestamps(startIdx) = hopTimestamp(hopIrs(startIdx))
+              val suffixIrs = new Iterator[Any] {
+                private var idx = startIdx
+
+                override def hasNext: Boolean = idx < eligibleCount
+
+                override def next(): Any = {
+                  if (idx >= eligibleCount) throw new NoSuchElementException("next on empty iterator")
+                  val hopValue = hopIrs(idx)(baseIrIndex)
+                  idx += 1
+                  columnAggregator.clone(hopValue)
+                }
+              }
+              values(startIdx) = columnAggregator.bulkMerge(suffixIrs)
+              startIdx += 1
+            }
+          }
+
+          columns(col) = SuffixBatchColumn(timestamps, values, collapsed)
+          suffixColumnIndices(suffixColumnCount) = col
+          suffixColumnCount += 1
+        }
+      }
+      col += 1
+    }
+
+    CumulatedBatchIr(columns, collapsedValues, util.Arrays.copyOf(suffixColumnIndices, suffixColumnCount))
+  }
+
+  def selectCumulatedBatchIr(cumulatedBatchIr: CumulatedBatchIr, queryTs: Long): Array[Any] = {
+    val result = selectCumulatedBatchCollapsedIr(cumulatedBatchIr)
+    mergeCumulatedTailHops(result, cumulatedBatchIr, queryTs)
+    result
+  }
+
+  def selectCumulatedBatchCollapsedIr(cumulatedBatchIr: CumulatedBatchIr): Array[Any] = {
+    if (cumulatedBatchIr == null) return windowedAggregator.init
+
+    val result = new Array[Any](windowedAggregator.length)
+    var col = 0
+    while (col < windowedAggregator.length) {
+      result(col) = windowedAggregator(col).clone(cumulatedBatchIr.collapsed(col))
+      col += 1
+    }
+    result
+  }
+
+  def mergeCumulatedTailHops(ir: Array[Any], cumulatedBatchIr: CumulatedBatchIr, queryTs: Long): Array[Any] = {
+    if (ir == null || cumulatedBatchIr == null) return ir
+
+    val suffixColumnIndices = cumulatedBatchIr.suffixColumnIndices
+    var suffixIdx = 0
+    while (suffixIdx < suffixColumnIndices.length) {
+      val col = suffixColumnIndices(suffixIdx)
+      val suffixColumn = cumulatedBatchIr.columns(col).asInstanceOf[SuffixBatchColumn]
+      val timestamps = suffixColumn.timestamps
+      val queryTail = TsUtils.round(queryTs - cumulatedWindowMillis(col), cumulatedHopSizes(col))
+      val idx = firstGreaterOrEqual(timestamps, queryTail)
+      if (idx < timestamps.length) {
+        ir(col) = windowedAggregator(col).merge(ir(col), suffixColumn.values(idx))
+      }
+      suffixIdx += 1
+    }
+    ir
+  }
+
+  protected final def hopTimestamp(hopIr: Array[Any]): Long =
+    hopIr(hopIr.length - 1).asInstanceOf[Long]
+
+  private def firstHopGreaterOrEqual(hopIrs: Array[Array[Any]], target: Long): Int = {
+    var low = 0
+    var high = hopIrs.length
+    while (low < high) {
+      val mid = (low + high) >>> 1
+      if (hopTimestamp(hopIrs(mid)) < target) low = mid + 1 else high = mid
+    }
+    low
+  }
+
+  private def firstGreaterOrEqual(values: Array[Long], target: Long): Int = {
+    var low = 0
+    var high = values.length
+    while (low < high) {
+      val mid = (low + high) >>> 1
+      if (values(mid) < target) low = mid + 1 else high = mid
+    }
+    low
+  }
 
   /** Go through the aggregators and update or delete the intermediate with the information of the row if relevant.
     * Useful for both online and mutations

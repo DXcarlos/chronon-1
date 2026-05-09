@@ -17,7 +17,13 @@
 package ai.chronon.aggregator.test
 
 import ai.chronon.aggregator.test.SawtoothAggregatorTest.sawtoothAggregate
-import ai.chronon.aggregator.windowing.{FinalBatchIr, FiveMinuteResolution, SawtoothOnlineAggregator}
+import ai.chronon.aggregator.windowing.{
+  CumulatedBatchOptions,
+  FinalBatchIr,
+  FiveMinuteResolution,
+  SawtoothOnlineAggregator,
+  TiledIr
+}
 import ai.chronon.api.Extensions.{WindowOps, WindowUtils}
 import ai.chronon.api._
 import com.google.gson.Gson
@@ -127,6 +133,19 @@ class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
 
     val sawtoothIrs = sawtoothAggregate(events, queries, aggregations, schema)
     val onlineAggregator = new SawtoothOnlineAggregator(batchEndTs, aggregations, schema, FiveMinuteResolution)
+    val mergeTreeSensitiveOperations = Set(
+      Operation.AVERAGE,
+      Operation.APPROX_UNIQUE_COUNT,
+      Operation.VARIANCE,
+      Operation.SKEW,
+      Operation.KURTOSIS,
+      Operation.APPROX_PERCENTILE,
+      Operation.APPROX_FREQUENT_K,
+      Operation.APPROX_HEAVY_HITTERS_K,
+      Operation.UNIQUE_TOP_K
+    )
+    val cumulatedCacheSafeAggregations =
+      aggregations.filterNot(aggregation => mergeTreeSensitiveOperations.contains(aggregation.operation))
     val (events1, events2) = events.splitAt(eventCount / 2)
     val batchIr1 = events1.foldLeft(onlineAggregator.init)(onlineAggregator.update)
     val batchIr2 = events2.foldLeft(onlineAggregator.init)(onlineAggregator.update)
@@ -136,10 +155,74 @@ class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
     val onlineIrs = queries.map(onlineAggregator.lambdaAggregateIr(denormBatchIr, windowHeadEvents.iterator, _))
 
     val gson = new Gson()
+    def assertJsonEquals(label: String,
+                         expected: Array[Any],
+                         actual: Array[Any],
+                         aggregator: SawtoothOnlineAggregator): Unit = {
+      val expectedStr = gson.toJson(expected)
+      val actualStr = gson.toJson(actual)
+      if (expectedStr != actualStr) {
+        val mismatch = expected.indices
+          .find { idx =>
+            gson.toJson(expected(idx)) != gson.toJson(actual(idx))
+          }
+          .getOrElse(-1)
+        val columnName =
+          if (mismatch >= 0) aggregator.windowedAggregator.outputSchema(mismatch)._1 else "unknown"
+        assertEquals(s"$label mismatch at column $mismatch ($columnName)", expectedStr, actualStr)
+      }
+    }
+
     for (i <- queries.indices) {
-      val onlineStr = gson.toJson(onlineAggregator.windowedAggregator.finalize(onlineIrs(i)))
-      val sawtoothStr = gson.toJson(onlineAggregator.windowedAggregator.finalize(sawtoothIrs(i)))
-      assertEquals(sawtoothStr, onlineStr)
+      val onlineFinal = onlineAggregator.windowedAggregator.finalize(onlineIrs(i))
+      val sawtoothFinal = onlineAggregator.windowedAggregator.finalize(sawtoothIrs(i))
+      assertJsonEquals(s"raw online at query ${queries(i)}", sawtoothFinal, onlineFinal, onlineAggregator)
+    }
+
+    val cumulatedAggregator =
+      new SawtoothOnlineAggregator(batchEndTs, cumulatedCacheSafeAggregations, schema, FiveMinuteResolution)
+    val safeBatchIr1 = events1.foldLeft(cumulatedAggregator.init)(cumulatedAggregator.update)
+    val safeBatchIr2 = events2.foldLeft(cumulatedAggregator.init)(cumulatedAggregator.update)
+    val safeBatchIr = cumulatedAggregator.normalizeBatchIr(cumulatedAggregator.merge(safeBatchIr1, safeBatchIr2))
+    val safeDenormBatchIr = cumulatedAggregator.denormalizeBatchIr(safeBatchIr)
+    val cumulatedBatchIr =
+      cumulatedAggregator.cumulateBatchIr(safeDenormBatchIr, batchEndTs, CumulatedBatchOptions.SawtoothServing)
+    val safeOnlineIrs =
+      queries.map(cumulatedAggregator.lambdaAggregateIr(safeDenormBatchIr, windowHeadEvents.iterator, _))
+    val cumulatedOnlineIrs =
+      queries.map(
+        cumulatedAggregator.lambdaAggregateIrFromCumulatedBatch(cumulatedBatchIr, windowHeadEvents.iterator, _))
+
+    for (i <- queries.indices) {
+      val onlineFinal = cumulatedAggregator.windowedAggregator.finalize(safeOnlineIrs(i))
+      val cumulatedOnlineFinal = cumulatedAggregator.windowedAggregator.finalize(cumulatedOnlineIrs(i))
+      assertJsonEquals(s"cumulated row at query ${queries(i)}", onlineFinal, cumulatedOnlineFinal, cumulatedAggregator)
+    }
+
+    def streamingTiles(queryTs: Long): Seq[TiledIr] =
+      windowHeadEvents
+        .filter(row => row.ts < queryTs)
+        .groupBy(row => TsUtils.round(row.ts, WindowUtils.Hour.millis))
+        .map {
+          case (tileStart, rows) =>
+            val ir = cumulatedAggregator.windowedAggregator.init
+            rows.foreach(cumulatedAggregator.windowedAggregator.update(ir, _))
+            TiledIr(tileStart, ir)
+        }
+        .toSeq
+
+    def cloneTiles(tiles: Seq[TiledIr]): Iterator[TiledIr] =
+      tiles.map(tile => TiledIr(tile.ts, cumulatedAggregator.windowedAggregator.clone(tile.ir))).iterator
+
+    queries.take(20).foreach { queryTs =>
+      val tiles = streamingTiles(queryTs)
+      val rawTiled =
+        cumulatedAggregator.lambdaAggregateFinalizedTiled(safeDenormBatchIr, cloneTiles(tiles), queryTs)
+      val cumulatedTiled =
+        cumulatedAggregator.lambdaAggregateFinalizedTiledFromCumulatedBatch(cumulatedBatchIr,
+                                                                            cloneTiles(tiles),
+                                                                            queryTs)
+      assertJsonEquals(s"cumulated tiled at query $queryTs", rawTiled, cumulatedTiled, cumulatedAggregator)
     }
   }
 

@@ -1,18 +1,26 @@
 package ai.chronon.online
 
-import ai.chronon.aggregator.windowing.FinalBatchIr
-import ai.chronon.api.Extensions.GroupByOps
-import ai.chronon.api.GroupBy
+import ai.chronon.aggregator.windowing.{
+  CumulatedBatchOptions,
+  FinalBatchIr,
+  MegaTileAggregator,
+  SawtoothOnlineAggregator
+}
+import ai.chronon.api.Extensions.{GroupByOps, WindowOps}
+import ai.chronon.api.{Builders, GroupBy, GroupByServingInfo, LongType, OnlineStrategy, Operation, TimeUnit, Window}
 import ai.chronon.online.fetcher.Fetcher.Request
 import ai.chronon.online.fetcher.FetcherCache.BatchIrCache
 import ai.chronon.online.fetcher.FetcherCache.BatchResponses
 import ai.chronon.online.fetcher.FetcherCache.CachedMapBatchResponse
+import ai.chronon.online.fetcher.FetcherCache.CumulatedBatchIrCache
 import ai.chronon.online.KVStore.TimedValue
 import ai.chronon.online.metrics.Metrics.Context
 import ai.chronon.online.fetcher.LambdaKvRequest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito
 import org.mockito.Mockito._
@@ -20,6 +28,7 @@ import org.mockito.stubbing.Stubber
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar
 
+import scala.concurrent.ExecutionContext
 import scala.collection.JavaConverters._
 import scala.util.Failure
 import scala.util.Success
@@ -34,10 +43,136 @@ trait MockitoHelper extends MockitoSugar {
 }
 
 class FetcherCacheTest extends AnyFlatSpec with MockitoHelper {
-  class TestableFetcherCache(cache: Option[BatchIrCache]) extends fetcher.FetcherCache {
+  private val directExecutionContext: ExecutionContext =
+    ExecutionContext.fromExecutor(new java.util.concurrent.Executor {
+      override def execute(command: Runnable): Unit = command.run()
+    })
+
+  class TestableFetcherCache(cache: Option[BatchIrCache], cumulatedCache: Option[CumulatedBatchIrCache] = None)
+      extends fetcher.FetcherCache {
     override val maybeBatchIrCache: Option[BatchIrCache] = cache
+    override val maybeCumulatedBatchIrCache: Option[CumulatedBatchIrCache] = cumulatedCache
+    override protected def cumulatedBatchIrBuildExecutionContext: ExecutionContext = directExecutionContext
   }
   val batchIrCacheMaximumSize = 50
+
+  it should "cumulated batch ir caching supports order-sensitive limit aggregations" in {
+    val fetcherCache = new TestableFetcherCache(None) {
+      override def isCachingEnabled(groupBy: GroupBy) = true
+    }
+    val windows = Seq(new Window(7, TimeUnit.DAYS))
+
+    val sumGroupBy = Builders.GroupBy(
+      aggregations = Seq(Builders.Aggregation(Operation.SUM, "value", windows))
+    )
+    val lastKGroupBy = Builders.GroupBy(
+      aggregations = Seq(Builders.Aggregation(Operation.LAST_K, "value", windows, argMap = Map("k" -> "2")))
+    )
+    val firstKGroupBy = Builders.GroupBy(
+      aggregations = Seq(Builders.Aggregation(Operation.FIRST_K, "value", windows, argMap = Map("k" -> "2")))
+    )
+    val approxUniqueCountGroupBy = Builders.GroupBy(
+      aggregations = Seq(Builders.Aggregation(Operation.APPROX_UNIQUE_COUNT, "value", windows))
+    )
+    val averageGroupBy = Builders.GroupBy(
+      aggregations = Seq(Builders.Aggregation(Operation.AVERAGE, "value", windows))
+    )
+
+    assertTrue(fetcherCache.isCumulatedBatchIrCachingEnabled(sumGroupBy))
+    assertTrue(fetcherCache.isCumulatedBatchIrCachingEnabled(lastKGroupBy))
+    assertTrue(fetcherCache.isCumulatedBatchIrCachingEnabled(firstKGroupBy))
+    assertFalse(fetcherCache.isCumulatedBatchIrCachingEnabled(approxUniqueCountGroupBy))
+    assertFalse(fetcherCache.isCumulatedBatchIrCachingEnabled(averageGroupBy))
+  }
+
+  it should "cumulated batch ir cache miss builds asynchronously and falls back" in {
+    val cumulatedCache = new CumulatedBatchIrCache("test_cumulated", batchIrCacheMaximumSize)
+    val fetcherCache = new TestableFetcherCache(None, Some(cumulatedCache)) {
+      override def isCachingEnabled(groupBy: GroupBy) = true
+    }
+
+    val windows = Seq(new Window(7, TimeUnit.DAYS))
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "value", windows))
+    val groupBy = Builders.GroupBy(metaData = Builders.MetaData(name = "test_group_by"), aggregations = aggregations)
+    val batchEndMillis = new Window(10, TimeUnit.DAYS).millis
+    val testMegaTileAggregator = new MegaTileAggregator(aggregations, Seq("value" -> LongType))
+    val groupByServingInfo = new GroupByServingInfo()
+    groupByServingInfo.setGroupBy(groupBy)
+    val servingInfo = new GroupByServingInfoParsed(groupByServingInfo) {
+      override lazy val batchEndTsMillis: Long = batchEndMillis
+      override lazy val groupByOps: GroupByOps = new GroupByOps(groupBy)
+      override lazy val megaTileAggregator: MegaTileAggregator = testMegaTileAggregator
+      override def cumulateBatchIrForServing(finalBatchIr: FinalBatchIr) =
+        testMegaTileAggregator.cumulateBatchIr(finalBatchIr, batchEndMillis, CumulatedBatchOptions.MegaTileServing)
+    }
+
+    val tailHops = Array(Array.empty[Array[Any]], Array.empty[Array[Any]], Array.empty[Array[Any]])
+    val finalBatchIr = FinalBatchIr(Array[Any](1L), tailHops)
+    val keys = Map("key" -> "value")
+
+    assertFalse(fetcherCache.getCumulatedBatchIrFromBatchIr(finalBatchIr, servingInfo, keys).isDefined)
+
+    val cachedCumulatedBatchIr = fetcherCache.getCumulatedBatchIrFromBatchIr(finalBatchIr, servingInfo, keys)
+    assertTrue(cachedCumulatedBatchIr.isDefined)
+    assertEquals(1L, testMegaTileAggregator.selectCumulatedBatchIr(cachedCumulatedBatchIr.get, batchEndMillis).head)
+  }
+
+  it should "cumulated batch ir cache build uses serving mode for small windows" in {
+    val windows = Seq(new Window(1, TimeUnit.HOURS))
+    val aggregations = Seq(Builders.Aggregation(Operation.SUM, "value", windows))
+    val schema = Seq("value" -> LongType)
+    val batchEndMillis = new Window(10, TimeUnit.DAYS).millis
+    val queryTs = batchEndMillis
+    val keys = Map("key" -> "value")
+
+    def smallWindowBatchIr: FinalBatchIr = {
+      val fiveMinuteHops = Array(
+        Array[Any](7L, batchEndMillis - 30 * 60 * 1000L),
+        Array[Any](11L, batchEndMillis - 20 * 60 * 1000L)
+      )
+      FinalBatchIr(Array[Any](null), Array(Array.empty[Array[Any]], Array.empty[Array[Any]], fiveMinuteHops))
+    }
+
+    def servingInfo(groupBy: GroupBy,
+                    testAggregator: SawtoothOnlineAggregator,
+                    testMegaTileAggregator: MegaTileAggregator): GroupByServingInfoParsed = {
+      val groupByServingInfo = new GroupByServingInfo()
+      groupByServingInfo.setGroupBy(groupBy)
+      new GroupByServingInfoParsed(groupByServingInfo) {
+        override lazy val batchEndTsMillis: Long = batchEndMillis
+        override lazy val groupByOps: GroupByOps = new GroupByOps(groupBy)
+        override lazy val aggregator: SawtoothOnlineAggregator = testAggregator
+        override lazy val megaTileAggregator: MegaTileAggregator = testMegaTileAggregator
+      }
+    }
+
+    def cachedFor(groupBy: GroupBy): Option[FinalBatchIr] = {
+      val cache = new CumulatedBatchIrCache("test_cumulated", batchIrCacheMaximumSize)
+      val fetcherCache = new TestableFetcherCache(None, Some(cache)) {
+        override def isCachingEnabled(groupBy: GroupBy) = true
+      }
+      val onlineAggregator = new SawtoothOnlineAggregator(batchEndMillis, aggregations, schema)
+      val megaTileAggregator = new MegaTileAggregator(aggregations, schema)
+      val info = servingInfo(groupBy, onlineAggregator, megaTileAggregator)
+      val finalBatchIr = smallWindowBatchIr
+
+      assertFalse(fetcherCache.getCumulatedBatchIrFromBatchIr(finalBatchIr, info, keys).isDefined)
+      fetcherCache.getCumulatedBatchIrFromBatchIr(finalBatchIr, info, keys).map { cumulated =>
+        FinalBatchIr(info.aggregator.selectCumulatedBatchIr(cumulated, queryTs), null)
+      }
+    }
+
+    val sawtoothGroupBy =
+      Builders.GroupBy(metaData = Builders.MetaData(name = "test_sawtooth_group_by"), aggregations = aggregations)
+    val sawtoothSelected = cachedFor(sawtoothGroupBy).get
+    assertEquals(18L, sawtoothSelected.collapsed.head)
+
+    val megaTileGroupBy =
+      Builders.GroupBy(metaData = Builders.MetaData(name = "test_megatile_group_by"), aggregations = aggregations)
+    megaTileGroupBy.setOnlineStrategy(OnlineStrategy.STREAMING_MEGATILES)
+    val megaTileSelected = cachedFor(megaTileGroupBy).get
+    assertNull(megaTileSelected.collapsed.head)
+  }
 
   it should "batch ir cache correctly caches batch irs" in {
     val cacheName = "test"

@@ -11,6 +11,12 @@ class MegaTileAggregator(aggregations: Seq[Aggregation],
                          override val tailBufferMillis: Long = new Window(2, TimeUnit.DAYS).millis)
     extends SawtoothMutationAggregator(aggregations, inputSchema, resolution, tailBufferMillis) {
 
+  override def cumulateBatchIr(
+      batchIr: FinalBatchIr,
+      batchEndTs: Long,
+      options: CumulatedBatchOptions = CumulatedBatchOptions.MegaTileServing): CumulatedBatchIr =
+    super.cumulateBatchIr(batchIr, batchEndTs, options)
+
   // Per-column hop size: maps windowed column index → hop size in millis
   val columnHopSize: Array[Long] = windowMappings.map { mapping =>
     Option(mapping.aggregationPart.window) match {

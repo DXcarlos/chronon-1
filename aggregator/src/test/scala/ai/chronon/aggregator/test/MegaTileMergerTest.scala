@@ -126,6 +126,20 @@ class MegaTileMergerTest extends AnyFlatSpec {
 
     assertNull(merged(0))
     assertEquals(5L, merged(1))
+
+    val cumulatedBatchIr = megaTileAgg.cumulateBatchIr(finalBatchIr, batchEnd, CumulatedBatchOptions.MegaTileServing)
+    val cumulatedMerged = merger.mergeCumulatedBatch(
+      cumulatedBatchIr,
+      Seq(
+        TsUtils.round(queryTs, DayMillis) -> null,
+        (TsUtils.round(queryTs, DayMillis) - DayMillis) -> null
+      ),
+      queryTs,
+      batchEnd
+    )
+
+    assertNull(cumulatedMerged(0))
+    assertEquals(5L, cumulatedMerged(1))
   }
 
   def naiveAggregate(allEvents: Array[TestRow],
@@ -158,7 +172,8 @@ class MegaTileMergerTest extends AnyFlatSpec {
                               queryTimes: Array[Long],
                               aggregations: Seq[Aggregation],
                               schema: Seq[(String, DataType)],
-                              batchEnd: Long): Array[Array[Any]] = {
+                              batchEnd: Long,
+                              useCumulatedBatchIr: Boolean = false): Array[Array[Any]] = {
 
     val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
     val merger = new MegaTileMerger(megaTileAgg)
@@ -170,6 +185,10 @@ class MegaTileMergerTest extends AnyFlatSpec {
     var batchIr = onlineAgg.init
     batchEvents.foreach(row => batchIr = onlineAgg.update(batchIr, row))
     val finalBatchIr = onlineAgg.finalizeSnapshot(batchIr)
+    val cumulatedBatchIr =
+      if (useCumulatedBatchIr)
+        megaTileAgg.cumulateBatchIr(finalBatchIr, batchEnd, CumulatedBatchOptions.MegaTileServing)
+      else null
 
     // 2. Simulate Flink: bucket ALL events into small tiles per tier
     val tiles: Map[Long, mutable.Map[Long, Array[Any]]] =
@@ -206,11 +225,53 @@ class MegaTileMergerTest extends AnyFlatSpec {
       val yesterdayIr = megaTileAgg.buildMegaTileIr(tiles, now = todayStart, batchEnd = yesterdayStart)
 
       // Merge using the fetcher logic
-      resultsByQueryTs(queryTs) = merger.merge(finalBatchIr, todayIr, yesterdayIr, todayStart, queryTs, batchEnd)
+      resultsByQueryTs(queryTs) =
+        if (useCumulatedBatchIr)
+          merger.mergeCumulatedBatch(cumulatedBatchIr,
+                                     Seq(todayStart -> todayIr, yesterdayStart -> yesterdayIr),
+                                     queryTs,
+                                     batchEnd)
+        else merger.merge(finalBatchIr, todayIr, yesterdayIr, todayStart, queryTs, batchEnd)
     }
 
     // Return results in original query order
     queryTimes.map(resultsByQueryTs)
+  }
+
+  it should "match raw batch tail merging with cumulated batch tails" in {
+    val (events, schema) = generateEvents(10, 10000)
+    val maxTs = events.map(_.ts).max
+    val batchEnd = TsUtils.round(maxTs - DayMillis, DayMillis)
+
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(Operation.SUM, "num", AllWindows),
+      Builders.Aggregation(Operation.COUNT, "num", AllWindows),
+      Builders.Aggregation(Operation.AVERAGE, "amount", AllWindows),
+      Builders.Aggregation(Operation.VARIANCE, "amount", AllWindows),
+      Builders.Aggregation(Operation.SKEW, "amount", AllWindows),
+      Builders.Aggregation(Operation.KURTOSIS, "amount", AllWindows),
+      Builders.Aggregation(Operation.MIN, "num", AllWindows),
+      Builders.Aggregation(Operation.MAX, "num", AllWindows),
+      Builders.Aggregation(Operation.UNIQUE_COUNT, "num", AllWindows),
+      Builders.Aggregation(Operation.APPROX_UNIQUE_COUNT, "num", AllWindows),
+      Builders.Aggregation(Operation.TOP_K, "num", AllWindows, argMap = Map("k" -> "3")),
+      Builders.Aggregation(Operation.BOTTOM_K, "num", AllWindows, argMap = Map("k" -> "3")),
+      Builders.Aggregation(Operation.LAST, "num", AllWindows),
+      Builders.Aggregation(Operation.FIRST, "num", AllWindows),
+      Builders.Aggregation(Operation.LAST_K, "num", AllWindows, argMap = Map("k" -> "3")),
+      Builders.Aggregation(Operation.FIRST_K, "num", AllWindows, argMap = Map("k" -> "3"))
+    )
+
+    val queryTimes = Array(
+      batchEnd + 6 * 3600 * 1000L,
+      batchEnd + 14 * 3600 * 1000L,
+      batchEnd + 23 * 3600 * 1000L
+    ).filter(_ <= maxTs)
+
+    val rawResults = megaTileMergerAggregate(events, queryTimes, aggregations, schema, batchEnd)
+    val cumulatedResults =
+      megaTileMergerAggregate(events, queryTimes, aggregations, schema, batchEnd, useCumulatedBatchIr = true)
+    compareResults(cumulatedResults, rawResults, queryTimes, "cumulated_batch_tail")
   }
 
   it should "match naive aggregation with batch fresh" in {

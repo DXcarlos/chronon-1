@@ -16,7 +16,15 @@
 
 package ai.chronon.online
 
-import ai.chronon.aggregator.windowing.{MegaTileAggregator, MegaTileMerger, ResolutionUtils, SawtoothOnlineAggregator}
+import ai.chronon.aggregator.windowing.{
+  CumulatedBatchIr,
+  CumulatedBatchOptions,
+  FinalBatchIr,
+  MegaTileAggregator,
+  MegaTileMerger,
+  ResolutionUtils,
+  SawtoothOnlineAggregator
+}
 import ai.chronon.api.Constants.{ReversalField, TimeField}
 import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, WindowOps, WindowUtils}
 import ai.chronon.api.ScalaJavaConversions.ListOps
@@ -48,6 +56,9 @@ class GroupByServingInfoParsed(val groupByServingInfo: GroupByServingInfo)
 
   // caching groupBy helper to avoid re-computing batchDataSet,streamingDataset & inferred accuracy
   lazy val groupByOps = new GroupByOps(groupByServingInfo.groupBy)
+
+  lazy val isCumulatedBatchIrCacheSafe: Boolean =
+    GroupByServingInfoParsed.isCumulatedBatchIrCacheSafe(groupBy)
 
   lazy val irChrononSchema: StructType =
     StructType.from(s"${groupBy.metaData.cleanName}_IR", aggregator.batchIrSchema)
@@ -106,6 +117,12 @@ class GroupByServingInfoParsed(val groupByServingInfo: GroupByServingInfo)
 
   lazy val megaTileCodec: MegaTileCodec = new MegaTileCodec(groupBy, valueInputSchema)
 
+  def cumulateBatchIrForServing(finalBatchIr: FinalBatchIr): CumulatedBatchIr =
+    if (groupByOps.isMegaTilingEnabled)
+      megaTileAggregator.cumulateBatchIr(finalBatchIr, batchEndTsMillis, CumulatedBatchOptions.MegaTileServing)
+    else
+      aggregator.cumulateBatchIr(finalBatchIr, batchEndTsMillis, CumulatedBatchOptions.SawtoothServing)
+
   // End mega tiling specific variables
 
   def outputChrononSchema: StructType =
@@ -155,4 +172,19 @@ class GroupByServingInfoParsed(val groupByServingInfo: GroupByServingInfo)
       case DataModel.ENTITIES => mutationChrononSchema
     }
   }
+}
+
+object GroupByServingInfoParsed {
+  private[online] def isCumulatedBatchIrCacheSafe(groupBy: GroupBy): Boolean =
+    Option(groupBy)
+      .flatMap(groupBy => Option(groupBy.aggregations))
+      .forall(_.toScala.forall { aggregation =>
+        aggregation.operation match {
+          case Operation.AVERAGE | Operation.VARIANCE | Operation.SKEW | Operation.KURTOSIS |
+              Operation.APPROX_UNIQUE_COUNT | Operation.APPROX_PERCENTILE | Operation.APPROX_FREQUENT_K |
+              Operation.APPROX_HEAVY_HITTERS_K | Operation.UNIQUE_TOP_K =>
+            false
+          case _ => true
+        }
+      })
 }

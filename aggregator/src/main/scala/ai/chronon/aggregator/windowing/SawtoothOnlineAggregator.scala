@@ -125,6 +125,44 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
     resultIr
   }
 
+  def lambdaAggregateIrFromCumulatedBatch(cumulatedBatchIr: CumulatedBatchIr,
+                                          streamingRows: Iterator[Row],
+                                          queryTs: Long,
+                                          hasReversal: Boolean = false): Array[Any] = {
+    if (cumulatedBatchIr == null && streamingRows == null) return null
+    val headRows = Option(streamingRows).getOrElse(Array.empty[Row].iterator)
+
+    if (batchEndTs > queryTs) {
+      throw new IllegalArgumentException(s"Request time of $queryTs is less than batch time $batchEndTs")
+    }
+
+    val resultIr =
+      if (cumulatedBatchIr == null) windowedAggregator.init
+      else selectCumulatedBatchCollapsedIr(cumulatedBatchIr)
+
+    while (headRows.hasNext) {
+      val row = headRows.next()
+      val rowTs = row.ts
+
+      val shouldSelect = if (hasReversal) {
+        val mutationTs = row.mutationTs
+        val rowBeforeQuery = queryTs > rowTs && queryTs > mutationTs
+        val rowAfterBatchEnd = mutationTs >= batchEndTs
+        rowBeforeQuery && rowAfterBatchEnd
+      } else {
+        val rowBeforeQuery = queryTs > rowTs
+        val rowAfterBatchEnd = rowTs >= batchEndTs
+        rowBeforeQuery && rowAfterBatchEnd
+      }
+
+      if (shouldSelect) {
+        updateIr(resultIr, row, queryTs, hasReversal)
+      }
+    }
+    mergeCumulatedTailHops(resultIr, cumulatedBatchIr, queryTs)
+    resultIr
+  }
+
   def lambdaAggregateIrTiled(finalBatchIr: FinalBatchIr,
                              streamingTiledIrs: Iterator[TiledIr],
                              queryTs: Long): Array[Any] = {
@@ -152,6 +190,32 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
     resultIr
   }
 
+  def lambdaAggregateIrTiledFromCumulatedBatch(cumulatedBatchIr: CumulatedBatchIr,
+                                               streamingTiledIrs: Iterator[TiledIr],
+                                               queryTs: Long): Array[Any] = {
+    // null handling
+    if (cumulatedBatchIr == null && streamingTiledIrs == null) return null
+    val tiledIrs = Option(streamingTiledIrs).getOrElse(Array.empty[TiledIr].iterator)
+
+    if (batchEndTs > queryTs) {
+      throw new IllegalArgumentException(s"Request time of $queryTs is less than batch time $batchEndTs")
+    }
+
+    val resultIr =
+      if (cumulatedBatchIr == null) windowedAggregator.init
+      else selectCumulatedBatchCollapsedIr(cumulatedBatchIr)
+
+    while (tiledIrs.hasNext) {
+      val tiledIr = tiledIrs.next()
+      val tiledIrTs = tiledIr.ts
+      if (queryTs > tiledIrTs && tiledIrTs >= batchEndTs) {
+        updateIrTiled(resultIr, tiledIr, queryTs)
+      }
+    }
+    mergeCumulatedTailHops(resultIr, cumulatedBatchIr, queryTs)
+    resultIr
+  }
+
   def lambdaAggregateFinalized(finalBatchIr: FinalBatchIr,
                                streamingRows: Iterator[Row],
                                ts: Long,
@@ -159,11 +223,26 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
     windowedAggregator.finalize(lambdaAggregateIr(finalBatchIr, streamingRows, ts, hasReversal = hasReversal))
   }
 
+  def lambdaAggregateFinalizedFromCumulatedBatch(cumulatedBatchIr: CumulatedBatchIr,
+                                                 streamingRows: Iterator[Row],
+                                                 ts: Long,
+                                                 hasReversal: Boolean = false): Array[Any] = {
+    windowedAggregator.finalize(
+      lambdaAggregateIrFromCumulatedBatch(cumulatedBatchIr, streamingRows, ts, hasReversal))
+  }
+
   def lambdaAggregateFinalizedTiled(finalBatchIr: FinalBatchIr,
                                     streamingTiledIrs: Iterator[TiledIr],
                                     ts: Long): Array[Any] = {
     // TODO: Add support for mutations / hasReversal to the tiled implementation
     windowedAggregator.finalize(lambdaAggregateIrTiled(finalBatchIr, streamingTiledIrs, ts))
+  }
+
+  def lambdaAggregateFinalizedTiledFromCumulatedBatch(cumulatedBatchIr: CumulatedBatchIr,
+                                                      streamingTiledIrs: Iterator[TiledIr],
+                                                      ts: Long): Array[Any] = {
+    // TODO: Add support for mutations / hasReversal to the tiled implementation
+    windowedAggregator.finalize(lambdaAggregateIrTiledFromCumulatedBatch(cumulatedBatchIr, streamingTiledIrs, ts))
   }
 
   // example: window size = 30d
