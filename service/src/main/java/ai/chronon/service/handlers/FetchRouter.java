@@ -40,7 +40,7 @@ public class FetchRouter {
 
         router.post("/groupby/:name").handler(new FetchHandler(fetcher, new GroupByFetcherFunction()));
         router.post("/join/:name").handler(new FetchHandler(fetcher, new JoinFetcherFunction()));
-        router.post("/infer/:name").handler(new FetchHandler(fetcher, new InferenceFetcherFunction()));
+        router.post("/inference/:name").handler(new FetchHandler(fetcher, new InferenceFetcherFunction()));
 
         return router;
     }
