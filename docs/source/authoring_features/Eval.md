@@ -73,6 +73,21 @@ Lineage:
 
 If there is a semantic error anywhere in the graph, i.e. referencing an invalid column name, it would show up here as well.
 
+For example, I ran `eval` on a temporary canary `GroupBy` with `view_event="IF(evnt_type = 'view', 1, 0)"` and got:
+
+```text
+❌ ERROR Eval job failed.
+❌ GroupBy validation failed: [UNRESOLVED_COLUMN.WITH_SUGGESTION] A column or
+function parameter with name `evnt_type` cannot be resolved. Did you mean one of
+the following? [`event_type`, `device_type`, `event_id`, `event_time_ms`, `ds`].
+
+Lineage:
+[GroupBy] gcp.eval_invalid_column_demo.v0__0
+└── ✅ [StagingQuery] gcp.exports.user_activities__0
+```
+
+If that bad `GroupBy` were upstream of a `Join`, you could still run `eval` only on the final `Join`; the failure would bubble up through the lineage the same way.
+
 1. Author or edit the final conf.
 2. Run `zipline compile`.
 3. Run `zipline hub eval` on that final conf.
