@@ -836,8 +836,10 @@ def clear_downstream(conf, repo, hub_url, use_auth, format, start_ds, end_ds, as
     print_key_value("Affected confs", len(affected_confs), format=format)
     click.echo()
     for conf_result in affected_confs:
+        mode = conf_result.get("mode", "backfill")
+        mode_label = "batch" if mode == "backfill" else "online"
         print_key_value(
-            f"  {conf_result.get('confName', 'unknown')}",
+            f"  {conf_result.get('confName', 'unknown')} ({mode_label})",
             f"{conf_result.get('startPartition', '')} to {conf_result.get('endPartition', '')}",
             format=format,
         )
@@ -857,8 +859,19 @@ def clear_downstream(conf, repo, hub_url, use_auth, format, start_ds, end_ds, as
 
     print_success(f"Cleared {len(affected_confs)} confs", format=format)
     click.echo()
-    click.echo("To recompute, run backfill for each affected conf:")
-    click.echo("  zipline hub backfill <compiled_conf_path> --start-ds <start> --end-ds <end>")
+
+    backfill_confs = [c for c in affected_confs if c.get("mode", "backfill") == "backfill"]
+    deploy_confs = [c for c in affected_confs if c.get("mode") == "deploy"]
+
+    if backfill_confs:
+        click.echo("To recompute batch data, run backfill for each affected conf:")
+        for c in backfill_confs:
+            click.echo(f"  zipline hub backfill {c['confName']} --start-ds {c['startPartition']} --end-ds {c['endPartition']}")
+
+    if deploy_confs:
+        click.echo("To fix online data, run adhoc upload for each deploy conf:")
+        for c in deploy_confs:
+            click.echo(f"  zipline hub run-adhoc {c['confName']}")
 
 
 def load_json(file_path):

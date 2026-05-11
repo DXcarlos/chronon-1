@@ -762,7 +762,7 @@ class TestHubRunner:
                  "startPartition": "2024-01-01", "endPartition": "2024-01-05"},
             ],
             "affectedConfs": [
-                {"confName": "aws.my_conf.v1", "startPartition": "2024-01-01", "endPartition": "2024-01-05"},
+                {"confName": "aws.my_conf.v1", "startPartition": "2024-01-01", "endPartition": "2024-01-05", "mode": "backfill"},
             ],
             "totalNodesCleared": 1,
             "message": "Preview: 1 confs would be cleared",
@@ -794,9 +794,9 @@ class TestHubRunner:
 
         assert result.exit_code == 0
         plain_output = _plain(result.output)
-        assert "aws.my_conf.v1" in plain_output
+        assert "aws.my_conf.v1 (batch)" in plain_output
         assert "Cleared 1 confs" in plain_output
-        assert "zipline hub backfill" in plain_output
+        assert "zipline hub backfill aws.my_conf.v1 --start-ds 2024-01-01 --end-ds 2024-01-05" in plain_output
 
         assert mock_post.call_count == 2
 
