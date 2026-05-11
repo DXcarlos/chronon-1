@@ -1,6 +1,6 @@
 ---
 title: "Naming and Versioning"
-order: 8
+order: 9
 ---
 
 
@@ -104,4 +104,3 @@ Versioning:
 1. When creating a new entity, start with `version=0`.
 2. When iterating on an entity, create a branch and bump the version
 3. Iterations on your branch can keep the same version (no need to bump version in between runs while iterating on a branch)
-

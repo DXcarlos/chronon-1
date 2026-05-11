@@ -23,6 +23,8 @@ Note, if you are making a change to any existing entities **without** changing t
 
 ## Eval
 
+For the day-to-day authoring workflow and a full explanation of lineage and schema output, start with [Authoring Features > Eval](/docs/authoring_features/Eval). This page focuses on the surrounding test and deployment workflow.
+
 Before running expensive backfill jobs, use eval to quickly validate your configuration. Eval checks that:
 - All source tables exist and are accessible
 - Column names and types match your configuration
@@ -136,4 +138,3 @@ This will run:
 1. Frontfill jobs into the output table (if the `offline_schedule` argument is set on your entity)
 2. Batch upload jobs for serving (if `online=True`)
 3. Streaming jobs (if a topic is configured for the `GroupBy` being scheduled)
-

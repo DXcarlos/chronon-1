@@ -143,7 +143,7 @@ Opens the Zipline Hub UI for the selected config. From the Hub you can monitor j
 
 - [Authoring GroupBys](/docs/authoring_features/GroupBy) — full reference for the GroupBy API
 - [Authoring Joins](/docs/authoring_features/Join) — combining GroupBys into training datasets
-- [Eval](/docs/running_on_zipline_hub/Eval) — detailed guide to configuration validation
+- [Eval](/docs/authoring_features/Eval) — validating a final conf and its full upstream lineage
 - [Deploy](/docs/running_on_zipline_hub/Deploy) — understanding scheduled vs. adhoc deployment
 - [CLI Reference](/docs/reference/cli) — full reference for all `zipline` commands
 - [Local Sandbox](/docs/getting_started/Local_Sandbox) — explore Chronon locally without a Zipline subscription
