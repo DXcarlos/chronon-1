@@ -7,21 +7,18 @@ order: 6
 
 `zipline hub eval` is the fastest way to validate a Chronon config while you are authoring it. It compiles the conf, syncs the compiled lineage to Hub, and asks the eval service to validate the final conf you named against the full upstream graph.
 
-## The mental model
+Note: The easiest way to call Eval is through the Zipline VSCode / Cursor extension.
 
-You only call `eval` on the final conf you care about:
+You can call `eval` on `Join`s, `GroupBy`s or `StagingQuery`s.
 
-- a `Join` when you are validating the full feature surface for training or serving
-- a `GroupBy` when you are validating a reusable feature source
-- a `StagingQuery` when you are validating a raw export or intermediate dataset
+You do **not** need to run `eval` on each node in a lineage. It happens automatically for you.
 
-You do **not** need to run `eval` on each upstream `StagingQuery` or `GroupBy` first.
-
-For example, the `v1 = Join(...)` defined in `python/test/canary/joins/gcp/demo.py` compiles to `compiled/joins/gcp/demo.v1__1`. Running:
+For example, for `v1 = Join(...)` defined [here](https://github.com/zipline-ai/chronon/blob/main/python/test/canary/joins/gcp/demo.py):
 
 ```bash
 zipline hub eval compiled/joins/gcp/demo.v1__1
 ```
+(or just click the button in VSCode)
 
 will automatically validate:
 
@@ -74,92 +71,7 @@ Lineage:
     └── ✅ [StagingQuery] gcp.exports.dim_merchants__0
 ```
 
-The important labels are:
-
-- `[left]`: columns coming from the left side of a `Join`
-- `[joinPart: ...]`: columns contributed by a specific `GroupBy`
-- `[derivation]`: columns created by `Join.derivations`
-- `[key]`: key columns in a `GroupBy`
-- `[aggregation]`: aggregated output columns in a `GroupBy`
-- `[no agg]`: pass-through columns in an entity-style `GroupBy`
-
-The summary lines mean:
-
-- `Left table`: the materialized table or view that the join evaluates on its left side
-- `Join parts`: how many `JoinPart`s the final join includes
-- `Conf dependencies`: the direct upstream Chronon confs the final conf depends on
-- `External tables`: raw warehouse tables referenced directly by the conf being summarized
-
-![Eval command demonstration](../../images/eval_sample.gif)
-
-## Getting the full upstream schema
-
-The default human-readable output is optimized for quick authoring feedback. If you want the schema for every upstream node in a machine-readable form, run:
-
-```bash
-zipline hub eval compiled/joins/gcp/demo.v1__1 --format=json
-```
-
-In that mode, the response includes the top-level summary plus a recursive `upstreamResponse` tree. Here is a shortened excerpt from the same canary eval:
-
-```json
-{
-  "confName": "gcp.demo.v1__1",
-  "success": 1,
-  "shortMessage": "✅ Join: gcp.demo.v1__1 (4 deps, 0 external)",
-  "upstreamResponse": [
-    {
-      "confName": "gcp.exports.user_activities__0",
-      "message": "StagingQuery Configuration: gcp.exports.user_activities__0 ...",
-      "schemaInfo": {
-        "external_table_0": "demo.`user-activities`"
-      }
-    },
-    {
-      "confName": "gcp.user_activities.v1__1",
-      "message": "GroupBy Configuration: gcp.user_activities.v1__1 ..."
-    }
-  ]
-}
-```
-
-This is the easiest way to inspect the full lineage schema for the final conf you are evaluating:
-
-- the top-level `message` describes the final `Join`, `GroupBy`, or `StagingQuery`
-- each `upstreamResponse` entry describes one direct dependency
-- each dependency can have its own nested `upstreamResponse`
-- `schemaInfo` calls out external tables when a node reads directly from the warehouse
-- `depth` and `confType` are bookkeeping fields for the recursive response and are usually safe to ignore
-
-For the `gcp.demo.v1__1` example, the JSON response includes:
-
-- the `Join` output schema, including left-side columns and each `JoinPart`'s output columns
-- the `gcp.user_activities.v1__1` `GroupBy` output schema, including `[key]` and `[aggregation]` columns
-- the `gcp.dim_listings.v1__0` and `gcp.dim_merchants.v1__0` entity-style `GroupBy` output schemas, including `[no agg]` columns
-- the output schema for each upstream `StagingQuery`, plus the raw external table name each one reads from
-
-## Evaluating with sample rows
-
-`eval` can also compute concrete outputs from fixture data instead of only checking schemas.
-
-```bash
-# 1. Generate a YAML skeleton that matches the raw input tables in the lineage
-zipline hub eval compiled/joins/gcp/demo.v1__1 --generate-test-config
-
-# 2. Fill in the generated YAML
-
-# 3. Run eval against those rows
-zipline hub eval compiled/joins/gcp/demo.v1__1 --test-data-path test-data.yaml
-```
-
-With `--test-data-path`, eval still returns the schema and lineage summary, then appends temporary catalog tables and computed output rows. In the canary `gcp.demo.v1__1` example, the response included a `data.gcp_demo_v1__1` table with 6 evaluated rows, which is useful for checking:
-
-- point-in-time join behavior
-- aggregation windows on concrete timestamps
-- derivation logic on real sample values
-- null handling and key matching
-
-## Recommended workflow
+If there is a semantic error anywhere in the graph, i.e. referencing an invalid column name, it would show up here as well.
 
 1. Author or edit the final conf.
 2. Run `zipline compile`.
