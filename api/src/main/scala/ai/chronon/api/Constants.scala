@@ -102,4 +102,5 @@ object Constants {
 
   val KvTablePrefixArg = "kv.tablePrefix"
   val KvEnableTtlArg = "kv.enableTtl"
+  val KvReplicaRegionsArg = "kv.replicaRegions"
 }

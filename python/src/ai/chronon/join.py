@@ -265,7 +265,7 @@ def BootstrapPart(
 def Join(
     left: api.Source,
     right_parts: List[api.JoinPart],
-    row_ids: Union[str, List[str]],
+    row_ids: Optional[Union[str, List[str]]] = None,
     version: Optional[int] = None,
     online_external_parts: List[api.ExternalPart] = None,
     bootstrap_parts: List[api.BootstrapPart] = None,
@@ -356,7 +356,8 @@ def Join(
         defaults to "@daily". Set to "@never" to explicitly disable online scheduling even when online=True.
         Supports the same format as offline_schedule.
     :param row_ids:
-        Columns of the left table that uniquely define a training record. Used as default keys during bootstrap
+        Columns of the left table that uniquely define a training record. Used as default keys during bootstrap.
+        Optional.
     :param bootstrap_parts:
         A list of BootstrapPart used for the Join. See BootstrapPart doc for more details
     :param bootstrap_from_log:

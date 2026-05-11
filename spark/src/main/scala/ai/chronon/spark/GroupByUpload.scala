@@ -430,13 +430,16 @@ object GroupByUpload {
       case (Accuracy.TEMPORAL, DataModel.ENTITIES) => otherGroupByUpload.temporalEvents(jsonPercent)
     }
 
-    // Emit null count metrics
-    if (maybeContext.isDefined) {
+    // Emit null count metrics. We force-flush the OTel meter provider afterwards because
+    // the periodic exporter buffers in-process — the JVM exits as soon as upload finishes
+    // and the gauges would otherwise be dropped before the next tick. This replaces a racy
+    // Thread.sleep(ScrapeWaitSeconds) that overlapped one tick on a hope-and-pray basis.
+    maybeContext.foreach { ctx =>
       logger.info(s"Emitting data quality metrics for ${nullCounts.keys.mkString(", ")} ")
       nullCounts.foreach { case (field, count) =>
-        maybeContext.get.gauge(s"NullCount.$field.$endDs", count)
+        ctx.gauge(Metrics.Name.UploadNullCount, count, additionalTags = Map("field" -> field, "endDs" -> endDs))
       }
-      Thread.sleep(Constants.ScrapeWaitSeconds.seconds.toMillis)
+      ctx.flush(Constants.ScrapeWaitSeconds.seconds.toMillis)
     }
 
     UploadResult(kvDf, nullCounts)
