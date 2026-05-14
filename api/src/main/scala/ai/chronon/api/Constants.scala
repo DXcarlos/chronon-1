@@ -65,6 +65,13 @@ object Constants {
 
   val EnhancedStatsDataset: String = "ENHANCED_STATS"
 
+  // KV-name prefixes that disambiguate which producer type owns a stats lookup name
+  // (so a Join and a StagingQuery with the same conf name don't collide). The Join
+  // prefix is intentionally empty for backward compatibility with stats already
+  // written without any prefix.
+  val EnhancedStatsNodeTypeJoin: String = "join"
+  val EnhancedStatsNodeTypeStagingQuery: String = "staging_query"
+
   val DefaultDriftTileSize: Window = new Window(30, TimeUnit.MINUTES)
 
   val FetchTimeout: Duration = Duration(10, concurrent.TimeUnit.MINUTES)

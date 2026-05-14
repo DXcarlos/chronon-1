@@ -218,6 +218,64 @@ class StagingQueryPlannerTest extends AnyFlatSpec with Matchers {
     firstSemanticHashes should equal(secondSemanticHashes)
   }
 
+  it should "staging query planner should add a stats compute node when enableStatsCompute is true" in {
+    val stagingQuery = StagingQuery(
+      query = "SELECT * FROM test_table",
+      metaData = MetaData(
+        name = "testStatsStagingQuery",
+        executionInfo = new ExecutionInfo().setEnableStatsCompute(true)
+      ),
+      engineType = EngineType.SPARK
+    )
+
+    val planner = new StagingQueryPlanner(stagingQuery)
+    val plan = planner.buildPlan
+
+    plan.nodes.asScala should have size 2
+
+    val statsNodeName = "testStatsStagingQuery__stats_compute"
+    val stagingNodeName = "testStatsStagingQuery__staging"
+    val nodeNames = plan.nodes.asScala.map(_.metaData.name).toSet
+    nodeNames should contain(stagingNodeName)
+    nodeNames should contain(statsNodeName)
+
+    plan.terminalNodeNames.asScala(ai.chronon.planner.Mode.BACKFILL) should equal(statsNodeName)
+
+    val statsNode = plan.nodes.asScala.find(_.metaData.name == statsNodeName).get
+    statsNode.content.getStagingQueryStatsCompute should not be null
+    statsNode.content.getStagingQueryStatsCompute.stagingQuery should not be null
+
+    // The stats node should depend on the upstream staging output table
+    val stagingNode = plan.nodes.asScala.find(_.metaData.name == stagingNodeName).get
+    val expectedTable = stagingNode.metaData.executionInfo.outputTableInfo.table
+    val deps = statsNode.metaData.executionInfo.getTableDependencies.asScala
+    deps should have size 1
+    deps.head.getTableInfo.table should equal(expectedTable)
+  }
+
+  it should "staging query planner should omit stats compute node when enableStatsCompute is false or unset" in {
+    val sqUnset = StagingQuery(
+      query = "SELECT * FROM test_table",
+      metaData = MetaData(name = "unsetSq"),
+      engineType = EngineType.SPARK
+    )
+    val sqFalse = StagingQuery(
+      query = "SELECT * FROM test_table",
+      metaData = MetaData(
+        name = "falseSq",
+        executionInfo = new ExecutionInfo().setEnableStatsCompute(false)
+      ),
+      engineType = EngineType.SPARK
+    )
+
+    Seq(sqUnset, sqFalse).foreach { sq =>
+      val plan = new StagingQueryPlanner(sq).buildPlan
+      plan.nodes.asScala should have size 1
+      plan.terminalNodeNames.asScala(ai.chronon.planner.Mode.BACKFILL) should equal(
+        sq.metaData.name + "__staging")
+    }
+  }
+
   it should "staging query planner should produce exactly one node wrapping a StagingQuery for canary confs" in {
     val stagingQueryRootDir = Paths.get(getClass.getClassLoader.getResource("canary/compiled/staging_queries").getPath)
 

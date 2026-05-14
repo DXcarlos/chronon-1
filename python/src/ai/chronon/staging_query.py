@@ -179,6 +179,7 @@ def StagingQuery(
     env_vars: Optional[common.EnvironmentVariables] = None,
     cluster_conf: common.ClusterConfigProperties = None,
     step_days: Optional[int] = None,
+    enable_stats_compute: Optional[bool] = None,
     recompute_days: Optional[int] = None,
     additional_partitions: List[str] = None,
 ) -> ttypes.StagingQuery:
@@ -227,6 +228,13 @@ def StagingQuery(
     :param step_days:
         The maximum number of days to process at once
     :type step_days: int
+    :param enable_stats_compute:
+        Whether to enable enhanced statistics computation and upload for this staging query.
+        When True, a stats compute node will be added to the workflow that computes
+        cardinality-aware statistics on the staging query output and uploads them to the
+        KV store. Stats are written under a `staging_query/<name>` lookup so they do not
+        collide with same-named joins; readers must pass `?type=staging_query` to fetch them.
+    :type enable_stats_compute: bool
     :param dependencies:
         List of dependencies for the StagingQuery. Each dependency can be either a TableDependency object
         or a dictionary with 'name' and 'spec' keys.
@@ -277,6 +285,7 @@ def StagingQuery(
         env=env_vars,
         stepDays=step_days,
         clusterConf=cluster_conf,
+        enableStatsCompute=enable_stats_compute,
     )
 
     airflow_dependencies = []

@@ -30,6 +30,7 @@ import scala.concurrent.ExecutionContext$;
  *   - metric: Approx percentile metric name, or source column name (required when table has multiple percentile metrics)
  *   - dataset: Dataset name (optional, defaults to ENHANCED_STATS)
  *   - semanticHash: Config hash to read from a specific shard (optional)
+ *   - type: Producer type ("staging_query" for StagingQuery-produced stats; omit for Join).
  */
 public class StatsDriftHandler implements Handler<RoutingContext> {
 
@@ -60,6 +61,7 @@ public class StatsDriftHandler implements Handler<RoutingContext> {
         String metric = ctx.request().getParam("metric");
         String datasetName = ctx.request().getParam("dataset");
         String semanticHash = ctx.request().getParam("semanticHash");
+        String nodeType = ctx.request().getParam("type");
 
         if (referenceStartTimeStr == null || referenceEndTimeStr == null ||
                 comparisonStartTimeStr == null || comparisonEndTimeStr == null) {
@@ -91,15 +93,16 @@ public class StatsDriftHandler implements Handler<RoutingContext> {
             datasetName = Constants.EnhancedStatsDataset();
         }
 
-        logger.info("Computing stats drift for table: {}, metric: {}, referenceRange: [{}, {}], comparisonRange: [{}, {}], dataset: {}, semanticHash: {}",
+        logger.info("Computing stats drift for table: {}, metric: {}, referenceRange: [{}, {}], comparisonRange: [{}, {}], dataset: {}, semanticHash: {}, type: {}",
                 tableName, metric, referenceStartTimeMillis, referenceEndTimeMillis,
                 comparisonStartTimeMillis, comparisonEndTimeMillis, datasetName,
-                semanticHash != null ? semanticHash : "(none)");
+                semanticHash != null ? semanticHash : "(none)",
+                nodeType != null ? nodeType : "(none)");
 
         JavaStatsService statsService = new JavaStatsService(api, "ENHANCED_STATS", datasetName, ec);
         CompletableFuture<JavaStatsDriftResponse> driftResponseFuture =
                 statsService.fetchDrift(tableName, referenceStartTimeMillis, referenceEndTimeMillis,
-                        comparisonStartTimeMillis, comparisonEndTimeMillis, metric, semanticHash);
+                        comparisonStartTimeMillis, comparisonEndTimeMillis, metric, semanticHash, nodeType);
 
         Future<JavaStatsDriftResponse> vertxFuture = Future.fromCompletionStage(driftResponseFuture);
 

@@ -101,6 +101,10 @@ struct JoinStatsUploadToKVNode {
     1: optional api.Join join
 }
 
+struct StagingQueryStatsComputeNode {
+    1: optional api.StagingQuery stagingQuery
+}
+
 union NodeContent {
     // join nodes
     1: SourceWithFilterNode sourceWithFilter
@@ -122,6 +126,7 @@ union NodeContent {
 
     // Stats Node
     20: JoinStatsComputeNode joinStatsCompute
+    21: StagingQueryStatsComputeNode stagingQueryStatsCompute
 
     // groupBy nodes
     100: GroupByBackfillNode groupByBackfill

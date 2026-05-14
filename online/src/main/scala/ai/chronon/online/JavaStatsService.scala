@@ -106,6 +106,18 @@ class JavaStatsService(api: Api,
     }
   }
 
+  /** Translates a (tableName, nodeType) pair into the disambiguated lookup name used as the
+    * stats KV key prefix. "join" (or null/empty) keeps the legacy un-prefixed shape so existing
+    * data and callers remain compatible; other types (e.g. "staging_query") get a `<type>/` prefix.
+    */
+  private def lookupNameFor(tableName: String, nodeType: String): String = {
+    Option(nodeType).map(_.trim).filter(_.nonEmpty) match {
+      case Some(t) if t.equalsIgnoreCase(Constants.EnhancedStatsNodeTypeJoin) => tableName
+      case Some(t)                                                            => s"$t/$tableName"
+      case None                                                               => tableName
+    }
+  }
+
   /** Fetch and merge statistics for a given table and time range.
     *
     * @param tableName The name of the table (used as key in KV store)
@@ -113,13 +125,17 @@ class JavaStatsService(api: Api,
     * @param endTimeMillis End of time range (inclusive)
     * @param semanticHash If set, reads from the shard written by the job with this config hash.
     *                     Pass null (Java) or None (Scala) to read un-sharded legacy data.
+    * @param nodeType Optional producer type ("staging_query" for StagingQuery-produced stats,
+    *                 null/"join" for Join-produced stats — joins remain un-prefixed for backward compat).
     * @return CompletableFuture of JavaStatsResponse with statistics or error
     */
   def fetchStats(tableName: String,
                  startTimeMillis: Long,
                  endTimeMillis: Long,
-                 semanticHash: String): CompletableFuture[JavaStatsResponse] = {
+                 semanticHash: String,
+                 nodeType: String): CompletableFuture[JavaStatsResponse] = {
 
+    val lookupName = lookupNameFor(tableName, nodeType)
     val requestedHash = Option(semanticHash)
     // When the flag is off, drop any hash the caller passed and read un-sharded data.
     // Log a warning so the frontend knows the hash was ignored rather than silently failing.
@@ -137,8 +153,8 @@ class JavaStatsService(api: Api,
     val scalaFuture: Future[JavaStatsResponse] = Future {
       Try {
         // Retrieve schemas from KV Store in a single batch call
-        val keySchemaKey = s"$tableName${Constants.TimedKvRDDKeySchemaKey}"
-        val valueSchemaKey = s"$tableName${Constants.TimedKvRDDValueSchemaKey}"
+        val keySchemaKey = s"$lookupName${Constants.TimedKvRDDKeySchemaKey}"
+        val valueSchemaKey = s"$lookupName${Constants.TimedKvRDDValueSchemaKey}"
 
         val (keyCodecOpt, valueCodecOpt) = getSchemasFromKVStore(keySchemaKey, valueSchemaKey, maybeHash)
 
@@ -149,14 +165,15 @@ class JavaStatsService(api: Api,
             case None =>
               " (no semanticHash — reading un-sharded data)"
           }
-          throw new RuntimeException(s"Failed to retrieve schemas for $tableName$hashHint. Has it been uploaded?")
+          throw new RuntimeException(s"Failed to retrieve schemas for $lookupName$hashHint. Has it been uploaded?")
         }
 
         val keyCodec = keyCodecOpt.get
         val valueCodec = valueCodecOpt.get
 
-        // Encode key using the stored key codec
-        val chrononRow = Array[Any](tableName)
+        // Encode key using the stored key codec — must use the (potentially prefixed) lookupName
+        // because that is what the producer wrote as the JoinPath column value.
+        val chrononRow = Array[Any](lookupName)
         val record = AvroConversions
           .fromChrononRow(chrononRow, keyCodec.chrononSchema, keyCodec.schema)
           .asInstanceOf[generic.GenericData.Record]
@@ -184,8 +201,8 @@ class JavaStatsService(api: Api,
               logger.info(s"Fetched ${timedValues.size} tiles for $tableName")
 
               // Fetch schemas (these are static metadata)
-              val selectedSchemaOpt = getMetadataValue(s"$tableName/selectedSchema", None, maybeHash)
-              val noKeysSchemaOpt = getMetadataValue(s"$tableName/noKeysSchema", None, maybeHash)
+              val selectedSchemaOpt = getMetadataValue(s"$lookupName/selectedSchema", None, maybeHash)
+              val noKeysSchemaOpt = getMetadataValue(s"$lookupName/noKeysSchema", None, maybeHash)
 
               if (selectedSchemaOpt.isEmpty || noKeysSchemaOpt.isEmpty) {
                 throw new RuntimeException(s"Failed to retrieve schemas for $tableName. Metadata may be missing.")
@@ -198,7 +215,7 @@ class JavaStatsService(api: Api,
               val noKeysSchema = noKeysSchemaCodec.chrononSchema.asInstanceOf[StructType]
 
               // Fallback: try to get from metadata row (backward compatibility)
-              val cardinalityMapOpt = getMetadataValue(s"$tableName/cardinalityMap", Some(endTimeMillis), maybeHash)
+              val cardinalityMapOpt = getMetadataValue(s"$lookupName/cardinalityMap", Some(endTimeMillis), maybeHash)
               val mergedCardinalityMap = if (cardinalityMapOpt.isDefined) {
                 val cardinalityJson = cardinalityMapOpt.get
                 cardinalityJson
@@ -318,13 +335,15 @@ class JavaStatsService(api: Api,
                  comparisonStartTimeMillis: Long,
                  comparisonEndTimeMillis: Long,
                  metricName: String,
-                 semanticHash: String): CompletableFuture[JavaStatsDriftResponse] = {
+                 semanticHash: String,
+                 nodeType: String): CompletableFuture[JavaStatsDriftResponse] = {
 
+    val lookupName = lookupNameFor(tableName, nodeType)
     val scalaFuture: Future[JavaStatsDriftResponse] = Future {
       Try {
         val requestedHash = Option(semanticHash).filter(_.nonEmpty)
         val maybeHash = effectiveSemanticHash(tableName, requestedHash)
-        val drift = computeDrift(tableName,
+        val drift = computeDrift(lookupName,
                                  referenceStartTimeMillis,
                                  referenceEndTimeMillis,
                                  comparisonStartTimeMillis,
@@ -372,7 +391,9 @@ class JavaStatsService(api: Api,
                          windowDays: Int,
                          metricName: String,
                          distanceName: String,
-                         semanticHash: String): CompletableFuture[JavaStatsTrailingDriftResponse] = {
+                         semanticHash: String,
+                         nodeType: String): CompletableFuture[JavaStatsTrailingDriftResponse] = {
+    val lookupName = lookupNameFor(tableName, nodeType)
     val scalaFuture: Future[JavaStatsTrailingDriftResponse] = Future {
       Try {
         if (windowDays <= 0) {
@@ -394,7 +415,7 @@ class JavaStatsService(api: Api,
         val lastAnchorMillis = end.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli
         val fetchStartMillis = firstAnchorMillis - (2L * windowMillis)
         val fetchEndMillis = lastAnchorMillis - 1L
-        val cached = fetchDecodedIrRange(tableName, fetchStartMillis, fetchEndMillis, maybeHash, "trailing")
+        val cached = fetchDecodedIrRange(lookupName, fetchStartMillis, fetchEndMillis, maybeHash, "trailing")
 
         var date = start
         while (!date.isAfter(end)) {
@@ -913,7 +934,14 @@ class JavaStatsService(api: Api,
 
   /** Overload for callers that don't use semantic-hash sharding (reads un-sharded legacy data). */
   def fetchStats(tableName: String, startTimeMillis: Long, endTimeMillis: Long): CompletableFuture[JavaStatsResponse] =
-    fetchStats(tableName, startTimeMillis, endTimeMillis, null)
+    fetchStats(tableName, startTimeMillis, endTimeMillis, null, null)
+
+  /** Overload for callers that pass semanticHash but not a nodeType (defaults to Join shape). */
+  def fetchStats(tableName: String,
+                 startTimeMillis: Long,
+                 endTimeMillis: Long,
+                 semanticHash: String): CompletableFuture[JavaStatsResponse] =
+    fetchStats(tableName, startTimeMillis, endTimeMillis, semanticHash, null)
 
   def fetchDrift(tableName: String,
                  referenceStartTimeMillis: Long,
@@ -927,6 +955,23 @@ class JavaStatsService(api: Api,
                comparisonStartTimeMillis,
                comparisonEndTimeMillis,
                metricName,
+               null,
+               null)
+
+  def fetchDrift(tableName: String,
+                 referenceStartTimeMillis: Long,
+                 referenceEndTimeMillis: Long,
+                 comparisonStartTimeMillis: Long,
+                 comparisonEndTimeMillis: Long,
+                 metricName: String,
+                 semanticHash: String): CompletableFuture[JavaStatsDriftResponse] =
+    fetchDrift(tableName,
+               referenceStartTimeMillis,
+               referenceEndTimeMillis,
+               comparisonStartTimeMillis,
+               comparisonEndTimeMillis,
+               metricName,
+               semanticHash,
                null)
 
   def fetchTrailingDrift(tableName: String,
@@ -935,7 +980,16 @@ class JavaStatsService(api: Api,
                          windowDays: Int,
                          metricName: String,
                          distanceName: String): CompletableFuture[JavaStatsTrailingDriftResponse] =
-    fetchTrailingDrift(tableName, startDate, endDate, windowDays, metricName, distanceName, null)
+    fetchTrailingDrift(tableName, startDate, endDate, windowDays, metricName, distanceName, null, null)
+
+  def fetchTrailingDrift(tableName: String,
+                         startDate: String,
+                         endDate: String,
+                         windowDays: Int,
+                         metricName: String,
+                         distanceName: String,
+                         semanticHash: String): CompletableFuture[JavaStatsTrailingDriftResponse] =
+    fetchTrailingDrift(tableName, startDate, endDate, windowDays, metricName, distanceName, semanticHash, null)
 
   /** Add derived features to the statistics map.
     * Computes additional metrics based on existing statistics:

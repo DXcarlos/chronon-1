@@ -34,6 +34,7 @@ import scala.concurrent.ExecutionContext$;
  *   - distance: Distance to return as y: linf, l2, or l1 (optional, defaults to linf)
  *   - dataset: Dataset name (optional, defaults to ENHANCED_STATS)
  *   - semanticHash: Config hash to read from a specific shard (optional)
+ *   - type: Producer type ("staging_query" for StagingQuery-produced stats; omit for Join).
  */
 public class StatsTrailingDriftHandler implements Handler<RoutingContext> {
 
@@ -64,6 +65,7 @@ public class StatsTrailingDriftHandler implements Handler<RoutingContext> {
         String distance = ctx.request().getParam("distance");
         String datasetName = ctx.request().getParam("dataset");
         String semanticHash = ctx.request().getParam("semanticHash");
+        String nodeType = ctx.request().getParam("type");
 
         if (startDate == null || endDate == null || windowDaysStr == null) {
             sendError(ctx, 400, "Missing required query parameters: startDate, endDate, windowDays");
@@ -99,13 +101,14 @@ public class StatsTrailingDriftHandler implements Handler<RoutingContext> {
             datasetName = Constants.EnhancedStatsDataset();
         }
 
-        logger.info("Computing trailing stats drift for table: {}, metric: {}, distance: {}, dateRange: [{}, {}], windowDays: {}, dataset: {}, semanticHash: {}",
+        logger.info("Computing trailing stats drift for table: {}, metric: {}, distance: {}, dateRange: [{}, {}], windowDays: {}, dataset: {}, semanticHash: {}, type: {}",
                 tableName, metric, distance, startDate, endDate, windowDays, datasetName,
-                semanticHash != null ? semanticHash : "(none)");
+                semanticHash != null ? semanticHash : "(none)",
+                nodeType != null ? nodeType : "(none)");
 
         JavaStatsService statsService = new JavaStatsService(api, "ENHANCED_STATS", datasetName, ec);
         CompletableFuture<JavaStatsTrailingDriftResponse> driftResponseFuture =
-                statsService.fetchTrailingDrift(tableName, startDate, endDate, windowDays, metric, distance, semanticHash);
+                statsService.fetchTrailingDrift(tableName, startDate, endDate, windowDays, metric, distance, semanticHash, nodeType);
 
         Future<JavaStatsTrailingDriftResponse> vertxFuture = Future.fromCompletionStage(driftResponseFuture);
 

@@ -21,7 +21,7 @@ import ai.chronon.api._
 import ai.chronon.api.planner.{MetaDataUtils, TableDependencies}
 import ai.chronon.observability.{TileSummaryKey, TileSummary}
 import ai.chronon.online.KVStore.PutRequest
-import ai.chronon.planner.{ExternalSourceSensorNode, GroupByBackfillNode, JoinStatsComputeNode, MonolithJoinNode, Node, NodeContent, StagingQueryNode}
+import ai.chronon.planner.{ExternalSourceSensorNode, GroupByBackfillNode, JoinStatsComputeNode, MonolithJoinNode, Node, NodeContent, StagingQueryNode, StagingQueryStatsComputeNode}
 import ai.chronon.spark.other.MockKVStore
 import ai.chronon.spark.utils.{MockApi, SparkTestBase}
 import ai.chronon.spark.catalog.TableUtils
@@ -1255,6 +1255,49 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
       tableDependencies = Seq(tableDep),
       stepDays = Some(1),
       outputTableOverride = Some("test_db.empty_stats_join__stats_output")
+    )
+
+    val node = new Node().setMetaData(metadata).setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
+
+    noException should be thrownBy runner.run(metadata, nodeContent, Option(range))
+  }
+
+  "BatchNodeRunner.run with StagingQueryStatsComputeNode" should "skip gracefully when staging query output table has no rows" in {
+    val sqOutputTable = "test_db.empty_sq_output"
+    spark.sql(s"DROP TABLE IF EXISTS $sqOutputTable")
+    spark.sql(
+      s"""CREATE TABLE $sqOutputTable (
+         |  user_id INT,
+         |  amount DOUBLE,
+         |  ds STRING
+         |)
+         |PARTITIONED BY (ds)""".stripMargin
+    )
+
+    val sqConf = Builders.StagingQuery(
+      metaData = Builders.MetaData(namespace = "test_db", name = "empty_stats_sq"),
+      query = s"SELECT * FROM $sqOutputTable"
+    )
+
+    val sqStatsNode = new StagingQueryStatsComputeNode().setStagingQuery(sqConf)
+    val nodeContent = new NodeContent()
+    nodeContent.setStagingQueryStatsCompute(sqStatsNode)
+
+    val tableDep = TableDependencies.fromTable(
+      sqOutputTable,
+      new Query().setPartitionColumn("ds").setPartitionFormat("yyyy-MM-dd")
+    )
+
+    implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+    val metadata = MetaDataUtils.layer(
+      baseMetadata = new MetaData().setOutputNamespace("test_db").setTeam("test_team"),
+      modeName = "backfill",
+      nodeName = "test_db__empty_stats_sq__stats_compute",
+      tableDependencies = Seq(tableDep),
+      stepDays = Some(1),
+      outputTableOverride = Some("test_db.empty_stats_sq__stats_output")
     )
 
     val node = new Node().setMetaData(metadata).setContent(nodeContent)

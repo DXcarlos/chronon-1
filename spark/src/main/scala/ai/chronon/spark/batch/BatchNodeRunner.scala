@@ -229,57 +229,68 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
                                   range: PartitionRange): Unit = {
     require(joinStatsCompute.isSetJoin, "JoinStatsComputeNode must have a join set")
     val joinConf = joinStatsCompute.join
-    val joinName = metadata.name
+    // keyColumns can NPE when join parts are null; tolerate that and fall back to all-columns.
+    val keys = scala.util.Try(joinConf.keyColumns).toOption.map(_.toSeq).getOrElse(Seq.empty)
+    runEnhancedStatsCompute(metadata, statsName = joinConf.metaData.name, keys = keys, range = range)
+  }
 
+  private def runStagingQueryStatsCompute(metadata: MetaData,
+                                          stagingQueryStatsCompute: StagingQueryStatsComputeNode,
+                                          range: PartitionRange): Unit = {
+    require(stagingQueryStatsCompute.isSetStagingQuery, "StagingQueryStatsComputeNode must have a stagingQuery set")
+    val sqConf = stagingQueryStatsCompute.stagingQuery
+    // Prefix the stats lookup name with the node-type segment so it can't collide with a
+    // same-named Join. Join stats are intentionally written un-prefixed for backward compatibility.
+    val prefixedName = s"${Constants.EnhancedStatsNodeTypeStagingQuery}/${sqConf.metaData.name}"
+    runEnhancedStatsCompute(metadata, statsName = prefixedName, keys = Seq.empty, range = range)
+  }
+
+  // Shared compute+upload path for Join and StagingQuery enhanced stats. Reads the upstream output
+  // table from the node's first table dependency, runs EnhancedStatsCompute, then writes both to the
+  // configured output table and the KV store (with optional semanticHash sharding).
+  private def runEnhancedStatsCompute(metadata: MetaData,
+                                      statsName: String,
+                                      keys: Seq[String],
+                                      range: PartitionRange): Unit = {
     // step-days slicing is handled by the orchestrator via DependencyResolver.getMissingSteps;
     // each invocation receives exactly one step-sized range.
-    logger.info(s"Running stats compute for join '$joinName' for range: [${range.start}, ${range.end}]")
+    logger.info(s"Running enhanced stats compute for '$statsName' for range: [${range.start}, ${range.end}]")
 
-    // Import the necessary stats classes
-    import ai.chronon.spark.stats.EnhancedStatsCompute
+    import ai.chronon.spark.stats.{EnhancedStatsCompute, EnhancedStatsStore}
 
-    // Get the join output table from dependencies - the first table dependency should be the join output
-    val joinOutputTable = Option(metadata.executionInfo)
+    val inputTable = Option(metadata.executionInfo)
       .flatMap(ei => Option(ei.getTableDependencies))
       .map(_.asScala.head.getTableInfo.table)
-      .getOrElse(
-        throw new IllegalStateException(s"Could not determine join output table for stats compute node: $joinName"))
+      .getOrElse(throw new IllegalStateException(s"Could not determine input table for stats compute node: $statsName"))
 
-    logger.info(s"Reading join output from table: $joinOutputTable")
+    logger.info(s"Reading stats input from table: $inputTable")
 
-    // Read the join output for the specified partition range
-    val joinOutputDf = tableUtils.sql(
-      s"SELECT * FROM $joinOutputTable WHERE ${tableUtils.partitionColumn} >= '${range.start}' AND ${tableUtils.partitionColumn} <= '${range.end}'"
+    val inputDf = tableUtils.sql(
+      s"SELECT * FROM $inputTable WHERE ${tableUtils.partitionColumn} >= '${range.start}' AND ${tableUtils.partitionColumn} <= '${range.end}'"
     )
 
-    if (joinOutputDf.isEmpty) {
-      logger.info(s"No rows found for join '$joinName' in range [${range.start}, ${range.end}], skipping stats compute")
+    if (inputDf.isEmpty) {
+      logger.info(s"No rows found for '$statsName' in range [${range.start}, ${range.end}], skipping stats compute")
       return
     }
 
-    // Extract key columns from the join configuration
-    // Use Try to handle potential NPE from keyColumns method when join parts are null
-    val keys = scala.util.Try(joinConf.keyColumns).toOption.map(_.toSeq).getOrElse(Seq.empty)
     if (keys.nonEmpty) {
       logger.info(s"Computing enhanced statistics with keys: ${keys.mkString(", ")}")
     } else {
       logger.info(s"Computing enhanced statistics without key exclusions (all columns will be analyzed)")
     }
 
-    // Create EnhancedStatsCompute instance
     val enhancedStats = new EnhancedStatsCompute(
-      inputDf = joinOutputDf,
+      inputDf = inputDf,
       keys = keys,
-      name = joinConf.metaData.name
+      name = statsName
     )
 
-    // Compute daily summary statistics
     val (flatDf, statsMetadata) = enhancedStats.enhancedDailySummary(
       sample = 1.0,
       timeBucketMinutes = 0 // Daily tiles
     )
 
-    // Convert to Avro DataFrame format (with key_bytes, value_bytes, ts columns)
     implicit val sparkSession = tableUtils.sparkSession
     val keyColumns = Seq("JoinPath")
     val valueColumns = flatDf.columns.filterNot(c => c == "JoinPath" || c == Constants.TimeColumn).toSeq
@@ -287,30 +298,26 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       flatDf,
       keyColumns,
       valueColumns,
-      storeSchemasPrefix = Some(joinConf.metaData.name),
+      storeSchemasPrefix = Some(statsName),
       metadata = Some(statsMetadata)
     )
     val outputTable = metadata.outputTable
     avroDf.show()
 
-    // Add partition column (ds) derived from timestamp for partitioning
     val avroDfWithPartition = avroDf.withTimeBasedColumn(tableUtils.partitionColumn).drop("key_json").drop("value_json")
 
     val recordCount = avroDfWithPartition.count()
     logger.info(s"Saving $recordCount stats records to table: $outputTable")
 
-    // Write the stats in Avro format to the output table, partitioned by day
     tableUtils.insertPartitions(
       df = avroDfWithPartition,
       tableName = outputTable,
       semanticHash = Option(node.semanticHash).filter(_.nonEmpty)
     )
 
-    // Upload to KV store using the proper EnhancedStatsStore method.
     // Sharding is gated by CHRONON_SHARD_ENHANCED_STATS — must be enabled on both write and read sides
     // before activating, otherwise the service won't find the sharded data.
     logger.info(s"Uploading $recordCount stats records to KV store")
-    import ai.chronon.spark.stats.EnhancedStatsStore
     val shardingEnabled = sys.env.getOrElse("CHRONON_SHARD_ENHANCED_STATS", "false").equalsIgnoreCase("true")
     val statsSemanticHash = if (shardingEnabled) Option(node.semanticHash).filter(_.nonEmpty) else None
     logger.info(
@@ -320,7 +327,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       tableUtils)
     statsStore.upload(avroDf, putsPerRequest = 100)
 
-    logger.info(s"Successfully computed and saved stats for join '$joinName'")
+    logger.info(s"Successfully computed and saved stats for '$statsName'")
   }
 
   private[batch] def extractAndPersistPartitionStats(metricsKvStore: KVStore, outputTable: String, confName: String)(
@@ -470,6 +477,14 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
         require(conf.getJoinStatsCompute.isSetJoin, "JoinStatsComputeNode must have a join set")
         runJoinStatsCompute(metadata, conf.getJoinStatsCompute, range)
         logger.info(s"Successfully completed join stats compute for '${metadata.name}'")
+
+      case NodeContent._Fields.STAGING_QUERY_STATS_COMPUTE =>
+        logger.info(
+          s"Running staging query stats compute for '${metadata.name}' for range: [${range.start}, ${range.end}]")
+        require(conf.getStagingQueryStatsCompute.isSetStagingQuery,
+                "StagingQueryStatsComputeNode must have a stagingQuery set")
+        runStagingQueryStatsCompute(metadata, conf.getStagingQueryStatsCompute, range)
+        logger.info(s"Successfully completed staging query stats compute for '${metadata.name}'")
 
       case _ =>
         throw new UnsupportedOperationException(s"Unsupported NodeContent type: ${conf.getSetField}")
