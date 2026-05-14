@@ -30,6 +30,21 @@ logger = get_logger()
 _DEFAULT_CONF_TEAM = "default"
 
 
+class CompileMode(str, Enum):
+    PROD = "prod"
+    CANARY = "canary"
+
+
+# Per-mode field tuples on Team. Strict isolation: prod compile reads only the
+# prod trio; canary compile reads only the canary trio. Adding a new mode means
+# extending this table — no other place in the compile pipeline reaches into
+# Team-level execution-info fields.
+_MODE_FIELD_NAMES = {
+    CompileMode.PROD: ("env", "conf", "clusterConf"),
+    CompileMode.CANARY: ("canaryEnv", "canaryConf", "canaryClusterConf"),
+}
+
+
 def import_module_from_file(file_path):
     # Get the module name from the file path (without .py extension)
     module_name = file_path.split("/")[-1].replace(".py", "")
@@ -106,7 +121,7 @@ def load_teams(conf_root: str, print: bool = True) -> Dict[str, Team]:
     return team_dict
 
 
-def update_metadata(obj: Any, team_dict: Dict[str, Team]):
+def update_metadata(obj: Any, team_dict: Dict[str, Team], mode: CompileMode = CompileMode.PROD):
     assert obj is not None, "Cannot update metadata None object"
 
     metadata = obj.metaData
@@ -137,7 +152,7 @@ def update_metadata(obj: Any, team_dict: Dict[str, Team]):
     # walker once — no chance of drift where (e.g.) propagate reaches
     # `Join.left.joinSource.join` but resolve doesn't.
     for node in _walk_nodes(obj):
-        _propagate_namespace_onto(node, team_dict, team, namespace)
+        _propagate_namespace_onto(node, team_dict, team, namespace, mode=mode)
     for node in _walk_nodes(obj):
         _require_output_namespace_on(node)
     for node in _walk_nodes(obj):
@@ -189,6 +204,7 @@ def _propagate_namespace_onto(
     team_dict: Dict[str, Team],
     default_team: str,
     default_namespace: Optional[str],
+    mode: CompileMode = CompileMode.PROD,
 ):
     """Populate `metaData.team` and `metaData.outputNamespace` on a node. Falls back
     to the top-level `default_team` / `default_namespace` only when the node has no
@@ -210,7 +226,7 @@ def _propagate_namespace_onto(
         raise ValueError(
             f"Team '{node.metaData.team}' referenced by '{node.metaData.name}' not found in teams.py"
         )
-    merge_team_execution_info(node.metaData, team_dict, node.metaData.team)
+    merge_team_execution_info(node.metaData, team_dict, node.metaData.team, mode=mode)
 
 
 def _require_output_namespace_on(node: Any):
@@ -290,28 +306,43 @@ def _substitute_source_tables(source: Any, namespace: str):
         source.entities.mutationTable = _substitute(source.entities.mutationTable, namespace)
 
 
-def merge_team_execution_info(metadata: MetaData, team_dict: Dict[str, Team], team_name: str):
+def merge_team_execution_info(
+    metadata: MetaData,
+    team_dict: Dict[str, Team],
+    team_name: str,
+    mode: CompileMode = CompileMode.PROD,
+):
+    """Merge Team-level env/conf/clusterConf onto `metadata.executionInfo`.
+
+    Strict mode isolation: `mode` selects between the prod trio (env/conf/clusterConf)
+    and the canary trio (canaryEnv/canaryConf/canaryClusterConf). Prod compile never
+    reads canary fields and canary compile never reads prod fields — that's the only
+    place this isolation lives, so `_MODE_FIELD_NAMES` is the single source of truth.
+    """
     default_team = team_dict.get(_DEFAULT_CONF_TEAM)
     if not metadata.executionInfo:
         metadata.executionInfo = ExecutionInfo()
 
+    env_attr, conf_attr, cluster_attr = _MODE_FIELD_NAMES[mode]
+    team = team_dict[team_name]
+
     metadata.executionInfo.env = _merge_mode_maps(
-        default_team.env if default_team else {},
-        team_dict[team_name].env,
+        getattr(default_team, env_attr) if default_team else None,
+        getattr(team, env_attr),
         metadata.executionInfo.env,
         env_or_config_attribute=EnvOrConfigAttribute.ENV,
     )
 
     metadata.executionInfo.conf = _merge_mode_maps(
-        default_team.conf if default_team else {},
-        team_dict[team_name].conf,
+        getattr(default_team, conf_attr) if default_team else None,
+        getattr(team, conf_attr),
         metadata.executionInfo.conf,
         env_or_config_attribute=EnvOrConfigAttribute.CONFIG,
     )
 
     metadata.executionInfo.clusterConf = _merge_mode_maps(
-        default_team.clusterConf if default_team else {},
-        team_dict[team_name].clusterConf,
+        getattr(default_team, cluster_attr) if default_team else None,
+        getattr(team, cluster_attr),
         metadata.executionInfo.clusterConf,
         env_or_config_attribute=EnvOrConfigAttribute.CLUSTER_CONFIG,
     )

@@ -6,6 +6,7 @@ import click
 
 from ai.chronon.cli.compile.compile_context import CompileContext
 from ai.chronon.cli.compile.compiler import Compiler
+from ai.chronon.cli.compile.parse_teams import CompileMode
 from ai.chronon.cli.formatter import Format, jsonify_exceptions_if_json_format
 from ai.chronon.cli.theme import STYLE_INFO, console
 from gen_thrift.api.ttypes import ConfType
@@ -80,11 +81,39 @@ def __compile(
             )
         )
 
+    text_mode = format != Format.JSON
+
+    # Canary pass first: writes <root>/canary_compiled/ using Team.canaryEnv /
+    # canaryConf / canaryClusterConf. Reading happens before prod so a confirm-
+    # prompt in pending-changes doesn't get sandwiched between two prod outputs.
+    if text_mode:
+        console.rule("[bold cyan]🐤 BEGIN CANARY COMPILATION[/]")
+    canary_context = CompileContext(
+        ignore_python_errors=ignore_python_errors,
+        format=format,
+        force=force,
+        mode=CompileMode.CANARY,
+    )
+    canary_compiler = Compiler(canary_context)
+    canary_compiler.compile(dry_run, validate_all)
+    if text_mode:
+        console.rule("[bold cyan]🐤 END CANARY COMPILATION[/]")
+
+    # Prod pass: writes <root>/compiled/ as before. Results from this pass are
+    # what's returned and (in JSON mode) what's printed — keeping the external
+    # contract stable while canary output is recoverable from disk.
+    if text_mode:
+        console.rule("[bold magenta]🚀 BEGIN PROD COMPILATION[/]")
     compile_context = CompileContext(
-        ignore_python_errors=ignore_python_errors, format=format, force=force
+        ignore_python_errors=ignore_python_errors,
+        format=format,
+        force=force,
+        mode=CompileMode.PROD,
     )
     compiler = Compiler(compile_context)
     results = compiler.compile(dry_run, validate_all)
+    if text_mode:
+        console.rule("[bold magenta]🚀 END PROD COMPILATION[/]")
     if format == Format.JSON:
         print(
             json.dumps(
@@ -99,7 +128,7 @@ def __compile(
                 indent=4,
             )
         )
-    has_errors = compiler.has_compilation_errors()
+    has_errors = compiler.has_compilation_errors() or canary_compiler.has_compilation_errors()
 
     if has_errors and not ignore_python_errors:
         sys.exit(1)

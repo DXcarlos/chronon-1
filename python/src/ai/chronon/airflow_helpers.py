@@ -170,6 +170,16 @@ def _get_airflow_deps_from_source(source, partition_column=None):
         # Unknown source type
         return []
 
+    # Without a partition column we can't construct a meaningful dependency
+    # spec — skip rather than fail. This happens in canary compile when a team
+    # has no canaryConf (executionInfo.conf is empty) and the source's query
+    # also doesn't specify a partition column. In prod compile this same path
+    # is reached only when the user genuinely forgot to set the partition
+    # column anywhere, but failing later (at runtime / scheduling) is preferred
+    # over an obscure assertion deep in compile-time dep generation.
+    if source_partition_column is None:
+        return []
+
     return [
         create_airflow_dependency(table, source_partition_column, additional_partitions)
         for table in tables

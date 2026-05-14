@@ -6,6 +6,7 @@ import ai.chronon.cli.compile.parse_teams as teams
 from ai.chronon.cli.compile.conf_validator import ConfValidator
 from ai.chronon.cli.compile.display.compile_status import CompileStatus
 from ai.chronon.cli.compile.display.compiled_obj import CompiledObj
+from ai.chronon.cli.compile.parse_teams import CompileMode
 from ai.chronon.cli.compile.serializer import file2thrift
 from ai.chronon.cli.formatter import Format
 from ai.chronon.cli.logger import get_logger, require
@@ -64,13 +65,20 @@ CONFIG_INFOS: List[ConfigInfo] = [
 @dataclass
 class CompileContext:
     def __init__(
-        self, ignore_python_errors: bool = False, format: Format = Format.TEXT, force: bool = False
+        self,
+        ignore_python_errors: bool = False,
+        format: Format = Format.TEXT,
+        force: bool = False,
+        mode: CompileMode = CompileMode.PROD,
     ):
         self.chronon_root: str = os.getenv("CHRONON_ROOT", os.getcwd())
         self.teams_dict: Dict[str, Team] = teams.load_teams(
             self.chronon_root, print=format != Format.JSON
         )
-        self.compile_dir: str = "compiled"
+        self.mode: CompileMode = mode
+        # Mode picks the output folder. Each pass owns its own folder so the prod
+        # and canary outputs never trample each other.
+        self.compile_dir: str = "compiled" if mode == CompileMode.PROD else "canary_compiled"
         self.ignore_python_errors: bool = ignore_python_errors
         self.format: Format = format
         self.force: bool = force

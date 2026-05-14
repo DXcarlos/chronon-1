@@ -128,7 +128,11 @@ class Compiler:
                     shutil.rmtree(output_dir)
                 shutil.move(staging_dir, output_dir)
                 if self.compile_context.format != Format.JSON:
-                    console.print(f"Compilation successful. Compiled files saved to {output_dir}")
+                    mode_label = self.compile_context.mode.value.upper()
+                    console.print(
+                        f"[bold green]{mode_label} compilation successful.[/] "
+                        f"Compiled files saved to {output_dir}"
+                    )
             else:
                 if self.compile_context.format != Format.JSON:
                     console.print(
@@ -159,7 +163,7 @@ class Compiler:
         teams_dict = self.compile_context.teams_dict
         for team in teams_dict:
             m = MetaData()
-            merge_team_execution_info(m, teams_dict, team)
+            merge_team_execution_info(m, teams_dict, team, mode=self.compile_context.mode)
 
             tjson = serializer.thrift_simple_json(m)
             name = f"{team}.{team}_team_metadata"
