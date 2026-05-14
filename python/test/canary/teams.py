@@ -71,6 +71,38 @@ gcp = Team(
             "FRONTEND_URL": "http://localhost:3000",
             "HUB_URL": "http://localhost:3903",
             "EVAL_URL": "http://localhost:3904",
+            # Sentinel — referenced by test_canary_compile.py to verify that the
+            # prod compile pass uses only Team.env (never Team.canaryEnv). Must
+            # not appear in any file under canary_compiled/.
+            "PROD_ONLY_SENTINEL_GCP": "prod-only-sentinel-value-9b8a7c",
+        },
+        modeEnvironments={
+            RunMode.UPLOAD: {
+                "SPARK_CLUSTER_NAME": "zipline-transient-upload-cluster"
+            }
+        }
+    ),
+    canaryEnv=EnvironmentVariables(
+        common={
+            "CLOUD_PROVIDER": "gcp",
+            "CUSTOMER_ID": "canary",
+            "VERSION": "latest",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "ENABLE_PUBSUB": "true",
+            "ARTIFACT_PREFIX": "gs://zipline-artifacts-canary",
+            "WAREHOUSE_PREFIX": "gs://zipline-warehouse-canary",
+            "FLINK_STATE_URI": "gs://zipline-warehouse-canary/flink-state",
+            "CHRONON_ONLINE_ARGS": " -Ztasks=4",
+            "FRONTEND_URL": "http://localhost:3000",
+            "HUB_URL": "http://localhost:3903",
+            "EVAL_URL": "http://localhost:3904",
+            # Sentinel — referenced by test_canary_compile.py to verify that the
+            # canary compile pass uses only Team.canaryEnv (never Team.env).
+            # Must not appear in any file under compiled/.
+            "CANARY_ONLY_SENTINEL_GCP": "canary-only-sentinel-value-1d2e3f",
         },
         modeEnvironments={
             RunMode.UPLOAD: {
@@ -107,6 +139,41 @@ gcp = Team(
                 "-Dai.chronon.metrics.reader=grpc",
                 "-Dai.chronon.metrics.exporter.url=http://localhost:4317",
             ]),
+            # Sentinel — prod-only conf marker for the test.
+            "spark.chronon.test.prod_only_sentinel": "prod-only-conf-sentinel-4f5a6b",
+        },
+        modeConfigs={
+        }
+    ),
+    canaryConf=ConfigProperties(
+        common={
+            **BigQueryConfiguration({
+                "spark.sql.catalog.spark_catalog.warehouse": "gs://zipline-warehouse-canary/data/tables/",
+                "spark.sql.catalog.spark_catalog.gcp.bigquery.location": "us-central1",
+                "spark.sql.catalog.spark_catalog.gcp.bigquery.project-id": "canary-443022",
+            }),
+
+            "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
+            "spark.chronon.table_write.format": "iceberg",
+
+            "spark.chronon.partition.format": "yyyy-MM-dd",
+            "spark.chronon.partition.column": "ds",
+
+            "spark.chronon.coalesce.factor": "10",
+            "spark.default.parallelism": "10",
+            "spark.sql.shuffle.partitions": "10",
+            "spark.driver.memory": "512m",
+            "spark.driver.cores": "1",
+            "spark.executor.memory": "512m",
+            "spark.executor.cores": "1",
+
+            "spark.driver.extraJavaOptions": " ".join([
+                "-Dai.chronon.metrics.enabled=true",
+                "-Dai.chronon.metrics.reader=grpc",
+                "-Dai.chronon.metrics.exporter.url=http://localhost:4317",
+            ]),
+            # Sentinel — canary-only conf marker for the test.
+            "spark.chronon.test.canary_only_sentinel": "canary-only-conf-sentinel-7c8d9e",
         },
         modeConfigs={
         }
@@ -117,7 +184,21 @@ gcp = Team(
                 "dataproc.config": generate_dataproc_cluster_config(2, "canary-443022", "gs://zipline-artifacts-canary",
                                                                     idle_timeout="7200s",
                                                                     worker_host_type="n2-highmem-4",
-                                                                    master_host_type="n2-highmem-8")
+                                                                    master_host_type="n2-highmem-8"),
+                # Sentinel — prod-only cluster-conf marker for the test.
+                "prod_only_sentinel_cluster": "prod-only-cluster-sentinel-2e3f4a",
+            }
+        }
+    ),
+    canaryClusterConf=ClusterConfigProperties(
+        modeClusterConfigs={
+            RunMode.UPLOAD: {
+                "dataproc.config": generate_dataproc_cluster_config(2, "canary-443022", "gs://zipline-artifacts-canary",
+                                                                    idle_timeout="7200s",
+                                                                    worker_host_type="n2-highmem-4",
+                                                                    master_host_type="n2-highmem-8"),
+                # Sentinel — canary-only cluster-conf marker for the test.
+                "canary_only_sentinel_cluster": "canary-only-cluster-sentinel-5b6c7d",
             }
         }
     ),
