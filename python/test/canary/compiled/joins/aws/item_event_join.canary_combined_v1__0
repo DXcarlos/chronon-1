@@ -59,6 +59,9 @@
             "purchase_sum_1d": "fb8cfc84fca71682f8d758092259323f",
             "view_sum_1d": "cc58ae369bab825653562d7cd27aa09c"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "clusterConf": {
               "common": {
@@ -267,6 +270,9 @@
             "purchase_price_sum_7d": "5814df4e6a1e2eb06b9fab89e70ea97d",
             "user_id": "dec6601a613992b4b6cdc50ac8014a29"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "clusterConf": {
               "common": {
@@ -419,6 +425,9 @@
       "user_id_purchase_price_sum_7d": "5609e04d61a47a8cafc67970785a3a59"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {

@@ -16,6 +16,9 @@
       "schema_value_last": "2533f3b6588575d6884c6375f2b28e8d"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_partitioned_logging_v0__2_with_offset_0\", \"spec\": \"data.aws_partitioned_logging_v0__2/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {

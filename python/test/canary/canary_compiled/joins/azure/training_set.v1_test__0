@@ -1,0 +1,193 @@
+{
+  "joinParts": [
+    {
+      "groupBy": {
+        "aggregations": [
+          {
+            "argMap": {},
+            "inputColumn": "purchase_price",
+            "operation": 7,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "purchase_price",
+            "operation": 6,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {},
+            "inputColumn": "purchase_price",
+            "operation": 8,
+            "windows": [
+              {
+                "length": 1,
+                "timeUnit": 1
+              },
+              {
+                "length": 3,
+                "timeUnit": 1
+              },
+              {
+                "length": 7,
+                "timeUnit": 1
+              }
+            ]
+          },
+          {
+            "argMap": {
+              "k": "10"
+            },
+            "inputColumn": "purchase_price",
+            "operation": 13
+          }
+        ],
+        "keyColumns": [
+          "user_id"
+        ],
+        "metaData": {
+          "columnHashes": {
+            "purchase_price_average_1d": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "purchase_price_average_3d": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "purchase_price_average_7d": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "purchase_price_count_1d": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "purchase_price_count_3d": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "purchase_price_count_7d": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "purchase_price_last10": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "purchase_price_sum_1d": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "purchase_price_sum_3d": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "purchase_price_sum_7d": "cb0c629ccfbaf136f5a337da31f8ba98",
+            "user_id": "2a2caca3ea4afb84a2271533b1a1bae1"
+          },
+          "environments": [
+            0
+          ],
+          "executionInfo": {
+            "conf": {
+              "common": {
+                "spark.chronon.partition.column": "ds"
+              }
+            },
+            "env": {
+              "common": {
+                "CUSTOMER_ID": "dev",
+                "FRONTEND_URL": "http://localhost:3000",
+                "HUB_URL": "http://localhost:3903",
+                "VERSION": "latest"
+              }
+            },
+            "historicalBackfill": 0,
+            "onlineSchedule": "@daily"
+          },
+          "name": "azure.purchases.v1_test__0",
+          "online": 1,
+          "outputNamespace": "data",
+          "team": "azure",
+          "version": "0"
+        },
+        "sources": [
+          {
+            "events": {
+              "query": {
+                "selects": {
+                  "purchase_price": "purchase_price",
+                  "user_id": "user_id"
+                },
+                "startPartition": "2023-11-01",
+                "timeColumn": "ts"
+              },
+              "table": "data.purchases"
+            }
+          }
+        ]
+      },
+      "useLongNames": 0
+    }
+  ],
+  "left": {
+    "events": {
+      "query": {
+        "selects": {
+          "ts": "ts",
+          "user_id": "user_id"
+        },
+        "timeColumn": "ts"
+      },
+      "table": "data.checkouts"
+    }
+  },
+  "metaData": {
+    "columnHashes": {
+      "ts": "a173b2adccfe3c386f262c4cd7ffe9bd",
+      "user_id": "a673c80ffc3260ee5ca173869ba07f7c",
+      "user_id_purchase_price_average_1d": "e3351cc3265d17cfd1b99f8da7fb083d",
+      "user_id_purchase_price_average_3d": "e3351cc3265d17cfd1b99f8da7fb083d",
+      "user_id_purchase_price_average_7d": "e3351cc3265d17cfd1b99f8da7fb083d",
+      "user_id_purchase_price_count_1d": "e3351cc3265d17cfd1b99f8da7fb083d",
+      "user_id_purchase_price_count_3d": "e3351cc3265d17cfd1b99f8da7fb083d",
+      "user_id_purchase_price_count_7d": "e3351cc3265d17cfd1b99f8da7fb083d",
+      "user_id_purchase_price_last10": "e3351cc3265d17cfd1b99f8da7fb083d",
+      "user_id_purchase_price_sum_1d": "e3351cc3265d17cfd1b99f8da7fb083d",
+      "user_id_purchase_price_sum_3d": "e3351cc3265d17cfd1b99f8da7fb083d",
+      "user_id_purchase_price_sum_7d": "e3351cc3265d17cfd1b99f8da7fb083d"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_with_offset_0\", \"spec\": \"data.checkouts/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "offlineSchedule": "@daily"
+    },
+    "name": "azure.training_set.v1_test__0",
+    "online": 0,
+    "outputNamespace": "data",
+    "production": 0,
+    "samplePercent": 100.0,
+    "sourceFile": "joins/azure/training_set.py",
+    "team": "azure",
+    "version": "0"
+  },
+  "rowIds": [
+    "user_id"
+  ],
+  "useLongNames": 0
+}

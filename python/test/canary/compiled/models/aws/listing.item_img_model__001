@@ -11,6 +11,9 @@
     "instance": "named_struct('image', named_struct('s3Uri', listing_id_main_image_path), 'text','')"
   },
   "metaData": {
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {

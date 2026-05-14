@@ -389,6 +389,9 @@
       "view_event_sum_7d": "839e077acdbd8775ed00c561b685a207"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo_user_activities_raw_with_offset_0\", \"spec\": \"demo.user_activities_raw/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {

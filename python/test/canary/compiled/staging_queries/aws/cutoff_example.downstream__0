@@ -2,6 +2,9 @@
   "engineType": 0,
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_cutoff_example_export_a__0_with_offset_0\", \"spec\": \"data.aws_cutoff_example_export_a__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_aws_cutoff_example_export_b__0_with_offset_0\", \"spec\": \"data.aws_cutoff_example_export_b__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {

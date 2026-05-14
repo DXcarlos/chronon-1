@@ -1,0 +1,63 @@
+{
+  "accuracy": 1,
+  "aggregations": [
+    {
+      "argMap": {},
+      "inputColumn": "schema_value",
+      "operation": 3
+    }
+  ],
+  "keyColumns": [
+    "schema_hash"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "schema_hash": "4e0ece42c39268b595edaa85fabd83b4",
+      "schema_value_last": "6cddbbee834e60b87d7464daa04aceb9"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_partitioned_logging_v0__2_with_offset_0\", \"spec\": \"data.azure_partitioned_logging_v0__2/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "historicalBackfill": 0
+    },
+    "name": "azure.logging_schema.v1__2",
+    "outputNamespace": "data",
+    "sourceFile": "group_bys/azure/logging_schema.py",
+    "team": "azure",
+    "version": "2"
+  },
+  "sources": [
+    {
+      "events": {
+        "query": {
+          "partitionColumn": "ds",
+          "selects": {
+            "schema_hash": "CAST(keyBytes AS STRING)",
+            "schema_value": "CAST(valueBytes AS STRING)"
+          },
+          "startPartition": "2025-09-23",
+          "timeColumn": "ts_millis",
+          "wheres": [
+            "name='SCHEMA_PUBLISH_EVENT'"
+          ]
+        },
+        "table": "data.azure_partitioned_logging_v0__2"
+      }
+    }
+  ]
+}

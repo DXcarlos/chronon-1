@@ -59,6 +59,9 @@
             "purchase_sum_1d": "ae525baa20eea731a1270dd356ec611a",
             "view_sum_1d": "10afd70aaef55fd280157c808724d63a"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -164,6 +167,9 @@
       "user_id": "493d3df28f80664abd11b19fcd33b6e6"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

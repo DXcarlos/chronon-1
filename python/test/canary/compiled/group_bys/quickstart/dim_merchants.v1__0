@@ -8,6 +8,9 @@
       "primary_category": "71dfddda1396b6f421bceff5fcc72ffb"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_quickstart_quickstart_exports_dim_merchants__0_with_offset_0\", \"spec\": \"quickstart.quickstart_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

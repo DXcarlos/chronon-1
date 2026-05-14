@@ -2,6 +2,9 @@
   "engineType": 2,
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_DEMO_CLAIMS_DEMO_CLAIMS_DEMO_BASELINE_SOURCE_with_offset_0\", \"spec\": \"DEMO.CLAIMS_DEMO.CLAIMS_DEMO_BASELINE_SOURCE/DS={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {
@@ -41,6 +44,7 @@
           "CLOUD_PROVIDER": "azure",
           "CUSTOMER_ID": "claims-demo",
           "EVAL_URL": "http://hub.claims-demo-hub.svc.cluster.local:3903",
+          "FETCHER_URL": "http://localhost:9000",
           "FLINK_JARS_URI": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net/spark-3.5.3/libs/",
           "FLINK_SASL_JAAS_CONFIG_VAULT_URI": "https://eventhub-sasl-jaas.vault.azure.net/secrets/sasl-jass-config",
           "FLINK_STATE_URI": "abfss://crucible@ziplineai2.dfs.core.windows.net/claims-demo/flink-state",

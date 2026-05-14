@@ -46,6 +46,9 @@
             "tags": "799675961e188b9e4a5a898d7e3f02ff",
             "weight_grams": "5c3e9f99cb7ec2d0aa56c9bd0e391308"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -624,6 +627,9 @@
             "view_event_sum_30d": "62a8793addff23c7d8079961a8a07320",
             "view_event_sum_7d": "62a8793addff23c7d8079961a8a07320"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -911,6 +917,9 @@
       "user_id_view_event_sum_7d": "c7ae73b92e2a8aabfb4df9d22d37d2f5"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_quickstart_quickstart_exports_user_activities__0_with_offset_0\", \"spec\": \"quickstart.quickstart_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_quickstart_quickstart_exports_dim_listings__0_with_offset_0\", \"spec\": \"quickstart.quickstart_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

@@ -85,6 +85,9 @@
             "purchase_price_sum_7d": "3ee572f0e355659fc086d52ec43333f6",
             "user_id": "e0009a36a0838b4549d689008bac5afd"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -188,6 +191,9 @@
       "user_id_purchase_price_sum_7d": "e3351cc3265d17cfd1b99f8da7fb083d"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_with_offset_0\", \"spec\": \"data.checkouts/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

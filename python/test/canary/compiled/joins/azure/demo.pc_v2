@@ -24,6 +24,9 @@
             "tags": "318519d7ab1453a331685dc7f165bb85",
             "weight_grams": "f8f34e81434169852c03e62a335c20aa"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -172,6 +175,9 @@
       "weight_grams": "3563150a7e46318bf3395d3d08e7b27d"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_dim_listings_pc__1_with_offset_0\", \"spec\": \"data.azure_exports_dim_listings_pc__1/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

@@ -22,6 +22,9 @@
       "weight_grams": "8b5ac3514f1c8f0db67748e07de128f4"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.aws_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {

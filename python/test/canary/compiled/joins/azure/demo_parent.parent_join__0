@@ -24,6 +24,9 @@
             "tags": "f9ead5f03020ff66ff14e98fec19a774",
             "weight_grams": "ac84b5b0b11dca76306214d5d2f12fa9"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -150,6 +153,9 @@
       "user_id": "275e18a643e12228f787cd9a9b03eaed"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_user_activities__0_with_offset_0\", \"spec\": \"data.azure_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_azure_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.azure_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

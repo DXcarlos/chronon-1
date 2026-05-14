@@ -2,6 +2,9 @@
   "engineType": 0,
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo_user_activities_with_offset_0\", \"spec\": \"demo.user_activities/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

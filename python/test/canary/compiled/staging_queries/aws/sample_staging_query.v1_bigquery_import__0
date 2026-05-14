@@ -2,6 +2,9 @@
   "engineType": 1,
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_training_set_v1_hub__0_with_offset_0\", \"spec\": \"data.aws_training_set_v1_hub__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {

@@ -25,6 +25,9 @@
             "price_cents_last100_7d": "8d7a1fba31093361b1675f65e53748d7",
             "user_id": "4ecdf09ef20508785edf01ab40f381ed"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -92,6 +95,9 @@
                         "listing_id"
                       ],
                       "metaData": {
+                        "environments": [
+                          0
+                        ],
                         "executionInfo": {
                           "conf": {
                             "common": {
@@ -195,6 +201,9 @@
                   }
                 },
                 "metaData": {
+                  "environments": [
+                    0
+                  ],
                   "executionInfo": {
                     "conf": {
                       "common": {
@@ -297,6 +306,9 @@
       "user_id_price_cents_last100_7d": "bddd7571d888b859ebeae7da9e49f6af"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_user_activities__0_with_offset_0\", \"spec\": \"data.azure_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

@@ -85,6 +85,9 @@
             "purchase_price_sum_7d": "8c780fb5b00f55c0545cc6e48ef21c92",
             "user_id": "43dbce4df14238a2622226be130fb913"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -204,6 +207,9 @@
       "user_id_purchase_price_sum_7d": "fcc7e330b079c5fd6f94b29cd8e9fb5e"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_claims_demo_azure_crucible_stress_sources_checkouts__0_with_offset_0\", \"spec\": \"claims_demo.azure_crucible_stress_sources_checkouts__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_claims_demo_azure_crucible_stress_sources_purchases__0_with_offset_0\", \"spec\": \"claims_demo.azure_crucible_stress_sources_purchases__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

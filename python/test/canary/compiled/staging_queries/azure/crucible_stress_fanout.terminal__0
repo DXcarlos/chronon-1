@@ -2,6 +2,9 @@
   "engineType": 0,
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_claims_demo_azure_crucible_stress_fanout_segment_000__0_with_offset_0\", \"spec\": \"claims_demo.azure_crucible_stress_fanout_segment_000__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_claims_demo_azure_crucible_stress_fanout_segment_001__0_with_offset_0\", \"spec\": \"claims_demo.azure_crucible_stress_fanout_segment_001__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_claims_demo_azure_crucible_stress_fanout_segment_002__0_with_offset_0\", \"spec\": \"claims_demo.azure_crucible_stress_fanout_segment_002__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_claims_demo_azure_crucible_stress_fanout_segment_003__0_with_offset_0\", \"spec\": \"claims_demo.azure_crucible_stress_fanout_segment_003__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

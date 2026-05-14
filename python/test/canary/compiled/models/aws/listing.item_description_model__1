@@ -10,6 +10,9 @@
     "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))"
   },
   "metaData": {
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {

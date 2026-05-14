@@ -8,6 +8,9 @@
       "primary_category": "41f7c36859f55e0908a0e2ee1cea4fb3"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_dim_merchants__0_with_offset_0\", \"spec\": \"data.azure_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

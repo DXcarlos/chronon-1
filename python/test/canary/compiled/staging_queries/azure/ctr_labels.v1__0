@@ -1,6 +1,9 @@
 {
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_demo_derivations_v3__derived_with_offset_0\", \"spec\": \"data.azure_demo_derivations_v3__derived/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

@@ -18,6 +18,9 @@
     ]
   },
   "metaData": {
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -128,6 +131,9 @@
         "instance": "named_struct('content', concat_ws('; ', listing_id_headline, listing_id_long_description))"
       },
       "metaData": {
+        "environments": [
+          0
+        ],
         "executionInfo": {
           "clusterConf": {
             "common": {
@@ -621,6 +627,9 @@
                   "user_id"
                 ],
                 "metaData": {
+                  "environments": [
+                    0
+                  ],
                   "executionInfo": {
                     "clusterConf": {
                       "common": {
@@ -754,6 +763,9 @@
                   "listing_id"
                 ],
                 "metaData": {
+                  "environments": [
+                    0
+                  ],
                   "executionInfo": {
                     "clusterConf": {
                       "common": {
@@ -891,6 +903,9 @@
                   "listing_id"
                 ],
                 "metaData": {
+                  "environments": [
+                    0
+                  ],
                   "executionInfo": {
                     "clusterConf": {
                       "common": {
@@ -1025,6 +1040,9 @@
             }
           },
           "metaData": {
+            "environments": [
+              0
+            ],
             "executionInfo": {
               "clusterConf": {
                 "common": {

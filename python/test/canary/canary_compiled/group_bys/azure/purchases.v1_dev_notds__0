@@ -1,0 +1,129 @@
+{
+  "aggregations": [
+    {
+      "argMap": {},
+      "inputColumn": "purchase_price",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "purchase_price",
+      "operation": 6,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "purchase_price",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 3,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {
+        "k": "10"
+      },
+      "inputColumn": "purchase_price",
+      "operation": 13
+    }
+  ],
+  "keyColumns": [
+    "user_id"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "purchase_price_average_1d": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "purchase_price_average_3d": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "purchase_price_average_7d": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "purchase_price_count_1d": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "purchase_price_count_3d": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "purchase_price_count_7d": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "purchase_price_last10": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "purchase_price_sum_1d": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "purchase_price_sum_3d": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "purchase_price_sum_7d": "7a943d6f94aa1c892adff82c36cc0d8a",
+      "user_id": "5039d7bfb147f14cea3f30f7379e9d6f"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_notds_with_offset_0\", \"spec\": \"data.purchases_notds/notds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "historicalBackfill": 0,
+      "onlineSchedule": "@daily"
+    },
+    "name": "azure.purchases.v1_dev_notds__0",
+    "online": 1,
+    "outputNamespace": "data",
+    "sourceFile": "group_bys/azure/purchases.py",
+    "team": "azure",
+    "version": "0"
+  },
+  "sources": [
+    {
+      "events": {
+        "query": {
+          "partitionColumn": "notds",
+          "selects": {
+            "purchase_price": "purchase_price",
+            "user_id": "user_id"
+          },
+          "startPartition": "2023-11-01",
+          "timeColumn": "ts"
+        },
+        "table": "data.purchases_notds"
+      }
+    }
+  ]
+}

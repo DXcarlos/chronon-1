@@ -22,6 +22,9 @@
       "weight_grams": "5c3e9f99cb7ec2d0aa56c9bd0e391308"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_quickstart_quickstart_exports_dim_listings__0_with_offset_0\", \"spec\": \"quickstart.quickstart_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

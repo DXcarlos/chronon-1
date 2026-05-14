@@ -2,6 +2,9 @@
   "engineType": 0,
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo_dim_users_with_offset_0\", \"spec\": \"demo.dim_users/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {
