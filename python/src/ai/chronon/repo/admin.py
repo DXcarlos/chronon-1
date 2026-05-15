@@ -9,7 +9,6 @@ import tarfile
 import tempfile
 import traceback
 from functools import partial
-from typing import Optional
 
 import click
 from rich.progress import (
@@ -81,52 +80,29 @@ def _app_images(cloud, release):
     return images
 
 
-def _kube_context_for_env(env: str, cli_override: Optional[str] = None) -> str:
-    """Resolve the kubectl context name for a Zipline env. Precedence:
-      1. `--kube-context` CLI override
-      2. Env var `ZIPLINE_PROD_KUBE_CONTEXT` / `ZIPLINE_CANARY_KUBE_CONTEXT`
-    Hard-fails if neither is set. Admin commands require an explicit context so
-    we never silently run kubectl against the user's ambient cluster — that
-    path is what makes "I thought I was on canary" incidents possible when prod
-    and canary live in separate AWS accounts.
-    """
-    if cli_override:
-        return cli_override
-    var = f"ZIPLINE_{env.upper()}_KUBE_CONTEXT"
-    ctx = os.environ.get(var)
-    if not ctx:
-        raise click.ClickException(
-            f"--env {env} requires a kubectl context to be configured.\n"
-            f"Set {var}=<context-name> in your shell or pass --kube-context <name>.\n"
-            f"List available contexts with: kubectl config get-contexts"
-        )
-    return ctx
+def _env_label_from_context(context: str) -> str:
+    """Heuristic env label derived from the kubectl context name. Drives the
+    prod/canary banner shown by env-coupled admin commands. Contexts containing
+    'canary' (case-insensitive) are labeled canary; everything else is prod.
+    This is purely cosmetic — the actual kubectl routing uses the context name
+    verbatim regardless of what the heuristic returns."""
+    return "canary" if "canary" in context.lower() else "prod"
 
 
 def _print_resolved_kube_context(context: str, format: Format = Format.TEXT) -> None:
-    """Print the kubectl context that env-aware kubectl-driven commands resolved
-    to. Pairs with `print_env_banner` so the user sees both the env claim and
-    the actual cluster name those kubectl calls will target."""
+    """Print the kubectl context that kubectl-driven admin commands will target.
+    Pairs with `print_env_banner` so the user sees both an env label and the
+    actual cluster name those kubectl calls hit."""
     if format == Format.JSON:
         return
     console.print(f"   [dim]kubectl context:[/dim] {context}")
 
 
-def env_option(func):
-    return click.option(
-        "--env",
-        help="Zipline deployment environment (prod or canary). For kubectl-driven commands, this picks the kubectl context via ZIPLINE_<ENV>_KUBE_CONTEXT or --kube-context.",
-        type=click.Choice(['prod', 'canary'], case_sensitive=False),
-        default='prod',
-        show_default=True,
-    )(func)
-
-
 def kube_context_option(func):
     return click.option(
         "--kube-context",
-        help="Override the kubectl context for this run (otherwise resolved from ZIPLINE_<ENV>_KUBE_CONTEXT).",
-        default=None,
+        help="kubectl context name to target. Required. Use `kubectl config get-contexts` to list available contexts.",
+        required=True,
     )(func)
 
 
@@ -301,13 +277,11 @@ def admin():
     type=click.Path(exists=True),
     help="Path to air-gap tarball (alternative to pulling from Docker Hub).",
 )
-@env_option
-def install(cloud, registry, api_token, release, artifact_prefix, bundle, env):
+def install(cloud, registry, api_token, release, artifact_prefix, bundle):
     """Install Zipline images into a private registry or the local Docker daemon.
 
     CLOUD is the cloud provider variant (gcp, aws, or azure).
     """
-    print_env_banner(env)
     for name in ("urllib3", "ai.chronon.logger"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
@@ -1055,9 +1029,8 @@ def upgrade():
     default=None,
     help="Zipline release to upgrade to (e.g. 1.4.2). Defaults to the installed zipline-ai package version.",
 )
-@env_option
 @kube_context_option
-def control_plane(cloud, release, env, kube_context):
+def control_plane(cloud, release, kube_context):
     """Upgrade running EKS service deployments to a given release.
 
     CLOUD is the cloud provider variant (gcp, aws, or azure).
@@ -1067,7 +1040,8 @@ def control_plane(cloud, release, env, kube_context):
         console.print(f"[yellow]Upgrade is currently only supported for AWS (got {cloud}).[/yellow]")
         raise SystemExit(1)
 
-    print_env_banner(env)
+    print_env_banner(_env_label_from_context(kube_context))
+    _print_resolved_kube_context(kube_context)
 
     if release is None:
         release = get_package_version()
@@ -1076,12 +1050,7 @@ def control_plane(cloud, release, env, kube_context):
             raise SystemExit(1)
         console.print(f"Using release [bold]{release}[/bold]")
 
-    # Resolve the kubectl context only after argument validation passes — we
-    # don't want a missing-env-var error to mask an obvious bad input.
-    context = _kube_context_for_env(env, kube_context)
-    _print_resolved_kube_context(context)
-
-    _upgrade_eks_services(cloud, release, context)
+    _upgrade_eks_services(cloud, release, kube_context)
 
 
 @upgrade.command("data-plane")
@@ -1116,13 +1085,11 @@ def doctor():
 @doctor.command("hub-health")
 @click.argument("hub_url")
 @click.option("--expected-version", default=None, help="Expected Zipline version (optional).")
-@env_option
-def hub_health(hub_url, expected_version, env):
+def hub_health(hub_url, expected_version):
     """Check that the Zipline hub is reachable and healthy.
 
     HUB_URL is the URL of the running Zipline hub (e.g. https://hub.example.com).
     """
-    print_env_banner(env)
     import urllib3
 
     http = urllib3.PoolManager()
@@ -1179,18 +1146,16 @@ def hub_health(hub_url, expected_version, env):
     show_default=True,
     help="Cloud provider variant.",
 )
-@env_option
 @kube_context_option
-def streaming_health(cloud, env, kube_context):
+def streaming_health(cloud, kube_context):
     """Check that the Flink streaming infrastructure is correctly configured.
 
     Requires kubectl to be installed and configured with access to the cluster.
     """
-    print_env_banner(env)
-    context = _kube_context_for_env(env, kube_context)
-    _print_resolved_kube_context(context)
+    print_env_banner(_env_label_from_context(kube_context))
+    _print_resolved_kube_context(kube_context)
     console.print("[bold]Running Kubernetes infrastructure checks...[/bold]")
-    results = run_infra_checks(cloud=cloud, kube_context=context)
+    results = run_infra_checks(cloud=cloud, kube_context=kube_context)
     print_check_table("Zipline Streaming Infrastructure Diagnostics", results)
 
 if __name__ == "__main__":

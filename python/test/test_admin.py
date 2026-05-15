@@ -1164,7 +1164,10 @@ class TestUpgradeCommand:
     @patch("ai.chronon.repo.admin._upgrade_eks_services")
     def test_upgrade_control_plane_gcp_rejected(self, mock_upgrade):
         runner = CliRunner()
-        result = runner.invoke(admin, ["upgrade", "control-plane", "gcp"])
+        result = runner.invoke(
+            admin,
+            ["upgrade", "control-plane", "gcp", "--kube-context", "test-ctx"],
+        )
         assert result.exit_code != 0
         mock_upgrade.assert_not_called()
         assert "only supported for AWS" in result.output
@@ -1173,7 +1176,10 @@ class TestUpgradeCommand:
     @patch("ai.chronon.repo.admin.get_package_version", return_value="unknown")
     def test_upgrade_control_plane_unknown_version_no_release_fails(self, mock_ver, mock_upgrade):
         runner = CliRunner()
-        result = runner.invoke(admin, ["upgrade", "control-plane", "aws"])
+        result = runner.invoke(
+            admin,
+            ["upgrade", "control-plane", "aws", "--kube-context", "test-ctx"],
+        )
         assert result.exit_code != 0
         mock_upgrade.assert_not_called()
         assert "--release" in result.output
