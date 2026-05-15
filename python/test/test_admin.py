@@ -857,7 +857,7 @@ class TestUpgradeEksServices:
     @patch("ai.chronon.repo.admin.shutil.which", return_value=None)
     def test_exits_when_kubectl_not_found(self, mock_which, capsys):
         with pytest.raises(SystemExit):
-            _upgrade_eks_services("aws", "1.0.0")
+            _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         mock_which.assert_called_once_with("kubectl")
         output = strip_ansi(capsys.readouterr().out)
         assert "kubectl not found" in output
@@ -866,7 +866,7 @@ class TestUpgradeEksServices:
     @patch("ai.chronon.repo.admin.shutil.which", return_value=None)
     def test_kubectl_not_found_shows_install_link(self, mock_which, capsys):
         with pytest.raises(SystemExit):
-            _upgrade_eks_services("aws", "1.0.0")
+            _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "kubernetes.io" in output
 
@@ -875,7 +875,7 @@ class TestUpgradeEksServices:
     def test_exits_when_cluster_unreachable(self, mock_which, mock_run, capsys):
         mock_run.return_value = _make_subprocess_result(returncode=1, stderr="connection refused")
         with pytest.raises(SystemExit):
-            _upgrade_eks_services("aws", "1.0.0")
+            _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "Cannot reach Kubernetes cluster" in output
 
@@ -884,7 +884,7 @@ class TestUpgradeEksServices:
     def test_cluster_unreachable_shows_kubeconfig_help(self, mock_which, mock_run, capsys):
         mock_run.return_value = _make_subprocess_result(returncode=1, stderr="connection refused")
         with pytest.raises(SystemExit):
-            _upgrade_eks_services("aws", "1.0.0")
+            _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "aws eks update-kubeconfig" in output
 
@@ -900,7 +900,7 @@ class TestUpgradeEksServices:
             return _make_subprocess_result(returncode=0)
 
         mock_run.side_effect = side_effect
-        _upgrade_eks_services("aws", "1.0.0")
+        _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         for service, (deployment, _, _) in _EKS_SERVICES.items():
             assert f"deployment/{deployment} not found" in output
@@ -910,7 +910,7 @@ class TestUpgradeEksServices:
     @patch("ai.chronon.repo.admin.shutil.which", return_value="/usr/local/bin/kubectl")
     def test_successful_upgrade_all_services(self, mock_which, mock_run, capsys):
         mock_run.return_value = _make_subprocess_result(returncode=0)
-        _upgrade_eks_services("aws", "1.0.0")
+        _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "EKS Service Upgrade" in output
         assert "Previous" in output
@@ -935,7 +935,7 @@ class TestUpgradeEksServices:
             return _make_subprocess_result(returncode=0)
 
         mock_run.side_effect = side_effect
-        _upgrade_eks_services("aws", "1.0.0")
+        _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "0.9.0" in output
         assert "1.0.0" in output
@@ -954,7 +954,7 @@ class TestUpgradeEksServices:
 
         mock_run.side_effect = side_effect
         with pytest.raises(SystemExit):
-            _upgrade_eks_services("aws", "1.0.0")
+            _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "FAIL" in output
         assert "unauthorized" in output
@@ -976,7 +976,7 @@ class TestUpgradeEksServices:
 
         mock_run.side_effect = side_effect
         with pytest.raises(SystemExit):
-            _upgrade_eks_services("aws", "1.0.0")
+            _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "FAIL" in output
         assert "timed out" in output
@@ -1004,7 +1004,7 @@ class TestUpgradeEksServices:
 
         mock_run.side_effect = side_effect
         with pytest.raises(SystemExit):
-            _upgrade_eks_services("aws", "1.0.0")
+            _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "FAIL" in output
         assert "rollout complete" in output
@@ -1028,7 +1028,7 @@ class TestUpgradeEksServices:
             return _make_subprocess_result(returncode=0)
 
         mock_run.side_effect = side_effect
-        _upgrade_eks_services("aws", "1.0.0")
+        _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "already on 1.0.0" in output
         assert "restarting" in output.lower()
@@ -1058,14 +1058,21 @@ class TestUpgradeEksServices:
             return _make_subprocess_result(returncode=0)
 
         mock_run.side_effect = side_effect
-        _upgrade_eks_services("aws", "2.5.0")
+        _upgrade_eks_services("aws", "2.5.0", "test-ctx")
 
         assert len(set_image_calls) == len(_EKS_SERVICES)
+        # `kubectl --context X set image deployment/Y container=image:tag ...` —
+        # find the `container=image:tag` arg by pattern rather than index, since
+        # the prepended `--context X` flag shifts positional indices.
         for cmd in set_image_calls:
-            container_image_arg = cmd[4]  # "container=image:tag"
+            container_image_arg = next(arg for arg in cmd if "=ziplineai/" in str(arg))
             assert ":2.5.0" in container_image_arg
         # Check cloud-specific images contain "aws"
-        cloud_specific = [c[4] for c in set_image_calls if "hub" in c[3] or "eval" in c[3]]
+        cloud_specific = [
+            next(a for a in c if "=ziplineai/" in str(a))
+            for c in set_image_calls
+            if any("hub" in str(a) or "eval" in str(a) for a in c)
+        ]
         for arg in cloud_specific:
             assert "aws" in arg
 
@@ -1074,7 +1081,7 @@ class TestUpgradeEksServices:
     def test_uses_correct_namespace(self, mock_which, mock_run):
         """All kubectl calls should use the _EKS_NAMESPACE constant."""
         mock_run.return_value = _make_subprocess_result(returncode=0)
-        _upgrade_eks_services("aws", "1.0.0")
+        _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         for c in mock_run.call_args_list:
             cmd = c[0][0]
             assert _EKS_NAMESPACE in cmd or _EKS_NAMESPACE in str(cmd)
@@ -1084,7 +1091,7 @@ class TestUpgradeEksServices:
     def test_uses_correct_rollout_timeout(self, mock_which, mock_run):
         """Rollout status should use _EKS_ROLLOUT_TIMEOUT."""
         mock_run.return_value = _make_subprocess_result(returncode=0)
-        _upgrade_eks_services("aws", "1.0.0")
+        _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         rollout_calls = [c[0][0] for c in mock_run.call_args_list if "rollout" in c[0][0]]
         for cmd in rollout_calls:
             assert f"--timeout={_EKS_ROLLOUT_TIMEOUT}s" in cmd
@@ -1101,7 +1108,7 @@ class TestUpgradeEksServices:
             return _make_subprocess_result(returncode=0)
 
         mock_run.side_effect = side_effect
-        _upgrade_eks_services("aws", "1.0.0")
+        _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "EKS Service Upgrade" not in output
 
@@ -1123,7 +1130,7 @@ class TestUpgradeEksServices:
             return _make_subprocess_result(returncode=0)
 
         mock_run.side_effect = side_effect
-        _upgrade_eks_services("aws", "1.0.0")
+        _upgrade_eks_services("aws", "1.0.0", "test-ctx")
         output = strip_ansi(capsys.readouterr().out)
         assert "rollout complete" in output
         assert "not found" in output
@@ -1136,17 +1143,23 @@ class TestUpgradeCommand:
     @patch("ai.chronon.repo.admin.get_package_version", return_value="1.0.0")
     def test_upgrade_control_plane_aws_with_release(self, mock_ver, mock_upgrade):
         runner = CliRunner()
-        result = runner.invoke(admin, ["upgrade", "control-plane", "aws", "--release", "1.4.2"])
+        result = runner.invoke(
+            admin,
+            ["upgrade", "control-plane", "aws", "--release", "1.4.2", "--kube-context", "test-ctx"],
+        )
         assert result.exit_code == 0
-        mock_upgrade.assert_called_once_with("aws", "1.4.2")
+        mock_upgrade.assert_called_once_with("aws", "1.4.2", "test-ctx")
 
     @patch("ai.chronon.repo.admin._upgrade_eks_services")
     @patch("ai.chronon.repo.admin.get_package_version", return_value="1.0.0")
     def test_upgrade_control_plane_defaults_to_package_version(self, mock_ver, mock_upgrade):
         runner = CliRunner()
-        result = runner.invoke(admin, ["upgrade", "control-plane", "aws"])
+        result = runner.invoke(
+            admin,
+            ["upgrade", "control-plane", "aws", "--kube-context", "test-ctx"],
+        )
         assert result.exit_code == 0
-        mock_upgrade.assert_called_once_with("aws", "1.0.0")
+        mock_upgrade.assert_called_once_with("aws", "1.0.0", "test-ctx")
 
     @patch("ai.chronon.repo.admin._upgrade_eks_services")
     def test_upgrade_control_plane_gcp_rejected(self, mock_upgrade):

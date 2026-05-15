@@ -9,6 +9,7 @@ import tarfile
 import tempfile
 import traceback
 from functools import partial
+from typing import Optional
 
 import click
 from rich.progress import (
@@ -30,9 +31,11 @@ from ai.chronon.repo.constants import (
     VALID_CLOUDS,
     get_public_spark_jars_for_admin,
 )
+from ai.chronon.cli.formatter import Format
 from ai.chronon.repo.hub_runner import (
     format_option,
     hub_url_option,
+    print_env_banner,
     redeploy_streaming,
     repo_option,
     use_auth_option,
@@ -78,6 +81,55 @@ def _app_images(cloud, release):
     return images
 
 
+def _kube_context_for_env(env: str, cli_override: Optional[str] = None) -> str:
+    """Resolve the kubectl context name for a Zipline env. Precedence:
+      1. `--kube-context` CLI override
+      2. Env var `ZIPLINE_PROD_KUBE_CONTEXT` / `ZIPLINE_CANARY_KUBE_CONTEXT`
+    Hard-fails if neither is set. Admin commands require an explicit context so
+    we never silently run kubectl against the user's ambient cluster — that
+    path is what makes "I thought I was on canary" incidents possible when prod
+    and canary live in separate AWS accounts.
+    """
+    if cli_override:
+        return cli_override
+    var = f"ZIPLINE_{env.upper()}_KUBE_CONTEXT"
+    ctx = os.environ.get(var)
+    if not ctx:
+        raise click.ClickException(
+            f"--env {env} requires a kubectl context to be configured.\n"
+            f"Set {var}=<context-name> in your shell or pass --kube-context <name>.\n"
+            f"List available contexts with: kubectl config get-contexts"
+        )
+    return ctx
+
+
+def _print_resolved_kube_context(context: str, format: Format = Format.TEXT) -> None:
+    """Print the kubectl context that env-aware kubectl-driven commands resolved
+    to. Pairs with `print_env_banner` so the user sees both the env claim and
+    the actual cluster name those kubectl calls will target."""
+    if format == Format.JSON:
+        return
+    console.print(f"   [dim]kubectl context:[/dim] {context}")
+
+
+def env_option(func):
+    return click.option(
+        "--env",
+        help="Zipline deployment environment (prod or canary). For kubectl-driven commands, this picks the kubectl context via ZIPLINE_<ENV>_KUBE_CONTEXT or --kube-context.",
+        type=click.Choice(['prod', 'canary'], case_sensitive=False),
+        default='prod',
+        show_default=True,
+    )(func)
+
+
+def kube_context_option(func):
+    return click.option(
+        "--kube-context",
+        help="Override the kubectl context for this run (otherwise resolved from ZIPLINE_<ENV>_KUBE_CONTEXT).",
+        default=None,
+    )(func)
+
+
 # EKS service → (deployment_name, container_name, image_repo_template)
 _EKS_SERVICES = {
     "hub": ("zipline-orchestration-hub", "orchestration-hub", "ziplineai/hub-{cloud}"),
@@ -89,14 +141,22 @@ _EKS_NAMESPACE = "zipline-system"
 _EKS_ROLLOUT_TIMEOUT = 300
 
 
-def _get_current_image(deployment, container):
+def _kubectl_argv(context: str, *args: str) -> list:
+    """Build a kubectl argv list with `--context <name>` baked in. Every kubectl
+    call in admin.py goes through this so a missing context flag is impossible
+    by construction."""
+    return ["kubectl", "--context", context, *args]
+
+
+def _get_current_image(deployment, container, context):
     """Return the current image for a container in a deployment, or None on failure."""
     result = subprocess.run(
-        [
-            "kubectl", "get", "deployment", deployment,
+        _kubectl_argv(
+            context,
+            "get", "deployment", deployment,
             "--namespace", _EKS_NAMESPACE,
             "-o", f"jsonpath={{.spec.template.spec.containers[?(@.name==\"{container}\")].image}}",
-        ],
+        ),
         capture_output=True, text=True,
     )
     if result.returncode == 0 and result.stdout.strip():
@@ -104,7 +164,7 @@ def _get_current_image(deployment, container):
     return None
 
 
-def _upgrade_eks_services(cloud, release):
+def _upgrade_eks_services(cloud, release, context):
     """Upgrade running EKS deployments to the new release. Skips services that don't exist."""
     if not shutil.which("kubectl"):
         console.print(
@@ -114,12 +174,12 @@ def _upgrade_eks_services(cloud, release):
         raise SystemExit(1)
 
     result = subprocess.run(
-        ["kubectl", "cluster-info", "--namespace", _EKS_NAMESPACE],
+        _kubectl_argv(context, "cluster-info", "--namespace", _EKS_NAMESPACE),
         capture_output=True, text=True,
     )
     if result.returncode != 0:
         console.print(
-            "[red]Cannot reach Kubernetes cluster.[/red]\n"
+            f"[red]Cannot reach Kubernetes cluster via context '{context}'.[/red]\n"
             "Configure your kubeconfig and retry:\n"
             "  aws eks update-kubeconfig --name <cluster-name> --region <region>"
         )
@@ -133,7 +193,7 @@ def _upgrade_eks_services(cloud, release):
         image = image_template.format(cloud=cloud) + f":{release}"
 
         check = subprocess.run(
-            ["kubectl", "get", "deployment", deployment, "--namespace", _EKS_NAMESPACE],
+            _kubectl_argv(context, "get", "deployment", deployment, "--namespace", _EKS_NAMESPACE),
             capture_output=True, text=True,
         )
         if check.returncode != 0:
@@ -143,13 +203,13 @@ def _upgrade_eks_services(cloud, release):
             )
             continue
 
-        current_image = _get_current_image(deployment, container)
+        current_image = _get_current_image(deployment, container, context)
         current_tag = current_image.rsplit(":", 1)[-1] if current_image else "unknown"
         image_repo = image_template.format(cloud=cloud)
 
         if current_image == image:
             console.print(f"  [bold]{service}[/bold]: already on {release} — restarting")
-            restart_cmd = ["kubectl", "rollout", "restart", f"deployment/{deployment}", "--namespace", _EKS_NAMESPACE]
+            restart_cmd = _kubectl_argv(context, "rollout", "restart", f"deployment/{deployment}", "--namespace", _EKS_NAMESPACE)
             restart_result = subprocess.run(restart_cmd, capture_output=True, text=True)
             if restart_result.returncode != 0:
                 results.append((service, image_repo, current_tag, release, "FAIL", restart_result.stderr.strip()))
@@ -157,7 +217,7 @@ def _upgrade_eks_services(cloud, release):
                 continue
         else:
             console.print(f"  [bold]{service}[/bold]: {current_tag} → {release}")
-            set_cmd = ["kubectl", "set", "image", f"deployment/{deployment}", f"{container}={image}", "--namespace", _EKS_NAMESPACE]
+            set_cmd = _kubectl_argv(context, "set", "image", f"deployment/{deployment}", f"{container}={image}", "--namespace", _EKS_NAMESPACE)
             set_result = subprocess.run(set_cmd, capture_output=True, text=True)
             if set_result.returncode != 0:
                 results.append((service, image_repo, current_tag, release, "FAIL", set_result.stderr.strip()))
@@ -165,7 +225,7 @@ def _upgrade_eks_services(cloud, release):
                 continue
 
         console.print("    waiting for rollout to complete...")
-        rollout_cmd = ["kubectl", "rollout", "status", f"deployment/{deployment}", f"--timeout={_EKS_ROLLOUT_TIMEOUT}s", "--namespace", _EKS_NAMESPACE]
+        rollout_cmd = _kubectl_argv(context, "rollout", "status", f"deployment/{deployment}", f"--timeout={_EKS_ROLLOUT_TIMEOUT}s", "--namespace", _EKS_NAMESPACE)
         rollout = subprocess.run(rollout_cmd, capture_output=True, text=True)
         if rollout.returncode == 0:
             detail = "restart complete" if current_image == image else "rollout complete"
@@ -241,11 +301,13 @@ def admin():
     type=click.Path(exists=True),
     help="Path to air-gap tarball (alternative to pulling from Docker Hub).",
 )
-def install(cloud, registry, api_token, release, artifact_prefix, bundle):
+@env_option
+def install(cloud, registry, api_token, release, artifact_prefix, bundle, env):
     """Install Zipline images into a private registry or the local Docker daemon.
 
     CLOUD is the cloud provider variant (gcp, aws, or azure).
     """
+    print_env_banner(env)
     for name in ("urllib3", "ai.chronon.logger"):
         logging.getLogger(name).setLevel(logging.WARNING)
 
@@ -993,7 +1055,9 @@ def upgrade():
     default=None,
     help="Zipline release to upgrade to (e.g. 1.4.2). Defaults to the installed zipline-ai package version.",
 )
-def control_plane(cloud, release):
+@env_option
+@kube_context_option
+def control_plane(cloud, release, env, kube_context):
     """Upgrade running EKS service deployments to a given release.
 
     CLOUD is the cloud provider variant (gcp, aws, or azure).
@@ -1003,6 +1067,8 @@ def control_plane(cloud, release):
         console.print(f"[yellow]Upgrade is currently only supported for AWS (got {cloud}).[/yellow]")
         raise SystemExit(1)
 
+    print_env_banner(env)
+
     if release is None:
         release = get_package_version()
         if release == "unknown":
@@ -1010,7 +1076,12 @@ def control_plane(cloud, release):
             raise SystemExit(1)
         console.print(f"Using release [bold]{release}[/bold]")
 
-    _upgrade_eks_services(cloud, release)
+    # Resolve the kubectl context only after argument validation passes — we
+    # don't want a missing-env-var error to mask an obvious bad input.
+    context = _kube_context_for_env(env, kube_context)
+    _print_resolved_kube_context(context)
+
+    _upgrade_eks_services(cloud, release, context)
 
 
 @upgrade.command("data-plane")
@@ -1045,11 +1116,13 @@ def doctor():
 @doctor.command("hub-health")
 @click.argument("hub_url")
 @click.option("--expected-version", default=None, help="Expected Zipline version (optional).")
-def hub_health(hub_url, expected_version):
+@env_option
+def hub_health(hub_url, expected_version, env):
     """Check that the Zipline hub is reachable and healthy.
 
     HUB_URL is the URL of the running Zipline hub (e.g. https://hub.example.com).
     """
+    print_env_banner(env)
     import urllib3
 
     http = urllib3.PoolManager()
@@ -1106,13 +1179,18 @@ def hub_health(hub_url, expected_version):
     show_default=True,
     help="Cloud provider variant.",
 )
-def streaming_health(cloud):
+@env_option
+@kube_context_option
+def streaming_health(cloud, env, kube_context):
     """Check that the Flink streaming infrastructure is correctly configured.
 
     Requires kubectl to be installed and configured with access to the cluster.
     """
+    print_env_banner(env)
+    context = _kube_context_for_env(env, kube_context)
+    _print_resolved_kube_context(context)
     console.print("[bold]Running Kubernetes infrastructure checks...[/bold]")
-    results = run_infra_checks(cloud=cloud)
+    results = run_infra_checks(cloud=cloud, kube_context=context)
     print_check_table("Zipline Streaming Infrastructure Diagnostics", results)
 
 if __name__ == "__main__":
