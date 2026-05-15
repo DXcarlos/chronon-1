@@ -427,7 +427,7 @@ def submit_schedule_all(
     )
 
     with status_spinner("Computing local conf hashes...", format=format):
-        conf_name_to_obj_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
+        conf_name_to_obj_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo, env=env)
 
     branch = get_current_branch()
 

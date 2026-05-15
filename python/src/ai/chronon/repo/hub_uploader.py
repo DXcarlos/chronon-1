@@ -13,8 +13,12 @@ from ai.chronon.repo.zipline_hub import ZiplineHub
 from gen_thrift.api.ttypes import Conf
 
 
-def build_local_repo_hashmap(root_dir: str):
-    compiled_dir = os.path.join(root_dir, "compiled")
+def build_local_repo_hashmap(root_dir: str, env: str = 'prod'):
+    # `env` picks the compile output folder. Mirrors the dual-folder layout
+    # produced by `zipline compile`: 'prod' → compiled/, 'canary' →
+    # canary_compiled/. Unknown values fall back to prod.
+    folder = "canary_compiled" if env and env.lower() == "canary" else "compiled"
+    compiled_dir = os.path.join(root_dir, folder)
     # Returns a map of name -> (tbinary, file_hash)
     results = {}
 
