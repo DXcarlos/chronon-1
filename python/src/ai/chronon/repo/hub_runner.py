@@ -435,7 +435,7 @@ def redeploy_streaming(repo, confs, hub_url=None, use_auth=True, format: Format 
 def submit_schedule_all(
     repo, cloud, customer_id, env='prod', hub_url=None, use_auth=True, format: Format = Format.TEXT
 ):
-    """Deploy schedules for all changed confs that have schedules defined and match the specified environment."""
+    """Deploy schedules for all confs that have schedules defined."""
     zipline_hub = _get_zipline_hub(
         hub_url,
         get_hub_conf_from_metadata_conf(
@@ -454,14 +454,15 @@ def submit_schedule_all(
     branch = get_current_branch()
 
     with status_spinner("Syncing confs with Hub...", format=format):
-        diff_confs = hub_uploader.compute_and_upload_diffs(
+        # Upload any changed confs to Hub
+        hub_uploader.compute_and_upload_diffs(
             branch,
             zipline_hub=zipline_hub,
             local_repo_confs=conf_name_to_obj_dict,
             format=format,
         )
 
-    # Collect confs with schedules
+    # Collect confs with schedules (from ALL confs, not just changed ones)
     confs_with_schedules = []
     skipped_confs = []
     env_filtered_confs = []
@@ -469,7 +470,7 @@ def submit_schedule_all(
     # Convert env string to enum value for comparison
     env_enum = _env_string_to_enum(env)
 
-    for name, conf in diff_confs.items():
+    for name, conf in conf_name_to_obj_dict.items():
         try:
             # Check if conf's environments field includes the specified env
             metadata_map = get_metadata_map(conf.localPath)

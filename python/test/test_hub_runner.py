@@ -526,17 +526,19 @@ class TestHubRunner:
         from gen_thrift.api.ttypes import Conf
 
         mock_get_current_branch.return_value = "test-branch"
-        mock_build_hashmap.return_value = {}
 
-        # Mock compute_and_upload_diffs to return a conf without schedules
+        # Mock build_local_repo_hashmap to return a conf without schedules
         conf_without_schedules = Conf(
             name="test_team.join_without_schedules",
             localPath="/path/to/conf",
             hash="hash1",
         )
-        mock_compute_diffs.return_value = {
+        mock_build_hashmap.return_value = {
             "test_team.join_without_schedules": conf_without_schedules,
         }
+
+        # Mock compute_and_upload_diffs (still called to upload any changes)
+        mock_compute_diffs.return_value = {}
 
         # Mock get_schedule_modes to return SCHEDULE_NONE_STR for both schedules
         mock_get_schedule_modes.return_value = ScheduleModes(
@@ -558,6 +560,83 @@ class TestHubRunner:
 
         # Verify call_schedule_all_api was NOT called since all confs have no schedules
         mock_hub_instance.call_schedule_all_api.assert_not_called()
+
+    @patch('ai.chronon.repo.hub_runner.get_schedule_modes')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.compute_and_upload_diffs')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    @patch('ai.chronon.repo.hub_runner.ZiplineHub')
+    def test_schedule_all_schedules_unchanged_confs(
+        self,
+        mock_zipline_hub,
+        mock_get_current_branch,
+        mock_build_hashmap,
+        mock_compute_diffs,
+        mock_get_schedule_modes,
+        canary,
+    ):
+        """Confs with schedules should be deployed even if they aren't in the diff."""
+        from ai.chronon.repo.hub_runner import (
+            ScheduleModes,
+            submit_schedule_all,
+        )
+        from gen_thrift.api.ttypes import Conf
+
+        mock_get_current_branch.return_value = "test-branch"
+
+        changed_conf = Conf(
+            name="test_team.changed_join",
+            localPath="/path/to/changed",
+            hash="hash_changed",
+        )
+        unchanged_conf = Conf(
+            name="test_team.unchanged_join",
+            localPath="/path/to/unchanged",
+            hash="hash_unchanged",
+        )
+        # build_local_repo_hashmap returns ALL confs in the repo
+        mock_build_hashmap.return_value = {
+            "test_team.changed_join": changed_conf,
+            "test_team.unchanged_join": unchanged_conf,
+        }
+        # compute_and_upload_diffs returns only the changed conf — the unchanged
+        # one used to be excluded from scheduling because of this.
+        mock_compute_diffs.return_value = {
+            "test_team.changed_join": changed_conf,
+        }
+
+        mock_get_schedule_modes.return_value = ScheduleModes(
+            offline_schedule="@daily",
+            online_schedule="@hourly",
+        )
+
+        mock_hub_instance = mock_zipline_hub.return_value
+        mock_hub_instance.call_schedule_all_api.return_value = {
+            "totalCount": 2,
+            "successCount": 2,
+            "failureCount": 0,
+            "results": [
+                {"confName": "test_team.changed_join", "success": True, "schedules": {}},
+                {"confName": "test_team.unchanged_join", "success": True, "schedules": {}},
+            ],
+        }
+
+        submit_schedule_all(
+            repo=canary,
+            cloud='gcp',
+            customer_id=None,
+            hub_url=None,
+            use_auth=False,
+        )
+
+        # Both confs (changed and unchanged) should be submitted for scheduling.
+        mock_hub_instance.call_schedule_all_api.assert_called_once()
+        submitted = mock_hub_instance.call_schedule_all_api.call_args[0][0]
+        submitted_names = {entry["conf_name"] for entry in submitted}
+        assert submitted_names == {
+            "test_team.changed_join",
+            "test_team.unchanged_join",
+        }
 
     @patch('requests.post')
     @patch('ai.chronon.repo.hub_runner.get_current_branch')
