@@ -591,7 +591,7 @@ class TestHubRunner:
             use_auth=False,
         )
 
-        mock_build_hashmap.assert_called_once_with(root_dir=canary)
+        mock_build_hashmap.assert_called_once_with(root_dir=canary, env="prod")
         mock_upload_diffs.assert_called_once()
         mock_post.assert_called_once()
         url = mock_post.call_args[0][0]

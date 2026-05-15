@@ -118,6 +118,14 @@ def default_team_metadata_conf(env: str = 'prod') -> str:
     return team_metadata_conf("default", env)
 
 
+def _env_from_conf_path(conf: str) -> str:
+    """Infer the compile env from a conf path. A path that lives under
+    `canary_compiled/` targets canary; anything else targets prod. Lets
+    conf-path-taking commands stay env-aware without making the user pass an
+    explicit `--env` flag that has to agree with the path they typed."""
+    return "canary" if "canary_compiled" in os.path.normpath(conf).split(os.sep) else "prod"
+
+
 def print_env_banner(env: str, format: Format = Format.TEXT) -> None:
     """Loudly announce which compile environment a CLI command is targeting.
     Suppressed in JSON mode so stdout stays machine-readable."""
@@ -373,11 +381,25 @@ def redeploy_streaming(repo, confs, hub_url=None, use_auth=True, format: Format 
         raise ValueError(
             f"All confs must target the same Hub, but found multiple hub_url values:\n{mismatches}"
         )
+
+    # All confs in a single redeploy must come from the same compile env
+    # (mixing prod and canary in one call would hash against the wrong folder
+    # for half of them).
+    conf_envs = [_env_from_conf_path(c) for c in confs]
+    if len(set(conf_envs)) > 1:
+        mismatches = "\n".join(
+            f"  {conf}: {env}" for conf, env in zip(confs, conf_envs, strict=True)
+        )
+        raise ValueError(
+            f"All confs must come from the same compile environment, but found a mix of prod and canary:\n{mismatches}"
+        )
+    env = conf_envs[0] if conf_envs else "prod"
+
     hub_conf = hub_confs[0]
     zipline_hub = _get_zipline_hub(hub_url, hub_conf, use_auth, format)
 
     with status_spinner("Computing local conf hashes...", format=format):
-        conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
+        conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo, env=env)
     branch = get_current_branch()
     with status_spinner("Syncing confs with Hub...", format=format):
         hub_uploader.compute_and_upload_diffs(
@@ -581,7 +603,9 @@ def submit_workflow(
     zipline_hub = _get_zipline_hub(hub_url, hub_conf, use_auth, format)
 
     with status_spinner("Computing local conf hashes...", format=format):
-        conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
+        conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(
+            root_dir=repo, env=_env_from_conf_path(conf)
+        )
     branch = get_current_branch()
 
     with status_spinner("Syncing confs with Hub...", format=format):
@@ -635,7 +659,9 @@ def submit_schedule(
     zipline_hub = _get_zipline_hub(hub_url, hub_conf, use_auth, format)
 
     with status_spinner("Computing local conf hashes...", format=format):
-        conf_name_to_obj_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
+        conf_name_to_obj_dict = hub_uploader.build_local_repo_hashmap(
+            root_dir=repo, env=_env_from_conf_path(conf)
+        )
     branch = get_current_branch()
 
     with status_spinner("Syncing confs with Hub...", format=format):
@@ -1131,7 +1157,9 @@ def eval(
         format=format,
         auth_url=hub_conf.frontend_url,
     )
-    conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo)
+    conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(
+        root_dir=repo, env=_env_from_conf_path(conf)
+    )
     branch = get_current_branch()
     if test_data_path:
         # Upload the test data skeleton to the bucket.
