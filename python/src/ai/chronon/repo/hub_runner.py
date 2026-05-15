@@ -17,6 +17,7 @@ from ai.chronon.cli.formatter import (
 )
 from ai.chronon.cli.git_utils import get_current_branch
 from ai.chronon.cli.theme import (
+    console,
     print_error,
     print_info,
     print_key_value,
@@ -104,7 +105,28 @@ def _resolve_data_type_kinds(obj):
     return obj
 
 
-DEFAULT_TEAM_METADATA_CONF = "compiled/teams_metadata/default/default_team_metadata"
+def team_metadata_conf(team: str = "default", env: str = 'prod') -> str:
+    """Path to a team's compiled metadata thriftjson, scoped to the compile
+    output folder selected by `env`. Mirrors the dual-folder layout produced
+    by `zipline compile`: `prod` → `compiled/`, `canary` → `canary_compiled/`.
+    Unknown values fall back to prod."""
+    folder = "canary_compiled" if env and env.lower() == "canary" else "compiled"
+    return f"{folder}/teams_metadata/{team}/{team}_team_metadata"
+
+
+def default_team_metadata_conf(env: str = 'prod') -> str:
+    return team_metadata_conf("default", env)
+
+
+def print_env_banner(env: str, format: Format = Format.TEXT) -> None:
+    """Loudly announce which compile environment a CLI command is targeting.
+    Suppressed in JSON mode so stdout stays machine-readable."""
+    if format == Format.JSON:
+        return
+    if env and env.lower() == "canary":
+        console.rule("[bold cyan]🐤 RUNNING AGAINST CANARY ENVIRONMENT[/]")
+    else:
+        console.rule("[bold magenta]🚀 RUNNING AGAINST PROD ENVIRONMENT[/]")
 
 
 @dataclass
@@ -395,7 +417,7 @@ def submit_schedule_all(
     zipline_hub = _get_zipline_hub(
         hub_url,
         get_hub_conf_from_metadata_conf(
-            DEFAULT_TEAM_METADATA_CONF,
+            default_team_metadata_conf(env),
             root_dir=repo,
             cloud_provider=cloud,
             customer_id=customer_id,
@@ -782,6 +804,8 @@ def schedule_all(
 ):
     """Deploy recurring schedules for all changed confs that have schedules defined."""
 
+    print_env_banner(env, format=format)
+
     if compile_pending_changes:
         # Check if there are any changes
         added = compile_pending_changes.get("added", [])
@@ -828,15 +852,23 @@ def schedule_all(
 @jsonify_exceptions_if_json_format
 @cloud_provider_option
 @customer_id_option
-def cancel(workflow_id, repo, hub_url, use_auth, format, cloud, customer_id):
+@click.option(
+    "--env",
+    help="Compile environment whose default team metadata supplies the hub config.",
+    type=click.Choice(['prod', 'canary'], case_sensitive=False),
+    default='prod',
+    show_default=True,
+)
+def cancel(workflow_id, repo, hub_url, use_auth, format, cloud, customer_id, env):
     """Cancel a running workflow.
 
     WORKFLOW_ID is the ID of the workflow to cancel.
     """
+    print_env_banner(env, format=format)
     zipline_hub = _get_zipline_hub(
         hub_url,
         get_hub_conf_from_metadata_conf(
-            DEFAULT_TEAM_METADATA_CONF,
+            default_team_metadata_conf(env),
             root_dir=repo,
             cloud_provider=cloud,
             customer_id=customer_id,
@@ -1173,14 +1205,22 @@ def eval(
     default="SPARK",
     show_default=True,
 )
+@click.option(
+    "--env",
+    help="Compile environment whose team/default metadata supplies the hub config.",
+    type=click.Choice(['prod', 'canary'], case_sensitive=False),
+    default='prod',
+    show_default=True,
+)
 @jsonify_exceptions_if_json_format
 def eval_table(
-    table, repo, conf, team, hub_url, use_auth, format, eval_url, engine_type
+    table, repo, conf, team, hub_url, use_auth, format, eval_url, engine_type, env
 ):
     """Validate a table's schema.
 
     TABLE is the table name for schema evaluation (e.g. data.loggable_response).
     """
+    print_env_banner(env, format=format)
     # Use conf for executionInfo if provided (highest priority)
     conf_execution_info, team_execution_info, default_execution_info = None, None, None
     team = team or os.environ.get("TEAM")
@@ -1189,13 +1229,12 @@ def eval_table(
         conf_execution_info = get_metadata_map(file_path).get("executionInfo")
     # Otherwise use team metadata if specified
     elif team:
-        team_metadata_path = f"compiled/teams_metadata/{team}/{team}_team_metadata"
-        file_path = os.path.join(repo, team_metadata_path)
+        file_path = os.path.join(repo, team_metadata_conf(team, env))
         with open(file_path, "r") as f:
             team_execution_info = json.load(f).get("executionInfo")
     # Otherwise use default team metadata
     else:
-        file_path = os.path.join(repo, DEFAULT_TEAM_METADATA_CONF)
+        file_path = os.path.join(repo, default_team_metadata_conf(env))
         with open(file_path, "r") as f:
             default_execution_info = json.load(f).get("executionInfo")
     execution_info = (
@@ -1273,21 +1312,28 @@ def eval_table(
     default="SPARK",
     show_default=True,
 )
+@click.option(
+    "--env",
+    help="Compile environment whose team/default metadata supplies the hub config.",
+    type=click.Choice(['prod', 'canary'], case_sensitive=False),
+    default='prod',
+    show_default=True,
+)
 @jsonify_exceptions_if_json_format
-def list_tables(schema_name, repo, team, hub_url, use_auth, format, eval_url, engine_type):
+def list_tables(schema_name, repo, team, hub_url, use_auth, format, eval_url, engine_type, env):
     """List tables in a schema.
 
     SCHEMA_NAME is the schema/database to list tables from (e.g. demo).
     """
+    print_env_banner(env, format=format)
     team_execution_info, default_execution_info = None, None
     team = team or os.environ.get("TEAM")
     if team:
-        team_metadata_path = f"compiled/teams_metadata/{team}/{team}_team_metadata"
-        file_path = os.path.join(repo, team_metadata_path)
+        file_path = os.path.join(repo, team_metadata_conf(team, env))
         with open(file_path, "r") as f:
             team_execution_info = json.load(f).get("executionInfo")
     else:
-        file_path = os.path.join(repo, DEFAULT_TEAM_METADATA_CONF)
+        file_path = os.path.join(repo, default_team_metadata_conf(env))
         with open(file_path, "r") as f:
             default_execution_info = json.load(f).get("executionInfo")
     execution_info = team_execution_info or default_execution_info
