@@ -48,6 +48,7 @@
           "AWS_REGION": "us-west-2",
           "CLOUD_PROVIDER": "aws",
           "CUSTOMER_ID": "dev",
+          "DATABRICKS_EXTRA": "DATABRICKS_EXTRA_1",
           "FRONTEND_URL": "http://localhost:3000",
           "HUB_URL": "http://localhost:3903",
           "SPARK_CLUSTER_NAME": "zipline-emr-canary",
