@@ -25,7 +25,15 @@ Chronon now has the capability to use output of join as input to downstream comp
 If you have similar features which would require multiple joins or groupbys, chaining features might be a good fit for your use case.
 
 ## How do I use it?
-You can pass in a parent join  **JoinSource** as Source in GroupBys. For example,
+
+Chronon supports two primary chaining patterns today:
+
+1. **Join -> GroupBy**: use a parent `JoinSource` as the source of a downstream `GroupBy`
+2. **Join -> Join**: use a parent `JoinSource` as the left side of a downstream `Join`
+
+### Pattern 1: Join -> GroupBy
+
+You can pass in a parent join **JoinSource** as the source in a downstream GroupBy. For example,
 
 ```python
 # Chaining Feature API example
@@ -83,14 +91,65 @@ enriched_listings = Join(
 )
 
 ```
+### Pattern 2: Join -> Join
+
+You can also use a parent join **JoinSource** as the left side of another Join.
+
+```python
+from group_bys.gcp import dim_listings, latest_listing_by_user
+from staging_queries.gcp import exports
+
+from ai.chronon.types import EventSource, Join, JoinPart, JoinSource, Query, selects
+
+# Join1: compute an intermediate field you want to expose downstream
+join1_v1 = Join(
+    left=EventSource(
+        table=exports.user_activities.table,
+        query=Query(
+            selects=selects("user_id"),
+            time_column="event_time_ms",
+        ),
+    ),
+    row_ids=["user_id"],
+    right_parts=[
+        JoinPart(group_by=latest_listing_by_user.v1),
+    ],
+    version=1,
+)
+
+# Join2: use Join1 output as the left side of another Join
+join2_v1 = Join(
+    left=JoinSource(
+        join=join1_v1,
+        query=Query(
+            selects=selects(
+                user_id="user_id",
+                listing_id="user_id_listing_id_last_7d",
+            ),
+            time_column="ts",
+        ),
+    ),
+    row_ids=["user_id"],
+    right_parts=[
+        JoinPart(group_by=dim_listings.v1),
+    ],
+    version=1,
+)
+```
+
+The key idea is that `Join1` produces the intermediate field (`listing_id` here), and `Join2` explicitly projects that field out of the upstream join output before using it as a downstream join key.
+
+The canary example linked below also includes a modular-derivation variant where `Join1` renames the intermediate field with a derivation before `Join2` projects it.
+
 ### Configuration Examples
 - [Chaining GroupBy](https://github.com/zipline-ai/chronon/blob/main/python/test/sample/group_bys/sample_team/sample_chaining_group_by.py)
-- [Chaining Join](https://github.com/zipline-ai/chronon/blob/main/python/test/sample/joins/sample_team/sample_chaining_join.py)
+- [JoinSource left side for a downstream Join](https://github.com/zipline-ai/chronon/blob/main/python/test/canary/joins/gcp/join_source_left_chaining.py)
 
 ## Clarifications
-- The goal of chaining is to use output of a Join as input to downstream computations like GroupBy or a Join. As of today we support the case 1 and case 2 in future plan
+- The goal of chaining is to use output of a Join as input to downstream computations like a GroupBy or another Join.
     - Case 1: A Join output is the source of another GroupBy
-    - Case 2: A Join output is the source of another Join – To be supported
-
-
+    - Case 2: A Join output is the left side of another Join
+- In both cases, use `JoinSource(join=upstream_join, query=Query(...))` to project the columns you want to carry forward.
+- For join-to-join chaining, downstream eval/backfill lineage should show the full dependency path:
+    - `join2 -> join1 -> upstream staging/groupby dependencies`
 
