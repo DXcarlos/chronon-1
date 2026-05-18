@@ -9,6 +9,9 @@
       "user_id": "56f9d4edd9ca35371c9410e78d27b4cf"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_users_with_offset_0\", \"spec\": \"data.users/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

@@ -57,6 +57,9 @@
             "event_sum_7d": "ecb1d6ff348b84c5412294f0fd6a34da",
             "group_by_subject": "825a7008e4d55f0cc56cd0457a30ad3b"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -159,6 +162,9 @@
             "entity_last_7d": "95a566f812b1c7bbaad37d394135a32a",
             "group_by_subject": "396180897f5371ec0e2c4a343aff4d44"
           },
+          "environments": [
+            0
+          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -262,6 +268,9 @@
       "ts": "2932897efedd17abaf8481deecaa3786"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_sample_namespace_sample_table_group_by_with_offset_0\", \"spec\": \"sample_namespace.sample_table_group_by/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_sample_table_sample_entity_snapshot_with_offset_0\", \"spec\": \"sample_table.sample_entity_snapshot/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_sample_table_sample_entity_mutations_hr_00_00_with_offset_0\", \"spec\": \"sample_table.sample_entity_mutations/hr=00:00/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

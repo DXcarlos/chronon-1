@@ -16,6 +16,9 @@
       "user_id": "7b923bd0f046b45fd998c185c7eba2cc"
     },
     "customJson": "{\"airflowDependencies\": []}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {
@@ -110,6 +113,9 @@
                   "group_by_subject"
                 ],
                 "metaData": {
+                  "environments": [
+                    0
+                  ],
                   "executionInfo": {
                     "conf": {
                       "common": {
@@ -207,6 +213,9 @@
                   "group_by_subject"
                 ],
                 "metaData": {
+                  "environments": [
+                    0
+                  ],
                   "executionInfo": {
                     "conf": {
                       "common": {
@@ -300,6 +309,9 @@
           "metaData": {
             "consistencyCheck": 1,
             "consistencySamplePercent": 5.0,
+            "environments": [
+              0
+            ],
             "executionInfo": {
               "conf": {
                 "common": {

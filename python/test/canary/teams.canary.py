@@ -185,6 +185,6 @@ azure = Team(
     outputNamespace="data",
 )
 
-# aws_databricks = Team(
-#     outputNamespace="data",
-# )
+aws_databricks = Team(
+    outputNamespace="data",
+)

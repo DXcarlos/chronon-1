@@ -6,6 +6,9 @@
     }
   },
   "metaData": {
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {

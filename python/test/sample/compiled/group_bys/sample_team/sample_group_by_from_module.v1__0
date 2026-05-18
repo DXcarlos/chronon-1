@@ -27,6 +27,9 @@
       "group_by_subject": "b9110d69763be4942e73ec66fea17aae"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_sample_namespace_sample_table_group_by_with_offset_0\", \"spec\": \"sample_namespace.sample_table_group_by/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_sample_namespace_another_sample_table_group_by_with_offset_0\", \"spec\": \"sample_namespace.another_sample_table_group_by/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
     "executionInfo": {
       "conf": {
         "common": {
