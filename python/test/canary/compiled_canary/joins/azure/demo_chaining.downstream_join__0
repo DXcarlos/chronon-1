@@ -1,0 +1,244 @@
+{
+  "joinParts": [
+    {
+      "groupBy": {
+        "aggregations": [
+          {
+            "argMap": {
+              "k": "100"
+            },
+            "inputColumn": "price_cents",
+            "operation": 13,
+            "windows": [
+              {
+                "length": 7,
+                "timeUnit": 1
+              }
+            ]
+          }
+        ],
+        "keyColumns": [
+          "user_id"
+        ],
+        "metaData": {
+          "columnHashes": {
+            "price_cents_last100_7d": "8d7a1fba31093361b1675f65e53748d7",
+            "user_id": "4ecdf09ef20508785edf01ab40f381ed"
+          },
+          "environments": [
+            0
+          ],
+          "executionInfo": {
+            "conf": {
+              "common": {
+                "spark.chronon.partition.column": "ds"
+              }
+            },
+            "env": {
+              "common": {
+                "CHRONON_ONLINE_ARGS": "-Ztasks=1",
+                "CUSTOMER_ID": "dev",
+                "FRONTEND_URL": "http://localhost:3000",
+                "HUB_URL": "http://localhost:3903",
+                "VERSION": "latest"
+              }
+            },
+            "historicalBackfill": 0,
+            "onlineSchedule": "@daily"
+          },
+          "name": "azure.user_activities_chained.chained_user_gb__0",
+          "online": 1,
+          "outputNamespace": "data",
+          "team": "azure",
+          "version": "0"
+        },
+        "sources": [
+          {
+            "joinSource": {
+              "join": {
+                "joinParts": [
+                  {
+                    "groupBy": {
+                      "keyColumns": [
+                        "listing_id"
+                      ],
+                      "metaData": {
+                        "environments": [
+                          0
+                        ],
+                        "executionInfo": {
+                          "conf": {
+                            "common": {
+                              "spark.chronon.partition.column": "ds"
+                            }
+                          },
+                          "env": {
+                            "common": {
+                              "CUSTOMER_ID": "dev",
+                              "FRONTEND_URL": "http://localhost:3000",
+                              "HUB_URL": "http://localhost:3903",
+                              "VERSION": "latest"
+                            }
+                          },
+                          "historicalBackfill": 0,
+                          "onlineSchedule": "@daily"
+                        },
+                        "name": "azure.dim_listings.v3",
+                        "online": 1,
+                        "outputNamespace": "data",
+                        "team": "azure"
+                      },
+                      "sources": [
+                        {
+                          "entities": {
+                            "query": {
+                              "selects": {
+                                "brief_description": "brief_description",
+                                "currency": "currency",
+                                "headline": "headline",
+                                "inventory_count": "inventory_count",
+                                "is_active": "is_active",
+                                "is_expensive": "IF(price_cents > 10000, 1, 0)",
+                                "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+                                "listing_id": "CAST(listing_id AS INT)",
+                                "long_description": "long_description",
+                                "main_image_path": "main_image_path",
+                                "merchant_id": "merchant_id",
+                                "price_cents": "price_cents",
+                                "primary_category": "primary_category",
+                                "secondary_image_paths": "secondary_image_paths",
+                                "tags": "tags",
+                                "weight_grams": "weight_grams"
+                              },
+                              "startPartition": "2025-01-01"
+                            },
+                            "snapshotTable": "data.azure_exports_dim_listings__0"
+                          }
+                        }
+                      ]
+                    },
+                    "useLongNames": 0
+                  }
+                ],
+                "left": {
+                  "events": {
+                    "query": {
+                      "selects": {
+                        "listing_id": "listing_id",
+                        "row_id": "event_id",
+                        "ts": "unix_millis(TIMESTAMP(event_time_ms))",
+                        "user_id": "user_id"
+                      },
+                      "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
+                    },
+                    "table": "data.azure_exports_user_activities__0",
+                    "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
+                  }
+                },
+                "metaData": {
+                  "environments": [
+                    0
+                  ],
+                  "executionInfo": {
+                    "conf": {
+                      "common": {
+                        "spark.chronon.partition.column": "ds"
+                      }
+                    },
+                    "env": {
+                      "common": {
+                        "CUSTOMER_ID": "dev",
+                        "FRONTEND_URL": "http://localhost:3000",
+                        "HUB_URL": "http://localhost:3903",
+                        "VERSION": "latest"
+                      }
+                    },
+                    "offlineSchedule": "17 0 * * *",
+                    "onlineSchedule": "@daily"
+                  },
+                  "name": "azure.demo_parent.parent_join__0",
+                  "online": 1,
+                  "outputNamespace": "data",
+                  "production": 0,
+                  "samplePercent": 100.0,
+                  "team": "azure",
+                  "version": "0"
+                },
+                "rowIds": [
+                  "event_id"
+                ],
+                "useLongNames": 0
+              },
+              "query": {
+                "selects": {
+                  "listing_id": "listing_id",
+                  "price_cents": "listing_id_price_cents",
+                  "user_id": "user_id"
+                },
+                "timeColumn": "ts"
+              }
+            }
+          }
+        ]
+      },
+      "useLongNames": 0
+    }
+  ],
+  "left": {
+    "events": {
+      "query": {
+        "selects": {
+          "listing_id": "listing_id",
+          "row_id": "event_id",
+          "ts": "unix_millis(TIMESTAMP(event_time_ms))",
+          "user_id": "user_id"
+        },
+        "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
+      },
+      "table": "data.azure_exports_user_activities__0",
+      "topic": "pubsub://user-activities-v2/project=canary-443022/subscription=user-activities-v2-sub/serde=pubsub_schema/schemaId=user-activities"
+    }
+  },
+  "metaData": {
+    "columnHashes": {
+      "listing_id": "a781ec55d64e705d8ce51d0c587b40e2",
+      "row_id": "a815aba076a56303f2c896256f1ba0ff",
+      "ts": "32cfb4df811008307e03612be49442ec",
+      "user_id": "275e18a643e12228f787cd9a9b03eaed",
+      "user_id_price_cents_last100_7d": "bddd7571d888b859ebeae7da9e49f6af"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_user_activities__0_with_offset_0\", \"spec\": \"data.azure_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "offlineSchedule": "@daily",
+      "onlineSchedule": "@daily"
+    },
+    "name": "azure.demo_chaining.downstream_join__0",
+    "online": 1,
+    "outputNamespace": "data",
+    "production": 0,
+    "samplePercent": 100.0,
+    "sourceFile": "joins/azure/demo_chaining.py",
+    "team": "azure",
+    "version": "0"
+  },
+  "rowIds": [
+    "event_id"
+  ],
+  "useLongNames": 0
+}

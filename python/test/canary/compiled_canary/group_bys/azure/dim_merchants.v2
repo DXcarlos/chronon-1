@@ -1,0 +1,51 @@
+{
+  "keyColumns": [
+    "listing_id"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "listing_id": "ef0459db5af8e98e7b54b6dbec987680",
+      "primary_category": "41f7c36859f55e0908a0e2ee1cea4fb3"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_dim_merchants__0_with_offset_0\", \"spec\": \"data.azure_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "historicalBackfill": 0,
+      "onlineSchedule": "@daily"
+    },
+    "name": "azure.dim_merchants.v2",
+    "online": 1,
+    "outputNamespace": "data",
+    "sourceFile": "group_bys/azure/dim_merchants.py",
+    "team": "azure"
+  },
+  "sources": [
+    {
+      "entities": {
+        "query": {
+          "selects": {
+            "listing_id": "CAST(merchant_id AS INT)",
+            "primary_category": "primary_category"
+          },
+          "startPartition": "2025-01-01"
+        },
+        "snapshotTable": "data.azure_exports_dim_merchants__0"
+      }
+    }
+  ]
+}

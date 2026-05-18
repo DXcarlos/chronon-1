@@ -1,0 +1,80 @@
+{
+  "keyColumns": [
+    "listing_id"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "brief_description": "243bd9475048b531e39784ed5a4c5d4c",
+      "currency": "9ab5e4d3c769742611e6e6a21f738f2d",
+      "headline": "81a42c547de455ac521e611ba9481579",
+      "inventory_count": "3960d102ae6397912e352963b24b38dc",
+      "is_active": "379f96022efce3edf51da4b393e79547",
+      "is_expensive": "2504b94d7ac884660d25b2f1244023ae",
+      "is_in_stock": "ebb556dbdf71f816accd53d8c6baa93f",
+      "listing_id": "fbf72f082947fc83693eec35cd952267",
+      "long_description": "595aeee2959d571b6255119efde48896",
+      "main_image_path": "ede172f537c094b47645056183a6a280",
+      "merchant_id": "3771ceeff8397cb4c7ebbd516466b978",
+      "price_cents": "dc1f837ea154688d1fcf185da86bb945",
+      "primary_category": "83ce32a1a4651376edf05ac4c8ecbd11",
+      "secondary_image_paths": "fc4a13046d7659ed39878955d18cf1c4",
+      "tags": "799675961e188b9e4a5a898d7e3f02ff",
+      "weight_grams": "5c3e9f99cb7ec2d0aa56c9bd0e391308"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_quickstart_quickstart_exports_dim_listings__0_with_offset_0\", \"spec\": \"quickstart.quickstart_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "historicalBackfill": 0,
+      "onlineSchedule": "@daily"
+    },
+    "name": "quickstart.dim_listings.v1__0",
+    "online": 1,
+    "outputNamespace": "quickstart",
+    "sourceFile": "group_bys/quickstart/dim_listings.py",
+    "team": "quickstart",
+    "version": "0"
+  },
+  "sources": [
+    {
+      "entities": {
+        "query": {
+          "selects": {
+            "brief_description": "brief_description",
+            "currency": "currency",
+            "headline": "headline",
+            "inventory_count": "inventory_count",
+            "is_active": "is_active",
+            "is_expensive": "IF(price_cents > 10000, 1, 0)",
+            "is_in_stock": "IF(inventory_count > 0, 1, 0)",
+            "listing_id": "listing_id",
+            "long_description": "long_description",
+            "main_image_path": "main_image_path",
+            "merchant_id": "merchant_id",
+            "price_cents": "price_cents",
+            "primary_category": "primary_category",
+            "secondary_image_paths": "secondary_image_paths",
+            "tags": "tags",
+            "weight_grams": "weight_grams"
+          },
+          "startPartition": "2023-11-01"
+        },
+        "snapshotTable": "quickstart.quickstart_exports_dim_listings__0"
+      }
+    }
+  ]
+}

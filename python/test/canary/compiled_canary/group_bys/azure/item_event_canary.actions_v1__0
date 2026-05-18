@@ -1,0 +1,109 @@
+{
+  "aggregations": [
+    {
+      "argMap": {},
+      "inputColumn": "add_cart",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "view",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "purchase",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "favorite",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        }
+      ]
+    }
+  ],
+  "keyColumns": [
+    "listing_id"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "add_cart_sum_1d": "eec202d0ac106e0a8bc1657478954fcb",
+      "favorite_sum_1d": "c05a21cd1801578bb3f7d7c6cf580f3c",
+      "listing_id": "cb824d0b93bc534fbfbd0454b8667e58",
+      "purchase_sum_1d": "c6c0c4f2cc8ff4746513c9e8b7f4dbc8",
+      "view_sum_1d": "ace9014ad7611148a04bd9f08f557021"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "_DATE"
+        }
+      },
+      "env": {
+        "common": {
+          "CHRONON_ONLINE_ARGS": "-Ztasks=4 -Zbootstrap=bootstrap.zipline-kafka-cluster.us-central1.managedkafka.canary-443022.cloud.goog:9092",
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "historicalBackfill": 0,
+      "onlineSchedule": "@daily"
+    },
+    "name": "azure.item_event_canary.actions_v1__0",
+    "online": 1,
+    "outputNamespace": "data",
+    "sourceFile": "group_bys/azure/item_event_canary.py",
+    "team": "azure",
+    "version": "0"
+  },
+  "sources": [
+    {
+      "events": {
+        "query": {
+          "selects": {
+            "add_cart": "IF(event_type = 'backend_add_to_cart', 1, 0)",
+            "favorite": "IF(event_type = 'backend_favorite_item2', 1, 0)",
+            "listing_id": "EXPLODE(TRANSFORM(SPLIT(COALESCE(attributes['sold_listing_ids'], attributes['listing_id']), ','), e -> CAST(e AS LONG)))",
+            "purchase": "IF(event_type = 'backend_cart_payment', 1, 0)",
+            "view": "IF(event_type = 'view_listing', 1, 0)"
+          },
+          "timeColumn": "timestamp",
+          "wheres": [
+            "event_type in ('backend_add_to_cart', 'view_listing', 'backend_cart_payment', 'backend_favorite_item2')"
+          ]
+        },
+        "table": "data.item_events_parquet_compat_partitioned",
+        "topic": "kafka://test-item-event-data/serde=custom/provider_class=ai.chronon.flink.deser.MockCustomSchemaProvider/schema_name=item_event/security.protocol=SASL_SSL/sasl.mechanism=OAUTHBEARER/sasl.login.callback.handler.class=com.google.cloud.hosted.kafka.auth.GcpLoginCallbackHandler/sasl.jaas.config=org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
+      }
+    }
+  ]
+}

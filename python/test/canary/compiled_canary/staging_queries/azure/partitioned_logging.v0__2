@@ -1,0 +1,49 @@
+{
+  "metaData": {
+    "customJson": "{\"airflowDependencies\": []}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "offlineSchedule": "@daily"
+    },
+    "name": "azure.partitioned_logging.v0__2",
+    "outputNamespace": "data",
+    "sourceFile": "staging_queries/azure/partitioned_logging.py",
+    "team": "azure",
+    "version": "2"
+  },
+  "query": "\n      SELECT\n        DATE(TIMESTAMP_MILLIS(tsMillis)) AS ds\n        , tsMillis as ts_millis\n        , BASE64(keyBytes) as key_base64\n        , BASE64(valueBytes) as value_base64\n        , joinName as name\n        , schemaHash as schema_hash\n        , keyBytes\n        , valueBytes\n      FROM data.loggable_response\n      WHERE DATE(TIMESTAMP_MILLIS(tsMillis)) BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "tableDependencies": [
+    {
+      "endOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "startOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "tableInfo": {
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
+        "table": "data.loggable_response"
+      }
+    }
+  ]
+}

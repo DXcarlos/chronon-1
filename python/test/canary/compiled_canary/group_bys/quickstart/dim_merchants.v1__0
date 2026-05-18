@@ -1,0 +1,52 @@
+{
+  "keyColumns": [
+    "merchant_id"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "merchant_id": "257c1adda98f500cbb6d8cd6cba61b4c",
+      "primary_category": "71dfddda1396b6f421bceff5fcc72ffb"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_quickstart_quickstart_exports_dim_merchants__0_with_offset_0\", \"spec\": \"quickstart.quickstart_exports_dim_merchants__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "historicalBackfill": 0,
+      "onlineSchedule": "@daily"
+    },
+    "name": "quickstart.dim_merchants.v1__0",
+    "online": 1,
+    "outputNamespace": "quickstart",
+    "sourceFile": "group_bys/quickstart/dim_merchants.py",
+    "team": "quickstart",
+    "version": "0"
+  },
+  "sources": [
+    {
+      "entities": {
+        "query": {
+          "selects": {
+            "merchant_id": "merchant_id",
+            "primary_category": "primary_category"
+          },
+          "startPartition": "2023-11-01"
+        },
+        "snapshotTable": "quickstart.quickstart_exports_dim_merchants__0"
+      }
+    }
+  ]
+}

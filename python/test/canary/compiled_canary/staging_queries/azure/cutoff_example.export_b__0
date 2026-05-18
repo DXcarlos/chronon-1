@@ -1,0 +1,52 @@
+{
+  "engineType": 2,
+  "metaData": {
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_dim_merchants_with_offset_0\", \"spec\": \"dim_merchants/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "offlineSchedule": "@daily",
+      "stepDays": 30
+    },
+    "name": "azure.cutoff_example.export_b__0",
+    "outputNamespace": "data",
+    "sourceFile": "staging_queries/azure/cutoff_example.py",
+    "team": "azure",
+    "version": "0"
+  },
+  "query": "\n    SELECT *\n    FROM dim_merchants\n    WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "tableDependencies": [
+    {
+      "endOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "startOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "tableInfo": {
+        "partitionColumn": "ds",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
+        "table": "dim_merchants"
+      }
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "engineType": 0,
+  "metaData": {
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_workspace_poc_dim_listings_nop_with_offset_0\", \"spec\": \"workspace.poc.dim_listings_nop/updated_at_ts={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      0
+    ],
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "ds"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "dev",
+          "FRONTEND_URL": "http://localhost:3000",
+          "HUB_URL": "http://localhost:3903",
+          "VERSION": "latest"
+        }
+      },
+      "offlineSchedule": "@daily"
+    },
+    "name": "aws_databricks.exports.dim_listings_non_partitioned__0",
+    "outputNamespace": "workspace_iceberg.poc",
+    "sourceFile": "staging_queries/aws_databricks/exports.py",
+    "team": "aws_databricks",
+    "version": "0"
+  },
+  "query": "\n    SELECT\n        *, DATE_FORMAT(updated_at_ts, 'yyyy-MM-dd') AS ds\n    FROM workspace.poc.dim_listings_nop\n    WHERE\n    DATE_FORMAT(updated_at_ts, 'yyyy-MM-dd') BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "tableDependencies": [
+    {
+      "endOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "startOffset": {
+        "length": 0,
+        "timeUnit": 1
+      },
+      "tableInfo": {
+        "partitionColumn": "updated_at_ts",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
+        "table": "workspace.poc.dim_listings_nop",
+        "timePartitioned": 1
+      }
+    }
+  ]
+}
