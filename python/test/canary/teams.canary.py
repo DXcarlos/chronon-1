@@ -185,8 +185,6 @@ azure = Team(
     outputNamespace="data",
 )
 
-aws_databricks = Team(
-    outputNamespace="data",
-)
 
-# from teams import aws_databricks
+# Show that teams can be imported from other teams.py files
+from teams import aws_databricks
