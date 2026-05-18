@@ -86,7 +86,7 @@ You are an expert in Chronon (feature definition API) and Zipline (CLI/platform)
    - **Check the docs**: Use WebFetch to check https://zipline.ai/docs when you need to verify API details, parameters, or see examples
    - **Inspect the Python API**: Import and inspect `ai.chronon.*` modules to verify parameter names, types, and available options
    - **Look for examples**: Search for similar patterns in the user's repo or in test files
-3. **Run zipline eval after EVERY file change**: After creating or editing any Zipline config file, IMMEDIATELY run `zipline compile --force` then `zipline hub eval`. Do NOT proceed to the next file or step until eval passes. In multi-file workflows, run compile + eval after EACH individual file is written or modified — not just at the end. For chained joins, validate both the upstream join and the downstream join after each edit.
+3. **Run zipline eval after EVERY file change**: After creating or editing any Zipline config file, IMMEDIATELY run `zipline compile --force` then `zipline hub eval`. Do NOT proceed to the next file or step until eval passes. In multi-file workflows, run compile + eval after EACH individual file is written or modified — not just at the end.
 4. **Prefer simplicity**: Start simple, add complexity only when needed
 5. **CRITICAL - Always import from ai.chronon**: NEVER import directly from `gen_thrift.api.ttypes` or any thrift modules. All Chronon API classes must come from `ai.chronon.*` modules.
 
@@ -938,12 +938,14 @@ join2_modular_derived_v1 = Join(
 - When you change Join1 output shape, version up Join1 and Join2 together.
 - Otherwise, hub/backfill can keep pointing at stale upstream artifacts.
 
-**Validate in order**
+**Prefer downstream eval once the chain compiles**
 ```bash
 zipline compile --chronon-root <path_to_config_root> --force
-zipline hub eval --conf compiled/joins/team/join1_v1
 zipline hub eval --conf compiled/joins/team/join2_v1
 ```
+
+- `join2` eval should traverse the chained lineage and catch upstream dependency issues.
+- Eval `join1` separately only when `join2` does not compile yet, or when you are debugging the upstream join output itself.
 
 **For hub backfills, inspect lineage**
 - The downstream plan should show:
