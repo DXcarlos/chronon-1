@@ -1502,12 +1502,15 @@ For custom models with `training_conf`:
 
 Chaining allows you to use a **Join** as a source for a **GroupBy**, instead of EventSource or EntitySource. This enables creating features on already-enriched data.
 
+The same `JoinSource(join=...)` primitive can also be used as the **left side of another Join**. See **When User Wants to Create a Chained Join** above when the downstream consumer is another Join rather than a GroupBy.
+
 #### What is Chaining?
 
 Instead of aggregating raw event or entity data, you can:
 1. Create a "parent" Join that combines multiple data sources
 2. Wrap that Join in a `JoinSource`
-3. Use the JoinSource in a GroupBy to aggregate the enriched data
+3. Use the JoinSource in a downstream consumer such as a GroupBy, another Join, or ModelTransforms
+4. For this section specifically, use that JoinSource in a GroupBy to aggregate the enriched data
 
 **Use cases:**
 - Aggregate on features that require multiple lookups (e.g., "last 100 listing prices viewed by user")
@@ -1657,6 +1660,7 @@ first_join = Join(
 )
 
 # Second join: Previous output + Merchant details
+# This is the same chained-join pattern described in the dedicated section above.
 second_join = Join(
     left=JoinSource(join=first_join, query=...),
     right_parts=[JoinPart(group_by=merchant_gb)],
@@ -1746,14 +1750,16 @@ After creating a chained GroupBy:
 # Compile
 zipline compile --chronon-root <path> --force
 
-# Validate
+# Validate the downstream node
 zipline hub eval --conf compiled/group_bys/team/chained_groupby.v1
 ```
 
 Check that:
-- Parent Join compiles and validates successfully
+- Parent Join compiles successfully
 - Column names match between JoinSource selects and chained GroupBy aggregations
 - Time column is correctly propagated through the chain
+
+If the downstream GroupBy eval is blocked by a compile failure or you need to inspect the upstream join output directly, eval the parent Join separately while debugging.
 
 ---
 
@@ -2371,7 +2377,7 @@ zipline hub --help
 3. **Match downstream keys**: Join2 should consume the projected names, not the pre-join raw names
 4. **Version both joins together**: If Join1 changes, version up Join2 too
 5. **Compile immediately**: `zipline compile --chronon-root <config_root> --force`
-6. **Eval immediately in order**: `zipline hub eval` Join1 first, then Join2
+6. **Eval the downstream join immediately**: `zipline hub eval` on Join2 should traverse the chained lineage; eval Join1 separately only if Join2 is not compiling yet or if you are debugging Join1 output
 7. **Inspect hub lineage**: Backfill plan should show `join2 -> join1 -> upstream dependencies`
 
 ### Debugging Null Data:
