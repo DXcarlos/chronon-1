@@ -115,15 +115,20 @@
                 "spark.sql.catalog.spark_catalog.warehouse": "abfss://crucible@ziplineai2.dfs.core.windows.net/claims-demo/warehouse",
                 "spark.sql.defaultCatalog": "spark_catalog",
                 "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-                "spark.sql.shuffle.partitions": "10"
+                "spark.sql.shuffle.partitions": "10",
+                "taskmanager.memory.process.size": "4G"
               }
             },
             "env": {
               "common": {
                 "ARTIFACT_PREFIX": "abfss://crucible@ziplineai2.dfs.core.windows.net/claims-demo/artifacts",
+                "AUTH_SCOPE": "api://dev-zipline-auth",
+                "CHRONON_ONLINE_ARGS": " -Ztasks=1 -Zbootstrap=zipline-demo-events.servicebus.windows.net:9093",
                 "CLOUD_PROVIDER": "azure",
                 "CUSTOMER_ID": "claims-demo",
                 "EVAL_URL": "http://hub.claims-demo-hub.svc.cluster.local:3903",
+                "FLINK_JARS_URI": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net/spark-3.5.3/libs/",
+                "FLINK_SASL_JAAS_CONFIG_VAULT_URI": "https://eventhub-sasl-jaas.vault.azure.net/secrets/sasl-jass-config",
                 "FLINK_STATE_URI": "abfss://crucible@ziplineai2.dfs.core.windows.net/claims-demo/flink-state",
                 "FRONTEND_URL": "http://hub.claims-demo-hub.svc.cluster.local:3903",
                 "HUB_URL": "http://hub.claims-demo-hub.svc.cluster.local:3903",
@@ -231,16 +236,21 @@
           "spark.sql.catalog.spark_catalog.warehouse": "abfss://crucible@ziplineai2.dfs.core.windows.net/claims-demo/warehouse",
           "spark.sql.defaultCatalog": "spark_catalog",
           "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-          "spark.sql.shuffle.partitions": "10"
+          "spark.sql.shuffle.partitions": "10",
+          "taskmanager.memory.process.size": "4G"
         }
       },
       "enableStatsCompute": 0,
       "env": {
         "common": {
           "ARTIFACT_PREFIX": "abfss://crucible@ziplineai2.dfs.core.windows.net/claims-demo/artifacts",
+          "AUTH_SCOPE": "api://dev-zipline-auth",
+          "CHRONON_ONLINE_ARGS": " -Ztasks=1 -Zbootstrap=zipline-demo-events.servicebus.windows.net:9093",
           "CLOUD_PROVIDER": "azure",
           "CUSTOMER_ID": "claims-demo",
           "EVAL_URL": "http://hub.claims-demo-hub.svc.cluster.local:3903",
+          "FLINK_JARS_URI": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net/spark-3.5.3/libs/",
+          "FLINK_SASL_JAAS_CONFIG_VAULT_URI": "https://eventhub-sasl-jaas.vault.azure.net/secrets/sasl-jass-config",
           "FLINK_STATE_URI": "abfss://crucible@ziplineai2.dfs.core.windows.net/claims-demo/flink-state",
           "FRONTEND_URL": "http://hub.claims-demo-hub.svc.cluster.local:3903",
           "HUB_URL": "http://hub.claims-demo-hub.svc.cluster.local:3903",

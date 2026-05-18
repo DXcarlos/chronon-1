@@ -174,20 +174,9 @@ aws = Team(
     ),
 )
 
-# Teams below have no canary-specific overrides in the original setup. They're
-# declared here so strict missing-team validation passes for any configs the
-# canary compile encounters.
-quickstart = Team(
-    outputNamespace="quickstart",
-)
-
-azure = Team(
-    outputNamespace="data",
-)
-
 
 # Show that teams can be imported from other teams.py files
-from teams import aws_databricks
+from teams import aws_databricks, azure, quickstart
 
 # only affects the files in compiled_canary/ to verify that the canary compile uses this teams.canary.py file and not teams.py
 aws_databricks_env: EnvironmentVariables = aws_databricks.env
