@@ -30,6 +30,7 @@ You are an expert in Chronon (feature definition API) and Zipline (CLI/platform)
   - Step 9.5: Streaming EntitySource Template ⭐
   - Step 10: Validate with zipline eval
 - [Adding GroupBy to Join](#when-user-wants-to-add-groupby-to-a-join)
+- [Creating Chained Join](#when-user-wants-to-create-a-chained-join) - Using `JoinSource(join=...)` as the left side of another Join
 - [Creating StagingQuery](#when-user-wants-to-create-a-stagingquery)
 - [Creating Model or ModelTransforms](#when-user-wants-to-create-a-model-or-modeltransforms) ⭐
   - Pattern A: Pre-trained model inference (embeddings)
@@ -85,7 +86,7 @@ You are an expert in Chronon (feature definition API) and Zipline (CLI/platform)
    - **Check the docs**: Use WebFetch to check https://zipline.ai/docs when you need to verify API details, parameters, or see examples
    - **Inspect the Python API**: Import and inspect `ai.chronon.*` modules to verify parameter names, types, and available options
    - **Look for examples**: Search for similar patterns in the user's repo or in test files
-3. **Run zipline eval after EVERY file change**: After creating or editing any Zipline config file, IMMEDIATELY run `zipline compile --force` then `zipline hub eval`. Do NOT proceed to the next file or step until eval passes. In multi-file workflows, run compile + eval after EACH individual file is written or modified — not just at the end.
+3. **Run zipline eval after EVERY file change**: After creating or editing any Zipline config file, IMMEDIATELY run `zipline compile --force` then `zipline hub eval`. Do NOT proceed to the next file or step until eval passes. In multi-file workflows, run compile + eval after EACH individual file is written or modified — not just at the end. For chained joins, validate both the upstream join and the downstream join after each edit.
 4. **Prefer simplicity**: Start simple, add complexity only when needed
 5. **CRITICAL - Always import from ai.chronon**: NEVER import directly from `gen_thrift.api.ttypes` or any thrift modules. All Chronon API classes must come from `ai.chronon.*` modules.
 
@@ -799,6 +800,167 @@ zipline compile --chronon-root <path_to_config_root> --force
 # Then validate
 zipline hub eval --conf compiled/joins/team/join_name.v2
 ```
+
+---
+
+### When User Wants to Create a Chained Join
+
+Use this pattern when the **left side of Join2 should come from the output of Join1** rather than from a raw EventSource or EntitySource.
+
+This is now supported directly with:
+
+```python
+JoinSource(join=upstream_join, query=Query(...))
+```
+
+#### What the Pattern Looks Like
+
+1. **Join1** starts from a normal left source and adds an intermediate key/value you need later.
+2. **Join2** uses `JoinSource(join=Join1, query=...)` as its left side.
+3. Join2 then adds more right-side features using the projected columns from Join1 output.
+
+#### Canonical Example
+
+This is the exact shape of the merged GCP canary example:
+
+```python
+from group_bys.gcp import dim_listings, latest_listing_by_user
+from staging_queries.gcp import exports
+
+from ai.chronon.types import Derivation, EventSource, Join, JoinPart, JoinSource, Query, selects
+
+source = EventSource(
+    table=exports.user_activities.table,
+    query=Query(
+        selects=selects(
+            "user_id",
+        ),
+        time_column="event_time_ms",
+    ),
+)
+
+join1_v1 = Join(
+    left=source,
+    row_ids=["user_id"],
+    right_parts=[
+        JoinPart(group_by=latest_listing_by_user.v1),
+    ],
+    version=1,
+)
+
+join2_v1 = Join(
+    left=JoinSource(
+        join=join1_v1,
+        query=Query(
+            selects=selects(
+                user_id="user_id",
+                listing_id="user_id_listing_id_last_7d",
+            ),
+            time_column="ts",
+        ),
+    ),
+    row_ids=["user_id"],
+    right_parts=[
+        JoinPart(group_by=dim_listings.v1),
+    ],
+    version=1,
+)
+```
+
+#### How to Design It
+
+**Step 1: Keep Join1 narrow**
+- Join1 should usually carry only the left IDs/time columns plus the new field(s) you want to expose downstream.
+- A common pattern is: `user_id + ts` on the left, then add `listing_id` from a temporal GroupBy.
+
+**Step 2: Project explicit columns from Join1**
+- In Join2's `JoinSource`, always spell out the fields you want to carry forward.
+- Do not rely on implicit passthrough here; make the projection obvious.
+
+```python
+JoinSource(
+    join=join1_v1,
+    query=Query(
+        selects=selects(
+            user_id="user_id",
+            listing_id="user_id_listing_id_last_7d",
+        ),
+        time_column="ts",
+    ),
+)
+```
+
+**Step 3: Match Join2 right-side keys to the projected names**
+- If Join2 is joining listing features, its left source must expose `listing_id`.
+- Remember that Join1 output column names usually come from the upstream key prefixing convention:
+  - `{key}_{feature_name}`
+  - Example: `user_id_listing_id_last_7d`
+
+**Step 4: Use derivations in Join1 only when they simplify Join2**
+- If Join1 needs a renamed or cleaned-up field, define a derivation there and project that derived field from Join2.
+- This is especially useful for modular joins.
+
+```python
+join1_modular_derived_v1 = Join(
+    left=source,
+    row_ids=["user_id"],
+    right_parts=[JoinPart(group_by=latest_listing_by_user.v1)],
+    derivations=[
+        Derivation(
+            name="derived_listing_id",
+            expression="user_id_listing_id_last_7d",
+        ),
+    ],
+    modular_execution=True,
+    version=1,
+)
+
+join2_modular_derived_v1 = Join(
+    left=JoinSource(
+        join=join1_modular_derived_v1,
+        query=Query(
+            selects=selects(
+                user_id="user_id",
+                listing_id="derived_listing_id",
+            ),
+            time_column="ts",
+        ),
+    ),
+    row_ids=["user_id"],
+    right_parts=[JoinPart(group_by=dim_listings.v1)],
+    version=1,
+)
+```
+
+#### Important Validation Rules
+
+**Version both hops together**
+- When you change Join1 output shape, version up Join1 and Join2 together.
+- Otherwise, hub/backfill can keep pointing at stale upstream artifacts.
+
+**Validate in order**
+```bash
+zipline compile --chronon-root <path_to_config_root> --force
+zipline hub eval --conf compiled/joins/team/join1_v1
+zipline hub eval --conf compiled/joins/team/join2_v1
+```
+
+**For hub backfills, inspect lineage**
+- The downstream plan should show:
+  - `join2 -> join1 -> staging/groupby dependencies`
+- If the plan only shows Join2's right side and not Join1 lineage, treat that as a compile/versioning problem first.
+
+#### When to Prefer This Over a StagingQuery
+
+Use a chained Join when:
+- the intermediate field is naturally produced by a Join/GroupBy combination
+- you want Chronon lineage, eval, and backfill planning to understand the dependency graph
+- you expect to reuse Join1 independently
+
+Use a StagingQuery instead when:
+- you need arbitrary SQL over many tables
+- the intermediate transformation is mostly ETL rather than feature enrichment
+- the Join/GroupBy abstraction becomes harder to read than a single SQL step
 
 ---
 
@@ -2200,6 +2362,15 @@ zipline hub --help
 4. **Consider derivations**: Any cross-feature calculations?
 5. **Compile immediately**: `zipline compile --chronon-root <config_root> --force` — run right after editing the file
 6. **Eval immediately**: `zipline hub eval --conf compiled/joins/...` — run right after compiling. Do NOT skip or defer this step.
+
+### Creating a Chained Join:
+1. **Build Join1 first**: Start from a normal left source and add the field you want to expose downstream
+2. **Project Join1 output explicitly**: Use `JoinSource(join=join1, query=Query(selects=..., time_column="ts"))`
+3. **Match downstream keys**: Join2 should consume the projected names, not the pre-join raw names
+4. **Version both joins together**: If Join1 changes, version up Join2 too
+5. **Compile immediately**: `zipline compile --chronon-root <config_root> --force`
+6. **Eval immediately in order**: `zipline hub eval` Join1 first, then Join2
+7. **Inspect hub lineage**: Backfill plan should show `join2 -> join1 -> upstream dependencies`
 
 ### Debugging Null Data:
 1. **Check timestamps**: Both in milliseconds?
