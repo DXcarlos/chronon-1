@@ -38,7 +38,13 @@ logger = logging.getLogger(__name__)
 
 
 def _env_string_to_enum(env_str: str) -> int:
-    """Convert environment string to enum value."""
+    """Convert environment string to enum value.
+
+    The local compile system supports arbitrary `teams.<env>.py` files, but the
+    hub wire protocol still only understands the Thrift `Environment` enum
+    (PROD/CANARY). Adding a new env that can round-trip through the hub means
+    extending `thrift/api.thrift:Environment` + the hub server + this map +
+    the `click.Choice` lists below in lockstep."""
     env_map = {
         'prod': Environment.PROD,
         'canary': Environment.CANARY,
@@ -107,10 +113,11 @@ def _resolve_data_type_kinds(obj):
 
 def team_metadata_conf(team: str = "default", env: str = 'prod') -> str:
     """Path to a team's compiled metadata thriftjson, scoped to the compile
-    output folder selected by `env`. Mirrors the dual-folder layout produced
-    by `zipline compile`: `prod` → `compiled/`, `canary` → `canary_compiled/`.
-    Unknown values fall back to prod."""
-    folder = "canary_compiled" if env and env.lower() == "canary" else "compiled"
+    output folder selected by `env`. Mirrors the per-env layout produced by
+    `zipline compile`: `prod` → `compiled/`, any other <env> → `compiled_<env>/`
+    (matching teams.<env>.py). Empty / falsy env defaults to prod."""
+    e = (env or "prod").lower()
+    folder = "compiled" if e == "prod" else f"compiled_{e}"
     return f"{folder}/teams_metadata/{team}/{team}_team_metadata"
 
 
@@ -119,11 +126,16 @@ def default_team_metadata_conf(env: str = 'prod') -> str:
 
 
 def _env_from_conf_path(conf: str) -> str:
-    """Infer the compile env from a conf path. A path that lives under
-    `canary_compiled/` targets canary; anything else targets prod. Lets
-    conf-path-taking commands stay env-aware without making the user pass an
-    explicit `--env` flag that has to agree with the path they typed."""
-    return "canary" if "canary_compiled" in os.path.normpath(conf).split(os.sep) else "prod"
+    """Infer the compile env from a conf path. A path under `compiled/` targets
+    prod; a path under `compiled_<env>/` targets `<env>`. Lets conf-path-taking
+    commands stay env-aware without making the user pass an explicit `--env`
+    flag that has to agree with the path they typed."""
+    for part in os.path.normpath(conf).split(os.sep):
+        if part == "compiled":
+            return "prod"
+        if part.startswith("compiled_"):
+            return part[len("compiled_"):]
+    return "prod"
 
 
 def print_env_banner(env: str, format: Format = Format.TEXT) -> None:
@@ -131,10 +143,11 @@ def print_env_banner(env: str, format: Format = Format.TEXT) -> None:
     Suppressed in JSON mode so stdout stays machine-readable."""
     if format == Format.JSON:
         return
-    if env and env.lower() == "canary":
-        console.rule("[bold cyan]🐤 RUNNING AGAINST CANARY ENVIRONMENT[/]")
-    else:
+    e = (env or "prod").lower()
+    if e == "prod":
         console.rule("[bold magenta]🚀 RUNNING AGAINST PROD ENVIRONMENT[/]")
+    else:
+        console.rule(f"[bold cyan]🐤 RUNNING AGAINST {e.upper()} ENVIRONMENT[/]")
 
 
 @dataclass
@@ -383,15 +396,14 @@ def redeploy_streaming(repo, confs, hub_url=None, use_auth=True, format: Format 
         )
 
     # All confs in a single redeploy must come from the same compile env
-    # (mixing prod and canary in one call would hash against the wrong folder
-    # for half of them).
+    # (mixing envs in one call would hash against the wrong folder for some).
     conf_envs = [_env_from_conf_path(c) for c in confs]
     if len(set(conf_envs)) > 1:
         mismatches = "\n".join(
             f"  {conf}: {env}" for conf, env in zip(confs, conf_envs, strict=True)
         )
         raise ValueError(
-            f"All confs must come from the same compile environment, but found a mix of prod and canary:\n{mismatches}"
+            f"All confs must come from the same compile environment, but found a mix:\n{mismatches}"
         )
     env = conf_envs[0] if conf_envs else "prod"
 

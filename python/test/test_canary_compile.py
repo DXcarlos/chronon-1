@@ -1,7 +1,12 @@
 """End-to-end `zipline compile` checks against the canary confs.
 
 These don't require a cluster — they just exercise the compile CLI locally and
-assert post-conditions on the compiled thriftjson under `canary/compiled/`.
+assert post-conditions on the compiled thriftjson under `canary/compiled/` and
+`canary/compiled_canary/`. The two trees are produced by two separate compile
+passes: prod reads `teams.py`, canary reads `teams.canary.py`. Strict
+isolation is enforced at the file boundary, so a sentinel set in one teams
+file must never appear in the output of the other.
+
 Kept in the unit suite (not `test/integration/`) so PR CI runs them via
 `./mill python.test`; the integration suite only runs post-merge via
 `push_to_canary.yaml` and filters to `-k test_run_quickstart`.
@@ -130,18 +135,18 @@ def test_team_default_placeholder_resolves_through_cross_config_table_refs(canar
     )
 
 
-# Sentinel values embedded in the `gcp` Team in python/test/canary/teams.py.
-# Used by the leak-isolation tests below to verify prod and canary compile
-# passes read from disjoint Team-field sets.
+# Sentinel values embedded in the `gcp` Team in python/test/canary/teams.py
+# (prod) and python/test/canary/teams.canary.py (canary). The leak-isolation
+# tests below assert that each compile pass reads from exactly one teams file.
 _PROD_ONLY_SENTINELS = (
-    "prod-only-sentinel-value-9b8a7c",       # env.common
-    "prod-only-conf-sentinel-4f5a6b",        # conf.common
-    "prod-only-cluster-sentinel-2e3f4a",     # clusterConf.modeClusterConfigs
+    "prod-only-sentinel-value-9b8a7c",       # env.common in teams.py
+    "prod-only-conf-sentinel-4f5a6b",        # conf.common in teams.py
+    "prod-only-cluster-sentinel-2e3f4a",     # clusterConf in teams.py
 )
 _CANARY_ONLY_SENTINELS = (
-    "canary-only-sentinel-value-1d2e3f",     # canaryEnv.common
-    "canary-only-conf-sentinel-7c8d9e",      # canaryConf.common
-    "canary-only-cluster-sentinel-5b6c7d",   # canaryClusterConf.modeClusterConfigs
+    "canary-only-sentinel-value-1d2e3f",     # env.common in teams.canary.py
+    "canary-only-conf-sentinel-7c8d9e",      # conf.common in teams.canary.py
+    "canary-only-cluster-sentinel-5b6c7d",   # clusterConf in teams.canary.py
 )
 
 
@@ -161,29 +166,29 @@ def _find_sentinels_in_tree(root_dir, needles):
 
 
 def test_canary_compile_emits_canary_folder(canary):
-    """A `zipline compile` invocation must produce `canary_compiled/` alongside
+    """A `zipline compile` invocation must produce `compiled_canary/` alongside
     `compiled/`. The folder layout mirrors `compiled/` (per-conf-type subdirs
     plus `teams_metadata/`)."""
     _compile_canary(canary)
 
-    canary_compiled = os.path.join(canary, "canary_compiled")
-    assert os.path.isdir(canary_compiled), f"Expected canary_compiled/ at {canary_compiled}"
+    compiled_canary = os.path.join(canary, "compiled_canary")
+    assert os.path.isdir(compiled_canary), f"Expected compiled_canary/ at {compiled_canary}"
 
     # At minimum the team-metadata folder should exist (every team writes one).
-    assert os.path.isdir(os.path.join(canary_compiled, "teams_metadata")), (
-        "canary_compiled/teams_metadata/ missing — team-metadata pass didn't run for canary"
+    assert os.path.isdir(os.path.join(compiled_canary, "teams_metadata")), (
+        "compiled_canary/teams_metadata/ missing — team-metadata pass didn't run for canary"
     )
 
 
 def test_gcp_join_compiles_to_both_folders_when_team_has_both_configs(canary):
-    """The headline scenario: a Join authored under `joins/gcp/` whose Team in
-    `teams.py` defines both prod and canary trios must land in both output
-    folders with distinct `executionInfo` reflecting the right trio."""
+    """The headline scenario: a Join authored under `joins/gcp/` whose Team is
+    defined in both `teams.py` and `teams.canary.py` must land in both output
+    folders with distinct `executionInfo` reflecting the right teams file."""
     _compile_canary(canary)
 
     relpath = "joins/gcp/training_set.v1_dev__0"
     prod_path = os.path.join(canary, "compiled", relpath)
-    canary_path = os.path.join(canary, "canary_compiled", relpath)
+    canary_path = os.path.join(canary, "compiled_canary", relpath)
 
     assert os.path.exists(prod_path), f"Expected prod output at {prod_path}"
     assert os.path.exists(canary_path), f"Expected canary output at {canary_path}"
@@ -194,15 +199,14 @@ def test_gcp_join_compiles_to_both_folders_when_team_has_both_configs(canary):
     prod_env = prod_payload["metaData"]["executionInfo"]["env"]["common"]
     canary_env = canary_payload["metaData"]["executionInfo"]["env"]["common"]
 
-    # Prod env carries the prod-only sentinel; canary env carries the canary-only sentinel.
     assert prod_env.get("PROD_ONLY_SENTINEL_GCP") == "prod-only-sentinel-value-9b8a7c", (
-        f"prod executionInfo.env should reflect Team.env, got {prod_env}"
+        f"prod executionInfo.env should reflect teams.py's gcp.env, got {prod_env}"
     )
     assert "CANARY_ONLY_SENTINEL_GCP" not in prod_env, (
         f"prod executionInfo.env leaked canary value: {prod_env}"
     )
     assert canary_env.get("CANARY_ONLY_SENTINEL_GCP") == "canary-only-sentinel-value-1d2e3f", (
-        f"canary executionInfo.env should reflect Team.canaryEnv, got {canary_env}"
+        f"canary executionInfo.env should reflect teams.canary.py's gcp.env, got {canary_env}"
     )
     assert "PROD_ONLY_SENTINEL_GCP" not in canary_env, (
         f"canary executionInfo.env leaked prod value: {canary_env}"
@@ -210,11 +214,11 @@ def test_gcp_join_compiles_to_both_folders_when_team_has_both_configs(canary):
 
 
 def test_canary_team_metadata_uses_canary_fields(canary):
-    """The gcp `_team_metadata` file in `canary_compiled/` should reflect Team.canaryEnv/
-    canaryConf/canaryClusterConf (not the prod fields)."""
+    """The gcp `_team_metadata` file in `compiled_canary/` should reflect the
+    gcp Team in `teams.canary.py` (not the one in `teams.py`)."""
     _compile_canary(canary)
 
-    path = os.path.join(canary, "canary_compiled/teams_metadata/gcp/gcp_team_metadata")
+    path = os.path.join(canary, "compiled_canary/teams_metadata/gcp/gcp_team_metadata")
     assert os.path.exists(path), f"Expected canary gcp team metadata at {path}"
 
     payload = json.loads(open(path).read())
@@ -228,46 +232,44 @@ def test_canary_team_metadata_uses_canary_fields(canary):
 
 
 def test_canary_team_without_canary_fields_inherits_default(canary):
-    """A team that doesn't set its own canary fields still gets a team-metadata
-    file in `canary_compiled/`. Its `executionInfo` reflects only what the
-    `default` team's canary fields provide (or is empty if default has none)."""
+    """A team declared in `teams.canary.py` with no env/conf of its own still
+    gets a team-metadata file in `compiled_canary/`. Its `executionInfo`
+    reflects what the `default` team in `teams.canary.py` provides."""
     _compile_canary(canary)
 
-    # `test` team in python/test/canary/teams.py has no canary fields of its own.
-    # `default` has canaryEnv with VERSION/CUSTOMER_ID/FRONTEND_URL/HUB_URL and
-    # canaryConf with spark.chronon.partition.column.
-    path = os.path.join(canary, "canary_compiled/teams_metadata/test/test_team_metadata")
+    # `test` team in teams.canary.py has no env/conf of its own. `default` in
+    # teams.canary.py has env with VERSION/CUSTOMER_ID/FRONTEND_URL/HUB_URL and
+    # conf with spark.chronon.partition.column.
+    path = os.path.join(canary, "compiled_canary/teams_metadata/test/test_team_metadata")
     assert os.path.exists(path), f"Expected canary test team metadata at {path}"
 
     payload = json.loads(open(path).read())
     exec_info = payload.get("executionInfo", {})
     env_common = exec_info.get("env", {}).get("common", {}) if exec_info.get("env") else {}
 
-    # Inherited from default.canaryEnv but NOT carrying any gcp prod or canary sentinel.
     assert "PROD_ONLY_SENTINEL_GCP" not in env_common
     assert "CANARY_ONLY_SENTINEL_GCP" not in env_common
-    # Default-team canary inheritance is present.
     assert env_common.get("VERSION") == "latest"
 
 
-def test_no_leak_prod_fields_into_canary_compiled(canary):
-    """Strict isolation: nothing under canary_compiled/ should contain any
-    prod-only sentinel value from `gcp` Team. Proves the canary compile pass
-    reads only canary trio fields."""
+def test_no_leak_prod_fields_into_compiled_canary(canary):
+    """Strict isolation: nothing under compiled_canary/ should contain any
+    prod-only sentinel value from `gcp` Team in `teams.py`. Proves the canary
+    compile pass loads only `teams.canary.py`."""
     _compile_canary(canary)
 
-    canary_compiled = os.path.join(canary, "canary_compiled")
-    hits = _find_sentinels_in_tree(canary_compiled, _PROD_ONLY_SENTINELS)
+    compiled_canary = os.path.join(canary, "compiled_canary")
+    hits = _find_sentinels_in_tree(compiled_canary, _PROD_ONLY_SENTINELS)
     assert not hits, (
-        "Prod-only Team values leaked into canary_compiled/:\n"
+        "Prod-only Team values leaked into compiled_canary/:\n"
         + "\n".join(f"  {rel} contains {needle!r}" for rel, needle in hits)
     )
 
 
 def test_no_leak_canary_fields_into_compiled(canary):
     """Strict isolation: nothing under compiled/ should contain any canary-only
-    sentinel value from `gcp` Team. Proves the prod compile pass reads only
-    prod trio fields."""
+    sentinel value from `gcp` Team in `teams.canary.py`. Proves the prod
+    compile pass loads only `teams.py`."""
     _compile_canary(canary)
 
     compiled = os.path.join(canary, "compiled")

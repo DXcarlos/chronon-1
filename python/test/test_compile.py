@@ -21,7 +21,7 @@ from gen_thrift.common.ttypes import ExecutionInfo
 
 from ai.chronon.cli.compile import parse_configs
 from ai.chronon.cli.compile.compile_context import CONFIG_INFOS, CompileContext
-from ai.chronon.cli.compile.parse_teams import CompileMode, update_metadata
+from ai.chronon.cli.compile.parse_teams import PROD_ENV, PROD_TEAMS_FILE, update_metadata
 from ai.chronon.repo.compile import __compile, compile
 from ai.chronon.utils import OUTPUT_NAMESPACE_PLACEHOLDER
 
@@ -81,7 +81,8 @@ def test_parse_configs_relative_source_file():
     mock_compile_context.validator.validate_obj.return_value = []
     mock_compile_context.compile_status = MagicMock()
     mock_compile_context.seen_obj_ids = set()
-    mock_compile_context.mode = CompileMode.PROD
+    mock_compile_context.env = PROD_ENV
+    mock_compile_context.teams_file_name = PROD_TEAMS_FILE
 
     # Configure mocks
     with patch('ai.chronon.cli.compile.parse_configs.from_file') as mock_from_file, \
