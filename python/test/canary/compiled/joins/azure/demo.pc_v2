@@ -25,7 +25,7 @@
             "weight_grams": "f8f34e81434169852c03e62a335c20aa"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "conf": {
@@ -176,7 +176,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_dim_listings_pc__1_with_offset_0\", \"spec\": \"data.azure_exports_dim_listings_pc__1/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "conf": {

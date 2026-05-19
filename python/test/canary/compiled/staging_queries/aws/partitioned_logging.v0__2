@@ -2,7 +2,7 @@
   "metaData": {
     "customJson": "{\"airflowDependencies\": []}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "clusterConf": {

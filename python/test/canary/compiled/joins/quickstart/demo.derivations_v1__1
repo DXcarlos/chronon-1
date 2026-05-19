@@ -47,7 +47,7 @@
             "weight_grams": "5c3e9f99cb7ec2d0aa56c9bd0e391308"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "conf": {
@@ -628,7 +628,7 @@
             "view_event_sum_7d": "62a8793addff23c7d8079961a8a07320"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "conf": {
@@ -918,7 +918,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_quickstart_quickstart_exports_user_activities__0_with_offset_0\", \"spec\": \"quickstart.quickstart_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_quickstart_quickstart_exports_dim_listings__0_with_offset_0\", \"spec\": \"quickstart.quickstart_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "conf": {

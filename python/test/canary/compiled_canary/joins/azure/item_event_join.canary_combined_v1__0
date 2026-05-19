@@ -60,7 +60,7 @@
             "view_sum_1d": "10afd70aaef55fd280157c808724d63a"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "conf": {
@@ -227,7 +227,7 @@
             "user_id": "2a2caca3ea4afb84a2271533b1a1bae1"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "conf": {
@@ -338,7 +338,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "conf": {

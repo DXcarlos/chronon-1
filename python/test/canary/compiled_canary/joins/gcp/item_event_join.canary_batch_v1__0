@@ -86,7 +86,7 @@
             "user_id": "a406c2de0040b2e926dba6334f299281"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "clusterConf": {
@@ -220,7 +220,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_purchases_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_import_v1__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "clusterConf": {

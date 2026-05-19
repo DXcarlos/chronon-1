@@ -2,7 +2,7 @@
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_test_connection_with_offset_0\", \"spec\": \"data.test_connection/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "conf": {

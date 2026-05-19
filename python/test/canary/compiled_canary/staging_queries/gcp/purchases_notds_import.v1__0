@@ -3,7 +3,7 @@
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_notds_with_offset_0\", \"spec\": \"data.purchases_notds/notds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "clusterConf": {

@@ -38,11 +38,12 @@ zipline hub schedule-all --cloud aws
 `schedule-all` deploys against a single compile environment at a time. `--env` selects which env's compiled output to read and which configs to deploy:
 
 ```bash
-zipline hub schedule-all --cloud aws --env prod    # default — reads compiled/
-zipline hub schedule-all --cloud aws --env canary  # reads compiled_canary/
+zipline hub schedule-all --cloud aws --env prod     # default — reads compiled/
+zipline hub schedule-all --cloud aws --env canary   # reads compiled_canary/
+zipline hub schedule-all --cloud aws --env staging  # any lowercase env name works
 ```
 
-The `--env` value must match a `teams.<env>.py` file that exists at compile time (see the [Compile section in `python/README.md`](https://github.com/zipline-ai/chronon/blob/main/python/README.md) for multi-env compile setup). The hub command resolves to the corresponding `compiled_<env>/` folder.
+`--env` is free-form: any lowercase identifier is accepted. The value must match a `teams.<env>.py` file that exists at compile time (see the [Compile section in `python/README.md`](https://github.com/zipline-ai/chronon/blob/main/python/README.md) for multi-env compile setup). The hub command resolves to the corresponding `compiled_<env>/` folder.
 
 #### Per-entity opt-in with `environments=[...]`
 
@@ -55,7 +56,7 @@ GroupBy(
 )
 ```
 
-`schedule-all` reads `metaData.environments` from each compiled conf and skips any entity whose list doesn't contain the target env. Behavior matrix:
+`environments=` accepts any lowercase identifier (e.g. `'prod'`, `'canary'`, `'staging'`) — no closed allowlist. `schedule-all` reads `metaData.environments` from each compiled conf and skips any entity whose list doesn't contain the target env. Behavior matrix:
 
 | `environments=` value     | `--env prod` (default) | `--env canary` |
 |---------------------------|------------------------|----------------|

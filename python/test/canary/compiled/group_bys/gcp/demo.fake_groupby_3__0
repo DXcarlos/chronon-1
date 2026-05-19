@@ -22,7 +22,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_some_table_with_offset_0\", \"spec\": \"some-table/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "clusterConf": {

@@ -3,7 +3,7 @@
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_checkouts_with_offset_0\", \"spec\": \"checkouts/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "conf": {

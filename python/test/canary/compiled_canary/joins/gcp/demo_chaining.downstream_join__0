@@ -26,7 +26,7 @@
             "user_id": "e3d702eb6c23558f50233c39f7718309"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "clusterConf": {
@@ -122,7 +122,7 @@
                       ],
                       "metaData": {
                         "environments": [
-                          0
+                          "prod"
                         ],
                         "executionInfo": {
                           "clusterConf": {
@@ -255,7 +255,7 @@
                 },
                 "metaData": {
                   "environments": [
-                    0
+                    "prod"
                   ],
                   "executionInfo": {
                     "clusterConf": {
@@ -386,7 +386,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "clusterConf": {

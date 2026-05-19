@@ -86,7 +86,7 @@
             "user_id": "dec6601a613992b4b6cdc50ac8014a29"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "clusterConf": {
@@ -235,7 +235,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "clusterConf": {

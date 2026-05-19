@@ -31,25 +31,10 @@ from ai.chronon.repo.auth import get_user_email
 from ai.chronon.repo.constants import VALID_CLOUDS, RunMode
 from ai.chronon.repo.utils import print_possible_confs, upload_to_blob_store
 from ai.chronon.repo.zipline_hub import ZiplineHub
-from gen_thrift.api.ttypes import DataKind, Environment
+from gen_thrift.api.ttypes import DataKind
 from gen_thrift.planner.ttypes import Mode
 
 logger = logging.getLogger(__name__)
-
-
-def _env_string_to_enum(env_str: str) -> int:
-    """Convert environment string to enum value.
-
-    The local compile system supports arbitrary `teams.<env>.py` files, but the
-    hub wire protocol still only understands the Thrift `Environment` enum
-    (PROD/CANARY). Adding a new env that can round-trip through the hub means
-    extending `thrift/api.thrift:Environment` + the hub server + this map +
-    the `click.Choice` lists below in lockstep."""
-    env_map = {
-        'prod': Environment.PROD,
-        'canary': Environment.CANARY,
-    }
-    return env_map.get(env_str.lower(), Environment.PROD)
 
 
 def _validate_at_most_daily_schedule(schedule_expression: str) -> Optional[str]:
@@ -489,17 +474,17 @@ def submit_schedule_all(
     skipped_confs = []
     env_filtered_confs = []
 
-    # Convert env string to enum value for comparison
-    env_enum = _env_string_to_enum(env)
+    env_normalized = (env or "prod").lower()
 
     for name, conf in conf_name_to_obj_dict.items():
         try:
-            # Check if conf's environments field includes the specified env
+            # Check if conf's environments field includes the specified env.
+            # `environments` is a list of lowercase strings (e.g. ["prod",
+            # "canary"]); a conf with no explicit field defaults to prod-only.
             metadata_map = get_metadata_map(conf.localPath)
-            conf_environments = metadata_map.get("environments", [Environment.PROD])
+            conf_environments = metadata_map.get("environments", ["prod"])
 
-            # Skip confs that don't match the specified environment
-            if env_enum not in conf_environments:
+            if env_normalized not in conf_environments:
                 env_filtered_confs.append(name)
                 continue
 
@@ -842,7 +827,7 @@ def schedule(
 @click.option(
     "--env",
     help="Environment to deploy schedules for (only schedules confs whose environments field includes this value)",
-    type=click.Choice(['prod', 'canary'], case_sensitive=False),
+    type=str,
     default='prod',
     show_default=True,
 )
@@ -910,7 +895,7 @@ def schedule_all(
 @click.option(
     "--env",
     help="Compile environment whose default team metadata supplies the hub config.",
-    type=click.Choice(['prod', 'canary'], case_sensitive=False),
+    type=str,
     default='prod',
     show_default=True,
 )
@@ -1265,7 +1250,7 @@ def eval(
 @click.option(
     "--env",
     help="Compile environment whose team/default metadata supplies the hub config.",
-    type=click.Choice(['prod', 'canary'], case_sensitive=False),
+    type=str,
     default='prod',
     show_default=True,
 )
@@ -1372,7 +1357,7 @@ def eval_table(
 @click.option(
     "--env",
     help="Compile environment whose team/default metadata supplies the hub config.",
-    type=click.Choice(['prod', 'canary'], case_sensitive=False),
+    type=str,
     default='prod',
     show_default=True,
 )

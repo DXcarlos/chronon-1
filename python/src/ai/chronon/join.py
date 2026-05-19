@@ -410,7 +410,7 @@ def Join(
     # Initialize and validate environments
     if environments is None:
         environments = ['prod']
-    environments = utils.convert_environments_to_enum(environments)
+    environments = utils.normalize_environments(environments)
 
     assert version is None or isinstance(version, int), (
         f"Version must be an integer or None, but found {type(version).__name__}"

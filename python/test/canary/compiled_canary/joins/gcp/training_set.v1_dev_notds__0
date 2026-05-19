@@ -86,7 +86,7 @@
             "user_id": "659acfa58500e1f693d923b698c6e4c9"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "clusterConf": {
@@ -220,7 +220,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_checkouts_notds_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_checkouts_notds_import_v1__0/notds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_purchases_notds_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_notds_import_v1__0/notds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "clusterConf": {

@@ -34,30 +34,24 @@ ANY_SOURCE_TYPE = Union[
 chronon_root_path = ""  # passed from compile.py
 
 
-def convert_environments_to_enum(environments: List[str]) -> List[int]:
-    """Convert environment strings to enum values with validation.
+_ENV_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
-    Args:
-        environments: List of environment strings ('prod', 'canary', case-insensitive)
 
-    Returns:
-        List of Environment enum integer values
-
-    Raises:
-        ValueError: If any environment string is not 'prod' or 'canary'
-    """
-    env_map = {
-        'prod': api.Environment.PROD,
-        'canary': api.Environment.CANARY,
-    }
+def normalize_environments(environments: List[str]) -> List[str]:
+    """Validate and normalize the user-facing `environments=` list authored on
+    a GroupBy/Join/StagingQuery. Lowercase form (e.g. 'prod', 'canary',
+    'staging') so it lines up with `teams.<env>.py` discovery in
+    `parse_teams.discover_compile_envs`. No allowlist — adding a new env is
+    purely a matter of dropping in a teams.<env>.py file."""
     result = []
     for env in environments:
         env_lower = env.lower()
-        if env_lower not in env_map:
+        if not _ENV_NAME_RE.match(env_lower):
             raise ValueError(
-                f"Invalid environment '{env}'. Must be one of: {list(env_map.keys())}"
+                f"Invalid environment '{env}'. Must be lowercase, start with "
+                f"a letter, and contain only letters, digits, and underscores."
             )
-        result.append(env_map[env_lower])
+        result.append(env_lower)
     return result
 
 
