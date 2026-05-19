@@ -645,7 +645,7 @@ def GroupBy(
     # Initialize and validate environments
     if environments is None:
         environments = ['prod']
-    environments = utils.normalize_environments(environments)
+    environments = utils.convert_environments_to_enum(environments)
 
     assert sources, "Sources are not specified"
 

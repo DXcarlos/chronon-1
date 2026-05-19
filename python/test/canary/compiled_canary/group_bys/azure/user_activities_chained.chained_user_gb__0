@@ -24,7 +24,7 @@
     },
     "customJson": "{\"airflowDependencies\": []}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "conf": {
@@ -94,7 +94,7 @@
                 ],
                 "metaData": {
                   "environments": [
-                    "prod"
+                    0
                   ],
                   "executionInfo": {
                     "conf": {
@@ -199,7 +199,7 @@
           },
           "metaData": {
             "environments": [
-              "prod"
+              0
             ],
             "executionInfo": {
               "conf": {

@@ -3,7 +3,7 @@
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo__user_activities__with_offset_0\", \"spec\": \"demo.`user-activities`/_PARTITIONTIME={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "clusterConf": {

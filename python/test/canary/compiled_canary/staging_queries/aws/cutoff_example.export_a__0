@@ -3,7 +3,7 @@
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo_dim_listings_with_offset_0\", \"spec\": \"demo.dim_listings/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "clusterConf": {

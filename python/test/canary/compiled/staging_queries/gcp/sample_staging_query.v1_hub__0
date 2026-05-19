@@ -2,7 +2,7 @@
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_v1_hub__0_with_offset_1\", \"spec\": \"data.gcp_training_set_v1_hub__0/ds={{ macros.ds_add(ds, -1) }}\"}]}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "clusterConf": {

@@ -60,7 +60,7 @@
             "view_sum_1d": "d4bc995b2e1955c153a0d1d78927f07c"
           },
           "environments": [
-            "prod"
+            0
           ],
           "executionInfo": {
             "clusterConf": {
@@ -254,7 +254,7 @@
             "user_id": "a406c2de0040b2e926dba6334f299281"
           },
           "environments": [
-            "prod"
+            0
           ],
           "executionInfo": {
             "clusterConf": {
@@ -392,7 +392,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_purchases_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_import_v1__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "clusterConf": {

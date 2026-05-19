@@ -284,10 +284,10 @@ enum EngineType {
 
 }
 
-// The `environments` field on MetaData is a list of free-form lowercase env
-// names (e.g. "prod", "canary", "staging") matching the teams.<env>.py files
-// that exist in the user's repo. Kept as strings rather than an enum so adding
-// a new deployment env doesn't require an api.thrift change.
+enum Environment {
+    PROD = 0,
+    CANARY = 1,
+}
 
 /**
 * contains configs params that don't change the contents of the output.
@@ -334,7 +334,7 @@ struct MetaData {
     // users can put anything they want in here, but the compiler shouldn't
     103: optional string customJson
 
-    104: optional list<string> environments
+    104: optional list<Environment> environments
 
     // enable job to compute consistency metrics
     200: optional bool consistencyCheck

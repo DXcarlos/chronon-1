@@ -19,6 +19,7 @@ from rich.text import Text
 
 from ai.chronon.cli.formatter import Format
 from ai.chronon.repo.hub_runner import get_conf_type, hub, redeploy_streaming
+from gen_thrift.api.ttypes import Environment
 
 
 def _plain(text: str) -> str:
@@ -638,7 +639,7 @@ class TestHubRunner:
         # Both confs have prod environments and real schedules — both must be
         # submitted. Mocked because the localPaths above are fake.
         mock_get_metadata_map.return_value = {
-            "environments": ["prod"],
+            "environments": [Environment.PROD],
             "executionInfo": {"offlineSchedule": "@daily"},
         }
         mock_get_schedule_modes.return_value = ScheduleModes(
@@ -976,11 +977,11 @@ class TestHubRunner:
         # Set up environments for each conf
         def get_metadata_side_effect(path):
             if "prod" in path:
-                return {"environments": ["prod"], "executionInfo": {"offlineSchedule": "@daily"}}
+                return {"environments": [Environment.PROD], "executionInfo": {"offlineSchedule": "@daily"}}
             elif "canary" in path:
-                return {"environments": ["canary"], "executionInfo": {"offlineSchedule": "@daily"}}
+                return {"environments": [Environment.CANARY], "executionInfo": {"offlineSchedule": "@daily"}}
             elif "both" in path:
-                return {"environments": ["prod", "canary"], "executionInfo": {"offlineSchedule": "@daily"}}
+                return {"environments": [Environment.PROD, Environment.CANARY], "executionInfo": {"offlineSchedule": "@daily"}}
             return {}
 
         mock_get_metadata_map.side_effect = get_metadata_side_effect
@@ -1056,11 +1057,11 @@ class TestHubRunner:
 
         def get_metadata_side_effect(path):
             if "prod" in path:
-                return {"environments": ["prod"], "executionInfo": {"offlineSchedule": "@daily"}}
+                return {"environments": [Environment.PROD], "executionInfo": {"offlineSchedule": "@daily"}}
             elif "canary" in path:
-                return {"environments": ["canary"], "executionInfo": {"offlineSchedule": "@daily"}}
+                return {"environments": [Environment.CANARY], "executionInfo": {"offlineSchedule": "@daily"}}
             elif "both" in path:
-                return {"environments": ["prod", "canary"], "executionInfo": {"offlineSchedule": "@daily"}}
+                return {"environments": [Environment.PROD, Environment.CANARY], "executionInfo": {"offlineSchedule": "@daily"}}
             return {}
 
         mock_get_metadata_map.side_effect = get_metadata_side_effect
@@ -1197,7 +1198,7 @@ class TestHubRunner:
         mock_compute_diffs.return_value = {}
 
         mock_get_metadata_map.return_value = {
-            "environments": ["prod"],
+            "environments": [Environment.PROD],
             "executionInfo": {"offlineSchedule": "@daily"}
         }
 
@@ -1264,121 +1265,158 @@ class TestHubRunner:
 
     @patch('ai.chronon.repo.hub_runner.submit_schedule_all')
     @patch('ai.chronon.click_helpers.__compile')
-    def test_schedule_all_command_accepts_arbitrary_env(
+    def test_schedule_all_command_rejects_invalid_env(
         self,
         mock_compile,
         mock_submit_schedule_all,
         canary,
     ):
-        """The schedule-all `--env` flag is free-form — any lowercase identifier
-        is accepted at the CLI layer and forwarded to submit_schedule_all. The
-        actual filter happens downstream by reading compiled_<env>/ and the
-        per-conf `environments` field. Used to be a click.Choice locked to
-        prod/canary; relaxed when metaData.environments moved from enum to
-        list<string>."""
+        """Test that schedule-all command rejects invalid --env values."""
         mock_compile.return_value = ({}, False, {"added": [], "changed": [], "deleted": []})
 
         runner = CliRunner()
+
+        # Test with invalid env value
         result = self._run_and_print(runner, hub, [
             'schedule-all',
             '--repo', canary,
             '--cloud', 'gcp',
             '--no-use-auth',
-            '--env', 'staging',
+            '--env', 'invalid',
         ])
-        assert result.exit_code == 0
-        call_kwargs = mock_submit_schedule_all.call_args[1]
-        assert call_kwargs['env'] == 'staging'
+
+        # Should fail with exit code 2 (invalid option)
+        assert result.exit_code == 2
+        assert "Invalid value for '--env'" in result.output or "'invalid' is not one of" in result.output
+
+        # submit_schedule_all should NOT be called
+        mock_submit_schedule_all.assert_not_called()
 
 
 class TestEnvironmentValidation:
-    """Test environment string normalization on authored configs.
-
-    `environments=` is a free-form lowercase identifier per entry — the field
-    just needs to match a `teams.<env>.py` at compile time. Validation is
-    shape-only (lowercase, identifier-charset); no closed allowlist."""
+    """Test environment string validation in API functions."""
 
     def test_join_accepts_valid_environments(self):
-        """Join accepts arbitrary lowercase env names and stores them as
-        strings on metaData.environments."""
+        """Test that Join accepts 'prod' and 'canary' strings."""
         from ai.chronon.join import Join
         from ai.chronon.query import Query
         from gen_thrift.api.ttypes import EventSource, Source
 
         left = Source(events=EventSource(table="test.table", query=Query(selects={"a": "a"})))
 
-        join = Join(left=left, right_parts=[], row_ids="id", environments=['prod'])
-        assert join.metaData.environments == ['prod']
+        # Should not raise for valid environments
+        join = Join(
+            left=left,
+            right_parts=[],
+            row_ids="id",
+            environments=['prod']
+        )
+        assert join.metaData.environments == [0]  # Environment.PROD
 
-        join = Join(left=left, right_parts=[], row_ids="id", environments=['canary'])
-        assert join.metaData.environments == ['canary']
+        join = Join(
+            left=left,
+            right_parts=[],
+            row_ids="id",
+            environments=['canary']
+        )
+        assert join.metaData.environments == [1]  # Environment.CANARY
 
-        join = Join(left=left, right_parts=[], row_ids="id", environments=['prod', 'canary'])
-        assert join.metaData.environments == ['prod', 'canary']
+        join = Join(
+            left=left,
+            right_parts=[],
+            row_ids="id",
+            environments=['prod', 'canary']
+        )
+        assert join.metaData.environments == [0, 1]
 
-        # Arbitrary new envs work without any schema change — this is the point
-        # of moving from enum to string.
-        join = Join(left=left, right_parts=[], row_ids="id", environments=['staging'])
-        assert join.metaData.environments == ['staging']
+        # Test case insensitivity
+        join = Join(
+            left=left,
+            right_parts=[],
+            row_ids="id",
+            environments=['PROD', 'Canary']
+        )
+        assert join.metaData.environments == [0, 1]
 
-        # Case insensitivity: input is normalized to lowercase.
-        join = Join(left=left, right_parts=[], row_ids="id", environments=['PROD', 'Canary'])
-        assert join.metaData.environments == ['prod', 'canary']
-
-    def test_join_rejects_malformed_environment(self):
-        """Names that aren't lowercase identifier-shaped are rejected — guards
-        against typos like leading digits, hyphens, or empty strings landing
-        in metaData.environments."""
+    def test_join_rejects_invalid_environment(self):
+        """Test that Join raises ValueError for invalid environment strings."""
         from ai.chronon.join import Join
         from ai.chronon.query import Query
         from gen_thrift.api.ttypes import EventSource, Source
+        import pytest
 
         left = Source(events=EventSource(table="test.table", query=Query(selects={"a": "a"})))
 
-        for bad in ['foo-bar', '1env', '', 'has space']:
-            with pytest.raises(ValueError, match=f"Invalid environment '{bad}'"):
-                Join(left=left, right_parts=[], row_ids="id", environments=[bad])
+        with pytest.raises(ValueError) as exc_info:
+            Join(
+                left=left,
+                right_parts=[],
+                row_ids="id",
+                environments=['invalid']
+            )
+        assert "Invalid environment 'invalid'" in str(exc_info.value)
+        assert "Must be one of: ['prod', 'canary']" in str(exc_info.value)
 
-    def test_group_by_rejects_malformed_environment(self):
+    def test_group_by_rejects_invalid_environment(self):
+        """Test that GroupBy raises ValueError for invalid environment strings."""
         from ai.chronon.group_by import GroupBy
         from ai.chronon.query import Query
         from gen_thrift.api.ttypes import EventSource, Source
+        import pytest
 
         source = Source(events=EventSource(table="test.table", query=Query(selects={"a": "a"})))
 
-        with pytest.raises(ValueError, match="Invalid environment 'My-Env'"):
-            GroupBy(sources=[source], keys=['a'], aggregations=None, environments=['My-Env'])
+        with pytest.raises(ValueError) as exc_info:
+            GroupBy(
+                sources=[source],
+                keys=['a'],
+                aggregations=None,
+                environments=['staging']
+            )
+        assert "Invalid environment 'staging'" in str(exc_info.value)
 
-    def test_staging_query_rejects_malformed_environment(self):
+    def test_staging_query_rejects_invalid_environment(self):
+        """Test that StagingQuery raises ValueError for invalid environment strings."""
         from ai.chronon.staging_query import StagingQuery
+        import pytest
 
-        with pytest.raises(ValueError, match="Invalid environment ''"):
-            StagingQuery(query="SELECT * FROM table", environments=[''])
+        with pytest.raises(ValueError) as exc_info:
+            StagingQuery(
+                query="SELECT * FROM table",
+                environments=['dev']
+            )
+        assert "Invalid environment 'dev'" in str(exc_info.value)
 
-    def test_model_rejects_malformed_environment(self):
+    def test_model_rejects_invalid_environment(self):
+        """Test that Model raises ValueError for invalid environment strings."""
         from ai.chronon.model import Model
+        import pytest
 
-        with pytest.raises(ValueError, match="Invalid environment '2025-prod'"):
-            Model(version="v1", environments=['2025-prod'])
+        with pytest.raises(ValueError) as exc_info:
+            Model(
+                version="v1",
+                environments=['test']
+            )
+        assert "Invalid environment 'test'" in str(exc_info.value)
 
-    def test_utils_normalize_environments(self):
-        """`normalize_environments` lowercases each entry and validates the
-        shape — no allowlist, so adding `teams.staging.py` is enough to make
-        `environments=['staging']` work end-to-end."""
-        from ai.chronon.utils import normalize_environments
+    def test_utils_convert_environments_to_enum(self):
+        """Test the shared utils.convert_environments_to_enum function."""
+        from ai.chronon.utils import convert_environments_to_enum
+        from gen_thrift.api.ttypes import Environment
+        import pytest
 
-        assert normalize_environments(['prod']) == ["prod"]
-        assert normalize_environments(['canary']) == ["canary"]
-        assert normalize_environments(['prod', 'canary']) == ["prod", "canary"]
-        # Arbitrary new envs are valid.
-        assert normalize_environments(['staging']) == ["staging"]
-        assert normalize_environments(['dev']) == ["dev"]
+        # Test valid inputs
+        assert convert_environments_to_enum(['prod']) == [Environment.PROD]
+        assert convert_environments_to_enum(['canary']) == [Environment.CANARY]
+        assert convert_environments_to_enum(['prod', 'canary']) == [Environment.PROD, Environment.CANARY]
 
-        # Case insensitivity.
-        assert normalize_environments(['PROD']) == ["prod"]
-        assert normalize_environments(['Canary']) == ["canary"]
-        assert normalize_environments(['PrOd', 'CaNaRy']) == ["prod", "canary"]
+        # Test case insensitivity
+        assert convert_environments_to_enum(['PROD']) == [Environment.PROD]
+        assert convert_environments_to_enum(['Canary']) == [Environment.CANARY]
+        assert convert_environments_to_enum(['PrOd', 'CaNaRy']) == [Environment.PROD, Environment.CANARY]
 
-        # Shape validation: must be a lowercase identifier.
-        with pytest.raises(ValueError, match="Invalid environment 'foo-bar'"):
-            normalize_environments(['foo-bar'])
+        # Test invalid input
+        with pytest.raises(ValueError) as exc_info:
+            convert_environments_to_enum(['staging'])
+        assert "Invalid environment 'staging'" in str(exc_info.value)
+        assert "Must be one of: ['prod', 'canary']" in str(exc_info.value)

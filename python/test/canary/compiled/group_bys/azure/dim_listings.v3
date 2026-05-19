@@ -23,7 +23,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.azure_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "conf": {

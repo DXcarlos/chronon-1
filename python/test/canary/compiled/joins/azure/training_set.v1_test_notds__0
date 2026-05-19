@@ -86,7 +86,7 @@
             "user_id": "81dd6ad753af4f7bb8411902a7e9b861"
           },
           "environments": [
-            "prod"
+            0
           ],
           "executionInfo": {
             "conf": {
@@ -194,7 +194,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_notds_with_offset_0\", \"spec\": \"data.checkouts_notds/notds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_purchases_notds_with_offset_0\", \"spec\": \"data.purchases_notds/notds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "conf": {

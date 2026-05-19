@@ -211,7 +211,7 @@ def Model(
     # Initialize and validate environments
     if environments is None:
         environments = ['prod']
-    environments = utils.normalize_environments(environments)
+    environments = utils.convert_environments_to_enum(environments)
 
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()
@@ -285,7 +285,7 @@ def ModelTransforms(
     # Initialize and validate environments
     if environments is None:
         environments = ['prod']
-    environments = utils.normalize_environments(environments)
+    environments = utils.convert_environments_to_enum(environments)
 
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()

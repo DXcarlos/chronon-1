@@ -12,7 +12,7 @@
   },
   "metaData": {
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "clusterConf": {

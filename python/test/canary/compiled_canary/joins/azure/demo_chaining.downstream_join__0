@@ -26,7 +26,7 @@
             "user_id": "4ecdf09ef20508785edf01ab40f381ed"
           },
           "environments": [
-            "prod"
+            0
           ],
           "executionInfo": {
             "conf": {
@@ -95,7 +95,7 @@
                       ],
                       "metaData": {
                         "environments": [
-                          "prod"
+                          0
                         ],
                         "executionInfo": {
                           "conf": {
@@ -200,7 +200,7 @@
                 },
                 "metaData": {
                   "environments": [
-                    "prod"
+                    0
                   ],
                   "executionInfo": {
                     "conf": {
@@ -304,7 +304,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_user_activities__0_with_offset_0\", \"spec\": \"data.azure_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "conf": {

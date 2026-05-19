@@ -31,7 +31,7 @@
   },
   "metaData": {
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "clusterConf": {
@@ -143,7 +143,7 @@
       },
       "metaData": {
         "environments": [
-          "prod"
+          0
         ],
         "executionInfo": {
           "clusterConf": {
@@ -319,7 +319,7 @@
                 ],
                 "metaData": {
                   "environments": [
-                    "prod"
+                    0
                   ],
                   "executionInfo": {
                     "clusterConf": {
@@ -767,7 +767,7 @@
                 ],
                 "metaData": {
                   "environments": [
-                    "prod"
+                    0
                   ],
                   "executionInfo": {
                     "clusterConf": {
@@ -896,8 +896,8 @@
           },
           "metaData": {
             "environments": [
-              "prod",
-              "canary"
+              0,
+              1
             ],
             "executionInfo": {
               "clusterConf": {

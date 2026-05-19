@@ -103,7 +103,7 @@
             "weight_grams_last": "5b19e9ed87508482695b4e3606acfa97"
           },
           "environments": [
-            "prod"
+            0
           ],
           "executionInfo": {
             "clusterConf": {
@@ -613,7 +613,7 @@
             "view_event_sum_7d": "f597dd2f8e5d672fbac0445fb935469b"
           },
           "environments": [
-            "prod"
+            0
           ],
           "executionInfo": {
             "clusterConf": {
@@ -822,7 +822,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listing_mutations__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listing_mutations__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "clusterConf": {
