@@ -33,6 +33,39 @@ Schedules all configs based on their versions in the `main`/`master` branch. Thi
 zipline hub schedule-all --cloud aws
 ```
 
+#### Targeting an environment with `--env`
+
+`schedule-all` deploys against a single compile environment at a time. `--env` selects which env's compiled output to read and which configs to deploy:
+
+```bash
+zipline hub schedule-all --cloud aws --env prod    # default — reads compiled/
+zipline hub schedule-all --cloud aws --env canary  # reads compiled_canary/
+```
+
+The `--env` value must match a `teams.<env>.py` file that exists at compile time (see the [Compile section in `python/README.md`](https://github.com/zipline-ai/chronon/blob/main/python/README.md) for multi-env compile setup). The hub command resolves to the corresponding `compiled_<env>/` folder.
+
+#### Per-entity opt-in with `environments=[...]`
+
+By default, every `GroupBy`/`Join`/`StagingQuery` is scheduled only under `--env prod`. To opt an entity into additional envs, set `environments=` at authoring time:
+
+```python
+GroupBy(
+    ...
+    environments=['prod', 'canary'],  # scheduled by both prod and canary deploys
+)
+```
+
+`schedule-all` reads `metaData.environments` from each compiled conf and skips any entity whose list doesn't contain the target env. Behavior matrix:
+
+| `environments=` value     | `--env prod` (default) | `--env canary` |
+|---------------------------|------------------------|----------------|
+| `['prod']`                | ✓ scheduled            | ✗ skipped      |
+| `['canary']`              | ✗ skipped              | ✓ scheduled    |
+| `['prod', 'canary']`      | ✓ scheduled            | ✓ scheduled    |
+| omitted (defaults to prod)| ✓ scheduled            | ✗ skipped      |
+
+The default (prod-only) is intentional: a config running on production data never accidentally rolls out to canary clusters until you explicitly add `'canary'` to its `environments` list.
+
 ## Scheduled Jobs by Entity Type
 
 ### GroupBy
