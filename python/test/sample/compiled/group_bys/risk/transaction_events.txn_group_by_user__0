@@ -44,7 +44,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_txn_events_with_offset_0\", \"spec\": \"data.txn_events/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "conf": {

@@ -19,7 +19,7 @@
             "user_id": "7b923bd0f046b45fd998c185c7eba2cc"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "conf": {
@@ -115,7 +115,7 @@
                       ],
                       "metaData": {
                         "environments": [
-                          0
+                          "prod"
                         ],
                         "executionInfo": {
                           "conf": {
@@ -215,7 +215,7 @@
                       ],
                       "metaData": {
                         "environments": [
-                          0
+                          "prod"
                         ],
                         "executionInfo": {
                           "conf": {
@@ -311,7 +311,7 @@
                   "consistencyCheck": 1,
                   "consistencySamplePercent": 5.0,
                   "environments": [
-                    0
+                    "prod"
                   ],
                   "executionInfo": {
                     "conf": {
@@ -418,7 +418,7 @@
     "consistencySamplePercent": 5.0,
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_sample_namespace_sample_table_group_by_with_offset_0\", \"spec\": \"sample_namespace.sample_table_group_by/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "conf": {

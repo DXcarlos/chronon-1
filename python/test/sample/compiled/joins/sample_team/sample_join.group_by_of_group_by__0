@@ -20,7 +20,7 @@
             "s2CellId": "1181a5371beed4745dda564b319b9cb9"
           },
           "environments": [
-            0
+            "prod"
           ],
           "executionInfo": {
             "conf": {
@@ -122,7 +122,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_sample_namespace_sample_team_sample_staging_query_v1__0_with_offset_0\", \"spec\": \"sample_namespace.sample_team_sample_staging_query_v1__0/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_sample_namespace_sample_team_sample_group_by_group_by_require_backfill__0_with_offset_0\", \"spec\": \"sample_namespace.sample_team_sample_group_by_group_by_require_backfill__0/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      0
+      "prod"
     ],
     "executionInfo": {
       "conf": {
