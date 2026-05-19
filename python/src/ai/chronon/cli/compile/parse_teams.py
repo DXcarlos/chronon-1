@@ -122,6 +122,14 @@ def load_teams(
         f"Team config file: {teams_file} not found. You might be running this from the wrong directory."
     )
 
+    # Drop any stale `teams` / `teams_<env>` modules from sys.modules before
+    # exec'ing this teams file. teams.<env>.py can do `from teams import …` to
+    # reuse prod definitions, and that import must resolve via sys.path against
+    # chronon_root — not via a cached entry left over from a previous compile
+    # invocation or from a sibling test's tmpdir.
+    for cached in [n for n in list(sys.modules) if n == "teams" or n.startswith("teams_")]:
+        del sys.modules[cached]
+
     team_module = import_module_from_file(teams_file)
 
     assert team_module is not None, (

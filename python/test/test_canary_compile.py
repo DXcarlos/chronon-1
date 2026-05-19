@@ -278,3 +278,96 @@ def test_no_leak_canary_fields_into_compiled(canary):
         "Canary-only Team values leaked into compiled/:\n"
         + "\n".join(f"  {rel} contains {needle!r}" for rel, needle in hits)
     )
+
+
+# The tests below exercise the `from teams import …` pattern in teams.canary.py.
+# A canary teams file only needs to redefine the teams that actually differ
+# from prod; for teams that match prod, importing them satisfies strict
+# missing-team without duplicating the whole definition. Mutating an imported
+# Team's env is a clean way to layer canary-only overrides (e.g. extra env
+# vars) on top of the prod baseline.
+#
+# Layout in python/test/canary/teams.canary.py:
+#   from teams import aws_databricks, azure, quickstart
+#   aws_databricks.env.common['DATABRICKS_EXTRA'] = 'DATABRICKS_EXTRA_1'
+
+
+# (team, relpath under compiled_canary/) tuples covering one config per
+# imported team. Confirms strict missing-team validation is satisfied for
+# teams declared via `from teams import …` rather than redefined.
+_IMPORTED_TEAM_CONFIGS = [
+    ("aws_databricks", "compiled_canary/staging_queries/aws_databricks/exports.dim_listings__0"),
+    ("azure", "compiled_canary/group_bys/azure/dim_listings.v3"),
+    ("quickstart", "compiled_canary/group_bys/quickstart/dim_listings.v1__0"),
+]
+
+
+@pytest.mark.parametrize("team,relpath", _IMPORTED_TEAM_CONFIGS)
+def test_imported_team_configs_compile_under_canary(canary, team, relpath):
+    """A team that's brought into `teams.canary.py` purely via
+    `from teams import <team>` (no redefinition) must satisfy the strict
+    missing-team check, and its configs must land in compiled_canary/. This
+    is the headline ergonomic — `teams.canary.py` only redeclares the teams
+    that diverge from prod."""
+    _compile_canary(canary)
+
+    path = os.path.join(canary, relpath)
+    assert os.path.exists(path), (
+        f"Expected canary output at {relpath} — team {team!r} was imported "
+        f"from teams.py but its configs didn't compile under canary."
+    )
+
+
+def test_canary_mutation_to_imported_team_lands_in_canary_only(canary):
+    """When teams.canary.py mutates an imported Team (e.g.
+    `aws_databricks.env.common['DATABRICKS_EXTRA'] = …`), the mutation must
+    appear in compiled_canary/ but NOT in compiled/. The prod pass re-loads
+    teams.py from scratch via import_module_from_file's exec_module call, so
+    each pass owns an isolated copy of the prod Team objects."""
+    _compile_canary(canary)
+
+    canary_meta = json.loads(
+        open(os.path.join(
+            canary, "compiled_canary/teams_metadata/aws_databricks/aws_databricks_team_metadata"
+        )).read()
+    )
+    prod_meta = json.loads(
+        open(os.path.join(
+            canary, "compiled/teams_metadata/aws_databricks/aws_databricks_team_metadata"
+        )).read()
+    )
+
+    canary_env_common = canary_meta["executionInfo"]["env"]["common"]
+    prod_env_common = prod_meta["executionInfo"]["env"]["common"]
+
+    assert canary_env_common.get("DATABRICKS_EXTRA") == "DATABRICKS_EXTRA_1", (
+        f"Expected canary aws_databricks env.common['DATABRICKS_EXTRA'] == "
+        f"'DATABRICKS_EXTRA_1', got {canary_env_common.get('DATABRICKS_EXTRA')!r}. "
+        "The teams.canary.py mutation didn't take effect on the canary compile."
+    )
+    assert "DATABRICKS_EXTRA" not in prod_env_common, (
+        f"DATABRICKS_EXTRA leaked into prod's aws_databricks team_metadata: "
+        f"{prod_env_common.get('DATABRICKS_EXTRA')!r}. The canary mutation was "
+        "supposed to be isolated by import_module_from_file re-execing teams.py."
+    )
+
+
+def test_canary_mutation_propagates_to_owning_team_configs(canary):
+    """The canary mutation on `aws_databricks.env.common` must propagate into
+    every config owned by aws_databricks, not just the team-metadata file.
+    Catches a regression where Team-level env merge silently skips
+    user-mutated entries."""
+    _compile_canary(canary)
+
+    canary_sq = json.loads(open(os.path.join(
+        canary, "compiled_canary/staging_queries/aws_databricks/exports.dim_listings__0"
+    )).read())
+    prod_sq = json.loads(open(os.path.join(
+        canary, "compiled/staging_queries/aws_databricks/exports.dim_listings__0"
+    )).read())
+
+    canary_env_common = canary_sq["metaData"]["executionInfo"]["env"]["common"]
+    prod_env_common = prod_sq["metaData"]["executionInfo"]["env"]["common"]
+
+    assert canary_env_common.get("DATABRICKS_EXTRA") == "DATABRICKS_EXTRA_1"
+    assert "DATABRICKS_EXTRA" not in prod_env_common

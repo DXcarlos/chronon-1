@@ -49,16 +49,17 @@ def compile(chronon_root, ignore_python_errors=False, format=Format.TEXT, force=
     if chronon_root is None or chronon_root == "":
         chronon_root = os.getcwd()
 
-    if chronon_root not in sys.path:
-        if format != Format.JSON:
-            console.print(
-                f"\nAdding [{STYLE_INFO} italic]{chronon_root}[/{STYLE_INFO} italic] to python path, during compile."
-            )
-        sys.path.insert(0, chronon_root)
-    elif format != Format.JSON:
+    # Always move chronon_root to the front of sys.path. teams.<env>.py files
+    # can do `from teams import …` to reuse prod team definitions, and that
+    # import has to resolve to chronon_root/teams.py — not to some other
+    # teams.py sitting on sys.path from an earlier compile or test fixture.
+    if chronon_root in sys.path:
+        sys.path.remove(chronon_root)
+    if format != Format.JSON:
         console.print(
-            f"\n[{STYLE_INFO} italic]{chronon_root}[/{STYLE_INFO} italic] already on python path."
+            f"\nAdding [{STYLE_INFO} italic]{chronon_root}[/{STYLE_INFO} italic] to python path, during compile."
         )
+    sys.path.insert(0, chronon_root)
 
     compiled_result, has_errors, _ = __compile(chronon_root=chronon_root, ignore_python_errors=ignore_python_errors, format=format, force=force, dry_run=dry_run)
 
