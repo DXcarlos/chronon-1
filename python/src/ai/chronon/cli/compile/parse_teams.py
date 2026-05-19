@@ -57,6 +57,17 @@ def discover_compile_envs(conf_root: str) -> List[Tuple[str, str]]:
         m = _TEAMS_ENV_RE.match(basename)
         if not m:
             continue
+        # `teams.prod.py` would collide with the canonical `teams.py` entry
+        # appended below — both would target env "prod" and write to compiled/.
+        # Fail loudly so the user renames one of them rather than silently
+        # losing whichever pass ran first.
+        if m.group(1) == PROD_ENV:
+            raise ValueError(
+                f"Found {basename} at {conf_root}: env name '{PROD_ENV}' is "
+                f"reserved for the canonical {PROD_TEAMS_FILE} file. Rename "
+                f"{basename} to teams.<other-env>.py (e.g. teams.staging.py) "
+                f"or remove it."
+            )
         envs.append((m.group(1), basename))
     envs.sort()
     envs.append((PROD_ENV, PROD_TEAMS_FILE))

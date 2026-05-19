@@ -241,19 +241,29 @@ def customer_id_option(func):
     )(func)
 
 
+_CONF_FOLDER_TO_HUB_TYPE = {
+    "joins": "joins",
+    "staging_queries": "stagingqueries",
+    "group_bys": "groupbys",
+    "models": "models",
+    "model_transforms": "modeltransforms",
+}
+
+
 def get_conf_type(conf):
-    if "compiled/joins" in conf:
-        return "joins"
-    elif "compiled/staging_queries" in conf:
-        return "stagingqueries"
-    elif "compiled/group_by" in conf:
-        return "groupbys"
-    elif "compiled/models" in conf:
-        return "models"
-    elif "compiled/model_transforms" in conf:
-        return "modeltransforms"
-    else:
-        raise ValueError(f"Unsupported conf type: {conf}")
+    """Infer the hub conf-type from a conf path under any env's output dir.
+    Mirrors `_env_from_conf_path` in walking path components so both
+    `compiled/joins/...` (prod) and `compiled_<env>/joins/...` (canary etc.)
+    resolve to the same hub conf-type."""
+    parts = os.path.normpath(conf).split(os.sep)
+    for i, part in enumerate(parts):
+        if part == "compiled" or part.startswith("compiled_"):
+            if i + 1 < len(parts):
+                folder = parts[i + 1]
+                if folder in _CONF_FOLDER_TO_HUB_TYPE:
+                    return _CONF_FOLDER_TO_HUB_TYPE[folder]
+            break
+    raise ValueError(f"Unsupported conf type: {conf}")
 
 
 #### Common click options
@@ -521,11 +531,17 @@ def submit_schedule_all(
             skipped_confs.append(name)
 
     if not confs_with_schedules:
-        message_parts = [f"No changed confs with schedules found for environment '{env}'."]
+        message_parts = [
+            f"No confs with schedules found among loaded confs for environment '{env}'."
+        ]
         if env_filtered_confs:
-            message_parts.append(f"{len(env_filtered_confs)} conf(s) filtered out due to environment mismatch.")
+            message_parts.append(
+                f"{len(env_filtered_confs)} conf(s) filtered out due to environment mismatch."
+            )
         if skipped_confs:
-            message_parts.append(f"{len(skipped_confs)} conf(s) changed but have no schedules defined.")
+            message_parts.append(
+                f"{len(skipped_confs)} loaded conf(s) have no schedules defined."
+            )
         print_info(" ".join(message_parts), format=format)
         return
 

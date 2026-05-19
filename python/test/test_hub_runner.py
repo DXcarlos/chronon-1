@@ -18,13 +18,42 @@ from click.testing import CliRunner
 from rich.text import Text
 
 from ai.chronon.cli.formatter import Format
-from ai.chronon.repo.hub_runner import hub, redeploy_streaming
+from ai.chronon.repo.hub_runner import get_conf_type, hub, redeploy_streaming
 from gen_thrift.api.ttypes import Environment
 
 
 def _plain(text: str) -> str:
     """Strip ANSI escape sequences using Rich's own parser."""
     return Text.from_ansi(text).plain
+
+@pytest.mark.parametrize("conf,expected", [
+    # prod paths (under compiled/)
+    ("compiled/joins/team/x__0", "joins"),
+    ("compiled/staging_queries/team/x__0", "stagingqueries"),
+    ("compiled/group_bys/team/x__0", "groupbys"),
+    ("compiled/models/team/x__1.0", "models"),
+    ("compiled/model_transforms/team/x__1", "modeltransforms"),
+    # canary paths (under compiled_canary/) — these used to raise before the
+    # path-component fix, since the substring "compiled/joins" doesn't match
+    # "compiled_canary/joins/...".
+    ("compiled_canary/joins/team/x__0", "joins"),
+    ("compiled_canary/staging_queries/team/x__0", "stagingqueries"),
+    ("compiled_canary/group_bys/team/x__0", "groupbys"),
+    # arbitrary env name (any compiled_<env> prefix should work)
+    ("compiled_staging/joins/team/x__0", "joins"),
+    # absolute paths
+    ("/abs/repo/compiled_canary/joins/team/x__0", "joins"),
+])
+def test_get_conf_type_handles_per_env_output_dirs(conf, expected):
+    """get_conf_type must work for any compiled_<env>/ folder, not just
+    compiled/, otherwise canary-targeted hub commands fail with ValueError."""
+    assert get_conf_type(conf) == expected
+
+
+def test_get_conf_type_rejects_unknown_folder():
+    with pytest.raises(ValueError, match="Unsupported conf type"):
+        get_conf_type("compiled_canary/widgets/team/x")
+
 
 class TestHubRunner:
     """Test cases for hub_runner backfill command."""

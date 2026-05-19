@@ -21,7 +21,12 @@ from gen_thrift.common.ttypes import ExecutionInfo
 
 from ai.chronon.cli.compile import parse_configs
 from ai.chronon.cli.compile.compile_context import CONFIG_INFOS, CompileContext
-from ai.chronon.cli.compile.parse_teams import PROD_ENV, PROD_TEAMS_FILE, update_metadata
+from ai.chronon.cli.compile.parse_teams import (
+    PROD_ENV,
+    PROD_TEAMS_FILE,
+    discover_compile_envs,
+    update_metadata,
+)
 from ai.chronon.repo.compile import __compile, compile
 from ai.chronon.utils import OUTPUT_NAMESPACE_PLACEHOLDER
 
@@ -61,6 +66,34 @@ def test_compile_azure_resources(azure_resources):
     sys.path.insert(0, azure_resources)
     results = __compile(chronon_root=azure_resources, ignore_python_errors=True)
     assert len(results) != 0
+
+def test_discover_compile_envs_rejects_teams_prod_py_collision(tmp_path):
+    """`teams.prod.py` would collide with the canonical `teams.py` entry — both
+    would target env_name=='prod' and write to compiled/. Discovery must fail
+    loudly so the user renames one of them rather than silently losing whichever
+    pass ran first."""
+    (tmp_path / "teams.py").write_text("# prod teams")
+    (tmp_path / "teams.prod.py").write_text("# would collide")
+
+    with pytest.raises(ValueError, match=r"teams\.prod\.py.*reserved"):
+        discover_compile_envs(str(tmp_path))
+
+
+def test_discover_compile_envs_ordering(tmp_path):
+    """Discovery returns non-prod envs sorted, with prod appended last so its
+    confirm-prompt isn't sandwiched between sibling envs' output."""
+    (tmp_path / "teams.py").write_text("# prod")
+    (tmp_path / "teams.canary.py").write_text("# canary")
+    (tmp_path / "teams.staging.py").write_text("# staging")
+
+    envs = discover_compile_envs(str(tmp_path))
+
+    assert envs == [
+        ("canary", "teams.canary.py"),
+        ("staging", "teams.staging.py"),
+        (PROD_ENV, PROD_TEAMS_FILE),
+    ]
+
 
 def test_parse_configs_relative_source_file():
     """Test that sourceFile is stored as a path relative to chronon_root."""
@@ -111,6 +144,75 @@ def test_parse_configs_relative_source_file():
     expected_relative_path = "group_bys/team/test_group_by.py"
     assert results[0].obj.metaData.sourceFile == expected_relative_path
     assert not results[0].obj.metaData.sourceFile.startswith("/")  # Should be relative, not absolute
+
+
+def test_print_compile_summary_dry_run_branch(capsys):
+    """The dry-run summary line must say 'output not written' even when the
+    pass had zero errors. compiler.py deletes the staging dir without moving
+    anything on disk under --dry-run, so reporting 'N written' would be a lie."""
+    from ai.chronon.repo.compile import _print_compile_summary
+
+    _print_compile_summary([
+        {
+            "name": "prod",
+            "ok": True,
+            "compile_dir": "compiled",
+            "parsed_count": 42,
+            "error_count": 0,
+            "output_written": False,  # dry-run sets this False even when ok
+        },
+    ])
+
+    out = " ".join(capsys.readouterr().out.split())
+    assert "42 parsed (dry-run, output not written)" in out, out
+    assert "42 written" not in out, out
+
+
+def test_print_compile_summary_ignore_python_errors_branch(capsys):
+    """--ignore-python-errors forces the staging→output move even with errors,
+    so the summary should report 'written' alongside the error count."""
+    from ai.chronon.repo.compile import _print_compile_summary
+
+    _print_compile_summary([
+        {
+            "name": "canary",
+            "ok": False,
+            "compile_dir": "compiled_canary",
+            "parsed_count": 5,
+            "error_count": 2,
+            "output_written": True,
+        },
+    ])
+
+    out = " ".join(capsys.readouterr().out.split())
+    assert "5 written" in out
+    assert "2 error(s)" in out
+    assert "--ignore-python-errors" in out
+
+
+def test_print_compile_summary_failed_no_write_branch(capsys):
+    """A failed pass without --ignore-python-errors discards the staging dir.
+    Summary must say so explicitly so the user knows compiled_<env>/ wasn't
+    refreshed."""
+    from ai.chronon.repo.compile import _print_compile_summary
+
+    _print_compile_summary([
+        {
+            "name": "canary",
+            "ok": False,
+            "compile_dir": "compiled_canary",
+            "parsed_count": 165,
+            "error_count": 1,
+            "output_written": False,
+        },
+    ])
+
+    # Collapse rich's terminal-width wrapping so substring checks are stable
+    # across CI environments with different stty cols.
+    out = " ".join(capsys.readouterr().out.split())
+    assert "output not written" in out
+    assert "165 parsed and discarded" in out
+    assert "1 error(s)" in out
 
 
 def test_compile_with_json_format(canary):

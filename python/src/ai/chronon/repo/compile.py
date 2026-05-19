@@ -114,7 +114,10 @@ def __compile(
         env_has_errors = compiler.has_compilation_errors()
         any_errors |= env_has_errors
         parsed_count, error_count = _count_env_results(compiler)
-        output_written = (not env_has_errors) or ignore_python_errors
+        # dry_run always deletes the staging dir without moving it to output_dir
+        # (compiler.py:115-118), so nothing lands on disk regardless of errors
+        # or --ignore-python-errors.
+        output_written = (not dry_run) and ((not env_has_errors) or ignore_python_errors)
         env_summaries.append(
             {
                 "name": env_name,
@@ -183,8 +186,11 @@ def _print_compile_summary(env_summaries):
     dir_width = max(len(s["compile_dir"]) for s in env_summaries)
     for s in env_summaries:
         status = "[bold green]✓ OK    [/]" if s["ok"] else "[bold red]✗ FAILED[/]"
-        if s["ok"]:
+        if s["ok"] and s["output_written"]:
             detail = f"{s['parsed_count']} written"
+        elif s["ok"]:
+            # dry-run path: parsed cleanly, but nothing was written to disk.
+            detail = f"{s['parsed_count']} parsed (dry-run, output not written)"
         elif s["output_written"]:
             # `--ignore-python-errors` forces the move even with errors.
             detail = (
