@@ -590,6 +590,7 @@ class TestHubRunner:
         # Verify call_schedule_all_api was NOT called since all confs have no schedules
         mock_hub_instance.call_schedule_all_api.assert_not_called()
 
+    @patch('ai.chronon.repo.hub_runner.get_metadata_map')
     @patch('ai.chronon.repo.hub_runner.get_schedule_modes')
     @patch('ai.chronon.repo.hub_runner.hub_uploader.compute_and_upload_diffs')
     @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
@@ -602,6 +603,7 @@ class TestHubRunner:
         mock_build_hashmap,
         mock_compute_diffs,
         mock_get_schedule_modes,
+        mock_get_metadata_map,
         canary,
     ):
         """Confs with schedules should be deployed even if they aren't in the diff."""
@@ -623,17 +625,23 @@ class TestHubRunner:
             localPath="/path/to/unchanged",
             hash="hash_unchanged",
         )
-        # build_local_repo_hashmap returns ALL confs in the repo
+        # build_local_repo_hashmap returns ALL confs in the repo — this is what
+        # the schedule-all loop iterates (per PR #1831). compute_and_upload_diffs
+        # is still called for the sync side-effect but its return is irrelevant.
         mock_build_hashmap.return_value = {
             "test_team.changed_join": changed_conf,
             "test_team.unchanged_join": unchanged_conf,
         }
-        # compute_and_upload_diffs returns only the changed conf — the unchanged
-        # one used to be excluded from scheduling because of this.
         mock_compute_diffs.return_value = {
             "test_team.changed_join": changed_conf,
         }
 
+        # Both confs have prod environments and real schedules — both must be
+        # submitted. Mocked because the localPaths above are fake.
+        mock_get_metadata_map.return_value = {
+            "environments": [Environment.PROD],
+            "executionInfo": {"offlineSchedule": "@daily"},
+        }
         mock_get_schedule_modes.return_value = ScheduleModes(
             offline_schedule="@daily",
             online_schedule="@hourly",
@@ -951,18 +959,20 @@ class TestHubRunner:
         from gen_thrift.api.ttypes import Conf
 
         mock_get_current_branch.return_value = "test-branch"
-        mock_build_hashmap.return_value = {}
 
         # Create test confs: one with prod, one with canary, one with both
         prod_conf = Conf(name="test_team.prod_join", localPath="/path/to/prod", hash="hash1")
         canary_conf = Conf(name="test_team.canary_join", localPath="/path/to/canary", hash="hash2")
         both_conf = Conf(name="test_team.both_join", localPath="/path/to/both", hash="hash3")
 
-        mock_compute_diffs.return_value = {
+        # The schedule-all loop iterates build_local_repo_hashmap's return —
+        # not compute_and_upload_diffs (see PR #1831).
+        mock_build_hashmap.return_value = {
             "test_team.prod_join": prod_conf,
             "test_team.canary_join": canary_conf,
             "test_team.both_join": both_conf,
         }
+        mock_compute_diffs.return_value = {}
 
         # Set up environments for each conf
         def get_metadata_side_effect(path):
@@ -1032,17 +1042,18 @@ class TestHubRunner:
         from gen_thrift.api.ttypes import Conf
 
         mock_get_current_branch.return_value = "test-branch"
-        mock_build_hashmap.return_value = {}
 
         prod_conf = Conf(name="test_team.prod_join", localPath="/path/to/prod", hash="hash1")
         canary_conf = Conf(name="test_team.canary_join", localPath="/path/to/canary", hash="hash2")
         both_conf = Conf(name="test_team.both_join", localPath="/path/to/both", hash="hash3")
 
-        mock_compute_diffs.return_value = {
+        # See note in test_schedule_all_filters_by_environment about #1831.
+        mock_build_hashmap.return_value = {
             "test_team.prod_join": prod_conf,
             "test_team.canary_join": canary_conf,
             "test_team.both_join": both_conf,
         }
+        mock_compute_diffs.return_value = {}
 
         def get_metadata_side_effect(path):
             if "prod" in path:
@@ -1109,14 +1120,15 @@ class TestHubRunner:
         from gen_thrift.api.ttypes import Conf
 
         mock_get_current_branch.return_value = "test-branch"
-        mock_build_hashmap.return_value = {}
 
         # Conf without environments field
         legacy_conf = Conf(name="test_team.legacy_join", localPath="/path/to/legacy", hash="hash1")
 
-        mock_compute_diffs.return_value = {
+        # Loop iterates build_local_repo_hashmap (see #1831), not the diff set.
+        mock_build_hashmap.return_value = {
             "test_team.legacy_join": legacy_conf,
         }
+        mock_compute_diffs.return_value = {}
 
         # Return metadata without environments field (should default to ['prod'])
         mock_get_metadata_map.return_value = {
@@ -1175,14 +1187,15 @@ class TestHubRunner:
         from gen_thrift.api.ttypes import Conf
 
         mock_get_current_branch.return_value = "test-branch"
-        mock_build_hashmap.return_value = {}
 
-        # Only prod confs
+        # Only prod confs — the canary env filter must reject all of them so
+        # call_schedule_all_api is never invoked.
         prod_conf = Conf(name="test_team.prod_join", localPath="/path/to/prod", hash="hash1")
 
-        mock_compute_diffs.return_value = {
+        mock_build_hashmap.return_value = {
             "test_team.prod_join": prod_conf,
         }
+        mock_compute_diffs.return_value = {}
 
         mock_get_metadata_map.return_value = {
             "environments": [Environment.PROD],
