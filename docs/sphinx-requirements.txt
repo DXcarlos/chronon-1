@@ -3,3 +3,4 @@ myst-parser
 sphinx-book-theme
 build
 sphinx_design
+idna>=3.15 # not directly required, pinned by Snyk to avoid a vulnerability
