@@ -35,36 +35,16 @@ zipline hub schedule-all --cloud aws
 
 #### Targeting an environment with `--env`
 
-`schedule-all` deploys against a single compile environment at a time. `--env` selects which env's compiled output to read and which configs to deploy:
+`schedule-all` takes an `--env` flag that selects which compile output to read and which configs to deploy:
 
 ```bash
 zipline hub schedule-all --cloud aws --env prod    # default — reads compiled/
 zipline hub schedule-all --cloud aws --env canary  # reads compiled_canary/
 ```
 
-`--env` accepts `prod` or `canary` today (mirroring the Thrift `Environment` enum). The `canary` case requires a `teams.canary.py` next to `teams.py` at compile time — see the [Compile section in `python/README.md`](https://github.com/zipline-ai/chronon/blob/main/python/README.md) for multi-env compile setup. The hub command resolves to the corresponding `compiled_<env>/` folder.
+`--env` accepts `prod` or `canary` today. The `canary` case requires a `teams.canary.py` in the repo root and per-entity opt-in via `environments=['prod', 'canary']` on the `GroupBy`/`Join`/`StagingQuery`. Entities default to prod-only — they're never scheduled under `--env canary` unless explicitly opted in.
 
-#### Per-entity opt-in with `environments=[...]`
-
-By default, every `GroupBy`/`Join`/`StagingQuery` is scheduled only under `--env prod`. To opt an entity into additional envs, set `environments=` at authoring time:
-
-```python
-GroupBy(
-    ...
-    environments=['prod', 'canary'],  # scheduled by both prod and canary deploys
-)
-```
-
-`schedule-all` reads `metaData.environments` from each compiled conf and skips any entity whose list doesn't contain the target env. Behavior matrix:
-
-| `environments=` value     | `--env prod` (default) | `--env canary` |
-|---------------------------|------------------------|----------------|
-| `['prod']`                | ✓ scheduled            | ✗ skipped      |
-| `['canary']`              | ✗ skipped              | ✓ scheduled    |
-| `['prod', 'canary']`      | ✓ scheduled            | ✓ scheduled    |
-| omitted (defaults to prod)| ✓ scheduled            | ✗ skipped      |
-
-The default (prod-only) is intentional: a config running on production data never accidentally rolls out to canary clusters until you explicitly add `'canary'` to its `environments` list.
+See **[Multi-Environment Compile & Deploy](MultiEnvironment.md)** for the full guide: authoring `teams.canary.py`, the `environments=` behavior matrix, and the CI workflow.
 
 ## Scheduled Jobs by Entity Type
 

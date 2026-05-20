@@ -75,7 +75,7 @@
       },
       "env": {
         "common": {
-          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
           "AWS_REGION": "us-west-2",
           "CHRONON_ONLINE_ARGS": " -Ztasks=1",
           "CLOUD_PROVIDER": "aws",
@@ -92,7 +92,7 @@
         },
         "modeEnvironments": {
           "upload": {
-            "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+            "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
             "AWS_REGION": "us-west-2",
             "CHRONON_ONLINE_ARGS": " -Ztasks=1",
             "CLOUD_PROVIDER": "aws",
@@ -186,7 +186,7 @@
           },
           "env": {
             "common": {
-              "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+              "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
               "AWS_REGION": "us-west-2",
               "CHRONON_ONLINE_ARGS": " -Ztasks=1",
               "CLOUD_PROVIDER": "aws",
@@ -203,7 +203,7 @@
             },
             "modeEnvironments": {
               "upload": {
-                "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+                "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
                 "AWS_REGION": "us-west-2",
                 "CHRONON_ONLINE_ARGS": " -Ztasks=1",
                 "CLOUD_PROVIDER": "aws",
@@ -680,7 +680,7 @@
                     },
                     "env": {
                       "common": {
-                        "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+                        "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
                         "AWS_REGION": "us-west-2",
                         "CHRONON_ONLINE_ARGS": "-Ztasks=1",
                         "CLOUD_PROVIDER": "aws",
@@ -697,7 +697,7 @@
                       },
                       "modeEnvironments": {
                         "upload": {
-                          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+                          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
                           "AWS_REGION": "us-west-2",
                           "CHRONON_ONLINE_ARGS": "-Ztasks=1",
                           "CLOUD_PROVIDER": "aws",
@@ -814,7 +814,7 @@
                     },
                     "env": {
                       "common": {
-                        "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+                        "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
                         "AWS_REGION": "us-west-2",
                         "CHRONON_ONLINE_ARGS": " -Ztasks=1",
                         "CLOUD_PROVIDER": "aws",
@@ -831,7 +831,7 @@
                       },
                       "modeEnvironments": {
                         "upload": {
-                          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+                          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
                           "AWS_REGION": "us-west-2",
                           "CHRONON_ONLINE_ARGS": " -Ztasks=1",
                           "CLOUD_PROVIDER": "aws",
@@ -952,7 +952,7 @@
                     },
                     "env": {
                       "common": {
-                        "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+                        "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
                         "AWS_REGION": "us-west-2",
                         "CHRONON_ONLINE_ARGS": " -Ztasks=1",
                         "CLOUD_PROVIDER": "aws",
@@ -969,7 +969,7 @@
                       },
                       "modeEnvironments": {
                         "upload": {
-                          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+                          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
                           "AWS_REGION": "us-west-2",
                           "CHRONON_ONLINE_ARGS": " -Ztasks=1",
                           "CLOUD_PROVIDER": "aws",
@@ -1088,7 +1088,7 @@
               "enableStatsCompute": 1,
               "env": {
                 "common": {
-                  "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+                  "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
                   "AWS_REGION": "us-west-2",
                   "CHRONON_ONLINE_ARGS": " -Ztasks=1",
                   "CLOUD_PROVIDER": "aws",
@@ -1105,7 +1105,7 @@
                 },
                 "modeEnvironments": {
                   "upload": {
-                    "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+                    "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
                     "AWS_REGION": "us-west-2",
                     "CHRONON_ONLINE_ARGS": " -Ztasks=1",
                     "CLOUD_PROVIDER": "aws",

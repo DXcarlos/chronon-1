@@ -70,7 +70,7 @@ This will create a `compiled` directory.
 
 ### Canary environment (optional)
 
-To compile the same configs against a canary deployment, drop a sibling `teams.canary.py` next to `teams.py`. `zipline compile` will run a second pass and produce `compiled_canary/`. Only `canary` is supported as a non-prod env today (the Thrift `Environment` enum models `PROD` and `CANARY` only). Per-entity opt-in to canary is via `environments=['prod', 'canary']` on the `GroupBy`/`Join`/`StagingQuery` — see [Deploy.md](../../../../../../docs/source/running_on_zipline_hub/Deploy.md) for the full behavior matrix.
+To compile the same configs against a canary deployment, drop a sibling `teams.canary.py` next to `teams.py`. `zipline compile` will run a second pass and produce `compiled_canary/`. Only `canary` is supported as a non-prod env today (the Thrift `Environment` enum models `PROD` and `CANARY` only). Per-entity opt-in to canary is via `environments=['prod', 'canary']` on the `GroupBy`/`Join`/`StagingQuery` — see the [Multi-Environment Compile & Deploy guide](../../../../../../docs/source/running_on_zipline_hub/MultiEnvironment.md) for details.
 
 ---
 

@@ -138,52 +138,9 @@ zipline compile --chronon-root <repo-root>
 
 ###### Multi-environment compile via `teams.canary.py`
 
-To compile the same configs against a canary deployment environment (e.g. a canary cluster with different env vars / catalog / cluster sizes), drop a sibling `teams.canary.py` next to `teams.py`:
+To compile the same configs against a canary deployment, drop a sibling `teams.canary.py` next to `teams.py`. `zipline compile` will run a second pass and write to `compiled_canary/`. Only `canary` is supported as a non-prod env today.
 
-```
-<repo-root>/
-├── teams.py           # → compiles to compiled/
-├── teams.canary.py    # → compiles to compiled_canary/
-├── group_bys/
-├── joins/
-└── staging_queries/
-```
-
-`zipline compile` discovers `teams.canary.py` and runs a second compile pass with it as the source of team defaults. Each pass writes to its own output folder and uses *only* its own teams file — there is no implicit fallback to `teams.py`. Strict isolation means every team referenced by a config in the canary pass **must** be declared in `teams.canary.py`, or compile fails loudly.
-
-> **Only `canary` is supported as a non-prod env today.** The hub's wire contract — the Thrift `Environment` enum on `metaData.environments` — currently models `PROD` and `CANARY` only. Dropping in e.g. `teams.staging.py` will fail discovery with a clear error. Supporting a new env end-to-end requires extending `thrift/api.thrift` and the hub server in lockstep with `parse_teams._ALLOWED_NON_PROD_ENVS`.
-
-To avoid redeclaring every team in `teams.canary.py`, you can import and reuse teams from `teams.py`:
-
-```python
-# teams.canary.py
-from ai.chronon.types import Team, EnvironmentVariables
-
-# Teams that are identical to prod — import them as-is.
-from teams import aws_databricks, azure, quickstart
-
-# Layer a canary-only override on top of an imported team.
-# This affects only compiled_canary/, never compiled/.
-aws_databricks.env.common['DATABRICKS_EXTRA'] = "canary-only-value"
-
-# Teams that differ from prod — redeclare in full.
-default = Team(outputNamespace="default", env=EnvironmentVariables(common={...}))
-gcp = Team(outputNamespace="data", env=EnvironmentVariables(common={"CUSTOMER_ID": "canary", ...}))
-```
-
-The reserved env name `prod` always points at `teams.py`; a `teams.prod.py` is rejected with an explicit error.
-
-###### Compile summary
-
-After every run, `zipline compile` prints a per-env summary so you can see at a glance what was written:
-
-```
-─────────── 📋 COMPILATION SUMMARY ───────────
-  canary  ✓ OK      → compiled_canary  (165 written)
-  prod    ✓ OK      → compiled         (212 written)
-```
-
-If a pass fails (e.g. a Python syntax error in a config), its staging dir is discarded and `compiled_<env>/` is **not** updated — the summary will report `(N error(s); output not written (M parsed and discarded))`. Any env's failure causes `zipline compile` to exit with code `1`, so a broken canary pass surfaces in CI even when the prod pass succeeded.
+See the **[Multi-Environment Compile & Deploy guide](https://docs.zipline.ai/docs/running_on_zipline_hub/MultiEnvironment)** for the full guide — directory layout, the `from teams import …` authoring pattern, per-entity `environments=[...]` opt-in, the `--env` deploy contract, the compile summary, and the CI workflow.
 
 ##### Pre-commit Setup
 

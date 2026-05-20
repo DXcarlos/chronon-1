@@ -446,7 +446,7 @@
       },
       "env": {
         "common": {
-          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
           "AWS_REGION": "us-west-2",
           "CHRONON_ONLINE_ARGS": "-Ztasks=1 -Zbootstrap=b-1.ziplinecanarykafka.hak90r.c4.kafka.us-west-2.amazonaws.com:9092",
           "CLOUD_PROVIDER": "aws",
@@ -463,7 +463,7 @@
         },
         "modeEnvironments": {
           "upload": {
-            "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+            "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary-aws",
             "AWS_REGION": "us-west-2",
             "CHRONON_ONLINE_ARGS": "-Ztasks=1 -Zbootstrap=b-1.ziplinecanarykafka.hak90r.c4.kafka.us-west-2.amazonaws.com:9092",
             "CLOUD_PROVIDER": "aws",
