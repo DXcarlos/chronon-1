@@ -38,6 +38,7 @@
           "spark.chronon.table_write.format": "iceberg",
           "spark.default.parallelism": "10",
           "spark.driver.cores": "1",
+          "spark.driver.extraJavaOptions": "-Dai.chronon.metrics.enabled=true -Dai.chronon.metrics.reader=grpc -Dai.chronon.metrics.exporter.url=http://localhost:4317",
           "spark.driver.memory": "512m",
           "spark.executor.cores": "1",
           "spark.executor.memory": "512m",
