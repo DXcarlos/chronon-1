@@ -79,18 +79,28 @@ def test_discover_compile_envs_rejects_teams_prod_py_collision(tmp_path):
         discover_compile_envs(str(tmp_path))
 
 
+def test_discover_compile_envs_rejects_unsupported_env(tmp_path):
+    """Only `canary` is allowed as a non-prod env right now because the hub
+    wire contract (Thrift `Environment` enum) only models PROD and CANARY.
+    Discovery must reject any other teams.<env>.py file with a clear error
+    that names the supported set."""
+    (tmp_path / "teams.py").write_text("# prod teams")
+    (tmp_path / "teams.staging.py").write_text("# unsupported")
+
+    with pytest.raises(ValueError, match=r"teams\.staging\.py.*not supported.*'canary'"):
+        discover_compile_envs(str(tmp_path))
+
+
 def test_discover_compile_envs_ordering(tmp_path):
-    """Discovery returns non-prod envs sorted, with prod appended last so its
-    confirm-prompt isn't sandwiched between sibling envs' output."""
+    """Discovery returns the canary entry first and prod appended last, so the
+    prod pass's confirm-prompt isn't sandwiched between sibling envs' output."""
     (tmp_path / "teams.py").write_text("# prod")
     (tmp_path / "teams.canary.py").write_text("# canary")
-    (tmp_path / "teams.staging.py").write_text("# staging")
 
     envs = discover_compile_envs(str(tmp_path))
 
     assert envs == [
         ("canary", "teams.canary.py"),
-        ("staging", "teams.staging.py"),
         (PROD_ENV, PROD_TEAMS_FILE),
     ]
 

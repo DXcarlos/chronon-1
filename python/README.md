@@ -136,21 +136,22 @@ v1 = Join(
 zipline compile --chronon-root <repo-root>
 ```
 
-###### Multi-environment compile via `teams.<env>.py`
+###### Multi-environment compile via `teams.canary.py`
 
-To compile the same configs against a different deployment environment (e.g. a canary cluster with different env vars / catalog / cluster sizes), drop a sibling `teams.<env>.py` next to `teams.py`:
+To compile the same configs against a canary deployment environment (e.g. a canary cluster with different env vars / catalog / cluster sizes), drop a sibling `teams.canary.py` next to `teams.py`:
 
 ```
 <repo-root>/
 ├── teams.py           # → compiles to compiled/
 ├── teams.canary.py    # → compiles to compiled_canary/
-├── teams.staging.py   # → compiles to compiled_staging/  (any lowercase env name works)
 ├── group_bys/
 ├── joins/
 └── staging_queries/
 ```
 
-`zipline compile` auto-discovers every `teams.<env>.py` and runs one compile pass per env. Each pass writes to `compiled_<env>/` and uses *only* its own teams file — there is no implicit fallback to `teams.py`. Strict isolation means every team referenced by a config in an env's compile **must** be declared in that env's teams file, or compile fails loudly.
+`zipline compile` discovers `teams.canary.py` and runs a second compile pass with it as the source of team defaults. Each pass writes to its own output folder and uses *only* its own teams file — there is no implicit fallback to `teams.py`. Strict isolation means every team referenced by a config in the canary pass **must** be declared in `teams.canary.py`, or compile fails loudly.
+
+> **Only `canary` is supported as a non-prod env today.** The hub's wire contract — the Thrift `Environment` enum on `metaData.environments` — currently models `PROD` and `CANARY` only. Dropping in e.g. `teams.staging.py` will fail discovery with a clear error. Supporting a new env end-to-end requires extending `thrift/api.thrift` and the hub server in lockstep with `parse_teams._ALLOWED_NON_PROD_ENVS`.
 
 To avoid redeclaring every team in `teams.canary.py`, you can import and reuse teams from `teams.py`:
 

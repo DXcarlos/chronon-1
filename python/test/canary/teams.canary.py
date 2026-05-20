@@ -176,8 +176,10 @@ aws = Team(
 
 
 # Show that teams can be imported from other teams.py files
-from teams import aws_databricks, azure, quickstart
+from teams import aws_databricks, azure, quickstart, aws
 
 # only affects the files in compiled_canary/ to verify that the canary compile uses this teams.canary.py file and not teams.py
 aws_databricks_env: EnvironmentVariables = aws_databricks.env
 aws_databricks_env.common['DATABRICKS_EXTRA'] = "DATABRICKS_EXTRA_1"
+
+aws.env.common['ARTIFACT_PREFIX'] = "s3://zipline-artifacts-canary-aws"

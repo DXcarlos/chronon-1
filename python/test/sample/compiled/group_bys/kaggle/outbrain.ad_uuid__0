@@ -1,19 +1,53 @@
 {
+  "accuracy": 0,
+  "aggregations": [
+    {
+      "argMap": {},
+      "inputColumn": "clicked",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "clicked",
+      "operation": 6,
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "clicked",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 3,
+          "timeUnit": 1
+        }
+      ]
+    }
+  ],
   "keyColumns": [
-    "user_id"
+    "ad_id",
+    "uuid"
   ],
   "metaData": {
     "columnHashes": {
-      "account_age": "cc0b75ff3cb7022560a004b10a8d441b",
-      "account_balance": "c1ef9fd918e0f51e16185d2084fbf421",
-      "account_type": "93c20b1c5b89efd7782933d9bf48edb0",
-      "country": "ceee81a38d796a8ed8f1c592065613e1",
-      "credit_score": "ce10bc630d7c15523d016a2151d598ea",
-      "number_of_devices": "9af4acba3823ad67653b5d77ce8f261b",
-      "preferred_language": "8cf237ec3b22d4f3a8b8df992c92e564",
-      "user_id": "c983ce19a351e6fbda1bb1feea3dee5c"
+      "ad_id": "3a0c9fa922680991fc9257e01cca4501",
+      "clicked_average_3d": "fe10de33dc16a9939e63cd6e38861b97",
+      "clicked_count_3d": "fe10de33dc16a9939e63cd6e38861b97",
+      "clicked_sum_3d": "fe10de33dc16a9939e63cd6e38861b97",
+      "uuid": "38447eb1baac073053df5f534f35a38a"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_users_with_offset_0\", \"spec\": \"data.users/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_default_kaggle_outbrain_base_table__0_with_offset_0\", \"spec\": \"default.kaggle_outbrain_base_table__0/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
       0
     ],
@@ -61,28 +95,24 @@
       },
       "historicalBackfill": 0
     },
-    "name": "risk.user_data.user_group_by__0",
-    "outputNamespace": "risk",
-    "sourceFile": "group_bys/risk/user_data.py",
-    "team": "risk",
+    "name": "kaggle.outbrain.ad_uuid__0",
+    "outputNamespace": "kaggle",
+    "sourceFile": "group_bys/kaggle/outbrain.py",
+    "team": "kaggle",
     "version": "0"
   },
   "sources": [
     {
-      "entities": {
+      "events": {
         "query": {
           "selects": {
-            "account_age": "account_age",
-            "account_balance": "account_balance",
-            "account_type": "account_type",
-            "country": "country",
-            "credit_score": "credit_score",
-            "number_of_devices": "number_of_devices",
-            "preferred_language": "preferred_language",
-            "user_id": "user_id"
-          }
+            "ad_id": "ad_id",
+            "clicked": "clicked",
+            "uuid": "uuid"
+          },
+          "timeColumn": "ts"
         },
-        "snapshotTable": "data.users"
+        "table": "default.kaggle_outbrain_base_table__0"
       }
     }
   ]

@@ -42,7 +42,7 @@ zipline hub schedule-all --cloud aws --env prod    # default — reads compiled/
 zipline hub schedule-all --cloud aws --env canary  # reads compiled_canary/
 ```
 
-The `--env` value must match a `teams.<env>.py` file that exists at compile time (see the [Compile section in `python/README.md`](https://github.com/zipline-ai/chronon/blob/main/python/README.md) for multi-env compile setup). The hub command resolves to the corresponding `compiled_<env>/` folder.
+`--env` accepts `prod` or `canary` today (mirroring the Thrift `Environment` enum). The `canary` case requires a `teams.canary.py` next to `teams.py` at compile time — see the [Compile section in `python/README.md`](https://github.com/zipline-ai/chronon/blob/main/python/README.md) for multi-env compile setup. The hub command resolves to the corresponding `compiled_<env>/` folder.
 
 #### Per-entity opt-in with `environments=[...]`
 

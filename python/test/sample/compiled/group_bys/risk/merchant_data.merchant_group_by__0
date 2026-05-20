@@ -14,7 +14,7 @@
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_merchants_with_offset_0\", \"spec\": \"data.merchants/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
-      "prod"
+      0
     ],
     "executionInfo": {
       "conf": {

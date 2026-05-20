@@ -32,7 +32,15 @@ logger = get_logger()
 _DEFAULT_CONF_TEAM = "default"
 
 PROD_ENV = "prod"
+CANARY_ENV = "canary"
 PROD_TEAMS_FILE = "teams.py"
+
+# Closed set of non-prod envs that are allowed to back a `teams.<env>.py` file.
+# Kept narrow because the Thrift `Environment` enum (PROD, CANARY) is the wire
+# contract the hub server understands — `metaData.environments` is a list of
+# those enum values, and supporting a new env end-to-end requires extending
+# the enum + the hub server + this set in lockstep.
+_ALLOWED_NON_PROD_ENVS = frozenset({CANARY_ENV})
 
 # Strict charset for env names discovered from teams.<env>.py — lowercase
 # identifier-shaped only. Rejects editor backups (teams.py.bak), capitalized
@@ -57,18 +65,32 @@ def discover_compile_envs(conf_root: str) -> List[Tuple[str, str]]:
         m = _TEAMS_ENV_RE.match(basename)
         if not m:
             continue
+        env_name = m.group(1)
         # `teams.prod.py` would collide with the canonical `teams.py` entry
         # appended below — both would target env "prod" and write to compiled/.
         # Fail loudly so the user renames one of them rather than silently
         # losing whichever pass ran first.
-        if m.group(1) == PROD_ENV:
+        if env_name == PROD_ENV:
             raise ValueError(
                 f"Found {basename} at {conf_root}: env name '{PROD_ENV}' is "
                 f"reserved for the canonical {PROD_TEAMS_FILE} file. Rename "
-                f"{basename} to teams.<other-env>.py (e.g. teams.staging.py) "
-                f"or remove it."
+                f"{basename} to teams.<other-env>.py or remove it."
             )
-        envs.append((m.group(1), basename))
+        # Hub-side contract: `metaData.environments` is a list<Environment>
+        # whose enum currently only models PROD and CANARY. Reject any other
+        # teams.<env>.py until the Thrift enum + hub server are extended in
+        # lockstep — otherwise the compile output would reference an env that
+        # the hub can't schedule against.
+        if env_name not in _ALLOWED_NON_PROD_ENVS:
+            allowed = sorted(_ALLOWED_NON_PROD_ENVS)
+            raise ValueError(
+                f"Found {basename} at {conf_root}: env name '{env_name}' is "
+                f"not supported. Only these non-prod env names are allowed: "
+                f"{allowed}. Adding a new env requires extending "
+                f"thrift/api.thrift's Environment enum and the hub server "
+                f"first."
+            )
+        envs.append((env_name, basename))
     envs.sort()
     envs.append((PROD_ENV, PROD_TEAMS_FILE))
     return envs
