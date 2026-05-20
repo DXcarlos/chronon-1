@@ -36,7 +36,7 @@ from ai.chronon.repo.hub_runner import (
     hub_url_option,
     redeploy_streaming,
     repo_option,
-    use_auth_option,
+    use_auth_option, print_env_banner,
 )
 from ai.chronon.repo.registry_client import (
     DOCKER_HUB_REGISTRY,
