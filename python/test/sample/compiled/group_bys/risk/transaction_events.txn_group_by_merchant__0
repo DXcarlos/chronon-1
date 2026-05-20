@@ -43,9 +43,6 @@
       "transaction_amount_sum_1d": "8e425c8754ed3f51cb6ceaa144451f2d"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_txn_events_with_offset_0\", \"spec\": \"data.txn_events/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "conf": {
         "common": {

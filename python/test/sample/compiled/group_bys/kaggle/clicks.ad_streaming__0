@@ -46,9 +46,6 @@
       "clicked_sum_3d": "7e4dd4942778f969839961629a1b8249"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_default_kaggle_outbrain_base_table__0_with_offset_0\", \"spec\": \"default.kaggle_outbrain_base_table__0/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "conf": {
         "common": {

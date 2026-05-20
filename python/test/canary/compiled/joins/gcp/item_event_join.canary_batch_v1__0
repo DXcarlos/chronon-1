@@ -85,9 +85,6 @@
             "purchase_price_sum_7d": "631fab32648531978032f3b417da5d52",
             "user_id": "a406c2de0040b2e926dba6334f299281"
           },
-          "environments": [
-            0
-          ],
           "executionInfo": {
             "clusterConf": {
               "modeClusterConfigs": {
@@ -221,9 +218,6 @@
       "user_id_purchase_price_sum_7d": "0167b3659bffb8660e1ea86c541ee6f1"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_purchases_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_import_v1__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

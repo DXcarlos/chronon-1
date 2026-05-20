@@ -407,10 +407,12 @@ def Join(
     if isinstance(row_ids, str):
         row_ids = [row_ids]
 
-    # Initialize and validate environments
-    if environments is None:
-        environments = ['prod']
-    environments = utils.convert_environments_to_enum(environments)
+    # `environments` is left unset (None) when the author doesn't specify it.
+    # Downstream consumers (e.g. hub schedule-all) default the missing/empty
+    # case to ['prod']. Keeping it unset on disk avoids baking a default into
+    # every compiled conf.
+    if environments:
+        environments = utils.convert_environments_to_enum(environments)
 
     assert version is None or isinstance(version, int), (
         f"Version must be an integer or None, but found {type(version).__name__}"

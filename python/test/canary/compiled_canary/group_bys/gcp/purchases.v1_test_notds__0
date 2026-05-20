@@ -83,9 +83,6 @@
       "user_id": "e2bd778ac7f0e189c7f627b51b0eaa13"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_purchases_notds_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_notds_import_v1__0/notds={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

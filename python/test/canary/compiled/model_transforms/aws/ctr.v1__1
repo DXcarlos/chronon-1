@@ -30,9 +30,6 @@
     ]
   },
   "metaData": {
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -159,9 +156,6 @@
         "instance": "named_struct('user_id_click_event_average_7d', user_id_click_event_average_7d, 'listing_price_cents', listing_id_price_cents, 'price_log', price_log, 'price_bucket', price_bucket)"
       },
       "metaData": {
-        "environments": [
-          0
-        ],
         "executionInfo": {
           "clusterConf": {
             "common": {
@@ -353,9 +347,6 @@
                   "listing_id"
                 ],
                 "metaData": {
-                  "environments": [
-                    0
-                  ],
                   "executionInfo": {
                     "clusterConf": {
                       "common": {
@@ -819,9 +810,6 @@
                   "user_id"
                 ],
                 "metaData": {
-                  "environments": [
-                    0
-                  ],
                   "executionInfo": {
                     "clusterConf": {
                       "common": {
@@ -965,9 +953,6 @@
             }
           },
           "metaData": {
-            "environments": [
-              0
-            ],
             "executionInfo": {
               "clusterConf": {
                 "common": {

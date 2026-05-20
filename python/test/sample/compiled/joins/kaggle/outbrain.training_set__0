@@ -50,9 +50,6 @@
             "clicked_sum_3d": "bdaa80fe92f9210f5a2eacb54aecec67",
             "document_id": "5a4531d11a8fccbe2c52bfc7a4e1e65b"
           },
-          "environments": [
-            0
-          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -170,9 +167,6 @@
             "clicked_sum_3d": "fe10de33dc16a9939e63cd6e38861b97",
             "uuid": "38447eb1baac073053df5f534f35a38a"
           },
-          "environments": [
-            0
-          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -288,9 +282,6 @@
             "clicked_count_3d": "7e4dd4942778f969839961629a1b8249",
             "clicked_sum_3d": "7e4dd4942778f969839961629a1b8249"
           },
-          "environments": [
-            0
-          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -410,9 +401,6 @@
             "geo_location": "b3c030b6171ce6da347d7dc63e23be1f",
             "platform": "45f3e6b61082c384992ad518903e9729"
           },
-          "environments": [
-            0
-          ],
           "executionInfo": {
             "conf": {
               "common": {
@@ -524,9 +512,6 @@
       "uuid": "2413c2cb534d0f3358771dae3950989d"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_default_kaggle_outbrain_base_table__0_with_offset_0\", \"spec\": \"default.kaggle_outbrain_base_table__0/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "conf": {
         "common": {

@@ -23,9 +23,6 @@
       "user_id": "4ecdf09ef20508785edf01ab40f381ed"
     },
     "customJson": "{\"airflowDependencies\": []}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "conf": {
         "common": {
@@ -94,9 +91,6 @@
                   "listing_id"
                 ],
                 "metaData": {
-                  "environments": [
-                    0
-                  ],
                   "executionInfo": {
                     "conf": {
                       "common": {
@@ -200,9 +194,6 @@
             }
           },
           "metaData": {
-            "environments": [
-              0
-            ],
             "executionInfo": {
               "conf": {
                 "common": {

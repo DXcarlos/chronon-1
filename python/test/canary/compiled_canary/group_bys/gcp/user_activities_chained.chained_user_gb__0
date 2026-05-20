@@ -23,9 +23,6 @@
       "user_id": "e3d702eb6c23558f50233c39f7718309"
     },
     "customJson": "{\"airflowDependencies\": []}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -120,9 +117,6 @@
                   "listing_id"
                 ],
                 "metaData": {
-                  "environments": [
-                    0
-                  ],
                   "executionInfo": {
                     "clusterConf": {
                       "modeClusterConfigs": {
@@ -253,9 +247,6 @@
             }
           },
           "metaData": {
-            "environments": [
-              0
-            ],
             "executionInfo": {
               "clusterConf": {
                 "modeClusterConfigs": {

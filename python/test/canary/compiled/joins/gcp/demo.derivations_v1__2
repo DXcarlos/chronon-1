@@ -46,9 +46,6 @@
             "tags": "589de0914f9ffabf8c80a0fe10eaa866",
             "weight_grams": "041362c5ebf87a340a139e6b53034b7c"
           },
-          "environments": [
-            0
-          ],
           "executionInfo": {
             "clusterConf": {
               "modeClusterConfigs": {
@@ -555,9 +552,6 @@
             "view_event_sum_30d": "f597dd2f8e5d672fbac0445fb935469b",
             "view_event_sum_7d": "f597dd2f8e5d672fbac0445fb935469b"
           },
-          "environments": [
-            0
-          ],
           "executionInfo": {
             "clusterConf": {
               "modeClusterConfigs": {

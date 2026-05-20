@@ -1,9 +1,6 @@
 {
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf___derived_with_offset_0\", \"spec\": \"__derived/ds={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

@@ -57,9 +57,6 @@
       "view_sum_1d": "d4bc995b2e1955c153a0d1d78927f07c"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

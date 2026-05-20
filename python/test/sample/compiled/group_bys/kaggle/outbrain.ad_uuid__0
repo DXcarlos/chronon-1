@@ -48,9 +48,6 @@
       "uuid": "38447eb1baac073053df5f534f35a38a"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_default_kaggle_outbrain_base_table__0_with_offset_0\", \"spec\": \"default.kaggle_outbrain_base_table__0/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "conf": {
         "common": {

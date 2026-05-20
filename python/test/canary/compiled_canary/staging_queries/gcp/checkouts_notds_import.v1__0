@@ -2,9 +2,6 @@
   "engineType": 1,
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_notds_with_offset_0\", \"spec\": \"data.checkouts_notds/notds={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

@@ -1,9 +1,6 @@
 {
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_checkouts_external_with_offset_0\", \"spec\": \"data.checkouts_external/ds={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "conf": {
         "common": {

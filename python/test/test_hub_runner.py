@@ -1169,6 +1169,60 @@ class TestHubRunner:
     @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
     @patch('ai.chronon.repo.hub_runner.get_current_branch')
     @patch('ai.chronon.repo.hub_runner.ZiplineHub')
+    @pytest.mark.parametrize("environments_value", [None, []])
+    def test_schedule_all_treats_null_or_empty_environments_as_prod(
+        self,
+        mock_zipline_hub,
+        mock_get_current_branch,
+        mock_build_hashmap,
+        mock_compute_diffs,
+        mock_get_schedule_modes,
+        mock_get_metadata_map,
+        canary,
+        environments_value,
+    ):
+        """A conf with an explicit `environments: null` or `environments: []` on
+        disk must behave the same as a conf where the key is omitted entirely:
+        both default to prod-only deploy. Guards against a regression where
+        authoring stops writing the field but the consumer keeps a stricter
+        ``in`` check."""
+        from ai.chronon.repo.hub_runner import (
+            ScheduleModes,
+            submit_schedule_all,
+        )
+        from gen_thrift.api.ttypes import Conf
+
+        mock_get_current_branch.return_value = "test-branch"
+        conf = Conf(name="test_team.unset", localPath="/path/to/x", hash="hash1")
+        mock_build_hashmap.return_value = {"test_team.unset": conf}
+        mock_compute_diffs.return_value = {}
+        mock_get_metadata_map.return_value = {
+            "environments": environments_value,
+            "executionInfo": {"offlineSchedule": "@daily"},
+        }
+        mock_get_schedule_modes.return_value = ScheduleModes(
+            offline_schedule="@daily", online_schedule="None",
+        )
+        mock_hub_instance = mock_zipline_hub.return_value
+        mock_hub_instance.call_schedule_all_api.return_value = {
+            "totalCount": 1, "successCount": 1, "failureCount": 0, "results": [],
+        }
+
+        submit_schedule_all(
+            repo=canary, cloud='gcp', customer_id=None,
+            env='prod', hub_url=None, use_auth=False,
+        )
+
+        call_args = mock_hub_instance.call_schedule_all_api.call_args[0][0]
+        conf_names = [c["conf_name"] for c in call_args]
+        assert "test_team.unset" in conf_names
+
+    @patch('ai.chronon.repo.hub_runner.get_metadata_map')
+    @patch('ai.chronon.repo.hub_runner.get_schedule_modes')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.compute_and_upload_diffs')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    @patch('ai.chronon.repo.hub_runner.ZiplineHub')
     def test_schedule_all_no_matching_environment(
         self,
         mock_zipline_hub,
@@ -1337,6 +1391,24 @@ class TestEnvironmentValidation:
             environments=['PROD', 'Canary']
         )
         assert join.metaData.environments == [0, 1]
+
+    def test_join_leaves_environments_unset_when_not_provided(self):
+        """Authoring without `environments=` must leave metaData.environments
+        as None — downstream consumers (hub schedule-all) default missing /
+        empty to [Environment.PROD] at read time. Keeps compiled output free
+        of a hard-coded default."""
+        from ai.chronon.join import Join
+        from ai.chronon.query import Query
+        from gen_thrift.api.ttypes import EventSource, Source
+
+        left = Source(events=EventSource(table="test.table", query=Query(selects={"a": "a"})))
+
+        join = Join(left=left, right_parts=[], row_ids="id")
+        assert join.metaData.environments is None
+
+        # Empty list also leaves the field unset.
+        join = Join(left=left, right_parts=[], row_ids="id", environments=[])
+        assert join.metaData.environments in (None, [])
 
     def test_join_rejects_invalid_environment(self):
         """Test that Join raises ValueError for invalid environment strings."""

@@ -2,9 +2,6 @@
   "engineType": 1,
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo__checkouts__with_offset_0\", \"spec\": \"demo.`checkouts`/_PARTITIONTIME={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

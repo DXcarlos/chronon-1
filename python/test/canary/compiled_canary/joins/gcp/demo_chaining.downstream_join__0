@@ -25,9 +25,6 @@
             "price_cents_last100_7d": "c4c5a4063613d69fbe6ac20408f7cc07",
             "user_id": "e3d702eb6c23558f50233c39f7718309"
           },
-          "environments": [
-            0
-          ],
           "executionInfo": {
             "clusterConf": {
               "modeClusterConfigs": {
@@ -121,9 +118,6 @@
                         "listing_id"
                       ],
                       "metaData": {
-                        "environments": [
-                          0
-                        ],
                         "executionInfo": {
                           "clusterConf": {
                             "modeClusterConfigs": {
@@ -254,9 +248,6 @@
                   }
                 },
                 "metaData": {
-                  "environments": [
-                    0
-                  ],
                   "executionInfo": {
                     "clusterConf": {
                       "modeClusterConfigs": {
@@ -385,9 +376,6 @@
       "user_id_price_cents_last100_7d": "ac24fb3bf350137048765b535ac12587"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

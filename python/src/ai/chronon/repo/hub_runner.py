@@ -494,9 +494,12 @@ def submit_schedule_all(
 
     for name, conf in conf_name_to_obj_dict.items():
         try:
-            # Check if conf's environments field includes the specified env
+            # Check if conf's environments field includes the specified env.
+            # Authoring leaves the field unset when the user doesn't specify
+            # `environments=` — treat missing / null / empty as prod-only so a
+            # legacy conf with no env tag still deploys under --env prod.
             metadata_map = get_metadata_map(conf.localPath)
-            conf_environments = metadata_map.get("environments", [Environment.PROD])
+            conf_environments = metadata_map.get("environments") or [Environment.PROD]
 
             # Skip confs that don't match the specified environment
             if env_enum not in conf_environments:

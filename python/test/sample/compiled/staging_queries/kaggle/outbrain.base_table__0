@@ -1,9 +1,6 @@
 {
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_kaggle_outbrain_clicks_train_with_offset_0\", \"spec\": \"kaggle_outbrain.clicks_train/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_kaggle_outbrain_events_with_offset_0\", \"spec\": \"kaggle_outbrain.events/ds={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "conf": {
         "common": {

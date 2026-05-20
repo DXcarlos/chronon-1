@@ -1,8 +1,5 @@
 {
   "metaData": {
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "conf": {
         "common": {
@@ -61,9 +58,6 @@
         }
       },
       "metaData": {
-        "environments": [
-          0
-        ],
         "executionInfo": {
           "conf": {
             "common": {
@@ -160,9 +154,6 @@
                   "user_id"
                 ],
                 "metaData": {
-                  "environments": [
-                    0
-                  ],
                   "executionInfo": {
                     "conf": {
                       "common": {
@@ -271,9 +262,6 @@
                   "merchant_id"
                 ],
                 "metaData": {
-                  "environments": [
-                    0
-                  ],
                   "executionInfo": {
                     "conf": {
                       "common": {
@@ -350,9 +338,6 @@
                   "user_id"
                 ],
                 "metaData": {
-                  "environments": [
-                    0
-                  ],
                   "executionInfo": {
                     "conf": {
                       "common": {
@@ -431,9 +416,6 @@
                   "merchant_id"
                 ],
                 "metaData": {
-                  "environments": [
-                    0
-                  ],
                   "executionInfo": {
                     "conf": {
                       "common": {
@@ -519,9 +501,6 @@
             }
           },
           "metaData": {
-            "environments": [
-              0
-            ],
             "executionInfo": {
               "conf": {
                 "common": {

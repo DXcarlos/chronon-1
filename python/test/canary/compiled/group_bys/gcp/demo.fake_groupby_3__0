@@ -21,9 +21,6 @@
       "user_id": "9a6da6b28e68f9bc0b91421707d41660"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_some_table_with_offset_0\", \"spec\": \"some-table/ds={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
