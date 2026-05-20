@@ -30,13 +30,12 @@ from ai.chronon.repo.constants import (
     VALID_CLOUDS,
     get_public_spark_jars_for_admin,
 )
-from ai.chronon.cli.formatter import Format
 from ai.chronon.repo.hub_runner import (
     format_option,
     hub_url_option,
     redeploy_streaming,
     repo_option,
-    use_auth_option, print_env_banner,
+    use_auth_option,
 )
 from ai.chronon.repo.registry_client import (
     DOCKER_HUB_REGISTRY,
@@ -79,30 +78,11 @@ def _app_images(cloud, release):
     return images
 
 
-def _env_label_from_context(context: str) -> str:
-    """Heuristic env label derived from the kubectl context name. Drives the
-    prod/canary banner shown by env-coupled admin commands. Contexts containing
-    'canary' (case-insensitive) are labeled canary; everything else is prod.
-    This is purely cosmetic — the actual kubectl routing uses the context name
-    verbatim regardless of what the heuristic returns."""
-    return "canary" if "canary" in context.lower() else "prod"
-
-
-def _print_resolved_kube_context(context: str, format: Format = Format.TEXT) -> None:
-    """Print the kubectl context that kubectl-driven admin commands will target.
-    Used by `_confirm_kube_context` to show the detected context next to the
-    prod/canary banner before prompting."""
-    if format == Format.JSON:
-        return
-    console.print(f"   [dim]kubectl context:[/dim] {context}")
-
-
 def _get_current_kube_context() -> str:
     """Return the active kubectl context, or exit with a helpful message if
-    kubectl is missing or unconfigured. Reads `kubectl config current-context`
-    once at command start; the detected context is then pinned into every
-    subsequent kubectl call via `--context <name>` so the cluster a command
-    targets can't drift if the user's kubeconfig changes mid-run."""
+    kubectl is missing or unconfigured. Read once at command start so the
+    detected context is what gets shown in the confirmation prompt; the
+    actual kubectl calls inherit the ambient context as usual."""
     if not shutil.which("kubectl"):
         console.print(
             "[red]kubectl not found.[/red]\n"
@@ -123,19 +103,13 @@ def _get_current_kube_context() -> str:
     return result.stdout.strip()
 
 
-def _confirm_kube_context(
-    context: str,
-    format: Format = Format.TEXT,
-    assume_yes: bool = False,
-) -> None:
-    """Show the user which kubectl context the command is about to target and
-    prompt for confirmation. Aborts on No. Skipped in JSON-format mode or when
-    `assume_yes` is true (for CI / scripted use)."""
-    print_env_banner(_env_label_from_context(context), format=format)
-    _print_resolved_kube_context(context, format=format)
-    if assume_yes or format == Format.JSON:
+def _confirm_kube_context(context: str, assume_yes: bool = False) -> None:
+    """Show the detected kubectl context and prompt for confirmation. Aborts
+    on No. Skipped when `assume_yes` is true (for CI / scripted use)."""
+    console.print(f"About to run against kubectl context: [bold]{context}[/bold]")
+    if assume_yes:
         return
-    if not click.confirm("\nProceed against this kubectl context?", default=False):
+    if not click.confirm("Proceed?", default=False):
         console.print("[yellow]Aborted by user.[/yellow]")
         raise SystemExit(1)
 
@@ -160,22 +134,14 @@ _EKS_NAMESPACE = "zipline-system"
 _EKS_ROLLOUT_TIMEOUT = 300
 
 
-def _kubectl_argv(context: str, *args: str) -> list:
-    """Build a kubectl argv list with `--context <name>` baked in. Every kubectl
-    call in admin.py goes through this so a missing context flag is impossible
-    by construction."""
-    return ["kubectl", "--context", context, *args]
-
-
-def _get_current_image(deployment, container, context):
+def _get_current_image(deployment, container):
     """Return the current image for a container in a deployment, or None on failure."""
     result = subprocess.run(
-        _kubectl_argv(
-            context,
-            "get", "deployment", deployment,
+        [
+            "kubectl", "get", "deployment", deployment,
             "--namespace", _EKS_NAMESPACE,
             "-o", f"jsonpath={{.spec.template.spec.containers[?(@.name==\"{container}\")].image}}",
-        ),
+        ],
         capture_output=True, text=True,
     )
     if result.returncode == 0 and result.stdout.strip():
@@ -183,7 +149,7 @@ def _get_current_image(deployment, container, context):
     return None
 
 
-def _upgrade_eks_services(cloud, release, context):
+def _upgrade_eks_services(cloud, release):
     """Upgrade running EKS deployments to the new release. Skips services that don't exist."""
     if not shutil.which("kubectl"):
         console.print(
@@ -193,12 +159,12 @@ def _upgrade_eks_services(cloud, release, context):
         raise SystemExit(1)
 
     result = subprocess.run(
-        _kubectl_argv(context, "cluster-info", "--namespace", _EKS_NAMESPACE),
+        ["kubectl", "cluster-info", "--namespace", _EKS_NAMESPACE],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
         console.print(
-            f"[red]Cannot reach Kubernetes cluster via context '{context}'.[/red]\n"
+            "[red]Cannot reach Kubernetes cluster.[/red]\n"
             "Configure your kubeconfig and retry:\n"
             "  aws eks update-kubeconfig --name <cluster-name> --region <region>"
         )
@@ -212,7 +178,7 @@ def _upgrade_eks_services(cloud, release, context):
         image = image_template.format(cloud=cloud) + f":{release}"
 
         check = subprocess.run(
-            _kubectl_argv(context, "get", "deployment", deployment, "--namespace", _EKS_NAMESPACE),
+            ["kubectl", "get", "deployment", deployment, "--namespace", _EKS_NAMESPACE],
             capture_output=True, text=True,
         )
         if check.returncode != 0:
@@ -222,13 +188,13 @@ def _upgrade_eks_services(cloud, release, context):
             )
             continue
 
-        current_image = _get_current_image(deployment, container, context)
+        current_image = _get_current_image(deployment, container)
         current_tag = current_image.rsplit(":", 1)[-1] if current_image else "unknown"
         image_repo = image_template.format(cloud=cloud)
 
         if current_image == image:
             console.print(f"  [bold]{service}[/bold]: already on {release} — restarting")
-            restart_cmd = _kubectl_argv(context, "rollout", "restart", f"deployment/{deployment}", "--namespace", _EKS_NAMESPACE)
+            restart_cmd = ["kubectl", "rollout", "restart", f"deployment/{deployment}", "--namespace", _EKS_NAMESPACE]
             restart_result = subprocess.run(restart_cmd, capture_output=True, text=True)
             if restart_result.returncode != 0:
                 results.append((service, image_repo, current_tag, release, "FAIL", restart_result.stderr.strip()))
@@ -236,7 +202,7 @@ def _upgrade_eks_services(cloud, release, context):
                 continue
         else:
             console.print(f"  [bold]{service}[/bold]: {current_tag} → {release}")
-            set_cmd = _kubectl_argv(context, "set", "image", f"deployment/{deployment}", f"{container}={image}", "--namespace", _EKS_NAMESPACE)
+            set_cmd = ["kubectl", "set", "image", f"deployment/{deployment}", f"{container}={image}", "--namespace", _EKS_NAMESPACE]
             set_result = subprocess.run(set_cmd, capture_output=True, text=True)
             if set_result.returncode != 0:
                 results.append((service, image_repo, current_tag, release, "FAIL", set_result.stderr.strip()))
@@ -244,7 +210,7 @@ def _upgrade_eks_services(cloud, release, context):
                 continue
 
         console.print("    waiting for rollout to complete...")
-        rollout_cmd = _kubectl_argv(context, "rollout", "status", f"deployment/{deployment}", f"--timeout={_EKS_ROLLOUT_TIMEOUT}s", "--namespace", _EKS_NAMESPACE)
+        rollout_cmd = ["kubectl", "rollout", "status", f"deployment/{deployment}", f"--timeout={_EKS_ROLLOUT_TIMEOUT}s", "--namespace", _EKS_NAMESPACE]
         rollout = subprocess.run(rollout_cmd, capture_output=True, text=True)
         if rollout.returncode == 0:
             detail = "restart complete" if current_image == image else "rollout complete"
@@ -1095,7 +1061,7 @@ def control_plane(cloud, release, assume_yes):
     context = _get_current_kube_context()
     _confirm_kube_context(context, assume_yes=assume_yes)
 
-    _upgrade_eks_services(cloud, release, context)
+    _upgrade_eks_services(cloud, release)
 
 
 @upgrade.command("data-plane")
@@ -1200,7 +1166,7 @@ def streaming_health(cloud, assume_yes):
     context = _get_current_kube_context()
     _confirm_kube_context(context, assume_yes=assume_yes)
     console.print("[bold]Running Kubernetes infrastructure checks...[/bold]")
-    results = run_infra_checks(cloud=cloud, kube_context=context)
+    results = run_infra_checks(cloud=cloud)
     print_check_table("Zipline Streaming Infrastructure Diagnostics", results)
 
 if __name__ == "__main__":

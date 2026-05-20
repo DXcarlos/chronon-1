@@ -4,7 +4,6 @@ import json
 import logging
 import shutil
 import subprocess
-from functools import partial
 from urllib.parse import urlparse
 
 from rich.table import Table
@@ -16,22 +15,14 @@ logger = logging.getLogger(__name__)
 _KUBECTL_TIMEOUT = 10  # seconds
 
 
-def _run_kubectl(args, timeout=_KUBECTL_TIMEOUT, context=None):
+def _run_kubectl(args, timeout=_KUBECTL_TIMEOUT):
     """Run a kubectl subcommand with a timeout.
 
     Returns a CompletedProcess-like object; on TimeoutExpired, logs a warning
     and returns a namespace with returncode=1 and empty stdout/stderr so
     callers that check returncode behave correctly without special-casing.
-
-    When `context` is set, `--context <name>` is prepended so the call targets
-    that kubeconfig context instead of the ambient active one. Callers that
-    want deterministic env routing should pass it; legacy callers can leave it
-    None to preserve the old behavior.
     """
-    cmd = ["kubectl"]
-    if context:
-        cmd.extend(["--context", context])
-    cmd.extend(args)
+    cmd = ["kubectl"] + args
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -45,17 +36,12 @@ def _run_kubectl(args, timeout=_KUBECTL_TIMEOUT, context=None):
         return _TimedOut()
 
 
-def run_infra_checks(cloud="aws", kube_context=None):
+def run_infra_checks(cloud="aws"):
     """Run Kubernetes infrastructure checks for the Flink streaming setup.
 
     Returns a list of (check_name, what, status, detail) tuples.
-
-    When `kube_context` is set, every kubectl call targets that context — used
-    by the env-aware streaming-health command so we deterministically check
-    the prod or canary cluster rather than the ambient active one.
     """
     results = []
-    kctl = partial(_run_kubectl, context=kube_context)
 
     if not shutil.which("kubectl"):
         results.append(
@@ -69,7 +55,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
         return results
     results.append(("kubectl", "kubectl binary present", "ok", ""))
 
-    r = kctl(["cluster-info"])
+    r = _run_kubectl(["cluster-info"])
     if r.returncode != 0:
         results.append(
             (
@@ -83,7 +69,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
     results.append(("cluster", "Can reach the Kubernetes API", "ok", ""))
 
     for ns in ("zipline-flink", "zipline-system"):
-        r = kctl(["get", "namespace", ns])
+        r = _run_kubectl(["get", "namespace", ns])
         if r.returncode != 0:
             results.append(
                 (
@@ -96,7 +82,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
         else:
             results.append((ns, f"{ns} namespace exists", "ok", ""))
 
-    r = kctl(["get", "role", "orchestration-flink-role", "-n", "zipline-flink"])
+    r = _run_kubectl(["get", "role", "orchestration-flink-role", "-n", "zipline-flink"])
     if r.returncode != 0:
         results.append(
             (
@@ -109,7 +95,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
     else:
         results.append(("orchestration-flink-role", "Flink RBAC role exists", "ok", ""))
 
-    r = kctl(
+    r = _run_kubectl(
         [
             "auth",
             "can-i",
@@ -133,7 +119,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
     else:
         results.append(("FlinkDeployment RBAC", "orchestration-sa can submit Flink jobs", "ok", ""))
 
-    r = kctl(
+    r = _run_kubectl(
         [
             "auth",
             "can-i",
@@ -157,7 +143,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
     else:
         results.append(("ingress RBAC", "orchestration-sa can manage Flink ingresses", "ok", ""))
 
-    r = kctl(["get", "serviceaccount", "zipline-flink-sa", "-n", "zipline-flink"])
+    r = _run_kubectl(["get", "serviceaccount", "zipline-flink-sa", "-n", "zipline-flink"])
     if r.returncode != 0:
         results.append(
             (
@@ -170,7 +156,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
     else:
         results.append(("zipline-flink-sa", "Flink job service account exists", "ok", ""))
 
-    r = kctl(["get", "crd", "flinkdeployments.flink.apache.org"])
+    r = _run_kubectl(["get", "crd", "flinkdeployments.flink.apache.org"])
     if r.returncode != 0:
         results.append(
             (
@@ -184,7 +170,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
         results.append(("FlinkDeployment CRD", "Flink operator CRD installed", "ok", ""))
 
     hub_base_url = None
-    r = kctl(
+    r = _run_kubectl(
         [
             "get",
             "deployment",
@@ -234,7 +220,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
 
     if hub_base_url:
         hub_hostname = urlparse(hub_base_url).hostname or ""
-        r = kctl(
+        r = _run_kubectl(
             [
                 "get",
                 "ingress",
@@ -277,7 +263,7 @@ def run_infra_checks(cloud="aws", kube_context=None):
 
         is_elb = ".elb." in hub_base_url and ".amazonaws.com" in hub_base_url
         if is_elb:
-            r = kctl(
+            r = _run_kubectl(
                 [
                     "get",
                     "events",
@@ -307,22 +293,21 @@ def run_infra_checks(cloud="aws", kube_context=None):
                 )
 
     if cloud == "azure":
-        results.extend(_run_azure_infra_checks(kube_context=kube_context))
+        results.extend(_run_azure_infra_checks())
 
     return results
 
 
-def _run_azure_infra_checks(kube_context=None):
+def _run_azure_infra_checks():
     """Run Azure-specific checks for Flink-on-AKS with Workload Identity.
 
     Returns a list of (check_name, what, status, detail) tuples.
     """
     results = []
-    kctl = partial(_run_kubectl, context=kube_context)
 
     # Namespace label: tells the WI mutating webhook to activate for pods in this namespace.
     # Without it, the webhook skips the namespace entirely — SA annotation and client-id are irrelevant.
-    r = kctl(
+    r = _run_kubectl(
         [
             "get",
             "namespace",
@@ -347,7 +332,7 @@ def _run_azure_infra_checks(kube_context=None):
 
     # SA annotation: binds the SA to an Azure managed identity (client-id).
     # Without it, the webhook won't inject the federated token volume — Flink pods can't authenticate to ABFS or Key Vault.
-    r = kctl(
+    r = _run_kubectl(
         [
             "get",
             "serviceaccount",
@@ -380,7 +365,7 @@ def _run_azure_infra_checks(kube_context=None):
 
     # Flink operator: reconciles FlinkDeployment CRs into JM/TM pods.
     # Without a running operator, submitted jobs will be accepted by the API but never materialize.
-    r = kctl(
+    r = _run_kubectl(
         [
             "get",
             "deployment",
@@ -413,7 +398,7 @@ def _run_azure_infra_checks(kube_context=None):
 
     # Hub env vars: AksFlinkSubmitter reads these to configure the WI identity and target namespace for submitted jobs.
     # Missing values mean jobs are submitted with the wrong (or no) identity, causing silent ABFS/Event Hubs auth failures.
-    r = kctl(
+    r = _run_kubectl(
         [
             "get",
             "deployment",
@@ -500,7 +485,7 @@ def _run_azure_infra_checks(kube_context=None):
     ]
     wi_webhook_found = None
     for webhook_name in _WI_WEBHOOK_NAMES:
-        r = kctl(["get", "mutatingwebhookconfiguration", webhook_name])
+        r = _run_kubectl(["get", "mutatingwebhookconfiguration", webhook_name])
         if r.returncode == 0:
             wi_webhook_found = webhook_name
             break
