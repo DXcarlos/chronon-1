@@ -1,9 +1,6 @@
 {
   "metaData": {
     "customJson": "{\"airflowDependencies\": []}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

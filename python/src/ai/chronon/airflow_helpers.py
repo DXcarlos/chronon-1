@@ -171,12 +171,11 @@ def _get_airflow_deps_from_source(source, partition_column=None):
         return []
 
     # Without a partition column we can't construct a meaningful dependency
-    # spec — skip rather than fail. This happens in canary compile when a team
-    # has no canaryConf (executionInfo.conf is empty) and the source's query
-    # also doesn't specify a partition column. In prod compile this same path
-    # is reached only when the user genuinely forgot to set the partition
-    # column anywhere, but failing later (at runtime / scheduling) is preferred
-    # over an obscure assertion deep in compile-time dep generation.
+    # spec — skip rather than fail. Happens whenever a team's conf doesn't set
+    # `spark.chronon.partition.column` and the source's query doesn't specify
+    # one either (e.g. a per-env teams file with minimal conf). Failing later
+    # (at runtime / scheduling) is preferred over an obscure assertion deep in
+    # compile-time dep generation.
     if source_partition_column is None:
         return []
 

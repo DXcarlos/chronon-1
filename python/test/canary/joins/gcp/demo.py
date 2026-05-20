@@ -141,7 +141,8 @@ derivations_v1 = Join(
     output_namespace="data",
     step_days=30,
     offline_schedule="0 4 * * *",
-    online_schedule="0 3 * * *"
+    online_schedule="0 3 * * *",
+    environments=["prod", "canary"],
 )
 
 fake_groupby = GroupBy(

@@ -2,9 +2,6 @@
   "engineType": 2,
   "metaData": {
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_DEMO_CLAIMS_DEMO_CLAIMS_DEMO_BASELINE_SOURCE_with_offset_0\", \"spec\": \"DEMO.CLAIMS_DEMO.CLAIMS_DEMO_BASELINE_SOURCE/DS={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "conf": {
         "common": {

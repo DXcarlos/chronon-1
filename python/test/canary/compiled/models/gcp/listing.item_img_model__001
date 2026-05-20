@@ -12,9 +12,6 @@
     "instance": "named_struct('image', named_struct('gcsUri', listing_id_main_image_path), 'text','')"
   },
   "metaData": {
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

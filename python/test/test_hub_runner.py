@@ -18,13 +18,42 @@ from click.testing import CliRunner
 from rich.text import Text
 
 from ai.chronon.cli.formatter import Format
-from ai.chronon.repo.hub_runner import hub, redeploy_streaming
+from ai.chronon.repo.hub_runner import get_conf_type, hub, redeploy_streaming
 from gen_thrift.api.ttypes import Environment
 
 
 def _plain(text: str) -> str:
     """Strip ANSI escape sequences using Rich's own parser."""
     return Text.from_ansi(text).plain
+
+@pytest.mark.parametrize("conf,expected", [
+    # prod paths (under compiled/)
+    ("compiled/joins/team/x__0", "joins"),
+    ("compiled/staging_queries/team/x__0", "stagingqueries"),
+    ("compiled/group_bys/team/x__0", "groupbys"),
+    ("compiled/models/team/x__1.0", "models"),
+    ("compiled/model_transforms/team/x__1", "modeltransforms"),
+    # canary paths (under compiled_canary/) — these used to raise before the
+    # path-component fix, since the substring "compiled/joins" doesn't match
+    # "compiled_canary/joins/...".
+    ("compiled_canary/joins/team/x__0", "joins"),
+    ("compiled_canary/staging_queries/team/x__0", "stagingqueries"),
+    ("compiled_canary/group_bys/team/x__0", "groupbys"),
+    # arbitrary env name (any compiled_<env> prefix should work)
+    ("compiled_staging/joins/team/x__0", "joins"),
+    # absolute paths
+    ("/abs/repo/compiled_canary/joins/team/x__0", "joins"),
+])
+def test_get_conf_type_handles_per_env_output_dirs(conf, expected):
+    """get_conf_type must work for any compiled_<env>/ folder, not just
+    compiled/, otherwise canary-targeted hub commands fail with ValueError."""
+    assert get_conf_type(conf) == expected
+
+
+def test_get_conf_type_rejects_unknown_folder():
+    with pytest.raises(ValueError, match="Unsupported conf type"):
+        get_conf_type("compiled_canary/widgets/team/x")
+
 
 class TestHubRunner:
     """Test cases for hub_runner backfill command."""
@@ -561,6 +590,7 @@ class TestHubRunner:
         # Verify call_schedule_all_api was NOT called since all confs have no schedules
         mock_hub_instance.call_schedule_all_api.assert_not_called()
 
+    @patch('ai.chronon.repo.hub_runner.get_metadata_map')
     @patch('ai.chronon.repo.hub_runner.get_schedule_modes')
     @patch('ai.chronon.repo.hub_runner.hub_uploader.compute_and_upload_diffs')
     @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
@@ -573,6 +603,7 @@ class TestHubRunner:
         mock_build_hashmap,
         mock_compute_diffs,
         mock_get_schedule_modes,
+        mock_get_metadata_map,
         canary,
     ):
         """Confs with schedules should be deployed even if they aren't in the diff."""
@@ -594,17 +625,23 @@ class TestHubRunner:
             localPath="/path/to/unchanged",
             hash="hash_unchanged",
         )
-        # build_local_repo_hashmap returns ALL confs in the repo
+        # build_local_repo_hashmap returns ALL confs in the repo — this is what
+        # the schedule-all loop iterates (per PR #1831). compute_and_upload_diffs
+        # is still called for the sync side-effect but its return is irrelevant.
         mock_build_hashmap.return_value = {
             "test_team.changed_join": changed_conf,
             "test_team.unchanged_join": unchanged_conf,
         }
-        # compute_and_upload_diffs returns only the changed conf — the unchanged
-        # one used to be excluded from scheduling because of this.
         mock_compute_diffs.return_value = {
             "test_team.changed_join": changed_conf,
         }
 
+        # Both confs have prod environments and real schedules — both must be
+        # submitted. Mocked because the localPaths above are fake.
+        mock_get_metadata_map.return_value = {
+            "environments": [Environment.PROD],
+            "executionInfo": {"offlineSchedule": "@daily"},
+        }
         mock_get_schedule_modes.return_value = ScheduleModes(
             offline_schedule="@daily",
             online_schedule="@hourly",
@@ -922,18 +959,20 @@ class TestHubRunner:
         from gen_thrift.api.ttypes import Conf
 
         mock_get_current_branch.return_value = "test-branch"
-        mock_build_hashmap.return_value = {}
 
         # Create test confs: one with prod, one with canary, one with both
         prod_conf = Conf(name="test_team.prod_join", localPath="/path/to/prod", hash="hash1")
         canary_conf = Conf(name="test_team.canary_join", localPath="/path/to/canary", hash="hash2")
         both_conf = Conf(name="test_team.both_join", localPath="/path/to/both", hash="hash3")
 
-        mock_compute_diffs.return_value = {
+        # The schedule-all loop iterates build_local_repo_hashmap's return —
+        # not compute_and_upload_diffs (see PR #1831).
+        mock_build_hashmap.return_value = {
             "test_team.prod_join": prod_conf,
             "test_team.canary_join": canary_conf,
             "test_team.both_join": both_conf,
         }
+        mock_compute_diffs.return_value = {}
 
         # Set up environments for each conf
         def get_metadata_side_effect(path):
@@ -1003,17 +1042,18 @@ class TestHubRunner:
         from gen_thrift.api.ttypes import Conf
 
         mock_get_current_branch.return_value = "test-branch"
-        mock_build_hashmap.return_value = {}
 
         prod_conf = Conf(name="test_team.prod_join", localPath="/path/to/prod", hash="hash1")
         canary_conf = Conf(name="test_team.canary_join", localPath="/path/to/canary", hash="hash2")
         both_conf = Conf(name="test_team.both_join", localPath="/path/to/both", hash="hash3")
 
-        mock_compute_diffs.return_value = {
+        # See note in test_schedule_all_filters_by_environment about #1831.
+        mock_build_hashmap.return_value = {
             "test_team.prod_join": prod_conf,
             "test_team.canary_join": canary_conf,
             "test_team.both_join": both_conf,
         }
+        mock_compute_diffs.return_value = {}
 
         def get_metadata_side_effect(path):
             if "prod" in path:
@@ -1080,14 +1120,15 @@ class TestHubRunner:
         from gen_thrift.api.ttypes import Conf
 
         mock_get_current_branch.return_value = "test-branch"
-        mock_build_hashmap.return_value = {}
 
         # Conf without environments field
         legacy_conf = Conf(name="test_team.legacy_join", localPath="/path/to/legacy", hash="hash1")
 
-        mock_compute_diffs.return_value = {
+        # Loop iterates build_local_repo_hashmap (see #1831), not the diff set.
+        mock_build_hashmap.return_value = {
             "test_team.legacy_join": legacy_conf,
         }
+        mock_compute_diffs.return_value = {}
 
         # Return metadata without environments field (should default to ['prod'])
         mock_get_metadata_map.return_value = {
@@ -1128,6 +1169,60 @@ class TestHubRunner:
     @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
     @patch('ai.chronon.repo.hub_runner.get_current_branch')
     @patch('ai.chronon.repo.hub_runner.ZiplineHub')
+    @pytest.mark.parametrize("environments_value", [None, []])
+    def test_schedule_all_treats_null_or_empty_environments_as_prod(
+        self,
+        mock_zipline_hub,
+        mock_get_current_branch,
+        mock_build_hashmap,
+        mock_compute_diffs,
+        mock_get_schedule_modes,
+        mock_get_metadata_map,
+        canary,
+        environments_value,
+    ):
+        """A conf with an explicit `environments: null` or `environments: []` on
+        disk must behave the same as a conf where the key is omitted entirely:
+        both default to prod-only deploy. Guards against a regression where
+        authoring stops writing the field but the consumer keeps a stricter
+        ``in`` check."""
+        from ai.chronon.repo.hub_runner import (
+            ScheduleModes,
+            submit_schedule_all,
+        )
+        from gen_thrift.api.ttypes import Conf
+
+        mock_get_current_branch.return_value = "test-branch"
+        conf = Conf(name="test_team.unset", localPath="/path/to/x", hash="hash1")
+        mock_build_hashmap.return_value = {"test_team.unset": conf}
+        mock_compute_diffs.return_value = {}
+        mock_get_metadata_map.return_value = {
+            "environments": environments_value,
+            "executionInfo": {"offlineSchedule": "@daily"},
+        }
+        mock_get_schedule_modes.return_value = ScheduleModes(
+            offline_schedule="@daily", online_schedule="None",
+        )
+        mock_hub_instance = mock_zipline_hub.return_value
+        mock_hub_instance.call_schedule_all_api.return_value = {
+            "totalCount": 1, "successCount": 1, "failureCount": 0, "results": [],
+        }
+
+        submit_schedule_all(
+            repo=canary, cloud='gcp', customer_id=None,
+            env='prod', hub_url=None, use_auth=False,
+        )
+
+        call_args = mock_hub_instance.call_schedule_all_api.call_args[0][0]
+        conf_names = [c["conf_name"] for c in call_args]
+        assert "test_team.unset" in conf_names
+
+    @patch('ai.chronon.repo.hub_runner.get_metadata_map')
+    @patch('ai.chronon.repo.hub_runner.get_schedule_modes')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.compute_and_upload_diffs')
+    @patch('ai.chronon.repo.hub_runner.hub_uploader.build_local_repo_hashmap')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    @patch('ai.chronon.repo.hub_runner.ZiplineHub')
     def test_schedule_all_no_matching_environment(
         self,
         mock_zipline_hub,
@@ -1146,14 +1241,15 @@ class TestHubRunner:
         from gen_thrift.api.ttypes import Conf
 
         mock_get_current_branch.return_value = "test-branch"
-        mock_build_hashmap.return_value = {}
 
-        # Only prod confs
+        # Only prod confs — the canary env filter must reject all of them so
+        # call_schedule_all_api is never invoked.
         prod_conf = Conf(name="test_team.prod_join", localPath="/path/to/prod", hash="hash1")
 
-        mock_compute_diffs.return_value = {
+        mock_build_hashmap.return_value = {
             "test_team.prod_join": prod_conf,
         }
+        mock_compute_diffs.return_value = {}
 
         mock_get_metadata_map.return_value = {
             "environments": [Environment.PROD],
@@ -1295,6 +1391,24 @@ class TestEnvironmentValidation:
             environments=['PROD', 'Canary']
         )
         assert join.metaData.environments == [0, 1]
+
+    def test_join_leaves_environments_unset_when_not_provided(self):
+        """Authoring without `environments=` must leave metaData.environments
+        as None — downstream consumers (hub schedule-all) default missing /
+        empty to [Environment.PROD] at read time. Keeps compiled output free
+        of a hard-coded default."""
+        from ai.chronon.join import Join
+        from ai.chronon.query import Query
+        from gen_thrift.api.ttypes import EventSource, Source
+
+        left = Source(events=EventSource(table="test.table", query=Query(selects={"a": "a"})))
+
+        join = Join(left=left, right_parts=[], row_ids="id")
+        assert join.metaData.environments is None
+
+        # Empty list also leaves the field unset.
+        join = Join(left=left, right_parts=[], row_ids="id", environments=[])
+        assert join.metaData.environments in (None, [])
 
     def test_join_rejects_invalid_environment(self):
         """Test that Join raises ValueError for invalid environment strings."""

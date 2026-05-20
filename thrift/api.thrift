@@ -540,9 +540,6 @@ struct Team {
     21: optional common.ConfigProperties conf
     22: optional common.ClusterConfigProperties clusterConf
 
-    23: optional common.EnvironmentVariables canaryEnv
-    24: optional common.ConfigProperties canaryConf
-    25: optional common.ClusterConfigProperties canaryClusterConf
 }
 
 enum DataModel {

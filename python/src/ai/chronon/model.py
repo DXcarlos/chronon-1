@@ -208,10 +208,12 @@ def Model(
     :return:
         A Model object
     """
-    # Initialize and validate environments
-    if environments is None:
-        environments = ['prod']
-    environments = utils.convert_environments_to_enum(environments)
+    # `environments` is left unset (None) when the author doesn't specify it.
+    # Downstream consumers (e.g. hub schedule-all) default the missing/empty
+    # case to ['prod']. Keeping it unset on disk avoids baking a default into
+    # every compiled conf.
+    if environments:
+        environments = utils.convert_environments_to_enum(environments)
 
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()
@@ -282,10 +284,12 @@ def ModelTransforms(
      - environments: List of environments where this ModelTransforms should be deployed/available.
         Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     """
-    # Initialize and validate environments
-    if environments is None:
-        environments = ['prod']
-    environments = utils.convert_environments_to_enum(environments)
+    # `environments` is left unset (None) when the author doesn't specify it.
+    # Downstream consumers (e.g. hub schedule-all) default the missing/empty
+    # case to ['prod']. Keeping it unset on disk avoids baking a default into
+    # every compiled conf.
+    if environments:
+        environments = utils.convert_environments_to_enum(environments)
 
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()

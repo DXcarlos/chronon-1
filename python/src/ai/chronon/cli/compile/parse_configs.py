@@ -44,7 +44,9 @@ def from_folder(target_classes: List[type], input_dir: str, compile_context: Com
             for target_cls, objects_dict in multi_type_results.items():
                 for name, obj in objects_dict.items():
                     parse_teams.update_metadata(
-                        obj, compile_context.teams_dict, mode=compile_context.mode
+                        obj,
+                        compile_context.teams_dict,
+                        teams_file_name=compile_context.teams_file_name,
                     )
                     # Populate columnHashes field with semantic hashes
                     populate_column_hashes(obj)

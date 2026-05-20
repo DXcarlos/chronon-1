@@ -14,10 +14,11 @@ from gen_thrift.api.ttypes import Conf
 
 
 def build_local_repo_hashmap(root_dir: str, env: str = 'prod'):
-    # `env` picks the compile output folder. Mirrors the dual-folder layout
-    # produced by `zipline compile`: 'prod' → compiled/, 'canary' →
-    # canary_compiled/. Unknown values fall back to prod.
-    folder = "canary_compiled" if env and env.lower() == "canary" else "compiled"
+    # `env` picks the compile output folder. Mirrors the per-env layout produced
+    # by `zipline compile`: 'prod' → compiled/, any other <env> → compiled_<env>/
+    # (matching teams.<env>.py). Empty / falsy env defaults to prod.
+    e = (env or "prod").lower()
+    folder = "compiled" if e == "prod" else f"compiled_{e}"
     compiled_dir = os.path.join(root_dir, folder)
     # Returns a map of name -> (tbinary, file_hash)
     results = {}

@@ -102,9 +102,6 @@
             "tags_last": "127ced2578a540a522f3f437101d7726",
             "weight_grams_last": "5b19e9ed87508482695b4e3606acfa97"
           },
-          "environments": [
-            0
-          ],
           "executionInfo": {
             "clusterConf": {
               "modeClusterConfigs": {
@@ -259,9 +256,6 @@
       "user_id": "80c458b68b34de93d3c4c555ef2b2ddc"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_exports_user_activities__0_with_offset_0\", \"spec\": \"data.gcp_exports_user_activities__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listings__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_exports_dim_listing_mutations__0_with_offset_0\", \"spec\": \"data.gcp_exports_dim_listing_mutations__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
-    "environments": [
-      0
-    ],
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
