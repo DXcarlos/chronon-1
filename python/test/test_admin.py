@@ -1139,35 +1139,35 @@ class TestUpgradeEksServices:
 class TestUpgradeCommand:
     # --- control-plane subcommand ---
 
+    @patch("ai.chronon.repo.admin._get_current_kube_context", return_value="test-ctx")
     @patch("ai.chronon.repo.admin._upgrade_eks_services")
     @patch("ai.chronon.repo.admin.get_package_version", return_value="1.0.0")
-    def test_upgrade_control_plane_aws_with_release(self, mock_ver, mock_upgrade):
+    def test_upgrade_control_plane_aws_with_release(self, mock_ver, mock_upgrade, mock_ctx):
         runner = CliRunner()
         result = runner.invoke(
             admin,
-            ["upgrade", "control-plane", "aws", "--release", "1.4.2", "--kube-context", "test-ctx"],
+            ["upgrade", "control-plane", "aws", "--release", "1.4.2", "--yes"],
         )
         assert result.exit_code == 0
         mock_upgrade.assert_called_once_with("aws", "1.4.2", "test-ctx")
 
+    @patch("ai.chronon.repo.admin._get_current_kube_context", return_value="test-ctx")
     @patch("ai.chronon.repo.admin._upgrade_eks_services")
     @patch("ai.chronon.repo.admin.get_package_version", return_value="1.0.0")
-    def test_upgrade_control_plane_defaults_to_package_version(self, mock_ver, mock_upgrade):
+    def test_upgrade_control_plane_defaults_to_package_version(self, mock_ver, mock_upgrade, mock_ctx):
         runner = CliRunner()
         result = runner.invoke(
             admin,
-            ["upgrade", "control-plane", "aws", "--kube-context", "test-ctx"],
+            ["upgrade", "control-plane", "aws", "--yes"],
         )
         assert result.exit_code == 0
         mock_upgrade.assert_called_once_with("aws", "1.0.0", "test-ctx")
 
     @patch("ai.chronon.repo.admin._upgrade_eks_services")
     def test_upgrade_control_plane_gcp_rejected(self, mock_upgrade):
+        # cloud check fires before context detection, so no kubectl mock needed
         runner = CliRunner()
-        result = runner.invoke(
-            admin,
-            ["upgrade", "control-plane", "gcp", "--kube-context", "test-ctx"],
-        )
+        result = runner.invoke(admin, ["upgrade", "control-plane", "gcp"])
         assert result.exit_code != 0
         mock_upgrade.assert_not_called()
         assert "only supported for AWS" in result.output
@@ -1175,14 +1175,28 @@ class TestUpgradeCommand:
     @patch("ai.chronon.repo.admin._upgrade_eks_services")
     @patch("ai.chronon.repo.admin.get_package_version", return_value="unknown")
     def test_upgrade_control_plane_unknown_version_no_release_fails(self, mock_ver, mock_upgrade):
+        # release check fires before context detection, so no kubectl mock needed
         runner = CliRunner()
-        result = runner.invoke(
-            admin,
-            ["upgrade", "control-plane", "aws", "--kube-context", "test-ctx"],
-        )
+        result = runner.invoke(admin, ["upgrade", "control-plane", "aws"])
         assert result.exit_code != 0
         mock_upgrade.assert_not_called()
         assert "--release" in result.output
+
+    @patch("ai.chronon.repo.admin._get_current_kube_context", return_value="test-ctx")
+    @patch("ai.chronon.repo.admin._upgrade_eks_services")
+    @patch("ai.chronon.repo.admin.get_package_version", return_value="1.0.0")
+    def test_upgrade_control_plane_aborts_on_no(self, mock_ver, mock_upgrade, mock_ctx):
+        # Without --yes, the prompt fires. Sending "n" to stdin aborts before
+        # the upgrade runs.
+        runner = CliRunner()
+        result = runner.invoke(
+            admin,
+            ["upgrade", "control-plane", "aws", "--release", "1.4.2"],
+            input="n\n",
+        )
+        assert result.exit_code != 0
+        mock_upgrade.assert_not_called()
+        assert "Aborted by user" in result.output
 
     # --- data-plane subcommand ---
 

@@ -34,7 +34,6 @@ from ai.chronon.cli.formatter import Format
 from ai.chronon.repo.hub_runner import (
     format_option,
     hub_url_option,
-    print_env_banner,
     redeploy_streaming,
     repo_option,
     use_auth_option,
@@ -91,18 +90,62 @@ def _env_label_from_context(context: str) -> str:
 
 def _print_resolved_kube_context(context: str, format: Format = Format.TEXT) -> None:
     """Print the kubectl context that kubectl-driven admin commands will target.
-    Pairs with `print_env_banner` so the user sees both an env label and the
-    actual cluster name those kubectl calls hit."""
+    Used by `_confirm_kube_context` to show the detected context next to the
+    prod/canary banner before prompting."""
     if format == Format.JSON:
         return
     console.print(f"   [dim]kubectl context:[/dim] {context}")
 
 
-def kube_context_option(func):
+def _get_current_kube_context() -> str:
+    """Return the active kubectl context, or exit with a helpful message if
+    kubectl is missing or unconfigured. Reads `kubectl config current-context`
+    once at command start; the detected context is then pinned into every
+    subsequent kubectl call via `--context <name>` so the cluster a command
+    targets can't drift if the user's kubeconfig changes mid-run."""
+    if not shutil.which("kubectl"):
+        console.print(
+            "[red]kubectl not found.[/red]\n"
+            "Install kubectl (https://kubernetes.io/docs/tasks/tools/) and retry."
+        )
+        raise SystemExit(1)
+    result = subprocess.run(
+        ["kubectl", "config", "current-context"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        console.print(
+            "[red]No active kubectl context.[/red]\n"
+            "Configure one and retry:\n"
+            "  aws eks update-kubeconfig --name <cluster-name> --region <region>"
+        )
+        raise SystemExit(1)
+    return result.stdout.strip()
+
+
+def _confirm_kube_context(
+    context: str,
+    format: Format = Format.TEXT,
+    assume_yes: bool = False,
+) -> None:
+    """Show the user which kubectl context the command is about to target and
+    prompt for confirmation. Aborts on No. Skipped in JSON-format mode or when
+    `assume_yes` is true (for CI / scripted use)."""
+    print_env_banner(_env_label_from_context(context), format=format)
+    _print_resolved_kube_context(context, format=format)
+    if assume_yes or format == Format.JSON:
+        return
+    if not click.confirm("\nProceed against this kubectl context?", default=False):
+        console.print("[yellow]Aborted by user.[/yellow]")
+        raise SystemExit(1)
+
+
+def assume_yes_option(func):
     return click.option(
-        "--kube-context",
-        help="kubectl context name to target. Required. Use `kubectl config get-contexts` to list available contexts.",
-        required=True,
+        "-y", "--yes", "assume_yes",
+        is_flag=True,
+        default=False,
+        help="Skip the kubectl-context confirmation prompt. Use for scripts/CI.",
     )(func)
 
 
@@ -1029,8 +1072,8 @@ def upgrade():
     default=None,
     help="Zipline release to upgrade to (e.g. 1.4.2). Defaults to the installed zipline-ai package version.",
 )
-@kube_context_option
-def control_plane(cloud, release, kube_context):
+@assume_yes_option
+def control_plane(cloud, release, assume_yes):
     """Upgrade running EKS service deployments to a given release.
 
     CLOUD is the cloud provider variant (gcp, aws, or azure).
@@ -1040,9 +1083,6 @@ def control_plane(cloud, release, kube_context):
         console.print(f"[yellow]Upgrade is currently only supported for AWS (got {cloud}).[/yellow]")
         raise SystemExit(1)
 
-    print_env_banner(_env_label_from_context(kube_context))
-    _print_resolved_kube_context(kube_context)
-
     if release is None:
         release = get_package_version()
         if release == "unknown":
@@ -1050,7 +1090,12 @@ def control_plane(cloud, release, kube_context):
             raise SystemExit(1)
         console.print(f"Using release [bold]{release}[/bold]")
 
-    _upgrade_eks_services(cloud, release, kube_context)
+    # Detect the active kubectl context after input validation passes — we
+    # don't want a kubectl-not-found error to mask an obvious bad arg.
+    context = _get_current_kube_context()
+    _confirm_kube_context(context, assume_yes=assume_yes)
+
+    _upgrade_eks_services(cloud, release, context)
 
 
 @upgrade.command("data-plane")
@@ -1146,16 +1191,16 @@ def hub_health(hub_url, expected_version):
     show_default=True,
     help="Cloud provider variant.",
 )
-@kube_context_option
-def streaming_health(cloud, kube_context):
+@assume_yes_option
+def streaming_health(cloud, assume_yes):
     """Check that the Flink streaming infrastructure is correctly configured.
 
     Requires kubectl to be installed and configured with access to the cluster.
     """
-    print_env_banner(_env_label_from_context(kube_context))
-    _print_resolved_kube_context(kube_context)
+    context = _get_current_kube_context()
+    _confirm_kube_context(context, assume_yes=assume_yes)
     console.print("[bold]Running Kubernetes infrastructure checks...[/bold]")
-    results = run_infra_checks(cloud=cloud, kube_context=kube_context)
+    results = run_infra_checks(cloud=cloud, kube_context=context)
     print_check_table("Zipline Streaming Infrastructure Diagnostics", results)
 
 if __name__ == "__main__":
