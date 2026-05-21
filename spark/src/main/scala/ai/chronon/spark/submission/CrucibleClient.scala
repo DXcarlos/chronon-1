@@ -202,10 +202,24 @@ class CrucibleClient(val baseUrl: String, val namespace: String) {
       None
     } else {
       val jobObjects = (0 until jobs.size()).flatMap(i => Option(jobs.getJsonObject(i)))
+      def nonEmptyString(job: JsonObject, field: String): Option[String] =
+        Option(job.getString(field)).filter(_.nonEmpty)
+      def isRunning(job: JsonObject, field: String): Boolean =
+        nonEmptyString(job, field).exists(_.equalsIgnoreCase("RUNNING"))
+
       jobObjects
-        .find(job => Option(job.getString("status")).exists(_.equalsIgnoreCase("RUNNING")))
-        .orElse(jobObjects.headOption)
-        .flatMap(job => Option(job.getString("id")).filter(_.nonEmpty))
+        .find(job => nonEmptyString(job, "jid").isDefined && isRunning(job, "state"))
+        .orElse(
+          jobObjects.find(job =>
+            nonEmptyString(job, "jid").isDefined && nonEmptyString(job, "state").isDefined)
+        )
+        .flatMap(job => nonEmptyString(job, "jid"))
+        .orElse(
+          jobObjects
+            .find(job => isRunning(job, "status"))
+            .orElse(jobObjects.headOption)
+            .flatMap(job => nonEmptyString(job, "id"))
+        )
     }
   }
 

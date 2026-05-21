@@ -131,6 +131,25 @@ class CrucibleSubmitterTest extends AnyFlatSpec with Matchers {
     }
   }
 
+  it should "resolve Flink internal job id from jid and state fields" in {
+    withCruciblePathResponse(
+      "/flink/test-ns/flink-job-1/ui/jobs",
+      """{"jobs":[{"jid":"staging-job","state":"CREATED"},{"jid":"flink-runtime-456","state":"RUNNING"}]}"""
+    ) { baseUrl =>
+      val submitter = new CrucibleSubmitter(
+        baseUrl = baseUrl,
+        namespace = "test-ns",
+        sparkImage = "spark-image",
+        flinkImage = "flink-image"
+      )
+      try {
+        submitter.getFlinkInternalJobId("flink-job-1") shouldBe Some("flink-runtime-456")
+      } finally {
+        submitter.close()
+      }
+    }
+  }
+
   it should "expand flink dependency jar base path for crucible submissions" in {
     val jars = CrucibleSubmitter.flinkAdditionalJars(
       submissionProperties = Map(
