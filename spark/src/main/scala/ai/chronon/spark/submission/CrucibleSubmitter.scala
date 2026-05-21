@@ -27,7 +27,8 @@ class CrucibleSubmitter(
 
   @transient override lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  private val client = new CrucibleClient(baseUrl.stripSuffix("/"), namespace)
+  private val normalizedBaseUrl = baseUrl.stripSuffix("/")
+  private val client = new CrucibleClient(normalizedBaseUrl, namespace)
 
   override def submit(
       jobType: JobType,
@@ -154,18 +155,26 @@ class CrucibleSubmitter(
 
   override def close(): Unit = client.close()
 
-  // Spark UI URL: the gateway translates this Crucible jobId to Spark's
-  // driver-assigned application id at click time and 302s to SHS. The
-  // submitter stays synchronous — no polling, no cache — symmetric with the
-  // other JobSubmitter implementations.
   override def getJobUrl(jobId: String): Option[String] =
-    Some(s"${baseUrl.stripSuffix("/")}/api/v1/namespaces/$namespace/jobs/$jobId")
+    Some(jobUrl(jobId))
 
-  override def getSparkUrl(jobId: String): Option[String] =
-    Some(s"${baseUrl.stripSuffix("/")}/spark/$namespace/$jobId/")
+  override def getSparkUrl(jobId: String): Option[String] = {
+    try {
+      val job = client.getJob(jobId)
+      if (job.httpCode == 200) {
+        job.historyUrl.orElse(Some(sparkUIUrl(jobId)))
+      } else {
+        Some(sparkUIUrl(jobId))
+      }
+    } catch {
+      case e: Exception =>
+        logger.warn(s"Failed to resolve Crucible Spark history URL for job $jobId; using live UI URL", e)
+        Some(sparkUIUrl(jobId))
+    }
+  }
 
   override def getFlinkUrl(jobId: String): Option[String] =
-    Some(s"${baseUrl.stripSuffix("/")}/flink/$namespace/$jobId/ui")
+    Some(flinkUIUrl(jobId))
 
   override def isClusterCreateNeeded(isLongRunning: Boolean): Boolean = false
 
@@ -209,6 +218,15 @@ class CrucibleSubmitter(
   private def localClasspathFor(jarUri: String): String =
     if (jarUri.startsWith("local://")) jarUri.stripPrefix("local://")
     else "/opt/spark/work-dir/" + jarUri.split("/").last
+
+  private def jobUrl(jobId: String): String =
+    s"$normalizedBaseUrl/api/v1/namespaces/$namespace/jobs/$jobId"
+
+  private def sparkUIUrl(jobId: String): String =
+    s"$normalizedBaseUrl/jobs/$namespace/$jobId/ui"
+
+  private def flinkUIUrl(jobId: String): String =
+    s"$normalizedBaseUrl/flink/$namespace/$jobId/ui"
 
   private def sanitizeName(name: String): String = {
     val cleaned = name.toLowerCase
