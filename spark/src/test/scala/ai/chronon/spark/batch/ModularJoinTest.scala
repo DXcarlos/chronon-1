@@ -366,6 +366,15 @@ class ModularJoinTest extends SparkTestBase {
     Seq(("old_user", 1L, "old_boot", dayAndMonthBefore))
       .toDF("user", "ts", "boot_value", "ds")
       .save(bootstrapNode.metaData.outputTable)
+    Seq(("stale_user", 1L, "stale_boot", monthAgo))
+      .toDF("user", "ts", "boot_value", "ds")
+      .save(bootstrapNode.metaData.outputTable)
+    Seq(("stale_user", 1L, monthAgo))
+      .toDF("user", "ts", "ds")
+      .save(mergeNode.metaData.outputTable)
+    Seq(("stale_user", 1L, 1, monthAgo))
+      .toDF("user", "ts", "constant_value", "ds")
+      .save(derivationNode.metaData.outputTable)
 
     new JoinBootstrapJob(bootstrapNode.content.getJoinBootstrap, bootstrapNode.metaData, dateRange).run()
     val joinPartResult = new JoinPartJob(joinPartNode.content.getJoinPart, joinPartNode.metaData, dateRange).run()
@@ -376,7 +385,9 @@ class ModularJoinTest extends SparkTestBase {
     assertTrue(tableUtils.tableReachable(bootstrapNode.metaData.outputTable))
     assertEquals(0, tableUtils.scanDf(null, bootstrapNode.metaData.outputTable, range = Some(partitionRange)).count())
     assertFalse(tableUtils.tableReachable(joinPartNode.metaData.outputTable))
-    assertFalse(tableUtils.tableReachable(mergeNode.metaData.outputTable))
-    assertFalse(tableUtils.tableReachable(derivationNode.metaData.outputTable))
+    assertTrue(tableUtils.tableReachable(mergeNode.metaData.outputTable))
+    assertEquals(0, tableUtils.scanDf(null, mergeNode.metaData.outputTable, range = Some(partitionRange)).count())
+    assertTrue(tableUtils.tableReachable(derivationNode.metaData.outputTable))
+    assertEquals(0, tableUtils.scanDf(null, derivationNode.metaData.outputTable, range = Some(partitionRange)).count())
   }
 }

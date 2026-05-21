@@ -128,6 +128,61 @@ class UnionJoinTest extends BaseJoinTest {
     tableUtils.tableReachable(joinConf.metaData.outputTable, ignoreFailure = true) shouldBe false
   }
 
+  it should "clear existing output range when the left side has no rows" in {
+    import spark.implicits._
+
+    val viewsSchema = List(
+      Column("user", api.StringType, 1),
+      Column("item", api.StringType, 1),
+      Column("time_spent_ms", api.LongType, 5000)
+    )
+
+    val viewsTable = s"$namespace.empty_left_union_right_with_stale_output"
+    DataFrameGen
+      .events(spark, viewsSchema, count = 100, partitions = 3)
+      .save(viewsTable)
+
+    val start = tableUtils.partitionSpec.minus(today, new Window(7, TimeUnit.DAYS))
+    val viewsSource = Builders.Source.events(
+      table = viewsTable,
+      topic = "",
+      query = Builders.Query(selects = Builders.Selects("time_spent_ms"), startPartition = start)
+    )
+
+    val viewsGroupBy = Builders
+      .GroupBy(
+        sources = Seq(viewsSource),
+        keyColumns = Seq("item"),
+        aggregations = Seq(Builders.Aggregation(operation = Operation.AVERAGE, inputColumn = "time_spent_ms")),
+        metaData = Builders.MetaData(name = "unit_test.empty_left_union_views_with_stale_output", namespace = namespace)
+      )
+      .setAccuracy(Accuracy.TEMPORAL)
+
+    val itemQueriesTable = s"$namespace.empty_left_union_queries_with_stale_output"
+    DataFrameGen
+      .events(spark, List(Column("item", api.StringType, 1)), count = 100, partitions = 3)
+      .save(itemQueriesTable)
+
+    val joinConf = Builders.Join(
+      left = Builders.Source.events(Builders.Query(startPartition = start), table = itemQueriesTable),
+      joinParts = Seq(Builders.JoinPart(groupBy = viewsGroupBy, prefix = "user")),
+      metaData =
+        Builders.MetaData(name = "test.empty_left_union_join_with_stale_output", namespace = namespace, team = "item_team")
+    )
+
+    val futurePartition = tableUtils.partitionSpec.after(today)
+    val stalePartition = tableUtils.partitionSpec.minus(today, new Window(1, TimeUnit.DAYS))
+    Seq(("stale_item", 1L, futurePartition), ("old_item", 1L, stalePartition))
+      .toDF("item", "ts", "ds")
+      .save(joinConf.metaData.outputTable)
+
+    val dateRange = PartitionRange(futurePartition, futurePartition)(tableUtils.partitionSpec)
+
+    noException should be thrownBy UnionJoin.computeJoinAndSave(joinConf, dateRange)
+    tableUtils.scanDf(null, joinConf.metaData.outputTable, range = Some(dateRange)).count() shouldBe 0L
+    tableUtils.sql(s"SELECT * FROM ${joinConf.metaData.outputTable} WHERE ds = '$stalePartition'").count() shouldBe 1L
+  }
+
   it should "test UnionJoin with GroupBy and Join derivations" in {
 
     val eventsSchema = List(

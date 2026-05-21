@@ -37,17 +37,36 @@ class JoinDerivationJob(node: JoinDerivationNode, metaData: MetaData, range: Dat
   private val outputTable = metaData.outputTable
 
   def run(): Unit = tableUtils.withJobDescription(s"JoinDerivationJob(${join.metaData.name}) $dateRange") {
+    if (!tableUtils.tableReachable(leftInputTable, ignoreFailure = true)) {
+      logger.info(
+        s"Join left input table $leftInputTable is not present for range $dateRange, skipping derivation computation")
+      tableUtils.deleteRange(outputTable, dateRange)
+      return
+    }
 
     val leftDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(dateRange))
     if (leftDf.isEmpty) {
       logger.info(
         s"Join left input table $leftInputTable is empty for range $dateRange, skipping derivation computation")
+      tableUtils.deleteRange(outputTable, dateRange)
       return
     }
 
     val trueLeftCols = leftDf.columns
 
+    if (!tableUtils.tableReachable(baseTable, ignoreFailure = true)) {
+      logger.info(s"Base table $baseTable is not present for range $dateRange, skipping derivation computation")
+      tableUtils.deleteRange(outputTable, dateRange)
+      return
+    }
+
     val baseDf = tableUtils.scanDf(query = null, table = baseTable, range = Some(dateRange))
+    if (baseDf.isEmpty) {
+      logger.info(s"Base table $baseTable is empty for range $dateRange, skipping derivation computation")
+      tableUtils.deleteRange(outputTable, dateRange)
+      return
+    }
+
     val valueCols = baseDf.columns.diff(trueLeftCols)
 
     val baseOutputColumns = baseDf.columns.toSet

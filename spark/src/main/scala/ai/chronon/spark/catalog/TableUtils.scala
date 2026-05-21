@@ -738,6 +738,27 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     (startClause ++ endClause).toSeq
   }
 
+  def deleteRange(tableName: String, range: PartitionRange): Unit = {
+    require(range.wellDefined, s"Cannot delete an unbounded partition range from $tableName: $range")
+
+    if (!tableReachable(tableName, ignoreFailure = true)) {
+      logger.info(s"Table $tableName is not present, skipping delete for range $range")
+      return
+    }
+
+    tableFormatProvider.readFormat(tableName) match {
+      case Some(Hive) =>
+        range.partitions.foreach { partition =>
+          logger.info(s"Dropping partition ${range.partitionSpec.column}=$partition from $tableName")
+          sql(s"ALTER TABLE $tableName DROP IF EXISTS PARTITION (${range.partitionSpec.column}='$partition')")
+        }
+      case _ =>
+        val predicate = whereClauses(range).map(p => s"($p)").mkString(" AND ")
+        logger.info(s"Deleting rows from $tableName for range $range with predicate: $predicate")
+        sql(s"DELETE FROM $tableName WHERE $predicate")
+    }
+  }
+
   def scanDf(query: Query,
              table: String,
              fallbackSelects: Option[Map[String, String]] = None,

@@ -251,9 +251,13 @@ object UnionJoin {
   def computeJoinAndSave(joinConf: api.Join, dateRange: PartitionRange, semanticHash: Option[String] = None)(implicit
       tableUtils: TableUtils): Unit =
     tableUtils.withJobDescription(s"UnionJoin(${joinConf.metaData.name}) $dateRange") {
-      computeJoinOpt(joinConf, dateRange).foreach { resultDf =>
-        logger.info(s"Saving output to ${joinConf.metaData.outputTable}")
-        resultDf.save(joinConf.metaData.outputTable, semanticHash = semanticHash)
+      computeJoinOpt(joinConf, dateRange) match {
+        case Some(resultDf) =>
+          logger.info(s"Saving output to ${joinConf.metaData.outputTable}")
+          resultDf.save(joinConf.metaData.outputTable, semanticHash = semanticHash)
+        case None =>
+          logger.info(s"Clearing output range $dateRange from ${joinConf.metaData.outputTable}")
+          tableUtils.deleteRange(joinConf.metaData.outputTable, dateRange)
       }
     }
 

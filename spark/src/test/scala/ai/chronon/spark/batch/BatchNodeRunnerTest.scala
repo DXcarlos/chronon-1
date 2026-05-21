@@ -1039,7 +1039,9 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     val runner = new BatchNodeRunner(node, tableUtils, mockApi)
     val range = PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec)
 
-    an[Exception] should be thrownBy runner.run(metadata, nodeContent, Option(range))
+    val ex = the[Exception] thrownBy runner.run(metadata, nodeContent, Option(range))
+    ex.getMessage should include("TABLE_OR_VIEW_NOT_FOUND")
+    ex.getMessage should include("missing_join_output")
   }
 
   override def afterAll(): Unit = {

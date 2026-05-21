@@ -39,6 +39,7 @@ class JoinBootstrapJob(node: JoinBootstrapNode, metaData: MetaData, range: DateR
     val leftDf = tableUtils.scanDf(query = null, table = leftSourceTable, range = Some(dateRange))
     if (leftDf.isEmpty) {
       logger.info(s"Left source table $leftSourceTable is empty for range $dateRange, skipping bootstrap computation")
+      tableUtils.deleteRange(outputTable, dateRange)
       return
     }
 
