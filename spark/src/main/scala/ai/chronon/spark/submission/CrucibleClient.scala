@@ -210,8 +210,7 @@ class CrucibleClient(val baseUrl: String, val namespace: String) {
       jobObjects
         .find(job => nonEmptyString(job, "jid").isDefined && isRunning(job, "state"))
         .orElse(
-          jobObjects.find(job =>
-            nonEmptyString(job, "jid").isDefined && nonEmptyString(job, "state").isDefined)
+          jobObjects.find(job => nonEmptyString(job, "jid").isDefined && nonEmptyString(job, "state").isDefined)
         )
         .flatMap(job => nonEmptyString(job, "jid"))
         .orElse(
