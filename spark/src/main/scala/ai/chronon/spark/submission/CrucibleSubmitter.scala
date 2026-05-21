@@ -170,6 +170,23 @@ class CrucibleSubmitter(
   override def getFlinkUrl(jobId: String): Option[String] =
     Some(flinkUIUrl(jobId))
 
+  override def getFlinkInternalJobId(jobId: String): Option[String] =
+    try {
+      val internalJobId = client.getFlinkInternalJobId(jobId)
+      internalJobId match {
+        case Some(id) => logger.info(s"Resolved Flink internal job id for Crucible job $jobId: $id")
+        case None     => logger.warn(s"Flink internal job id not yet available for Crucible job $jobId")
+      }
+      internalJobId
+    } catch {
+      case e: CrucibleApiException =>
+        logger.warn(s"Failed to resolve Flink internal job id for Crucible job $jobId: ${e.getMessage}")
+        None
+      case e: Exception =>
+        logger.warn(s"Unexpected error resolving Flink internal job id for Crucible job $jobId", e)
+        None
+    }
+
   override def isClusterCreateNeeded(isLongRunning: Boolean): Boolean = false
 
   override def ensureClusterReady(clusterName: String, clusterConf: Option[Map[String, String]])(implicit

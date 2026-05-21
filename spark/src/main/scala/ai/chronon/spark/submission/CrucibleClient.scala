@@ -1,7 +1,7 @@
 package ai.chronon.spark.submission
 
 import io.vertx.core.Vertx
-import io.vertx.core.json.JsonObject
+import io.vertx.core.json.{JsonArray, JsonObject}
 import io.vertx.ext.web.client.{WebClient, WebClientOptions}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -114,6 +114,43 @@ class CrucibleClient(val baseUrl: String, val namespace: String) {
     await(future, s"getting Crucible status for job $jobId")
   }
 
+  def getFlinkInternalJobId(jobId: String): Option[String] = {
+    val uri = s"/flink/$namespace/$jobId/ui/jobs"
+    val future = new CompletableFuture[Option[String]]()
+
+    client
+      .getAbs(s"$baseUrl$uri")
+      .send(ar => {
+        if (ar.succeeded()) {
+          val response = ar.result()
+          if (response.statusCode() == 200) {
+            try {
+              val respBody = new JsonObject(response.bodyAsString())
+              future.complete(extractFlinkJobId(respBody.getJsonArray("jobs")))
+            } catch {
+              case e: Exception =>
+                val errorMsg = s"Invalid Flink jobs response for Crucible job $jobId: ${e.getMessage}"
+                logger.error(errorMsg, e)
+                future.completeExceptionally(CrucibleApiException(errorMsg, Some(response.statusCode()), e))
+            }
+          } else if (response.statusCode() == 404) {
+            future.complete(None)
+          } else {
+            val errorMsg =
+              s"Failed to get Flink internal job id for Crucible job $jobId: HTTP ${response.statusCode()} - ${response.bodyAsString()}"
+            logger.warn(errorMsg)
+            future.complete(None)
+          }
+        } else {
+          val errorMsg = s"Failed to get Flink internal job id for Crucible job $jobId: ${ar.cause().getMessage}"
+          logger.error(errorMsg, ar.cause())
+          future.completeExceptionally(CrucibleApiException(errorMsg, cause = ar.cause()))
+        }
+      })
+
+    await(future, s"getting Flink internal job id for Crucible job $jobId")
+  }
+
   def killJob(jobId: String): Unit = {
     val uri = s"$apiBase/jobs/$jobId"
     logger.info(s"Killing job $jobId")
@@ -159,6 +196,18 @@ class CrucibleClient(val baseUrl: String, val namespace: String) {
       case code if code >= 500 && code < 600 => "SERVER_ERROR"
       case _                                 => "ERROR"
     }
+
+  private def extractFlinkJobId(jobs: JsonArray): Option[String] = {
+    if (jobs == null || jobs.isEmpty) {
+      None
+    } else {
+      val jobObjects = (0 until jobs.size()).flatMap(i => Option(jobs.getJsonObject(i)))
+      jobObjects
+        .find(job => Option(job.getString("status")).exists(_.equalsIgnoreCase("RUNNING")))
+        .orElse(jobObjects.headOption)
+        .flatMap(job => Option(job.getString("id")).filter(_.nonEmpty))
+    }
+  }
 
   def close(): Unit = {
     client.close()

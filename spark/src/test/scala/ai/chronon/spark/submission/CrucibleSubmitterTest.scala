@@ -112,6 +112,25 @@ class CrucibleSubmitterTest extends AnyFlatSpec with Matchers {
       "https://crucible.example.com/spark-history/flink/test-ns/flink-job-1/ui")
   }
 
+  it should "resolve Flink internal job id through Crucible Flink REST proxy" in {
+    withCruciblePathResponse(
+      "/flink/test-ns/flink-job-1/ui/jobs",
+      """{"jobs":[{"id":"staging-job","status":"CREATED"},{"id":"flink-runtime-123","status":"RUNNING"}]}"""
+    ) { baseUrl =>
+      val submitter = new CrucibleSubmitter(
+        baseUrl = baseUrl,
+        namespace = "test-ns",
+        sparkImage = "spark-image",
+        flinkImage = "flink-image"
+      )
+      try {
+        submitter.getFlinkInternalJobId("flink-job-1") shouldBe Some("flink-runtime-123")
+      } finally {
+        submitter.close()
+      }
+    }
+  }
+
   it should "expand flink dependency jar base path for crucible submissions" in {
     val jars = CrucibleSubmitter.flinkAdditionalJars(
       submissionProperties = Map(
@@ -134,9 +153,13 @@ class CrucibleSubmitterTest extends AnyFlatSpec with Matchers {
   }
 
   private def withCrucibleJobResponse(responseJson: String)(test: String => Unit): Unit = {
+    withCruciblePathResponse("/api/v1/namespaces/test-ns/jobs/job-1", responseJson)(test)
+  }
+
+  private def withCruciblePathResponse(path: String, responseJson: String)(test: String => Unit): Unit = {
     val server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0)
     server.createContext(
-      "/api/v1/namespaces/test-ns/jobs/job-1",
+      path,
       new HttpHandler {
         override def handle(exchange: HttpExchange): Unit = {
           val response = responseJson.getBytes(StandardCharsets.UTF_8)
