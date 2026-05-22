@@ -451,11 +451,17 @@ class MegaTileProcessFunction(
       case NoWatermark =>
         nextSmallWindowHop(eventTs)
       case SparseKeyLag | Live =>
-        nextSmallWindowHop(processingTs)
+        if (processingTs == floorToSmallWindowHop(processingTs)) {
+          // processor.onEvent includes retained tiles with tileStart < smallWindowAsOfTs.
+          processingTs + 1L
+        } else processingTs
     }
 
+  private def floorToSmallWindowHop(ts: Long): Long =
+    TsUtils.round(ts, processor.minSmallWindowTileSize)
+
   private def nextSmallWindowHop(ts: Long): Long =
-    TsUtils.round(ts, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize
+    floorToSmallWindowHop(ts) + processor.minSmallWindowTileSize
 
   private def scheduleEvictTimerIfNeeded(timerService: TimerService, processingTs: Long): Unit = {
     if (!hasActiveSmallWindowState) {
@@ -466,8 +472,7 @@ class MegaTileProcessFunction(
     val current = nextEvictPtTimerState.value()
     if (current != null) return
 
-    val timestamp =
-      TsUtils.round(processingTs, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize
+    val timestamp = nextSmallWindowHop(processingTs)
     timerService.registerProcessingTimeTimer(timestamp)
     nextEvictPtTimerState.update(timestamp)
   }
