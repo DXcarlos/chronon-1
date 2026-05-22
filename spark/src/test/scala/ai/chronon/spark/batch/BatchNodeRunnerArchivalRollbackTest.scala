@@ -3,6 +3,7 @@ package ai.chronon.spark.batch
 import ai.chronon.api.Extensions._
 import ai.chronon.api._
 import ai.chronon.api.planner.{MetaDataUtils, TableDependencies}
+import ai.chronon.online.KVStore
 import ai.chronon.planner.{MonolithJoinNode, Node, NodeContent}
 import ai.chronon.spark.utils.{MockApi, SparkTestBase}
 import ai.chronon.spark.catalog.{CreationUtils, TableUtils}
@@ -150,5 +151,32 @@ class BatchNodeRunnerArchivalRollbackTest extends AnyFlatSpec with BeforeAndAfte
     val currentHash = tableUtils.getTableProperties(outputTable).flatMap(_.get(Constants.SemanticHashKey))
     assertEquals("Output table should retain the new semantic hash", Some(newHash), currentHash)
     assertTrue(s"Archive table should still exist since rollback was skipped", tableUtils.tableReachable(archiveTable))
+  }
+
+  it should "persist semantic hash when post-job actions fail" in {
+    val outputTable = s"$namespace.output_table"
+    val newHash = "new_hash"
+    val node = makeNode(outputTable, newHash)
+
+    val apiWithFailingPostJobAction = new MockApi(() => mockKVStore, namespace) {
+      override def genMetricsKvStore(tableBaseName: String): KVStore =
+        throw new RuntimeException("Simulated metrics store failure")
+    }
+
+    val runner = new BatchNodeRunner(node, tableUtils, apiWithFailingPostJobAction) {
+      override def run(metadata: MetaData, conf: NodeContent, maybeRange: Option[PartitionRange]): Unit = {
+        spark.sql(
+          s"""CREATE TABLE $outputTable (
+             |  id INT, value STRING, ds STRING
+             |) PARTITIONED BY (ds)""".stripMargin)
+        spark.sql(s"INSERT INTO $outputTable VALUES (1, 'new_output', '$yesterday')")
+      }
+    }
+
+    val exitCode = runner.runFromArgs(twoDaysAgo, yesterday, Some("metrics_dataset"))
+
+    assertEquals("runFromArgs should return 0 when only post-job actions fail", 0, exitCode)
+    val currentHash = tableUtils.getTableProperties(outputTable).flatMap(_.get(Constants.SemanticHashKey))
+    assertEquals("Output table should receive the semantic hash", Some(newHash), currentHash)
   }
 }

@@ -598,16 +598,20 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       }
 
       try {
-
         postJobActions(metadata = metadata, range = range, tableStatsDataset = tableStatsDataset)
-
-        if (!isSensorNode) {
-          su.setSemanticHash(outputTable, incomingSemanticHash)
-        }
       } catch {
         case e: Exception =>
           // Don't fail the job if post-job actions fail
           logger.error(s"Post-job actions failed for '${metadata.name}'", e)
+      }
+
+      if (!isSensorNode) {
+        try {
+          su.setSemanticHash(outputTable, incomingSemanticHash)
+        } catch {
+          case e: Exception =>
+            logger.error(s"Failed to set semantic hash for '${metadata.name}'", e)
+        }
       }
     } match {
       case Success(_) => {
