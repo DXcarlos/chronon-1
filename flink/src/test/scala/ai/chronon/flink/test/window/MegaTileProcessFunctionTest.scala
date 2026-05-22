@@ -78,6 +78,17 @@ class MegaTileProcessFunctionTest extends AnyFlatSpec with Matchers {
         expectedKey = "gen_catchup",
         expectedDayStart = dayStart("2025-07-21T00:00:00Z"),
         expectedValues = windowValues(2L, 3L, 3L))
+
+      // When the watermark catches up enough for Live mode, the event path must rebuild from the
+      // current live range before applying the incremental update.
+      driver.processWatermark("2025-07-21T11:29:40Z")
+      driver.setProcessingTime("2025-07-21T11:35:09Z")
+      driver.processEvent("gen_catchup", "2025-07-21T11:35:09Z", "user_after_transition")
+      assertSingleOutput(
+        driver.drainNewOutputs(),
+        expectedKey = "gen_catchup",
+        expectedDayStart = dayStart("2025-07-21T00:00:00Z"),
+        expectedValues = windowValues(2L, 4L, 4L))
     }
   }
 
