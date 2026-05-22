@@ -147,6 +147,9 @@ class MegaTileProcessFunction(
   private var nextEvictPtTimerState: ValueState[java.lang.Long] = _
   private var nextEmitPtTimerState: ValueState[java.lang.Long] = _
   private var lastEventProcessingTsState: ValueState[java.lang.Long] = _
+  // The floored as-of marker for the range currently covered by the TileStore's
+  // cachedSmallWindowIr. In Flink, that cached IR is backed by megaTileIrState.
+  private var cachedSmallWindowAsOfTsState: ValueState[java.lang.Long] = _
   private var todayDirtyState: ValueState[java.lang.Boolean] = _
   private var yesterdayDirtyState: ValueState[java.lang.Boolean] = _
 
@@ -190,6 +193,8 @@ class MegaTileProcessFunction(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-next-emit-pt-timer", classOf[java.lang.Long]))
     lastEventProcessingTsState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-last-event-processing-ts", classOf[java.lang.Long]))
+    cachedSmallWindowAsOfTsState = getRuntimeContext.getState(
+      new ValueStateDescriptor[java.lang.Long]("mega-tile-cached-small-window-as-of-ts", classOf[java.lang.Long]))
     todayDirtyState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Boolean]("mega-tile-today-dirty", classOf[java.lang.Boolean]))
     yesterdayDirtyState = getRuntimeContext.getState(
@@ -250,8 +255,10 @@ class MegaTileProcessFunction(
 
       val mode = currentMode(processingTs, watermark)
       val smallWindowAsOfTs = smallWindowAsOfTsForEvent(mode, tsMills, processingTs, watermark)
+      rebuildCachedSmallWindowForEventIfNeeded(smallWindowAsOfTs)
       // Step 3.
       val result = processor.onEvent(row, tsMills, smallWindowAsOfTs)
+      recordCachedSmallWindowAsOfTs(smallWindowAsOfTs)
       // Step 4.
       markDirtyState(result.todayEntry != null, result.yesterdayEntry != null)
 
@@ -344,6 +351,30 @@ class MegaTileProcessFunction(
     if (hasYesterdayUpdate) yesterdayDirtyState.update(java.lang.Boolean.TRUE)
   }
 
+  private def cachedSmallWindowAsOfTs: Option[Long] =
+    Option(cachedSmallWindowAsOfTsState.value()).map(_.longValue())
+
+  private def recordCachedSmallWindowAsOfTs(asOfTs: Long): Unit = {
+    if (processor.hasSmallWindows) {
+      cachedSmallWindowAsOfTsState.update(floorToSmallWindowHop(asOfTs))
+    }
+  }
+
+  private def rebuildCachedSmallWindowForEventIfNeeded(smallWindowAsOfTs: Long): Unit = {
+    if (!processor.hasSmallWindows || !hasActiveSmallWindowState) {
+      return
+    }
+
+    val targetAsOfTs = floorToSmallWindowHop(smallWindowAsOfTs)
+    if (cachedSmallWindowAsOfTs.contains(targetAsOfTs)) {
+      return
+    }
+
+    val result = processor.onEviction(smallWindowAsOfTs)
+    recordCachedSmallWindowAsOfTs(smallWindowAsOfTs)
+    markDirtyState(result.todayEntry != null, hasYesterdayUpdate = false)
+  }
+
   private def runEvictionTimer(currentKey: java.util.List[Any],
                                timestamp: Long,
                                processingTs: Long,
@@ -355,6 +386,7 @@ class MegaTileProcessFunction(
     emitOrBufferTodayThenDayRoll(evictionTime, currentKey, processingTs, out)
 
     val result = processor.onEviction(evictionTime)
+    recordCachedSmallWindowAsOfTs(evictionTime)
     markDirtyState(result.todayEntry != null, hasYesterdayUpdate = false)
     scheduleEvictTimerIfNeeded(timerService, processingTs)
 
@@ -397,6 +429,10 @@ class MegaTileProcessFunction(
     }
 
     processor.advanceWatermark(dayTransitionTs)
+    val currentDayStart = flinkStore.getCurrentDayStart
+    if (currentDayStart != previousDayStart) {
+      recordCachedSmallWindowAsOfTs(dayTransitionTs)
+    }
   }
 
   sealed private trait Mode
