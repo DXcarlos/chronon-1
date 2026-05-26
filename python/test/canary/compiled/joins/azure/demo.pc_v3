@@ -7,22 +7,22 @@
         ],
         "metaData": {
           "columnHashes": {
-            "brief_description": "d8f700f63471993b54a19d71122ec11b",
-            "currency": "ca2881e80e9a9b877c2824d1072d337d",
-            "headline": "3336296614f6be325954fd9ba86eb0cf",
-            "inventory_count": "31547342ddbeb4a831724186b289ea87",
-            "is_active": "faf50877bb5bd0b8f8d920fa0105bd1d",
-            "is_expensive": "e637a3ddd3c42a1edf54251b574b481f",
-            "is_in_stock": "c5fc4a74834fb45b6d5af196310c0f31",
-            "listing_id": "e486882fe8630828862beed3908c72f6",
-            "long_description": "639ab6183464bef6ec2c16118a2cde83",
-            "main_image_path": "647aece2b7dd9c084a447f06db6c9078",
-            "merchant_id": "f00635e9f0582cc0a4504e90e7bc469f",
-            "price_cents": "89610b09ce4e5c7cdba038c3d9ded2ef",
-            "primary_category": "f7e610e63a0809f8b26f9d196b40d35e",
-            "secondary_image_paths": "f9194618378f2ea3855aa792c0bd9317",
-            "tags": "318519d7ab1453a331685dc7f165bb85",
-            "weight_grams": "f8f34e81434169852c03e62a335c20aa"
+            "brief_description": "3e0f2a9f08516068ffa392ac019bfd05",
+            "currency": "d4a3eb2809a50876413c1ed616392ff4",
+            "headline": "1304905ebd71b0560a7a3c27cbedde31",
+            "inventory_count": "c57d12ebe452aec73098902de4774fa8",
+            "is_active": "99949348c2be2e8e2c59102b6b395ded",
+            "is_expensive": "6d239016c7509c324cc8a211e86d22c4",
+            "is_in_stock": "bb83937923b57e801a052a4a052676a6",
+            "listing_id": "a8ce5bda04910da34810a1aa9ec6b002",
+            "long_description": "cc0bcd2c367265ccf8ca9131d5cbb07a",
+            "main_image_path": "9fbb24d0edaf13727b5d0833be5881e6",
+            "merchant_id": "d8f732c6fc9748fce927f8332bc2c8a5",
+            "price_cents": "68985594438f2a61d1617266126926e1",
+            "primary_category": "40352ee5c67eb96ff54218386be59b32",
+            "secondary_image_paths": "86a715fb49f67131b34952a1b37f2c3c",
+            "tags": "9ba51198bd9e76ff6a107e1c9f80aafd",
+            "weight_grams": "d668836776a35b3d0f7d158e1fd187dd"
           },
           "executionInfo": {
             "conf": {
@@ -57,6 +57,7 @@
                 "CLOUD_PROVIDER": "azure",
                 "CUSTOMER_ID": "dev",
                 "EVAL_URL": "https://dev-azure.zipline.ai/services/eval",
+                "FETCHER_URL": "http://localhost:9000",
                 "FLINK_JARS_URI": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net/spark-3.5.3/libs/",
                 "FLINK_SASL_JAAS_CONFIG_VAULT_URI": "https://eventhub-sasl-jaas.vault.azure.net/secrets/sasl-jass-config",
                 "FLINK_STATE_URI": "abfss://dev-zipline-warehouse@ziplineai2.dfs.core.windows.net/flink-state",
@@ -101,7 +102,7 @@
                 },
                 "startPartition": "2025-01-01"
               },
-              "snapshotTable": "data.azure_exports_dim_listings_pc__1"
+              "snapshotTable": "data.azure_exports_dim_listings_pc__3"
             }
           }
         ]
@@ -132,45 +133,45 @@
         },
         "startPartition": "2025-01-01"
       },
-      "snapshotTable": "data.azure_exports_dim_listings_pc__1"
+      "snapshotTable": "data.azure_exports_dim_listings_pc__3"
     }
   },
   "metaData": {
     "columnHashes": {
-      "brief_description": "5ae40fa9963d02d1f8afcbae02869b08",
-      "currency": "384574f30fe984988c7f736d83309a1a",
-      "headline": "000015ca5c9b191c2c9b520dcf8e0a1c",
-      "inventory_count": "6a786936e98006983e160915875e593d",
-      "is_active": "133b82620e1c926d0853614ac2002039",
-      "is_expensive": "6eaa23bf9cd94987b8905b1e861a7661",
-      "is_in_stock": "1f3cf734bfd0cf20cb656b2938b9f0cd",
-      "listing_id": "07fa41bbfe808a6524a7a16ab712fd4c",
-      "listing_id_brief_description": "31868234a42424279e00fce7f2520214",
-      "listing_id_currency": "61473201211c1afd3a1d9116fb3a9072",
-      "listing_id_headline": "9146c233c1ea889f05471ba8f3bc46d2",
-      "listing_id_inventory_count": "ff7e89d74ad170478ea1232eb5e41fb9",
-      "listing_id_is_active": "eaf3404ef754943dfa769b255fb351a0",
-      "listing_id_is_expensive": "62317488c4de93bf10d2c0cf09b8506c",
-      "listing_id_is_in_stock": "4d2f1173522465ab4bcd03aa5c5a85c7",
-      "listing_id_listing_id": "0e6bb1208bb63ccc0da0771cb4a2ab1b",
-      "listing_id_long_description": "b293571116db4c10f5f1d2ff42a57b85",
-      "listing_id_main_image_path": "fb103f1f840e9700e5bb6c67c868678e",
-      "listing_id_merchant_id": "dac397a502736222f6984f54074ecb12",
-      "listing_id_price_cents": "587f0eac8381823fb2a546f6fe1fc8b5",
-      "listing_id_primary_category": "7e08626200c9028926bf8af6462b1dd6",
-      "listing_id_secondary_image_paths": "0a44c83cfa2493c8ba715a5833475759",
-      "listing_id_tags": "5979de3fc49571d9ccec8f21e69a31e5",
-      "listing_id_weight_grams": "53700fe5e54d5350be5dacbbc9b8aa0d",
-      "long_description": "756b272483270065098e5d4e7a1e1996",
-      "main_image_path": "ee8f4253c2be3bbc3ab771aebeaff658",
-      "merchant_id": "70e7a60026c000d42380322c75cbb4d3",
-      "price_cents": "992b998ed1d9a9e72b7eec8722225f7f",
-      "primary_category": "f50570d493cbeca365386a2f9c503147",
-      "secondary_image_paths": "9ee5811f3edd43580cb230469677c955",
-      "tags": "a43e930fdfbad711713a725eccb39cbd",
-      "weight_grams": "3563150a7e46318bf3395d3d08e7b27d"
+      "brief_description": "296def455b01742325a30166e46198f2",
+      "currency": "9528336cc8c26cd11553b033485c339c",
+      "headline": "ff631ded25542aeecb2c8a0f73bfb30b",
+      "inventory_count": "9a5fdc6099e79ab95928fe06c6188c81",
+      "is_active": "2150e282aadfcf4d7085b1da1d8cc6a4",
+      "is_expensive": "2f48826fa6ad300b5891fda3c34adc90",
+      "is_in_stock": "35134e1eb4ca3d0794a376b655cab71a",
+      "listing_id": "392e992c522282dc63a2085b2e95e5c9",
+      "listing_id_brief_description": "ddc5deff0ba4f52d0cd349d24cfa8cac",
+      "listing_id_currency": "0104845d3f14da7a7e5383ee766eb537",
+      "listing_id_headline": "78f91017909dddc1620fab5aa58c9a9e",
+      "listing_id_inventory_count": "9b13623539cd91f0fde81bd16e7a3870",
+      "listing_id_is_active": "e5dc8ab2dbc2d5b369c237c1c2caef47",
+      "listing_id_is_expensive": "1b0cfea6e35fc766e63cf552d5cdf9ae",
+      "listing_id_is_in_stock": "54daf0de73d648b47b7ea3ea92b3f9a3",
+      "listing_id_listing_id": "86a1adb1d3ce8f47bc84d3827a9b7aeb",
+      "listing_id_long_description": "a1a99ca9aa020e3b32968ea898f5ee86",
+      "listing_id_main_image_path": "df5f0d210e86a96922a799d7d166698c",
+      "listing_id_merchant_id": "4127b3f0d743f994b6637f8ec483c0fb",
+      "listing_id_price_cents": "e8d78167bb0a609f18ec4f1bdcb4e7a2",
+      "listing_id_primary_category": "530a0a4d4f425082bd896f3819a42016",
+      "listing_id_secondary_image_paths": "96540433da9012999572996b653c1727",
+      "listing_id_tags": "cfbce60affd0a9f607125cfc629cc787",
+      "listing_id_weight_grams": "a3e83fc799bf798206474033d950ce57",
+      "long_description": "a20466460aac8c45c562f22a1ca13f43",
+      "main_image_path": "c2966b0a7c969c65ff5517a38089be32",
+      "merchant_id": "98b445ed1bd98517a634c8e35e5cdca3",
+      "price_cents": "1092d59bb161bf0b0922d33840922727",
+      "primary_category": "94b8b2ca55892213a35dab643b83c7a2",
+      "secondary_image_paths": "04421cec302b480246615d069b178123",
+      "tags": "686d024eded457eeaee6924bc82cdbed",
+      "weight_grams": "20cceac265a2459d48f0ba02e5eca5a9"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_dim_listings_pc__1_with_offset_0\", \"spec\": \"data.azure_exports_dim_listings_pc__1/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_exports_dim_listings_pc__3_with_offset_0\", \"spec\": \"data.azure_exports_dim_listings_pc__3/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "conf": {
         "common": {
@@ -205,6 +206,7 @@
           "CLOUD_PROVIDER": "azure",
           "CUSTOMER_ID": "dev",
           "EVAL_URL": "https://dev-azure.zipline.ai/services/eval",
+          "FETCHER_URL": "http://localhost:9000",
           "FLINK_JARS_URI": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net/spark-3.5.3/libs/",
           "FLINK_SASL_JAAS_CONFIG_VAULT_URI": "https://eventhub-sasl-jaas.vault.azure.net/secrets/sasl-jass-config",
           "FLINK_STATE_URI": "abfss://dev-zipline-warehouse@ziplineai2.dfs.core.windows.net/flink-state",
@@ -221,7 +223,7 @@
       "offlineSchedule": "@daily",
       "stepDays": 30
     },
-    "name": "azure.demo.pc_v2",
+    "name": "azure.demo.pc_v3",
     "online": 0,
     "outputNamespace": "data",
     "production": 0,

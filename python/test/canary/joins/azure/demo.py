@@ -104,7 +104,7 @@ derivations_v3 = Join(
     step_days=30,
 )
 
-pc_v2 = Join(
+pc_v3 = Join(
     left=dim_listings.pc_source,
     row_ids=[], # TODO -- kill this once the SPJ API change goes through
     right_parts=[

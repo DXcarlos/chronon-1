@@ -68,9 +68,51 @@ class AzureApiImpl(conf: Map[String, String]) extends Api(conf) {
     }
   }
 
-  override def genMetricsKvStore(tableBaseName: String): KVStore = null
+  override def genMetricsKvStore(tableBaseName: String): KVStore = {
+    Option(sharedMetricsKvStore.get()) match {
+      case Some(existingStore) =>
+        existingStore
+      case None =>
+        metricsKvStoreLock.synchronized {
+          Option(sharedMetricsKvStore.get()) match {
+            case Some(existingStore) => existingStore
+            case None =>
+              val kvStoreType = conf.getOrElse("kv.store.type", sys.env.getOrElse("KV_STORE_TYPE", "cosmos"))
+              val delegate = kvStoreType.toLowerCase match {
+                case "cosmos" =>
+                  logger.info("Initializing Cosmos DB metrics KV store")
+                  CosmosKVStoreFactory.createMetrics(conf)
+                case "redis" =>
+                  logger.info("Initializing Redis metrics KV store")
+                  RedisKVStoreFactory.create(conf)
+                case other =>
+                  throw new IllegalArgumentException(
+                    s"Unsupported KV store type: $other. Supported types: cosmos, redis")
+              }
+              val newStore = new AzureMetricsKVStore(delegate, tableBaseName)
+              sharedMetricsKvStore.set(newStore)
+              newStore
+          }
+        }
+    }
+  }
 
-  override def genEnhancedStatsKvStore(tableBaseName: String): KVStore = null
+  override def genEnhancedStatsKvStore(tableBaseName: String): KVStore = {
+    Option(sharedEnhancedStatsKvStore.get()) match {
+      case Some(existingStore) =>
+        existingStore
+      case None =>
+        enhancedStatsKvStoreLock.synchronized {
+          Option(sharedEnhancedStatsKvStore.get()) match {
+            case Some(existingStore) => existingStore
+            case None =>
+              val newStore = genKvStore
+              sharedEnhancedStatsKvStore.set(newStore)
+              newStore
+          }
+        }
+    }
+  }
 
   override def streamDecoder(groupByServingInfoParsed: GroupByServingInfoParsed): SerDe =
     new AvroSerDe(AvroConversions.fromChrononSchema(groupByServingInfoParsed.streamChrononSchema))

@@ -1,7 +1,7 @@
 package ai.chronon.integrations.cloud_azure
 
 import ai.chronon.integrations.cloud_azure.CosmosKVStoreConstants._
-import com.azure.cosmos.{ConsistencyLevel, CosmosAsyncClient, CosmosClientBuilder}
+import com.azure.cosmos.{ConsistencyLevel, CosmosAsyncClient, CosmosAsyncDatabase, CosmosClientBuilder}
 import org.slf4j.LoggerFactory
 
 import java.util.concurrent.atomic.AtomicReference
@@ -15,6 +15,14 @@ object CosmosKVStoreFactory {
   private val clientLock = new Object()
 
   def create(conf: Map[String, String]): CosmosKVStoreImpl = {
+    new CosmosKVStoreImpl(getDatabase(conf), conf)
+  }
+
+  def createMetrics(conf: Map[String, String]): CosmosMetricsKVStoreImpl = {
+    new CosmosMetricsKVStoreImpl(getDatabase(conf), conf)
+  }
+
+  private def getDatabase(conf: Map[String, String]): CosmosAsyncDatabase = {
     val endpoint = getOrElseThrow(EnvCosmosEndpoint, conf)
     val key = getOrElseThrow(EnvCosmosKey, conf)
     val databaseName = getOptional(EnvCosmosDatabase, conf).getOrElse(DefaultDatabaseName)
@@ -34,8 +42,7 @@ object CosmosKVStoreFactory {
         }
     }
 
-    val database = client.getDatabase(databaseName)
-    new CosmosKVStoreImpl(database, conf)
+    client.getDatabase(databaseName)
   }
 
   private def createCosmosClient(

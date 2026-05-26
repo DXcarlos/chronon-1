@@ -140,7 +140,9 @@ class EnhancedStatsStore(api: Api,
       logger.info(s"Batch ${batchIdx + 1} complete: $successCount succeeded, $failureCount failed")
 
       if (failureCount > 0) {
-        logger.error(s"Some uploads failed in batch ${batchIdx + 1}")
+        throw new RuntimeException(
+          s"Failed to upload enhanced stats batch ${batchIdx + 1}/${batches.size}: " +
+            s"$failureCount of ${batch.length} writes failed")
       }
     }
 
