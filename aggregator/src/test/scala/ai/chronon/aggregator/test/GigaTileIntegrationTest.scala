@@ -102,7 +102,7 @@ class GigaTileIntegrationTest extends AnyFlatSpec {
         val event = streamingEvents(eventIdx)
         firePendingEvictions(event.ts)
         processor.advanceWatermark(event.ts)
-        val result = processor.onEvent(event, event.ts)
+        val result = processor.onEvent(event, event.ts, queryTs)
         if (result.todayEntry != null) kvStore(result.todayStart) = result.todayEntry
         if (result.yesterdayEntry != null) kvStore(result.yesterdayStart) = result.yesterdayEntry
         if (nextEvictionTs == Long.MaxValue && processor.hasSmallWindows) {
