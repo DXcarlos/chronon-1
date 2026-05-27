@@ -21,7 +21,7 @@ import ai.chronon.api._
 import ai.chronon.api.planner.{MetaDataUtils, TableDependencies}
 import ai.chronon.observability.{TileSummaryKey, TileSummary}
 import ai.chronon.online.KVStore.PutRequest
-import ai.chronon.planner.{ExternalSourceSensorNode, GroupByBackfillNode, JoinStatsComputeNode, MonolithJoinNode, Node, NodeContent, StagingQueryNode}
+import ai.chronon.planner.{ExternalSourceSensorNode, GroupByBackfillNode, JoinStatsComputeNode, MonolithJoinNode, Node, NodeContent, SourceWithFilterNode, StagingQueryNode}
 import ai.chronon.spark.other.MockKVStore
 import ai.chronon.spark.utils.{MockApi, SparkTestBase}
 import ai.chronon.spark.catalog.TableUtils
@@ -272,6 +272,8 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     spark.sql("DROP TABLE IF EXISTS test_db.input_table_alt")
     spark.sql("DROP TABLE IF EXISTS test_db.output_table_alt")
     spark.sql("DROP TABLE IF EXISTS test_db.left_table_alt")
+    spark.sql("DROP TABLE IF EXISTS test_db.empty_source_input")
+    spark.sql("DROP TABLE IF EXISTS test_db.empty_source_output")
     spark.sql("DROP TABLE IF EXISTS test_db.output_table" + Constants.archiveReuseTableSuffix)
     spark.sql("DROP TABLE IF EXISTS test_db.tp_events")
     spark.sql("DROP TABLE IF EXISTS test_db.tp_staging_output")
@@ -298,15 +300,43 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     assertEquals("runFromArgs should return 0 on success", 0, exitCode)
   }
 
-  it should "short circuit and throw exception when missing partitions are present" in {
+  it should "delegate execution when required input tables exist but partitions are unavailable" in {
 
     val configPath = createTestConfigFile(twoDaysAgo, today) // today's partition doesn't exist
     val node = ThriftJsonCodec.fromJsonFile[Node](configPath, check = true)
-    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    node.setSemanticHash("test_hash")
+
+    var didRun = false
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi) {
+      override def run(metadata: MetaData, conf: NodeContent, maybeRange: Option[PartitionRange]): Unit = {
+        didRun = true
+      }
+    }
 
     val exitCode = runner.runFromArgs(twoDaysAgo, today, None)
 
-    assertEquals("runFromArgs should return 1 on failure", 1, exitCode)
+    assertTrue("Runner should call run instead of failing a physical partition preflight", didRun)
+    assertEquals("runFromArgs should return 0 when delegated execution succeeds", 0, exitCode)
+  }
+
+  it should "fail before execution when a required input table is absent" in {
+    val missingInputTable = "test_db.missing_required_input"
+    spark.sql(s"DROP TABLE IF EXISTS $missingInputTable")
+
+    val configPath = createTestConfigFile(yesterday, yesterday, inputTable = missingInputTable)
+    val node = ThriftJsonCodec.fromJsonFile[Node](configPath, check = true)
+
+    var didRun = false
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi) {
+      override def run(metadata: MetaData, conf: NodeContent, maybeRange: Option[PartitionRange]): Unit = {
+        didRun = true
+      }
+    }
+
+    val exitCode = runner.runFromArgs(yesterday, yesterday, None)
+
+    assertFalse("Runner should fail before invoking node execution", didRun)
+    assertEquals("runFromArgs should return 1 when a required input table is absent", 1, exitCode)
   }
 
   it should "handle empty partition ranges correctly" in {
@@ -322,6 +352,52 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     val exitCode = runner.runFromArgs(futureDate1, futureDate2, None)
 
     assertEquals("runFromArgs should return 1 on failure due to missing all partitions", 1, exitCode)
+  }
+
+  "SourceJob" should "materialize an empty output table when the source range has no rows" in {
+    val inputTable = "test_db.empty_source_input"
+    val outputTable = "test_db.empty_source_output"
+
+    spark.sql(s"DROP TABLE IF EXISTS $inputTable")
+    spark.sql(s"DROP TABLE IF EXISTS $outputTable")
+    spark.sql(
+      s"""
+         |CREATE TABLE $inputTable (
+         |  id INT,
+         |  ts LONG,
+         |  ds STRING
+         |)
+         |PARTITIONED BY (ds)
+         |""".stripMargin
+    )
+
+    val source = Builders.Source.events(
+      query = Builders.Query(
+        selects = Builders.Selects("id"),
+        partitionColumn = "ds",
+        timeColumn = "ts"
+      ),
+      table = inputTable
+    )
+    val node = new SourceWithFilterNode().setSource(source)
+    val metadata = new MetaData()
+      .setName("empty_source_output")
+      .setOutputNamespace("test_db")
+      .setTeam("test_team")
+    val range = new DateRange()
+      .setStartDate(yesterday)
+      .setEndDate(yesterday)
+
+    new SourceJob(node, metadata, range)(tableUtils).run()
+
+    assertTrue("SourceJob should create the output table even when no rows are produced",
+               tableUtils.tableReachable(outputTable))
+    val outputDf = tableUtils.loadTable(outputTable)
+    assertEquals("Output table should be empty", 0, outputDf.count())
+    outputDf.columns should contain("id")
+    outputDf.columns should contain("ts")
+    outputDf.columns should contain("ts_ds")
+    outputDf.columns should contain("ds")
   }
 
   it should "correctly identify missing vs available partitions" in {
