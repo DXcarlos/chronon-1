@@ -9,7 +9,7 @@ This model takes into account features computed as part of the demo.derivations_
 and uses it as an input to predict click_through_rate.
 """
 
-label_source = EventSource(table=ctr_labels.v1.table, query = Query(
+label_source = EventSource(table=ctr_labels.ctr_labels.table, query = Query(
     selects= selects(
         user_id_click_event_average_7d="user_id_click_event_average_7d",
         listing_price_cents="listing_id_price_cents",

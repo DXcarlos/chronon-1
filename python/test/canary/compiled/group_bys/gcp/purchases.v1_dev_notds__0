@@ -70,19 +70,19 @@
   ],
   "metaData": {
     "columnHashes": {
-      "purchase_price_average_1d": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "purchase_price_average_3d": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "purchase_price_average_7d": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "purchase_price_count_1d": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "purchase_price_count_3d": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "purchase_price_count_7d": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "purchase_price_last10": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "purchase_price_sum_1d": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "purchase_price_sum_3d": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "purchase_price_sum_7d": "fd68ef8ce11f66fb65d9bf80e3f9ece5",
-      "user_id": "659acfa58500e1f693d923b698c6e4c9"
+      "purchase_price_average_1d": "9b4dd98d711a93c94a5f0856d29b4703",
+      "purchase_price_average_3d": "9b4dd98d711a93c94a5f0856d29b4703",
+      "purchase_price_average_7d": "9b4dd98d711a93c94a5f0856d29b4703",
+      "purchase_price_count_1d": "9b4dd98d711a93c94a5f0856d29b4703",
+      "purchase_price_count_3d": "9b4dd98d711a93c94a5f0856d29b4703",
+      "purchase_price_count_7d": "9b4dd98d711a93c94a5f0856d29b4703",
+      "purchase_price_last10": "9b4dd98d711a93c94a5f0856d29b4703",
+      "purchase_price_sum_1d": "9b4dd98d711a93c94a5f0856d29b4703",
+      "purchase_price_sum_3d": "9b4dd98d711a93c94a5f0856d29b4703",
+      "purchase_price_sum_7d": "9b4dd98d711a93c94a5f0856d29b4703",
+      "user_id": "3731ee4f595200d017e0e95f3c3001a2"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_purchases_notds_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_notds_import_v1__0/notds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_purchases_notds_import_purchases_notds__0_with_offset_0\", \"spec\": \"data.gcp_purchases_notds_import_purchases_notds__0/notds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -180,7 +180,7 @@
           "startPartition": "2023-11-01",
           "timeColumn": "ts"
         },
-        "table": "data.gcp_purchases_notds_import_v1__0"
+        "table": "data.gcp_purchases_notds_import_purchases_notds__0"
       }
     }
   ]

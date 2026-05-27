@@ -1,6 +1,6 @@
 {
   "metaData": {
-    "customJson": "{\"airflowDependencies\": []}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_azure_demo_derivations_v3__derived_with_offset_0\", \"spec\": \"data.azure_demo_derivations_v3__derived/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "conf": {
         "common": {
@@ -50,13 +50,13 @@
       },
       "offlineSchedule": "@daily"
     },
-    "name": "azure.partitioned_logging.v0__2",
+    "name": "azure.ctr_labels.ctr_labels__0",
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/azure/partitioned_logging.py",
+    "sourceFile": "staging_queries/azure/ctr_labels.py",
     "team": "azure",
-    "version": "2"
+    "version": "0"
   },
-  "query": "\n      SELECT\n        DATE(TIMESTAMP_MILLIS(tsMillis)) AS ds\n        , tsMillis as ts_millis\n        , BASE64(keyBytes) as key_base64\n        , BASE64(valueBytes) as value_base64\n        , joinName as name\n        , schemaHash as schema_hash\n        , keyBytes\n        , valueBytes\n      FROM data.loggable_response\n      WHERE DATE(TIMESTAMP_MILLIS(tsMillis)) BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "query": "\nSELECT\n    *,\n    case when rand() < 0.5 then 0 else 1 end as label\nFROM data.azure_demo_derivations_v3__derived\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
   "tableDependencies": [
     {
       "endOffset": {
@@ -68,11 +68,12 @@
         "timeUnit": 1
       },
       "tableInfo": {
+        "partitionColumn": "ds",
         "partitionInterval": {
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.loggable_response"
+        "table": "data.azure_demo_derivations_v3__derived"
       }
     }
   ]

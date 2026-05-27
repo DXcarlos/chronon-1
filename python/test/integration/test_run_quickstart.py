@@ -38,10 +38,10 @@ END_DS = {
 
 STAGING_QUERY_IMPORT_KEYS = {
     "gcp": [
-        "compiled/staging_queries/gcp/purchases_import.v1__0",
-        "compiled/staging_queries/gcp/checkouts_import.v1__0",
-        "compiled/staging_queries/gcp/purchases_notds_import.v1__0",
-        "compiled/staging_queries/gcp/checkouts_notds_import.v1__0",
+        "compiled/staging_queries/gcp/purchases_import.purchases__0",
+        "compiled/staging_queries/gcp/checkouts_import.checkouts__0",
+        "compiled/staging_queries/gcp/purchases_notds_import.purchases_notds__0",
+        "compiled/staging_queries/gcp/checkouts_notds_import.checkouts_notds__0",
     ],
     "aws": [
         "compiled/staging_queries/aws/exports.user_activities__0",

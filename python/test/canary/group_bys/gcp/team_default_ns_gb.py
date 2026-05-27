@@ -10,7 +10,7 @@ from staging_queries.gcp import purchases_import
 from ai.chronon.types import Aggregation, EventSource, GroupBy, Operation, Query, TimeUnit, Window, selects
 
 source = EventSource(
-    table=purchases_import.v1.table,
+    table=purchases_import.purchases.table,
     query=Query(
         selects=selects("user_id", "purchase_price"),
         start_partition="2023-11-01",

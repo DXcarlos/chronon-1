@@ -9,7 +9,7 @@ from ai.chronon.types import Accuracy, Aggregation, EventSource, GroupBy, Operat
 import staging_queries.aws.partitioned_logging as partitioned_logging
 
 source = EventSource(
-    table=partitioned_logging.v0.table,
+    table=partitioned_logging.partitioned_loggable_response.table,
     query=Query(
         selects=selects(
             schema_hash="CAST(keyBytes AS STRING)",

@@ -1,6 +1,6 @@
 {
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_demo_derivations_v1__2_with_offset_0\", \"spec\": \"data.aws_demo_derivations_v1__2/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_training_set_v1_hub__0_with_offset_1\", \"spec\": \"data.aws_training_set_v1_hub__0/ds={{ macros.ds_add(ds, -1) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -91,23 +91,27 @@
           }
         }
       },
-      "offlineSchedule": "@daily"
+      "offlineSchedule": "@daily",
+      "stepDays": 10
     },
-    "name": "aws.demo.v1_s__0",
+    "name": "aws.sample_staging_query.hub_training_set__0",
     "outputNamespace": "data",
-    "sourceFile": "joins/aws/demo.py",
+    "sourceFile": "staging_queries/aws/sample_staging_query.py",
+    "tableProperties": {
+      "sample_config_json": "{\"sample_key\": \"sample value\"}"
+    },
     "team": "aws",
     "version": "0"
   },
-  "query": "\nSELECT\n    *,\n    case when rand() < 0.5 then 0 else 1 end as label\nFROM data.aws_demo_derivations_v1__2\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
+  "query": "\nSELECT\n    *\nFROM data.aws_training_set_v1_hub__0\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
   "tableDependencies": [
     {
       "endOffset": {
-        "length": 0,
+        "length": 1,
         "timeUnit": 1
       },
       "startOffset": {
-        "length": 0,
+        "length": 1,
         "timeUnit": 1
       },
       "tableInfo": {
@@ -116,7 +120,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.aws_demo_derivations_v1__2"
+        "table": "data.aws_training_set_v1_hub__0"
       }
     }
   ]

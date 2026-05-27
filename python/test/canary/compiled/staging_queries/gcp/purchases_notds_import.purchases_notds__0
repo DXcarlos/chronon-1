@@ -79,7 +79,7 @@
       },
       "offlineSchedule": "@daily"
     },
-    "name": "gcp.purchases_notds_import.v1__0",
+    "name": "gcp.purchases_notds_import.purchases_notds__0",
     "outputNamespace": "data",
     "sourceFile": "staging_queries/gcp/purchases_notds_import.py",
     "team": "gcp",

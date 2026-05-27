@@ -155,7 +155,7 @@
           },
           "startPartition": "2025-07-01"
         },
-        "table": "data.aws_ctr_labels_v1__0"
+        "table": "data.aws_ctr_labels_ctr_labels__0"
       }
     },
     "trainingDataWindow": {

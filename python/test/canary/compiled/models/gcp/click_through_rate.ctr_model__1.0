@@ -139,7 +139,7 @@
           },
           "startPartition": "2025-07-01"
         },
-        "table": "data.gcp_ctr_labels_v1__0"
+        "table": "data.gcp_ctr_labels_ctr_labels__0"
       }
     },
     "trainingDataWindow": {

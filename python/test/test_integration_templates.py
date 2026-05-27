@@ -116,12 +116,12 @@ class TestDiscoverSources:
 
 class TestRewriteImports:
     def test_simple_rename(self):
-        content = "from staging_queries.gcp import purchases_import\nv = purchases_import.v1"
+        content = "from staging_queries.gcp import purchases_import\nv = purchases_import.purchases"
         renames = {"purchases_import": "purchases_import_abc123"}
         found = _find_imported_stems(content, renames)
         result = _apply_renames(content, found)
         assert "import purchases_import_abc123" in result
-        assert "purchases_import_abc123.v1" in result
+        assert "purchases_import_abc123.purchases" in result
 
     def test_multiple_renames(self):
         content = "import purchases_import, purchases_notds_import"

@@ -101,7 +101,7 @@ derivations_v1 = Join(
 
 from ai.chronon.types import StagingQuery, TableDependency
 
-v1_s = StagingQuery(
+derivation_labels = StagingQuery(
     query=f"""
 SELECT
     *,

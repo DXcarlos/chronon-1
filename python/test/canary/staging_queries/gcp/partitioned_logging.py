@@ -5,7 +5,7 @@ We keep the Binary columns as well as it's simpler casting to UTF-8 in bigQuery.
 """
 from ai.chronon.types import StagingQuery, TableDependency
 
-v0 = StagingQuery(
+partitioned_loggable_response = StagingQuery(
     dependencies=[TableDependency(table="data.loggable_response")],
     query="""
       SELECT

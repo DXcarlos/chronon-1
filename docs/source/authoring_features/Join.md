@@ -249,7 +249,7 @@ Steps
 
 ```python
 # ml_models/zipline/staging_queries/team_name/driver_table.py
-v1 = StagingQuery(
+training_driver = StagingQuery(
   query="...",
 )
 # ml_models/zipline/joins/team_name/model.py
@@ -257,7 +257,7 @@ v1 = Join(
   # driver table can be either output of an staging_query or custom hive table
   left=HiveEventSource(
     namespace="db_name",
-    table=driver_table.v1.table,
+    table=driver_table.training_driver.table,
     query=Query(...)
   )
   # all group_bys for the model for both backfill & serving
@@ -297,7 +297,7 @@ Steps
 
 ```python
 # ml_models/zipline/staging_queries/team_name/driver_table.py
-v1 = StagingQuery(
+log_refresh_driver = StagingQuery(
   query="""
   WITH
   log_drivers AS (
@@ -330,7 +330,7 @@ v1 = Join(
   # it's important to use the SAME staging query before and after.
   left=HiveEventSource(
     namespace="db_name",
-    table=driver_table.v1.table,
+    table=driver_table.log_refresh_driver.table,
     query=Query(...)
   ),
   # all group_bys for the model for both backfill & serving
@@ -360,7 +360,7 @@ v2 = Join(
   # if you must use a different driver table
   left=HiveEventSource(
     namespace="db_name",
-    table=driver_table.v2.table,
+    table=driver_table.new_segment_driver.table,
     query=Query(...)
   ),
   # carry over all other parameters from v1 join
@@ -412,7 +412,7 @@ Goal
 3. Include the existing join as a bootstrap_part so that existing feature data can be carried over to the new join without any backfill from scratch
 ```python
 # ml_models/zipline/staging_queries/team_name/driver_table.py
-v2 = StagingQuery(
+new_segment_driver = StagingQuery(
   query="""
 	SELECT *
 	FROM db_name.team_name_driver_table_v1
@@ -428,7 +428,7 @@ v2 = StagingQuery(
 right_parts = [...]
 driver_table = HiveEventSource(
   namespace="db_name",
-  table=driver_table.v1.table,
+  table=driver_table.new_segment_driver.table,
   query=Query(wheres=downsampling_filters)
 )
 # config for existing model in production
@@ -536,7 +536,7 @@ Goal
 
 ```python
 # ml_models/zipline/staging_queries/team_name/driver_table.py
-v1 = StagingQuery(
+legacy_union_driver = StagingQuery(
   query="""
   WITH
   legacy_drivers AS (
@@ -563,7 +563,7 @@ v1 = Join(
   # driver table with union history
   left=HiveEventSource(
     namespace="db_name",
-    table=driver_table.v1.table,
+    table=driver_table.legacy_union_driver.table,
     query=Query(...)
   ),
   right_parts=...

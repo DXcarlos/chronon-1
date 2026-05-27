@@ -78,7 +78,7 @@ FROM {training_set.v1_hub.table}
 WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 """
 
-v1_hub = StagingQuery(
+hub_training_set = StagingQuery(
     query=query_hub,
     output_namespace="data",
     table_properties={"sample_config_json": """{"sample_key": "sample value"}"""},
@@ -96,7 +96,7 @@ FROM {training_set.v1_hub.table}
 WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 """
 
-v1_bigquery_import = StagingQuery(
+bigquery_training_set_import = StagingQuery(
     query=bigquery_import_query,
     engine_type=EngineType.BIGQUERY,
     output_namespace="data",

@@ -240,17 +240,17 @@
         ],
         "metaData": {
           "columnHashes": {
-            "purchase_price_average_1d": "631fab32648531978032f3b417da5d52",
-            "purchase_price_average_3d": "631fab32648531978032f3b417da5d52",
-            "purchase_price_average_7d": "631fab32648531978032f3b417da5d52",
-            "purchase_price_count_1d": "631fab32648531978032f3b417da5d52",
-            "purchase_price_count_3d": "631fab32648531978032f3b417da5d52",
-            "purchase_price_count_7d": "631fab32648531978032f3b417da5d52",
-            "purchase_price_last10": "631fab32648531978032f3b417da5d52",
-            "purchase_price_sum_1d": "631fab32648531978032f3b417da5d52",
-            "purchase_price_sum_3d": "631fab32648531978032f3b417da5d52",
-            "purchase_price_sum_7d": "631fab32648531978032f3b417da5d52",
-            "user_id": "a406c2de0040b2e926dba6334f299281"
+            "purchase_price_average_1d": "1d0303f95b22d49fd3e6f55a197361d9",
+            "purchase_price_average_3d": "1d0303f95b22d49fd3e6f55a197361d9",
+            "purchase_price_average_7d": "1d0303f95b22d49fd3e6f55a197361d9",
+            "purchase_price_count_1d": "1d0303f95b22d49fd3e6f55a197361d9",
+            "purchase_price_count_3d": "1d0303f95b22d49fd3e6f55a197361d9",
+            "purchase_price_count_7d": "1d0303f95b22d49fd3e6f55a197361d9",
+            "purchase_price_last10": "1d0303f95b22d49fd3e6f55a197361d9",
+            "purchase_price_sum_1d": "1d0303f95b22d49fd3e6f55a197361d9",
+            "purchase_price_sum_3d": "1d0303f95b22d49fd3e6f55a197361d9",
+            "purchase_price_sum_7d": "1d0303f95b22d49fd3e6f55a197361d9",
+            "user_id": "35bbc8c04d88fe6c9eb4f1c2b659af21"
           },
           "executionInfo": {
             "clusterConf": {
@@ -347,7 +347,7 @@
                 "startPartition": "2023-11-01",
                 "timeColumn": "ts"
               },
-              "table": "data.gcp_purchases_import_v1__0"
+              "table": "data.gcp_purchases_import_purchases__0"
             }
           }
         ]
@@ -377,18 +377,18 @@
       "listing_id_view_sum_1d": "c92a7a66f21979b327788447d063fe2b",
       "ts": "ad9fd4c611e20ad833819a4ce9d752bf",
       "user_id": "493d3df28f80664abd11b19fcd33b6e6",
-      "user_id_purchase_price_average_1d": "0167b3659bffb8660e1ea86c541ee6f1",
-      "user_id_purchase_price_average_3d": "0167b3659bffb8660e1ea86c541ee6f1",
-      "user_id_purchase_price_average_7d": "0167b3659bffb8660e1ea86c541ee6f1",
-      "user_id_purchase_price_count_1d": "0167b3659bffb8660e1ea86c541ee6f1",
-      "user_id_purchase_price_count_3d": "0167b3659bffb8660e1ea86c541ee6f1",
-      "user_id_purchase_price_count_7d": "0167b3659bffb8660e1ea86c541ee6f1",
-      "user_id_purchase_price_last10": "0167b3659bffb8660e1ea86c541ee6f1",
-      "user_id_purchase_price_sum_1d": "0167b3659bffb8660e1ea86c541ee6f1",
-      "user_id_purchase_price_sum_3d": "0167b3659bffb8660e1ea86c541ee6f1",
-      "user_id_purchase_price_sum_7d": "0167b3659bffb8660e1ea86c541ee6f1"
+      "user_id_purchase_price_average_1d": "d56208fdb8c91c985bd4086ba51657ab",
+      "user_id_purchase_price_average_3d": "d56208fdb8c91c985bd4086ba51657ab",
+      "user_id_purchase_price_average_7d": "d56208fdb8c91c985bd4086ba51657ab",
+      "user_id_purchase_price_count_1d": "d56208fdb8c91c985bd4086ba51657ab",
+      "user_id_purchase_price_count_3d": "d56208fdb8c91c985bd4086ba51657ab",
+      "user_id_purchase_price_count_7d": "d56208fdb8c91c985bd4086ba51657ab",
+      "user_id_purchase_price_last10": "d56208fdb8c91c985bd4086ba51657ab",
+      "user_id_purchase_price_sum_1d": "d56208fdb8c91c985bd4086ba51657ab",
+      "user_id_purchase_price_sum_3d": "d56208fdb8c91c985bd4086ba51657ab",
+      "user_id_purchase_price_sum_7d": "d56208fdb8c91c985bd4086ba51657ab"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_purchases_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_import_v1__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_item_events_parquet_compat_with_offset_0\", \"spec\": \"data.item_events_parquet_compat/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_item_events_parquet_compat_partitioned_with_offset_0\", \"spec\": \"data.item_events_parquet_compat_partitioned/ds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_purchases_import_purchases__0_with_offset_0\", \"spec\": \"data.gcp_purchases_import_purchases__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

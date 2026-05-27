@@ -9,7 +9,7 @@ and timestamps for which features will be computed.
 """
 # Source data is exported from BigQuery to Iceberg via a StagingQuery (checkouts_import).
 source = EventSource(
-    table=checkouts_import.v1.table,
+    table=checkouts_import.checkouts.table,
     query=Query(
         selects=selects(
             "user_id"
@@ -46,7 +46,7 @@ v1_dev = Join(
 )
 
 source_notds = EventSource(
-    table=checkouts_notds_import.v1.table,
+    table=checkouts_notds_import.checkouts_notds.table,
     query=Query(
         selects=selects(
             "user_id"

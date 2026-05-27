@@ -8,7 +8,7 @@ This GroupBy aggregates metrics about a user's previous purchases in various win
 
 # Source data is exported from BigQuery to Iceberg via a StagingQuery (purchases_import).
 source = EventSource(
-    table=purchases_import.v1.table,
+    table=purchases_import.purchases.table,
     query=Query(
         selects=selects("user_id","purchase_price"),
         start_partition="2023-11-01",
@@ -73,7 +73,7 @@ v1_test = GroupBy(
 )
 
 source_notds = EventSource(
-    table=purchases_notds_import.v1.table,
+    table=purchases_notds_import.purchases_notds.table,
     query=Query(
         selects=selects("user_id","purchase_price"),
         time_column="ts",
@@ -135,4 +135,3 @@ v1_dev_notds = GroupBy(
         ),
     ],
 )
-

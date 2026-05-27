@@ -1,6 +1,6 @@
 from ai.chronon.types import EngineType, StagingQuery, TableDependency
 
-v1 = StagingQuery(
+purchases = StagingQuery(
     query="SELECT * FROM data.purchases WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}",
     engine_type=EngineType.BIGQUERY,
     output_namespace="data",

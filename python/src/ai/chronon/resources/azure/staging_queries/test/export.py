@@ -11,7 +11,7 @@ snowflake_export_sql = f"""
     DATE_TRUNC('DAY', {partition_column}) BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 """
 
-v1 = StagingQuery(
+snowflake_export = StagingQuery(
     query=snowflake_export_sql,
     output_namespace="data",
     engine_type=EngineType.SNOWFLAKE,

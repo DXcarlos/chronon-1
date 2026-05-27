@@ -15,7 +15,7 @@ For example, let's say we were using a theoretical `fct_purchases` table as the 
 In this case, the `StagingQuery` might look like this:
 
 ```python
-v1 = StagingQuery(
+purchases_with_user_details = StagingQuery(
     query="""
         SELECT
             a.id_user,
@@ -75,7 +75,7 @@ To use a non-default engine, import `EngineType` and pass it to your `StagingQue
 ```python
 from ai.chronon.types import EngineType, StagingQuery
 
-v1 = StagingQuery(
+bigquery_user_events = StagingQuery(
     query="SELECT * FROM my_dataset.my_table WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
     engine_type=EngineType.BIGQUERY,
     metaData=MetaData(
@@ -100,7 +100,7 @@ Usually this results in one big job for the first backfill, then smaller jobs fo
 This method of backfilling data is often faster for long ranges, however if you have concerns about any given run being too large to complete, you can also use the `step-days` argument to configure a maximum number of days to include in any given run:
 
 ```python
-v1 = StagingQuery(
+daily_staging_query = StagingQuery(
     ...
     customJson=json.dumps({
             "additional_args": ["--step-days=30"], # Sets the maximum days to run in one job to 30
@@ -126,7 +126,7 @@ Once merged into production, your `StagingQuery` will get scheduled for daily ru
 When a `StagingQuery` reads from a table that uses a timestamp or date column instead of Hive-style string partitions (common in BigQuery, Snowflake, and Delta Lake), you can declare the dependency as time-partitioned. This tells the orchestration sensor to check data availability via `SELECT DATE(MAX(column))` instead of checking for discrete partition existence.
 
 ```python
-v1 = StagingQuery(
+user_events = StagingQuery(
     query="""
         SELECT
             user_id,

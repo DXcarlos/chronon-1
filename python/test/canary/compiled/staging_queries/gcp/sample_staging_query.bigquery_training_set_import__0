@@ -1,7 +1,7 @@
 {
   "engineType": 1,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_v1_hub__0_with_offset_0\", \"spec\": \"data.gcp_training_set_v1_hub__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -77,15 +77,16 @@
           }
         }
       },
-      "offlineSchedule": "@daily"
+      "offlineSchedule": "@daily",
+      "stepDays": 30
     },
-    "name": "gcp.purchases_import.v1__0",
+    "name": "gcp.sample_staging_query.bigquery_training_set_import__0",
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/gcp/purchases_import.py",
+    "sourceFile": "staging_queries/gcp/sample_staging_query.py",
     "team": "gcp",
     "version": "0"
   },
-  "query": "SELECT * FROM data.purchases WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}",
+  "query": "\nSELECT\n    *\nFROM data.gcp_training_set_v1_hub__0\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
   "tableDependencies": [
     {
       "endOffset": {
@@ -102,7 +103,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.purchases"
+        "table": "data.gcp_training_set_v1_hub__0"
       }
     }
   ]

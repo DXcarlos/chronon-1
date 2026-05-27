@@ -2,7 +2,7 @@ from joins.aws import demo
 
 from ai.chronon.types import StagingQuery, TableDependency
 
-v1 = StagingQuery(
+ctr_labels = StagingQuery(
     query=f"""
 SELECT
     *,

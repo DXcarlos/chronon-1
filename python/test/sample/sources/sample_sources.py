@@ -87,7 +87,7 @@ sq_v1_selects = selects(
 
 # Sample Entity Source derived from a staging query.
 staging_entities = EntitySource(
-    snapshot_table=sample_staging_query.v1.table,
+    snapshot_table=sample_staging_query.listing_features.table,
     query=Query(
         start_partition="2021-03-01",
         selects=sq_v1_selects,

@@ -817,7 +817,7 @@ StagingQueries are for complex ETL that doesn't fit the GroupBy/Join pattern.
 ```python
 from ai.chronon.types import EngineType, StagingQuery, TableDependency
 
-v1 = StagingQuery(
+event_enrichment = StagingQuery(
     query="""
         SELECT
             a.user_id,
@@ -1086,7 +1086,7 @@ Use this for custom models you train yourself (e.g., XGBoost, PyTorch, TensorFlo
 from ai.chronon.types import StagingQuery, TableDependency
 
 # Create labels for training
-v1 = StagingQuery(
+ctr_labels = StagingQuery(
     query=f"""
     SELECT
         *,
@@ -1110,7 +1110,7 @@ from ai.chronon.data_types import DataType
 
 # Define training data source
 label_source = EventSource(
-    table=ctr_labels.v1.table,  # From the staging query above
+    table=ctr_labels.ctr_labels.table,  # From the staging query above
     query=Query(
         selects=selects(
             user_id_click_event_average_7d="user_id_click_event_average_7d",

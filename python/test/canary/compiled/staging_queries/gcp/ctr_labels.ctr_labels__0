@@ -1,6 +1,6 @@
 {
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_v1_hub__0_with_offset_1\", \"spec\": \"data.gcp_training_set_v1_hub__0/ds={{ macros.ds_add(ds, -1) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_demo_derivations_v1__2__derived_with_offset_0\", \"spec\": \"data.gcp_demo_derivations_v1__2__derived/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -76,27 +76,23 @@
           }
         }
       },
-      "offlineSchedule": "@daily",
-      "stepDays": 30
+      "offlineSchedule": "@daily"
     },
-    "name": "gcp.sample_staging_query.v1_hub__0",
+    "name": "gcp.ctr_labels.ctr_labels__0",
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/gcp/sample_staging_query.py",
-    "tableProperties": {
-      "sample_config_json": "{\"sample_key\": \"sample value\"}"
-    },
+    "sourceFile": "staging_queries/gcp/ctr_labels.py",
     "team": "gcp",
     "version": "0"
   },
-  "query": "\nSELECT\n    *\nFROM data.gcp_training_set_v1_hub__0\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
+  "query": "\nSELECT \n    *,\n    case when rand() < 0.5 then 0 else 1 end as label\nFROM data.gcp_demo_derivations_v1__2__derived\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
   "tableDependencies": [
     {
       "endOffset": {
-        "length": 1,
+        "length": 0,
         "timeUnit": 1
       },
       "startOffset": {
-        "length": 1,
+        "length": 0,
         "timeUnit": 1
       },
       "tableInfo": {
@@ -105,7 +101,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.gcp_training_set_v1_hub__0"
+        "table": "data.gcp_demo_derivations_v1__2__derived"
       }
     }
   ]

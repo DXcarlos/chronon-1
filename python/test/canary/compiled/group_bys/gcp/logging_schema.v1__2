@@ -12,10 +12,10 @@
   ],
   "metaData": {
     "columnHashes": {
-      "schema_hash": "d56f2fe27d07b7fd394789f8c6266408",
-      "schema_value_last": "dd8bd8fdc7f11b58dcbbd9fafe0a957d"
+      "schema_hash": "0b11abee612f18e63bbd8bd209122a0b",
+      "schema_value_last": "9a07a69389304f18143db0d5280d70e4"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_partitioned_logging_v0__2_with_offset_0\", \"spec\": \"data.gcp_partitioned_logging_v0__2/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_partitioned_logging_partitioned_loggable_response__2_with_offset_0\", \"spec\": \"data.gcp_partitioned_logging_partitioned_loggable_response__2/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -114,7 +114,7 @@
             "name='SCHEMA_PUBLISH_EVENT'"
           ]
         },
-        "table": "data.gcp_partitioned_logging_v0__2"
+        "table": "data.gcp_partitioned_logging_partitioned_loggable_response__2"
       }
     }
   ]

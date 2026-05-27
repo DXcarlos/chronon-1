@@ -1,7 +1,7 @@
 {
   "engineType": 1,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_notds_with_offset_0\", \"spec\": \"data.checkouts_notds/notds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_with_offset_0\", \"spec\": \"data.checkouts/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -14,7 +14,7 @@
       "conf": {
         "common": {
           "spark.chronon.coalesce.factor": "10",
-          "spark.chronon.partition.column": "notds",
+          "spark.chronon.partition.column": "ds",
           "spark.chronon.partition.format": "yyyy-MM-dd",
           "spark.chronon.table.format_provider.class": "ai.chronon.integrations.cloud_gcp.GcpFormatProvider",
           "spark.chronon.table_write.format": "iceberg",
@@ -79,13 +79,13 @@
       },
       "offlineSchedule": "@daily"
     },
-    "name": "gcp.checkouts_notds_import.v1__0",
+    "name": "gcp.checkouts_import.checkouts__0",
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/gcp/checkouts_notds_import.py",
+    "sourceFile": "staging_queries/gcp/checkouts_import.py",
     "team": "gcp",
     "version": "0"
   },
-  "query": "SELECT * FROM data.checkouts_notds WHERE notds BETWEEN {{ start_date }} AND {{ end_date }}",
+  "query": "SELECT * FROM data.checkouts WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}",
   "tableDependencies": [
     {
       "endOffset": {
@@ -97,12 +97,12 @@
         "timeUnit": 1
       },
       "tableInfo": {
-        "partitionColumn": "notds",
+        "partitionColumn": "ds",
         "partitionInterval": {
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.checkouts_notds"
+        "table": "data.checkouts"
       }
     }
   ]

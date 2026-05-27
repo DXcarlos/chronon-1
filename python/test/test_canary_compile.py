@@ -67,7 +67,7 @@ def test_canary_compile_resolves_namespace_placeholder(canary):
 _TEAM_DEFAULT_FIXTURES = [
     (
         "StagingQuery (no output_namespace= -> gcp team default 'data')",
-        "compiled/staging_queries/gcp/team_default_ns_example.v1__0",
+        "compiled/staging_queries/gcp/team_default_ns_example.checkouts_with_team_default_namespace__0",
         "data",
     ),
     (
@@ -121,7 +121,8 @@ def test_team_default_placeholder_resolves_through_cross_config_table_refs(canar
     compiled output.
 
     Exercised by: `joins/gcp/team_default_ns_join.py` reading
-    `team_default_ns_example.v1.table` (a StagingQuery with no output_namespace).
+    `team_default_ns_example.checkouts_with_team_default_namespace.table` (a
+    StagingQuery with no output_namespace).
     """
     _compile_canary(canary)
 
@@ -129,7 +130,7 @@ def test_team_default_placeholder_resolves_through_cross_config_table_refs(canar
     payload = json.loads(open(path).read())
 
     left_table = payload["left"]["events"]["table"]
-    assert left_table == "data.gcp_team_default_ns_example_v1__0", (
+    assert left_table == "data.gcp_team_default_ns_example_checkouts_with_team_default_namespace__0", (
         f"Join.left.events.table should resolve the internal placeholder against the "
         f"producer's team-default namespace, got {left_table!r}"
     )

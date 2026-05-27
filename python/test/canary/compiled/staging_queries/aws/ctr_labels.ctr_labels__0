@@ -93,7 +93,7 @@
       },
       "offlineSchedule": "@daily"
     },
-    "name": "aws.ctr_labels.v1__0",
+    "name": "aws.ctr_labels.ctr_labels__0",
     "outputNamespace": "data",
     "sourceFile": "staging_queries/aws/ctr_labels.py",
     "team": "aws",

@@ -1,7 +1,6 @@
 {
-  "engineType": 1,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_v1_hub__0_with_offset_0\", \"spec\": \"data.gcp_training_set_v1_hub__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": []}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -77,16 +76,15 @@
           }
         }
       },
-      "offlineSchedule": "@daily",
-      "stepDays": 30
+      "offlineSchedule": "@daily"
     },
-    "name": "gcp.sample_staging_query.v1_bigquery_import__0",
+    "name": "gcp.partitioned_logging.partitioned_loggable_response__2",
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/gcp/sample_staging_query.py",
+    "sourceFile": "staging_queries/gcp/partitioned_logging.py",
     "team": "gcp",
-    "version": "0"
+    "version": "2"
   },
-  "query": "\nSELECT\n    *\nFROM data.gcp_training_set_v1_hub__0\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
+  "query": "\n      SELECT\n        DATE(TIMESTAMP_MILLIS(tsMillis)) AS ds\n        , tsMillis as ts_millis\n        , BASE64(keyBytes) as key_base64\n        , BASE64(valueBytes) as value_base64\n        , joinName as name\n        , schemaHash as schema_hash\n        , keyBytes\n        , valueBytes\n      FROM data.loggable_response\n      WHERE DATE(TIMESTAMP_MILLIS(tsMillis)) BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [
     {
       "endOffset": {
@@ -98,12 +96,11 @@
         "timeUnit": 1
       },
       "tableInfo": {
-        "partitionColumn": "ds",
         "partitionInterval": {
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.gcp_training_set_v1_hub__0"
+        "table": "data.loggable_response"
       }
     }
   ]

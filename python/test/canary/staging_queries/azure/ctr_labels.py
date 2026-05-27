@@ -3,7 +3,7 @@ from joins.azure import demo
 from ai.chronon.types import StagingQuery, TableDependency
 
 # For modular join backfills
-v1 = StagingQuery(
+ctr_labels = StagingQuery(
     query=f"""
 SELECT
     *,

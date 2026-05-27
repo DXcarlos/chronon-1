@@ -13,7 +13,7 @@ this, every canary `.table` reference points at a producer with explicit
 
 from ai.chronon.types import EngineType, StagingQuery, TableDependency
 
-v1 = StagingQuery(
+checkouts_with_team_default_namespace = StagingQuery(
     query="SELECT * FROM data.checkouts WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}",
     engine_type=EngineType.BIGQUERY,
     dependencies=[

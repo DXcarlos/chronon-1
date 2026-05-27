@@ -1,7 +1,7 @@
 {
   "engineType": 1,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_with_offset_0\", \"spec\": \"data.checkouts/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_purchases_with_offset_0\", \"spec\": \"data.purchases/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -79,13 +79,13 @@
       },
       "offlineSchedule": "@daily"
     },
-    "name": "gcp.checkouts_import.v1__0",
+    "name": "gcp.purchases_import.purchases__0",
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/gcp/checkouts_import.py",
+    "sourceFile": "staging_queries/gcp/purchases_import.py",
     "team": "gcp",
     "version": "0"
   },
-  "query": "SELECT * FROM data.checkouts WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}",
+  "query": "SELECT * FROM data.purchases WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}",
   "tableDependencies": [
     {
       "endOffset": {
@@ -102,7 +102,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.checkouts"
+        "table": "data.purchases"
       }
     }
   ]

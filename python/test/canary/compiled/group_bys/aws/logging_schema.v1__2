@@ -12,10 +12,10 @@
   ],
   "metaData": {
     "columnHashes": {
-      "schema_hash": "dcf8cf2cef848c61a7120c4db9d241e5",
-      "schema_value_last": "2533f3b6588575d6884c6375f2b28e8d"
+      "schema_hash": "4a38a3047d3ce09deb0993cf43c38215",
+      "schema_value_last": "ab7b894720e762fe465e25c7c4587a89"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_partitioned_logging_v0__2_with_offset_0\", \"spec\": \"data.aws_partitioned_logging_v0__2/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_aws_partitioned_logging_partitioned_loggable_response__2_with_offset_0\", \"spec\": \"data.aws_partitioned_logging_partitioned_loggable_response__2/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -129,7 +129,7 @@
             "name='SCHEMA_PUBLISH_EVENT'"
           ]
         },
-        "table": "data.aws_partitioned_logging_v0__2"
+        "table": "data.aws_partitioned_logging_partitioned_loggable_response__2"
       }
     }
   ]

@@ -26,7 +26,7 @@ FROM sample_namespace.sample_table
 WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'
 """
 
-v1 = StagingQuery(
+listing_features = StagingQuery(
     query=query,
     setups=[
         "CREATE TEMPORARY FUNCTION S2_CELL AS 'com.sample.hive.udf.S2CellId'",

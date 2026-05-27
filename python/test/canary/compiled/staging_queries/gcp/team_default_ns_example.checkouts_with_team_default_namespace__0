@@ -1,6 +1,7 @@
 {
+  "engineType": 1,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_demo_derivations_v1__2__derived_with_offset_0\", \"spec\": \"data.gcp_demo_derivations_v1__2__derived/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_checkouts_with_offset_0\", \"spec\": \"data.checkouts/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -78,13 +79,13 @@
       },
       "offlineSchedule": "@daily"
     },
-    "name": "gcp.ctr_labels.v1__0",
+    "name": "gcp.team_default_ns_example.checkouts_with_team_default_namespace__0",
     "outputNamespace": "data",
-    "sourceFile": "staging_queries/gcp/ctr_labels.py",
+    "sourceFile": "staging_queries/gcp/team_default_ns_example.py",
     "team": "gcp",
     "version": "0"
   },
-  "query": "\nSELECT \n    *,\n    case when rand() < 0.5 then 0 else 1 end as label\nFROM data.gcp_demo_derivations_v1__2__derived\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
+  "query": "SELECT * FROM data.checkouts WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}",
   "tableDependencies": [
     {
       "endOffset": {
@@ -101,7 +102,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.gcp_demo_derivations_v1__2__derived"
+        "table": "data.checkouts"
       }
     }
   ]

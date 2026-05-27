@@ -73,17 +73,17 @@
         ],
         "metaData": {
           "columnHashes": {
-            "purchase_price_average_1d": "75c7ab0be06806e6086fcdd7de7077ea",
-            "purchase_price_average_3d": "75c7ab0be06806e6086fcdd7de7077ea",
-            "purchase_price_average_7d": "75c7ab0be06806e6086fcdd7de7077ea",
-            "purchase_price_count_1d": "75c7ab0be06806e6086fcdd7de7077ea",
-            "purchase_price_count_3d": "75c7ab0be06806e6086fcdd7de7077ea",
-            "purchase_price_count_7d": "75c7ab0be06806e6086fcdd7de7077ea",
-            "purchase_price_last10": "75c7ab0be06806e6086fcdd7de7077ea",
-            "purchase_price_sum_1d": "75c7ab0be06806e6086fcdd7de7077ea",
-            "purchase_price_sum_3d": "75c7ab0be06806e6086fcdd7de7077ea",
-            "purchase_price_sum_7d": "75c7ab0be06806e6086fcdd7de7077ea",
-            "user_id": "e2bd778ac7f0e189c7f627b51b0eaa13"
+            "purchase_price_average_1d": "32cd2bf9db979792a67891d4c8ab1248",
+            "purchase_price_average_3d": "32cd2bf9db979792a67891d4c8ab1248",
+            "purchase_price_average_7d": "32cd2bf9db979792a67891d4c8ab1248",
+            "purchase_price_count_1d": "32cd2bf9db979792a67891d4c8ab1248",
+            "purchase_price_count_3d": "32cd2bf9db979792a67891d4c8ab1248",
+            "purchase_price_count_7d": "32cd2bf9db979792a67891d4c8ab1248",
+            "purchase_price_last10": "32cd2bf9db979792a67891d4c8ab1248",
+            "purchase_price_sum_1d": "32cd2bf9db979792a67891d4c8ab1248",
+            "purchase_price_sum_3d": "32cd2bf9db979792a67891d4c8ab1248",
+            "purchase_price_sum_7d": "32cd2bf9db979792a67891d4c8ab1248",
+            "user_id": "124e26099ee3767df9cb3ebb2c5fa720"
           },
           "executionInfo": {
             "clusterConf": {
@@ -181,7 +181,7 @@
                 "startPartition": "2023-11-01",
                 "timeColumn": "ts"
               },
-              "table": "data.gcp_purchases_notds_import_v1__0"
+              "table": "data.gcp_purchases_notds_import_purchases_notds__0"
             }
           }
         ]
@@ -199,25 +199,25 @@
         },
         "timeColumn": "ts"
       },
-      "table": "data.gcp_checkouts_notds_import_v1__0"
+      "table": "data.gcp_checkouts_notds_import_checkouts_notds__0"
     }
   },
   "metaData": {
     "columnHashes": {
-      "ts": "e2212d8cb616fe6331426d0f64d0a049",
-      "user_id": "805c4121299eea43e17c6c535f568e0f",
-      "user_id_purchase_price_average_1d": "31dfb8cbf0c4d756d1d6725d1b003466",
-      "user_id_purchase_price_average_3d": "31dfb8cbf0c4d756d1d6725d1b003466",
-      "user_id_purchase_price_average_7d": "31dfb8cbf0c4d756d1d6725d1b003466",
-      "user_id_purchase_price_count_1d": "31dfb8cbf0c4d756d1d6725d1b003466",
-      "user_id_purchase_price_count_3d": "31dfb8cbf0c4d756d1d6725d1b003466",
-      "user_id_purchase_price_count_7d": "31dfb8cbf0c4d756d1d6725d1b003466",
-      "user_id_purchase_price_last10": "31dfb8cbf0c4d756d1d6725d1b003466",
-      "user_id_purchase_price_sum_1d": "31dfb8cbf0c4d756d1d6725d1b003466",
-      "user_id_purchase_price_sum_3d": "31dfb8cbf0c4d756d1d6725d1b003466",
-      "user_id_purchase_price_sum_7d": "31dfb8cbf0c4d756d1d6725d1b003466"
+      "ts": "332f9849e3dc3226ee576a8de26b4b4b",
+      "user_id": "c883fca6b729dca0efb2ecfcc41fc92c",
+      "user_id_purchase_price_average_1d": "63a0c22db8b14e63e241cc28447ea56f",
+      "user_id_purchase_price_average_3d": "63a0c22db8b14e63e241cc28447ea56f",
+      "user_id_purchase_price_average_7d": "63a0c22db8b14e63e241cc28447ea56f",
+      "user_id_purchase_price_count_1d": "63a0c22db8b14e63e241cc28447ea56f",
+      "user_id_purchase_price_count_3d": "63a0c22db8b14e63e241cc28447ea56f",
+      "user_id_purchase_price_count_7d": "63a0c22db8b14e63e241cc28447ea56f",
+      "user_id_purchase_price_last10": "63a0c22db8b14e63e241cc28447ea56f",
+      "user_id_purchase_price_sum_1d": "63a0c22db8b14e63e241cc28447ea56f",
+      "user_id_purchase_price_sum_3d": "63a0c22db8b14e63e241cc28447ea56f",
+      "user_id_purchase_price_sum_7d": "63a0c22db8b14e63e241cc28447ea56f"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_checkouts_notds_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_checkouts_notds_import_v1__0/notds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_purchases_notds_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_notds_import_v1__0/notds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_checkouts_notds_import_checkouts_notds__0_with_offset_0\", \"spec\": \"data.gcp_checkouts_notds_import_checkouts_notds__0/notds={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_data_gcp_purchases_notds_import_purchases_notds__0_with_offset_0\", \"spec\": \"data.gcp_purchases_notds_import_purchases_notds__0/notds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {

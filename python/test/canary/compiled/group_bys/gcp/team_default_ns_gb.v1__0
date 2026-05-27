@@ -17,10 +17,10 @@
   ],
   "metaData": {
     "columnHashes": {
-      "purchase_price_sum_1d": "cddb4e13f02083ccc7787eaaf53a42ee",
-      "user_id": "b5e979370e2291cded7a3af5a33adf58"
+      "purchase_price_sum_1d": "739952be89cfa0f922642da5ab414a18",
+      "user_id": "7319d70c275a24dcc5f3533c9b607b4b"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_purchases_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_import_v1__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_purchases_import_purchases__0_with_offset_0\", \"spec\": \"data.gcp_purchases_import_purchases__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -115,7 +115,7 @@
           "startPartition": "2023-11-01",
           "timeColumn": "ts"
         },
-        "table": "data.gcp_purchases_import_v1__0"
+        "table": "data.gcp_purchases_import_purchases__0"
       }
     }
   ]

@@ -70,19 +70,19 @@
   ],
   "metaData": {
     "columnHashes": {
-      "purchase_price_average_1d": "631fab32648531978032f3b417da5d52",
-      "purchase_price_average_3d": "631fab32648531978032f3b417da5d52",
-      "purchase_price_average_7d": "631fab32648531978032f3b417da5d52",
-      "purchase_price_count_1d": "631fab32648531978032f3b417da5d52",
-      "purchase_price_count_3d": "631fab32648531978032f3b417da5d52",
-      "purchase_price_count_7d": "631fab32648531978032f3b417da5d52",
-      "purchase_price_last10": "631fab32648531978032f3b417da5d52",
-      "purchase_price_sum_1d": "631fab32648531978032f3b417da5d52",
-      "purchase_price_sum_3d": "631fab32648531978032f3b417da5d52",
-      "purchase_price_sum_7d": "631fab32648531978032f3b417da5d52",
-      "user_id": "a406c2de0040b2e926dba6334f299281"
+      "purchase_price_average_1d": "1d0303f95b22d49fd3e6f55a197361d9",
+      "purchase_price_average_3d": "1d0303f95b22d49fd3e6f55a197361d9",
+      "purchase_price_average_7d": "1d0303f95b22d49fd3e6f55a197361d9",
+      "purchase_price_count_1d": "1d0303f95b22d49fd3e6f55a197361d9",
+      "purchase_price_count_3d": "1d0303f95b22d49fd3e6f55a197361d9",
+      "purchase_price_count_7d": "1d0303f95b22d49fd3e6f55a197361d9",
+      "purchase_price_last10": "1d0303f95b22d49fd3e6f55a197361d9",
+      "purchase_price_sum_1d": "1d0303f95b22d49fd3e6f55a197361d9",
+      "purchase_price_sum_3d": "1d0303f95b22d49fd3e6f55a197361d9",
+      "purchase_price_sum_7d": "1d0303f95b22d49fd3e6f55a197361d9",
+      "user_id": "35bbc8c04d88fe6c9eb4f1c2b659af21"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_purchases_import_v1__0_with_offset_0\", \"spec\": \"data.gcp_purchases_import_v1__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_purchases_import_purchases__0_with_offset_0\", \"spec\": \"data.gcp_purchases_import_purchases__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -179,7 +179,7 @@
           "startPartition": "2023-11-01",
           "timeColumn": "ts"
         },
-        "table": "data.gcp_purchases_import_v1__0"
+        "table": "data.gcp_purchases_import_purchases__0"
       }
     }
   ]
