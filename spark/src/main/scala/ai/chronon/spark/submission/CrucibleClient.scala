@@ -10,6 +10,11 @@ import java.util.concurrent.{CompletableFuture, ExecutionException, TimeUnit, Ti
 case class CrucibleApiException(message: String, statusCode: Option[Int] = None, cause: Throwable = null)
     extends RuntimeException(message, cause)
 
+case class CrucibleJobStatus(status: String,
+                             httpCode: Int,
+                             sparkApplicationId: Option[String] = None,
+                             historyUrl: Option[String] = None)
+
 class CrucibleClient(val baseUrl: String, val namespace: String) {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
@@ -67,9 +72,9 @@ class CrucibleClient(val baseUrl: String, val namespace: String) {
     await(future, "submitting Crucible job")
   }
 
-  def getJobStatus(jobId: String): (String, Int) = {
+  def getJobStatus(jobId: String): CrucibleJobStatus = {
     val uri = s"$apiBase/jobs/$jobId"
-    val future = new CompletableFuture[(String, Int)]()
+    val future = new CompletableFuture[CrucibleJobStatus]()
 
     client
       .getAbs(s"$baseUrl$uri")
@@ -82,7 +87,14 @@ class CrucibleClient(val baseUrl: String, val namespace: String) {
               val status = Option(respBody.getString("status")).filter(_.nonEmpty).getOrElse {
                 throw new IllegalStateException("Crucible status response missing required field 'status'")
               }
-              future.complete((status, 200))
+              future.complete(
+                CrucibleJobStatus(
+                  status = status,
+                  httpCode = 200,
+                  sparkApplicationId = Option(respBody.getString("sparkApplicationId")).filter(_.nonEmpty),
+                  historyUrl = Option(respBody.getString("historyUrl")).filter(_.nonEmpty)
+                )
+              )
             } catch {
               case e: Exception =>
                 val errorMsg = s"Invalid Crucible status response for job $jobId: ${e.getMessage}"
@@ -90,7 +102,7 @@ class CrucibleClient(val baseUrl: String, val namespace: String) {
                 future.completeExceptionally(CrucibleApiException(errorMsg, Some(response.statusCode()), e))
             }
           } else {
-            future.complete((statusLabel(response.statusCode()), response.statusCode()))
+            future.complete(CrucibleJobStatus(statusLabel(response.statusCode()), response.statusCode()))
           }
         } else {
           val errorMsg = s"Failed to get job status: ${ar.cause().getMessage}"

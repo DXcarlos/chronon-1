@@ -32,6 +32,13 @@ object NodeConfReader {
     hadoopConf.set("fs.gs.auth.type", "APPLICATION_DEFAULT")
     hadoopConf.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
     hadoopConf.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+    // S3A in Hadoop 3.4+ defaults to the v2 SDK chain that does NOT include
+    // WebIdentity, so on EKS IRSA the conf read fails with
+    // NoAuthWithAWSException. Force the v2 WebIdentity provider explicitly —
+    // the EKS-injected AWS_WEB_IDENTITY_TOKEN_FILE / AWS_ROLE_ARN env vars are
+    // all this provider needs to resolve credentials.
+    hadoopConf.set("fs.s3a.aws.credentials.provider",
+                   "software.amazon.awssdk.auth.credentials.WebIdentityTokenFileCredentialsProvider")
     hadoopConf.set("fs.abfs.impl", "org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem")
     hadoopConf.set("fs.abfss.impl", "org.apache.hadoop.fs.azurebfs.SecureAzureBlobFileSystem")
     hadoopConf.set("fs.azure.account.auth.type", "OAuth")

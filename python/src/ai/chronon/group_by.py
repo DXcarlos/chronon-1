@@ -497,6 +497,7 @@ def GroupBy(
     cluster_conf: common.ClusterConfigProperties = None,
     step_days: int = None,
     disable_historical_backfill: bool = False,
+    environments: Optional[List[str]] = None,
 ) -> ttypes.GroupBy:
     """
 
@@ -634,9 +635,20 @@ def GroupBy(
         Cluster configuration properties for the join.
     :param step_days
         The maximum number of days to output at once
+    :param environments:
+        List of environments where this GroupBy should be deployed/available.
+        Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
+    :type environments: List[str]
     :return:
         A GroupBy object containing specified aggregations.
     """
+    # `environments` is left unset (None) when the author doesn't specify it.
+    # Downstream consumers (e.g. hub schedule-all) default the missing/empty
+    # case to ['prod']. Keeping it unset on disk avoids baking a default into
+    # every compiled conf.
+    if environments:
+        environments = utils.convert_environments_to_enum(environments)
+
     assert sources, "Sources are not specified"
 
     assert version is None or isinstance(version, int), (
@@ -722,6 +734,7 @@ def GroupBy(
         tags=tags if tags else None,
         columnTags=column_tags if column_tags else None,
         version=str(version) if version is not None else None,
+        environments=environments,
     )
 
     group_by = ttypes.GroupBy(

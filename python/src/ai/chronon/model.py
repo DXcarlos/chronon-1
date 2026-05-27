@@ -161,6 +161,7 @@ def Model(
     output_namespace: Optional[str] = None,
     table_properties: Optional[Dict[str, str]] = None,
     tags: Optional[Dict[str, str]] = None,
+    environments: Optional[List[str]] = None,
 ) -> ttypes.Model:
     """
     Creates a Model object for ML model inference and orchestration.
@@ -200,9 +201,20 @@ def Model(
     :param tags:
         Additional metadata that does not directly affect computation, but is useful for management.
     :type tags: Dict[str, str]
+    :param environments:
+        List of environments where this Model should be deployed/available.
+        Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
+    :type environments: List[str]
     :return:
         A Model object
     """
+    # `environments` is left unset (None) when the author doesn't specify it.
+    # Downstream consumers (e.g. hub schedule-all) default the missing/empty
+    # case to ['prod']. Keeping it unset on disk avoids baking a default into
+    # every compiled conf.
+    if environments:
+        environments = utils.convert_environments_to_enum(environments)
+
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()
 
@@ -215,6 +227,7 @@ def Model(
         tags=tags,
         tableProperties=table_properties,
         version=version,
+        environments=environments,
     )
 
     model = ttypes.Model(
@@ -249,6 +262,7 @@ def ModelTransforms(
     output_namespace: Optional[str] = None,
     table_properties: Optional[Dict[str, str]] = None,
     tags: Optional[Dict[str, str]] = None,
+    environments: Optional[List[str]] = None,
 ) -> ttypes.ModelTransforms:
     """
     ModelTransforms allows taking the output of existing sources (Event/Entity/Join) and
@@ -267,7 +281,16 @@ def ModelTransforms(
      - output_namespace: Namespace for the model output
      - table_properties: Additional table properties for the model output
      - tags: Additional metadata tags
+     - environments: List of environments where this ModelTransforms should be deployed/available.
+        Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     """
+    # `environments` is left unset (None) when the author doesn't specify it.
+    # Downstream consumers (e.g. hub schedule-all) default the missing/empty
+    # case to ['prod']. Keeping it unset on disk avoids baking a default into
+    # every compiled conf.
+    if environments:
+        environments = utils.convert_environments_to_enum(environments)
+
     # Get caller's filename to assign team
     team = utils._get_team_from_caller()
 
@@ -287,6 +310,7 @@ def ModelTransforms(
         tags=tags,
         tableProperties=table_properties,
         version=str(version),
+        environments=environments,
     )
 
     model_transforms = ttypes.ModelTransforms(

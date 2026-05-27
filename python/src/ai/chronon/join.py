@@ -290,6 +290,7 @@ def Join(
     step_days: int = None,
     enable_stats_compute: bool = None,
     modular_execution: bool = False,
+    environments: Optional[List[str]] = None,
 ) -> api.Join:
     """
     Construct a join object. A join can pull together data from various GroupBy's both offline and online. This is also
@@ -397,18 +398,34 @@ def Join(
         When True, uses modular join planning (JoinPlanner) instead of the default
         monolith planner (MonolithJoinPlanner).
     :type modular_execution: bool
+    :param environments:
+        List of environments where this join should be deployed/available.
+        Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
+    :type environments: List[str]
     """
     # Normalize row_ids
     if isinstance(row_ids, str):
         row_ids = [row_ids]
 
+    # `environments` is left unset (None) when the author doesn't specify it.
+    # Downstream consumers (e.g. hub schedule-all) default the missing/empty
+    # case to ['prod']. Keeping it unset on disk avoids baking a default into
+    # every compiled conf.
+    if environments:
+        environments = utils.convert_environments_to_enum(environments)
+
     assert version is None or isinstance(version, int), (
         f"Version must be an integer or None, but found {type(version).__name__}"
     )
 
+    # Normalize before deepcopy so a left JoinSource can resolve the nested
+    # join's metadata name from its defining module. Without this, the copied
+    # inner join can keep a null name and later resolve to "<namespace>.null".
+    normalized_left = utils.normalize_source(left, output_namespace)
+
     # create a deep copy for case: multiple LeftOuterJoin use the same left,
     # validation will fail after the first iteration
-    updated_left = copy.deepcopy(left)
+    updated_left = copy.deepcopy(normalized_left)
     if left.events and left.events.query.selects:
         assert "ts" not in left.events.query.selects.keys(), (
             "'ts' is a reserved key word for Chronon, please specify the expression in timeColumn"
@@ -486,6 +503,7 @@ def Join(
         consistencySamplePercent=consistency_sample_percent,
         executionInfo=exec_info,
         version=str(version) if version is not None else None,
+        environments=environments,
     )
 
     join = api.Join(

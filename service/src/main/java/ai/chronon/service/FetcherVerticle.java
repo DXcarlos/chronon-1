@@ -5,6 +5,7 @@ import ai.chronon.online.JavaFetcher;
 import ai.chronon.service.handlers.FetchRouter;
 import ai.chronon.service.handlers.FetchRouterV2;
 import ai.chronon.service.handlers.GroupBySchemaHandler;
+import ai.chronon.service.handlers.GroupByStatusHandler;
 import ai.chronon.service.handlers.JoinListHandler;
 import ai.chronon.service.handlers.JoinSchemaHandler;
 import ai.chronon.service.handlers.StatsDriftHandler;
@@ -69,6 +70,9 @@ public class FetcherVerticle extends AbstractVerticle {
 
         // Set up route for retrieval of GroupBy schema
         router.get("/v1/groupby/:name/schema").handler(new GroupBySchemaHandler(fetcher));
+
+        // Set up route for retrieval of GroupBy status
+        router.get("/v1/groupby/:name/status").handler(new GroupByStatusHandler(fetcher));
 
         // Set up route for fetching enhanced statistics
         router.get("/v1/stats/:tableName/trailing-drift").handler(new StatsTrailingDriftHandler(api));

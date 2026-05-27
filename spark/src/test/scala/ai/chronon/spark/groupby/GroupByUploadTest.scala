@@ -239,8 +239,8 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
       .distinct()
       .withColumn("list_event", lit("recent-list-event"))
       .withColumn("views", lit(1))
-      .withColumn("ts", lit(tableUtils.partitionSpec.epochMillis(yesterday) - 1L))
-      .withColumn(tableUtils.partitionColumn, lit(tableUtils.partitionSpec.before(yesterday)))
+      .withColumn("ts", lit(tableUtils.partitionSpec.epochMillis(today) - 1L))
+      .withColumn(tableUtils.partitionColumn, lit(yesterday))
       .select(eventDf.columns.map(col): _*)
     val eventDfWithRecentRows = eventDf.unionByName(guaranteedRecentDf)
 

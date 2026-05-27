@@ -58,6 +58,11 @@ gcp = Team(
             "FRONTEND_URL": "http://localhost:3000",
             "HUB_URL": "http://localhost:3903",
             "EVAL_URL": "http://localhost:3904",
+            # Sentinel — referenced by test_canary_compile.py to verify that
+            # the prod compile pass uses only this `teams.py` file (never
+            # `teams.canary.py`). Must not appear in any file under
+            # compiled_canary/.
+            "PROD_ONLY_SENTINEL_GCP": "prod-only-sentinel-value-9b8a7c",
         },
         modeEnvironments={
             RunMode.UPLOAD: {
@@ -94,6 +99,8 @@ gcp = Team(
                 "-Dai.chronon.metrics.reader=grpc",
                 "-Dai.chronon.metrics.exporter.url=http://localhost:4317",
             ]),
+            # Sentinel — prod-only conf marker for the test.
+            "spark.chronon.test.prod_only_sentinel": "prod-only-conf-sentinel-4f5a6b",
         },
         modeConfigs={
         }
@@ -104,7 +111,9 @@ gcp = Team(
                 "dataproc.config": generate_dataproc_cluster_config(2, "canary-443022", "gs://zipline-artifacts-canary",
                                                                     idle_timeout="7200s",
                                                                     worker_host_type="n2-highmem-4",
-                                                                    master_host_type="n2-highmem-8")
+                                                                    master_host_type="n2-highmem-8"),
+                # Sentinel — prod-only cluster-conf marker for the test.
+                "prod_only_sentinel_cluster": "prod-only-cluster-sentinel-2e3f4a",
             }
         }
     ),

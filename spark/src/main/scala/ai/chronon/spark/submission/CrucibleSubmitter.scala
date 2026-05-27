@@ -27,7 +27,8 @@ class CrucibleSubmitter(
 
   @transient override lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  private val client = new CrucibleClient(baseUrl.stripSuffix("/"), namespace)
+  private val normalizedBaseUrl = baseUrl.stripSuffix("/")
+  private val client = new CrucibleClient(normalizedBaseUrl, namespace)
 
   override def submit(
       jobType: JobType,
@@ -80,13 +81,7 @@ class CrucibleSubmitter(
         body.put("mainClass", submissionProperties.getOrElse(MainClass, FlinkMainClass))
         body.put("jar", submissionProperties.getOrElse(FlinkMainJarURI, jarUri))
 
-        val additionalJars = scala.collection.mutable.ArrayBuffer[String]()
-        if (jarUri.nonEmpty) additionalJars += jarUri
-        submissionProperties.get(FlinkPubSubConnectorJarURI).foreach(additionalJars += _)
-        submissionProperties.get(FlinkKinesisConnectorJarURI).foreach(additionalJars += _)
-        submissionProperties
-          .get(AdditionalJars)
-          .foreach(_.split(",").map(_.trim).filter(_.nonEmpty).foreach(additionalJars += _))
+        val additionalJars = CrucibleSubmitter.flinkAdditionalJars(submissionProperties, jarUri)
         if (additionalJars.nonEmpty) {
           val jarsArray = new JsonArray()
           additionalJars.foreach(jarsArray.add)
@@ -133,12 +128,12 @@ class CrucibleSubmitter(
 
   override def status(jobId: String): JobStatusType = {
     try {
-      val (status, httpCode) = client.getJobStatus(jobId)
-      if (httpCode == 404) {
+      val job = client.getJobStatus(jobId)
+      if (job.httpCode == 404) {
         logger.warn(s"Job $jobId not found in Crucible namespace $namespace")
         JobStatusType.UNKNOWN
       } else {
-        mapStatus(status)
+        mapStatus(job.status)
       }
     } catch {
       case e: CrucibleApiException =>
@@ -155,13 +150,25 @@ class CrucibleSubmitter(
   override def close(): Unit = client.close()
 
   override def getJobUrl(jobId: String): Option[String] =
-    Some(s"${baseUrl.stripSuffix("/")}/api/v1/namespaces/$namespace/jobs/$jobId")
+    Some(jobUrl(jobId))
 
-  override def getSparkUrl(jobId: String): Option[String] =
-    Some(s"${baseUrl.stripSuffix("/")}/api/v1/namespaces/$namespace/jobs/$jobId/ui")
+  override def getSparkUrl(jobId: String): Option[String] = {
+    try {
+      val job = client.getJobStatus(jobId)
+      if (job.httpCode == 200) {
+        job.historyUrl.orElse(Some(sparkUIUrl(jobId)))
+      } else {
+        Some(sparkUIUrl(jobId))
+      }
+    } catch {
+      case e: Exception =>
+        logger.warn(s"Failed to resolve Crucible Spark history URL for job $jobId; using live UI URL", e)
+        Some(sparkUIUrl(jobId))
+    }
+  }
 
   override def getFlinkUrl(jobId: String): Option[String] =
-    Some(s"${baseUrl.stripSuffix("/")}/api/v1/namespaces/$namespace/jobs/$jobId/ui")
+    Some(flinkUIUrl(jobId))
 
   override def isClusterCreateNeeded(isLongRunning: Boolean): Boolean = false
 
@@ -180,9 +187,14 @@ class CrucibleSubmitter(
       FlinkCheckpointUri -> s"$flinkStateUri/checkpoints"
     )
     val enablePubSub = env.getOrElse("ENABLE_PUBSUB", "false").toBoolean
-    if (enablePubSub)
-      base + (FlinkPubSubConnectorJarURI -> s"$artifactPrefix/release/$version/jars/connectors_pubsub_deploy.jar")
-    else base
+    val enableKinesis = env.getOrElse("ENABLE_KINESIS", "false").toBoolean
+    base ++
+      (if (enablePubSub)
+         Map(FlinkPubSubConnectorJarURI -> s"$artifactPrefix/release/$version/jars/connectors_pubsub_deploy.jar")
+       else Map.empty) ++
+      (if (enableKinesis)
+         Map(FlinkKinesisConnectorJarURI -> s"$artifactPrefix/release/$version/jars/connectors_kinesis_deploy.jar")
+       else Map.empty)
   }
 
   override def getLatestCheckpointPath(flinkInternalJobId: String, flinkStateUri: String): Option[String] =
@@ -205,6 +217,15 @@ class CrucibleSubmitter(
   private def localClasspathFor(jarUri: String): String =
     if (jarUri.startsWith("local://")) jarUri.stripPrefix("local://")
     else "/opt/spark/work-dir/" + jarUri.split("/").last
+
+  private def jobUrl(jobId: String): String =
+    s"$normalizedBaseUrl/api/v1/namespaces/$namespace/jobs/$jobId"
+
+  private def sparkUIUrl(jobId: String): String =
+    s"$normalizedBaseUrl/jobs/$namespace/$jobId/ui"
+
+  private def flinkUIUrl(jobId: String): String =
+    s"$normalizedBaseUrl/flink/$namespace/$jobId/ui"
 
   private def sanitizeName(name: String): String = {
     val cleaned = name.toLowerCase
@@ -236,6 +257,19 @@ object CrucibleSubmitter {
 
   private[submission] def appendClasspath(existing: String, localJarPath: String): String =
     Option(existing).filter(_.trim.nonEmpty).map(_ + File.pathSeparator + localJarPath).getOrElse(localJarPath)
+
+  private[submission] def flinkAdditionalJars(submissionProperties: Map[String, String],
+                                              jarUri: String): Seq[String] = {
+    val jars = scala.collection.mutable.ArrayBuffer[String]()
+    if (jarUri.nonEmpty) jars += jarUri
+    submissionProperties.get(FlinkPubSubConnectorJarURI).foreach(jars += _)
+    submissionProperties.get(FlinkKinesisConnectorJarURI).foreach(jars += _)
+    submissionProperties.get(FlinkJarsUri).foreach(base => additionalFlinkJars(base).foreach(jars += _))
+    submissionProperties
+      .get(AdditionalJars)
+      .foreach(_.split(",").map(_.trim).filter(_.nonEmpty).foreach(jars += _))
+    jars.toSeq
+  }
 
   private def envFlag(name: String): Boolean =
     sys.env.get(name).exists { value =>

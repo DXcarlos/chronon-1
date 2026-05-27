@@ -6,6 +6,7 @@ import ai.chronon.cli.compile.parse_teams as teams
 from ai.chronon.cli.compile.conf_validator import ConfValidator
 from ai.chronon.cli.compile.display.compile_status import CompileStatus
 from ai.chronon.cli.compile.display.compiled_obj import CompiledObj
+from ai.chronon.cli.compile.parse_teams import PROD_ENV, PROD_TEAMS_FILE
 from ai.chronon.cli.compile.serializer import file2thrift
 from ai.chronon.cli.formatter import Format
 from ai.chronon.cli.logger import get_logger, require
@@ -64,13 +65,22 @@ CONFIG_INFOS: List[ConfigInfo] = [
 @dataclass
 class CompileContext:
     def __init__(
-        self, ignore_python_errors: bool = False, format: Format = Format.TEXT, force: bool = False
+        self,
+        ignore_python_errors: bool = False,
+        format: Format = Format.TEXT,
+        force: bool = False,
+        env: str = PROD_ENV,
+        teams_file_name: str = PROD_TEAMS_FILE,
     ):
         self.chronon_root: str = os.getenv("CHRONON_ROOT", os.getcwd())
+        self.env: str = env
+        self.teams_file_name: str = teams_file_name
         self.teams_dict: Dict[str, Team] = teams.load_teams(
-            self.chronon_root, print=format != Format.JSON
+            self.chronon_root, teams_file_name=teams_file_name, print=format != Format.JSON
         )
-        self.compile_dir: str = "compiled"
+        # Env picks the output folder. Each env's pass owns its own folder so prod
+        # and any per-env compiles (canary, staging, …) never trample each other.
+        self.compile_dir: str = "compiled" if env == PROD_ENV else f"compiled_{env}"
         self.ignore_python_errors: bool = ignore_python_errors
         self.format: Format = format
         self.force: bool = force

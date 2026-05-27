@@ -128,7 +128,11 @@ class Compiler:
                     shutil.rmtree(output_dir)
                 shutil.move(staging_dir, output_dir)
                 if self.compile_context.format != Format.JSON:
-                    console.print(f"Compilation successful. Compiled files saved to {output_dir}")
+                    env_label = self.compile_context.env.upper()
+                    console.print(
+                        f"[bold green]{env_label} compilation successful.[/] "
+                        f"Compiled files saved to {output_dir}"
+                    )
             else:
                 if self.compile_context.format != Format.JSON:
                     console.print(

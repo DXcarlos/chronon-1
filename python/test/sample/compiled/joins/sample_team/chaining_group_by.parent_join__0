@@ -291,12 +291,12 @@
       "offlineSchedule": "@daily",
       "onlineSchedule": "@daily"
     },
-    "name": "sample_team.sample_chaining_join_parent.parent_join__0",
+    "name": "sample_team.chaining_group_by.parent_join__0",
     "online": 1,
     "outputNamespace": "sample_namespace",
     "production": 0,
     "samplePercent": 100.0,
-    "sourceFile": "joins/sample_team/sample_chaining_join_parent.py",
+    "sourceFile": "group_bys/sample_team/chaining_group_by.py",
     "team": "sample_team",
     "version": "0"
   },

@@ -396,6 +396,56 @@ class TableDependenciesTest extends AnyFlatSpec with Matchers {
     deps(2).getEndOffset should equal(WindowUtils.zero())
   }
 
+  it should "include root entity mutation dependencies for temporal entity-backed join sources" in {
+    val leftQuery = Builders.Query(partitionColumn = "ds")
+    val entityQuery = Builders.Query(
+      startPartition = "2025-01-01",
+      partitionColumn = "ds"
+    )
+    entityQuery.setPartitionInterval(WindowUtils.Day)
+
+    val parentJoin = Builders.Join(
+      metaData = Builders.MetaData(namespace = "test", name = "parent_join"),
+      left = Builders.Source.entities(
+        query = entityQuery,
+        snapshotTable = "test.dim_snapshot",
+        mutationTable = "test.dim_mutations"
+      ),
+      joinParts = Seq.empty,
+      bootstrapParts = Seq.empty
+    )
+
+    val childJoin = Builders.Join(
+      metaData = Builders.MetaData(namespace = "test", name = "child_join"),
+      left = Builders.Source.joinSource(parentJoin, Builders.Query(partitionColumn = "ds")),
+      joinParts = Seq.empty,
+      bootstrapParts = Seq.empty
+    )
+
+    val downstreamGroupBy = Builders.GroupBy(
+      sources = Seq(Builders.Source.joinSource(childJoin, Builders.Query(partitionColumn = "ds"))),
+      keyColumns = Seq("listing_id"),
+      aggregations = Seq(Builders.Aggregation(Operation.LAST, "headline", Seq(WindowUtils.Unbounded))),
+      accuracy = Accuracy.TEMPORAL
+    )
+
+    val join = Builders.Join(
+      left = Builders.Source.events(leftQuery, table = "test.left_events"),
+      joinParts = Seq(Builders.JoinPart(groupBy = downstreamGroupBy)),
+      bootstrapParts = Seq.empty
+    )
+
+    val deps = TableDependencies.fromJoin(join)
+
+    deps.map(_.getTableInfo.getTable) should equal(
+      Seq("test.left_events", "test.child_join", "test.dim_mutations")
+    )
+    deps(1).getStartOffset should equal(WindowUtils.Day)
+    deps(1).getEndOffset should equal(WindowUtils.Day)
+    deps(2).getStartOffset should equal(WindowUtils.zero())
+    deps(2).getEndOffset should equal(WindowUtils.zero())
+  }
+
   // Mirrors the three shapes the Python TableDependency dataclass can produce after
   // exposing start_cutoff / end_cutoff. These pin down what each shape resolves to
   // in the planner — critical because the platform orchestrator expands the full
