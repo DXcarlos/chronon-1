@@ -837,8 +837,8 @@ fraud_features = Join(
         table="fraud.transactions"
     ),
     right_parts=[
-        JoinPart(group_by=transaction_history.v1),
-        JoinPart(group_by=user_profile.v1)
+        JoinPart(group_by=transaction_history.transaction_features),
+        JoinPart(group_by=user_profile.profile_features)
     ],
     online_external_parts=[
         ExternalPart(user_service, prefix="usr"),

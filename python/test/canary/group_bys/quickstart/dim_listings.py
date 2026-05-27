@@ -33,7 +33,7 @@ source = EntitySource(
     ),
 )
 
-v1 = GroupBy(
+listing_features = GroupBy(
     sources=[source],
     keys=["listing_id"],
     online=True,

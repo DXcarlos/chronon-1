@@ -12,7 +12,7 @@ from ai.chronon.types import JoinSource, ModelTransforms
 
 source = JoinSource(join=demo.derivations_v1)
 
-v1 = ModelTransforms(
+team_default_model_transforms = ModelTransforms(
     sources=[source],
     models=[click_through_rate.ctr_model],
     passthrough_fields=[

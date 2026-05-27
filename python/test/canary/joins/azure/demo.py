@@ -29,22 +29,22 @@ source = EventSource(
 )
 
 # Join with user behavioral features and listing attributes
-v2 = Join(
+event_enrichment = Join(
     left=source,
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
         # user activity features disabled as streaming sources aren't ready yet
         # User behavioral features (aggregated over time windows)
         # JoinPart(
-        #     group_by=user_activities.v1,
+        #     group_by=user_activities.user_activity_features,
         # ),
         # Listing dimension attributes (point-in-time lookup)
         JoinPart(
-            group_by=dim_listings.v3,
+            group_by=dim_listings.listing_features,
         ),
         # Listing dimension attributes (point-in-time lookup)
         JoinPart(
-            group_by=dim_merchants.v2,
+            group_by=dim_merchants.merchant_features,
             prefix="merchant_"
         ),
     ],
@@ -60,11 +60,11 @@ derivations_v3 = Join(
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
         JoinPart(
-            group_by=dim_listings.v3,
+            group_by=dim_listings.listing_features,
         ),
         # user activity features disabled as streaming sources aren't ready yet
         # JoinPart(
-        #     group_by=user_activities.v1,
+        #     group_by=user_activities.user_activity_features,
         # ),
     ],
     derivations=[

@@ -1,0 +1,517 @@
+{
+  "aggregations": [
+    {
+      "argMap": {},
+      "inputColumn": "view_event",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "click_event",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "purchase_event",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "favorite_event",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "add_to_cart_event",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "view_event",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "click_event",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "purchase_event",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "favorite_event",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "add_to_cart_event",
+      "operation": 8,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "is_mobile",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "is_desktop",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {},
+      "inputColumn": "is_tablet",
+      "operation": 7,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    },
+    {
+      "argMap": {
+        "k": "128"
+      },
+      "inputColumn": "user_event_struct",
+      "operation": 13,
+      "windows": [
+        {
+          "length": 1,
+          "timeUnit": 1
+        },
+        {
+          "length": 7,
+          "timeUnit": 1
+        },
+        {
+          "length": 14,
+          "timeUnit": 1
+        },
+        {
+          "length": 30,
+          "timeUnit": 1
+        }
+      ]
+    }
+  ],
+  "keyColumns": [
+    "user_id"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "add_to_cart_event_average_14d": "4704481cd3cbf2b3f6e85c94a7f7ab69",
+      "add_to_cart_event_average_1d": "4704481cd3cbf2b3f6e85c94a7f7ab69",
+      "add_to_cart_event_average_30d": "4704481cd3cbf2b3f6e85c94a7f7ab69",
+      "add_to_cart_event_average_7d": "4704481cd3cbf2b3f6e85c94a7f7ab69",
+      "add_to_cart_event_sum_14d": "4704481cd3cbf2b3f6e85c94a7f7ab69",
+      "add_to_cart_event_sum_1d": "4704481cd3cbf2b3f6e85c94a7f7ab69",
+      "add_to_cart_event_sum_30d": "4704481cd3cbf2b3f6e85c94a7f7ab69",
+      "add_to_cart_event_sum_7d": "4704481cd3cbf2b3f6e85c94a7f7ab69",
+      "click_event_average_14d": "f1b69817eebc1949e56d123c3ee1327e",
+      "click_event_average_1d": "f1b69817eebc1949e56d123c3ee1327e",
+      "click_event_average_30d": "f1b69817eebc1949e56d123c3ee1327e",
+      "click_event_average_7d": "f1b69817eebc1949e56d123c3ee1327e",
+      "click_event_sum_14d": "f1b69817eebc1949e56d123c3ee1327e",
+      "click_event_sum_1d": "f1b69817eebc1949e56d123c3ee1327e",
+      "click_event_sum_30d": "f1b69817eebc1949e56d123c3ee1327e",
+      "click_event_sum_7d": "f1b69817eebc1949e56d123c3ee1327e",
+      "favorite_event_average_14d": "1debace4217f861436ad64c513ff9d8e",
+      "favorite_event_average_1d": "1debace4217f861436ad64c513ff9d8e",
+      "favorite_event_average_30d": "1debace4217f861436ad64c513ff9d8e",
+      "favorite_event_average_7d": "1debace4217f861436ad64c513ff9d8e",
+      "favorite_event_sum_14d": "1debace4217f861436ad64c513ff9d8e",
+      "favorite_event_sum_1d": "1debace4217f861436ad64c513ff9d8e",
+      "favorite_event_sum_30d": "1debace4217f861436ad64c513ff9d8e",
+      "favorite_event_sum_7d": "1debace4217f861436ad64c513ff9d8e",
+      "is_desktop_sum_14d": "59b69fc99d8881fdb89fab4590ed2587",
+      "is_desktop_sum_1d": "59b69fc99d8881fdb89fab4590ed2587",
+      "is_desktop_sum_30d": "59b69fc99d8881fdb89fab4590ed2587",
+      "is_desktop_sum_7d": "59b69fc99d8881fdb89fab4590ed2587",
+      "is_mobile_sum_14d": "9aa22586bd9e8e591f9b9d5d9eb42fe0",
+      "is_mobile_sum_1d": "9aa22586bd9e8e591f9b9d5d9eb42fe0",
+      "is_mobile_sum_30d": "9aa22586bd9e8e591f9b9d5d9eb42fe0",
+      "is_mobile_sum_7d": "9aa22586bd9e8e591f9b9d5d9eb42fe0",
+      "is_tablet_sum_14d": "75f386d29d49e4207ed89d7c0c5c45f7",
+      "is_tablet_sum_1d": "75f386d29d49e4207ed89d7c0c5c45f7",
+      "is_tablet_sum_30d": "75f386d29d49e4207ed89d7c0c5c45f7",
+      "is_tablet_sum_7d": "75f386d29d49e4207ed89d7c0c5c45f7",
+      "purchase_event_average_14d": "bec7e02d26e9fc9196fd8307d9436d9f",
+      "purchase_event_average_1d": "bec7e02d26e9fc9196fd8307d9436d9f",
+      "purchase_event_average_30d": "bec7e02d26e9fc9196fd8307d9436d9f",
+      "purchase_event_average_7d": "bec7e02d26e9fc9196fd8307d9436d9f",
+      "purchase_event_sum_14d": "bec7e02d26e9fc9196fd8307d9436d9f",
+      "purchase_event_sum_1d": "bec7e02d26e9fc9196fd8307d9436d9f",
+      "purchase_event_sum_30d": "bec7e02d26e9fc9196fd8307d9436d9f",
+      "purchase_event_sum_7d": "bec7e02d26e9fc9196fd8307d9436d9f",
+      "user_event_struct_last128_14d": "4dd7e72159d19948cc960154c1b30415",
+      "user_event_struct_last128_1d": "4dd7e72159d19948cc960154c1b30415",
+      "user_event_struct_last128_30d": "4dd7e72159d19948cc960154c1b30415",
+      "user_event_struct_last128_7d": "4dd7e72159d19948cc960154c1b30415",
+      "user_id": "01026dd1c72328b5cd4799229f4e3f2d",
+      "view_event_average_14d": "f1db0c0c2b39b23e822180bd023485ad",
+      "view_event_average_1d": "f1db0c0c2b39b23e822180bd023485ad",
+      "view_event_average_30d": "f1db0c0c2b39b23e822180bd023485ad",
+      "view_event_average_7d": "f1db0c0c2b39b23e822180bd023485ad",
+      "view_event_sum_14d": "f1db0c0c2b39b23e822180bd023485ad",
+      "view_event_sum_1d": "f1db0c0c2b39b23e822180bd023485ad",
+      "view_event_sum_30d": "f1db0c0c2b39b23e822180bd023485ad",
+      "view_event_sum_7d": "f1db0c0c2b39b23e822180bd023485ad"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_demo_user_activities_raw_with_offset_0\", \"spec\": \"demo.user_activities_raw/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "executionInfo": {
+      "clusterConf": {
+        "common": {
+          "emr.config": "{\"releaseLabel\": \"emr-7.12.0\", \"instanceType\": \"m5.xlarge\", \"instanceCount\": 3, \"autoTerminationPolicy\": {\"idleTimeout\": 7200}, \"subnetName\": \"zipline-canary-subnet-main\", \"securityGroupName\": \"zipline-canary-sg\"}"
+        }
+      },
+      "conf": {
+        "common": {
+          "spark.chronon.coalesce.factor": "10",
+          "spark.chronon.partition.column": "ds",
+          "spark.chronon.partition.format": "yyyy-MM-dd",
+          "spark.chronon.table_write.format": "iceberg",
+          "spark.chronon.table_write.upload.format": "ion",
+          "spark.chronon.table_write.upload.location": "s3://zipline-warehouse-canary/data/ion_uploads/",
+          "spark.default.parallelism": "10",
+          "spark.driver.cores": "1",
+          "spark.driver.memory": "1g",
+          "spark.executor.cores": "1",
+          "spark.executor.memory": "1g",
+          "spark.hadoop.hive.metastore.client.factory.class": "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory",
+          "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
+          "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
+          "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-canary/data/tables/",
+          "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+          "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+          "spark.sql.shuffle.partitions": "10",
+          "taskmanager.memory.process.size": "4G"
+        },
+        "modeConfigs": {
+          "backfill": {
+            "spark.chronon.coalesce.factor": "10",
+            "spark.chronon.partition.column": "ds",
+            "spark.chronon.partition.format": "yyyy-MM-dd",
+            "spark.chronon.table_write.format": "iceberg",
+            "spark.chronon.table_write.upload.format": "ion",
+            "spark.chronon.table_write.upload.location": "s3://zipline-warehouse-canary/data/ion_uploads/",
+            "spark.default.parallelism": "10",
+            "spark.driver.cores": "1",
+            "spark.driver.memory": "1g",
+            "spark.executor.cores": "1",
+            "spark.executor.memory": "1g",
+            "spark.hadoop.hive.metastore.client.factory.class": "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory",
+            "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkSessionCatalog",
+            "spark.sql.catalog.spark_catalog.catalog-impl": "org.apache.iceberg.aws.glue.GlueCatalog",
+            "spark.sql.catalog.spark_catalog.warehouse": "s3://zipline-warehouse-canary/data/tables/",
+            "spark.sql.defaultUrlStreamHandlerFactory.enabled": "false",
+            "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+            "spark.sql.shuffle.partitions": "10",
+            "taskmanager.memory.process.size": "4G"
+          }
+        }
+      },
+      "env": {
+        "common": {
+          "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+          "AWS_REGION": "us-west-2",
+          "CHRONON_ONLINE_ARGS": "-Ztasks=1",
+          "CLOUD_PROVIDER": "aws",
+          "CUSTOMER_ID": "canary",
+          "ENABLE_KINESIS": "true",
+          "EVAL_URL": "https://canary-eval-aws.zipline.ai",
+          "FETCHER_URL": "http://localhost:9000",
+          "FLINK_JARS_URI": "s3://zipline-artifacts-canary/spark-3.5.3/libs/",
+          "FLINK_STATE_URI": "s3://zipline-warehouse-canary/flink-state",
+          "FRONTEND_URL": "https://canary-aws.zipline.ai",
+          "HUB_URL": "https://canary-orch-aws.zipline.ai",
+          "SPARK_CLUSTER_NAME": "zipline-emr-canary",
+          "VERSION": "latest",
+          "WAREHOUSE_PREFIX": "s3://zipline-warehouse-canary"
+        },
+        "modeEnvironments": {
+          "upload": {
+            "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
+            "AWS_REGION": "us-west-2",
+            "CHRONON_ONLINE_ARGS": "-Ztasks=1",
+            "CLOUD_PROVIDER": "aws",
+            "CUSTOMER_ID": "canary",
+            "ENABLE_KINESIS": "true",
+            "EVAL_URL": "https://canary-eval-aws.zipline.ai",
+            "FETCHER_URL": "http://localhost:9000",
+            "FLINK_JARS_URI": "s3://zipline-artifacts-canary/spark-3.5.3/libs/",
+            "FLINK_STATE_URI": "s3://zipline-warehouse-canary/flink-state",
+            "FRONTEND_URL": "https://canary-aws.zipline.ai",
+            "HUB_URL": "https://canary-orch-aws.zipline.ai",
+            "SPARK_CLUSTER_NAME": "zipline-emr-canary",
+            "VERSION": "latest",
+            "WAREHOUSE_PREFIX": "s3://zipline-warehouse-canary"
+          }
+        }
+      },
+      "historicalBackfill": 0,
+      "onlineSchedule": "@daily",
+      "stepDays": 10
+    },
+    "name": "aws.user_activities.user_activity_features__1",
+    "online": 1,
+    "outputNamespace": "data",
+    "sourceFile": "group_bys/aws/user_activities.py",
+    "team": "aws",
+    "version": "1"
+  },
+  "sources": [
+    {
+      "events": {
+        "query": {
+          "selects": {
+            "add_to_cart_event": "IF(event_type = 'add_to_cart', 1, 0)",
+            "click_event": "IF(event_type = 'click', 1, 0)",
+            "favorite_event": "IF(event_type = 'favorite', 1, 0)",
+            "is_desktop": "IF(device_type = 'desktop', 1, 0)",
+            "is_mobile": "IF(device_type = 'mobile', 1, 0)",
+            "is_tablet": "IF(device_type = 'tablet', 1, 0)",
+            "listing_id": "listing_id",
+            "purchase_event": "IF(event_type = 'purchase', 1, 0)",
+            "user_event_struct": "STRUCT(event_type, listing_id, unix_millis(TIMESTAMP(event_time_ms)) as timestamp)",
+            "user_id": "user_id",
+            "view_event": "IF(event_type = 'view', 1, 0)"
+          },
+          "timeColumn": "unix_millis(TIMESTAMP(event_time_ms))"
+        },
+        "table": "demo.user_activities_raw",
+        "topic": "kinesis://user-activities/serde=glue_registry/registry_name=zipline-canary/schema_name=user-activities"
+      }
+    }
+  ]
+}

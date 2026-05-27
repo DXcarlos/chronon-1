@@ -229,7 +229,7 @@
                           "onlineSchedule": "@daily",
                           "stepDays": 10
                         },
-                        "name": "aws.dim_listings.v1__0",
+                        "name": "aws.dim_listings.listing_features__0",
                         "online": 1,
                         "outputNamespace": "data",
                         "team": "aws",

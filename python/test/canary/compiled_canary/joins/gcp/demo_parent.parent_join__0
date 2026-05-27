@@ -7,22 +7,22 @@
         ],
         "metaData": {
           "columnHashes": {
-            "brief_description": "85c0544e6f2d058e93e6d54956e118e4",
-            "currency": "ff795c264858b08c00d9159c8e4761d5",
-            "headline": "46fb87fe34c8251a81870c83853e15c6",
-            "inventory_count": "10910897373885c1b0fc1420e7a52562",
-            "is_active": "0fe881820ff26668c32d68dc3382a7ff",
-            "is_expensive": "4d6678c92b2194fd9b7e6bfa85366fe5",
-            "is_in_stock": "0cd5441df3d278d3b7a060e4bd23a324",
-            "listing_id": "6ed4569be71307367d24e5fe77626334",
-            "long_description": "51bbdbd4269ccb2d382f835dcfc2eed3",
-            "main_image_path": "a5ab50facb20e01a0d93a4ed0eac1a9d",
-            "merchant_id": "60a2c0a6662b1bdb97061e9b9566e451",
-            "price_cents": "058f7df64e0544d392a31bb6dc08209f",
-            "primary_category": "62f56fda8558ec54a85da33a3934c182",
-            "secondary_image_paths": "e8ec969f13b6db533bca510f235fd069",
-            "tags": "589de0914f9ffabf8c80a0fe10eaa866",
-            "weight_grams": "041362c5ebf87a340a139e6b53034b7c"
+            "brief_description": "d3f1642bb4530f2e5235ebc6c9d693cf",
+            "currency": "584e00b79b9bf6ed25d432a02e427bfc",
+            "headline": "823ec0ec5b2415afdbd2cf8febfc374e",
+            "inventory_count": "e678c648b144c77bae159484e764d01b",
+            "is_active": "bbe0b8d898bbc76bd6a2d78638f851c5",
+            "is_expensive": "26476e3eaf428978b2ede58feafc2a5e",
+            "is_in_stock": "ddd25f021c8fdcd8057bf6734e14c2b8",
+            "listing_id": "ba0c8a32e88d22787b397feacfd53c50",
+            "long_description": "c7e6a709928049067a8bdf57053133a4",
+            "main_image_path": "62961413b069c509d2cd3d46f8ce0b45",
+            "merchant_id": "d479bdca8b838ea37dcd648d469cfb48",
+            "price_cents": "f245f3def43d79f3a1f626b77f9602a3",
+            "primary_category": "93b732b1334215ad752a0f8d0efb8c21",
+            "secondary_image_paths": "0d522be8a33da9576acfa778a76010db",
+            "tags": "420f8a75f02f0a5b868be518a7cfac6b",
+            "weight_grams": "568b2e373bf32463b746b38f90fe1185"
           },
           "executionInfo": {
             "clusterConf": {
@@ -100,7 +100,7 @@
             "historicalBackfill": 0,
             "onlineSchedule": "@daily"
           },
-          "name": "gcp.dim_listings.v1__0",
+          "name": "gcp.dim_listings.listing_features__0",
           "online": 1,
           "outputNamespace": "data",
           "team": "gcp",

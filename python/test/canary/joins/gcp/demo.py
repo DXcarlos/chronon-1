@@ -30,21 +30,21 @@ source = EventSource(
 )
 
 # Join with user behavioral features and listing attributes
-v1 = Join(
+event_enrichment = Join(
     left=source,
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
         # User behavioral features (aggregated over time windows)
         JoinPart(
-            group_by=user_activities.v1,
+            group_by=user_activities.user_activity_features,
         ),
         # Listing dimension attributes (point-in-time lookup)
         JoinPart(
-            group_by=dim_listings.v1,
+            group_by=dim_listings.listing_features,
         ),
         # Listing dimension attributes (point-in-time lookup)
         JoinPart(
-            group_by=dim_merchants.v1,
+            group_by=dim_merchants.merchant_features,
             prefix="merchant_"
         ),
     ],
@@ -62,7 +62,7 @@ mutation_test = Join(
     row_ids=["event_id"],
     right_parts=[
         JoinPart(
-            group_by=dim_listings_with_mutations.v2,
+            group_by=dim_listings_with_mutations.listing_features_with_mutations,
         ),
     ],
     version=1,
@@ -77,10 +77,10 @@ mutation_test_modular = Join(
     row_ids=["event_id"],
     right_parts=[
         JoinPart(
-            group_by=dim_listings_with_mutations.v2,
+            group_by=dim_listings_with_mutations.listing_features_with_mutations,
         ),
         JoinPart(
-            group_by=user_activities.v1,
+            group_by=user_activities.user_activity_features,
         ),
     ],
     version=2,
@@ -98,10 +98,10 @@ derivations_v1 = Join(
     row_ids=["event_id"], # TODO -- kill this once the SPJ API change goes through
     right_parts=[
         JoinPart(
-            group_by=dim_listings.v1,
+            group_by=dim_listings.listing_features,
         ),
         JoinPart(
-            group_by=user_activities.v1,
+            group_by=user_activities.user_activity_features,
         ),
     ],
     derivations=[

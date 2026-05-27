@@ -24,7 +24,7 @@ model = Model(
     )
 )
 
-v1 = ModelTransforms(
+transaction_model_transforms = ModelTransforms(
     sources=[source],
     models=[model],
     passthrough_fields=["user_id"],

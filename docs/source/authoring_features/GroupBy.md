@@ -225,7 +225,7 @@ source = Source(
 
 window_sizes = ["3d", "14d", "30d"] # Define some window sizes to use below
 
-v1 = GroupBy(
+return_features = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,
@@ -267,7 +267,7 @@ source = Source(
 
 window_sizes = ["3d", "14d", "30d"]
 
-v1 = GroupBy(
+bucketed_purchase_features = GroupBy(
     sources=[source],
     keys=["user_id"],
     online=True,
@@ -318,7 +318,7 @@ source = Source(
 
 window_sizes = ["3d", "14d", "30d"] # Define some window sizes to use below
 
-v1 = GroupBy(
+purchase_features = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,
@@ -364,7 +364,7 @@ source = Source(
         )
     ))
 
-v1 = GroupBy(
+user_features = GroupBy(
     sources=[source],
     keys=["user_id"], # Primary key is the same as the primary key for the source table
     aggregations=None, # In this case, there are no aggregations or windows to define

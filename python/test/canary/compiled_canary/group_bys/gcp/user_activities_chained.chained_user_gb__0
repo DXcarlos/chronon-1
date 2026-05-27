@@ -193,7 +193,7 @@
                     "historicalBackfill": 0,
                     "onlineSchedule": "@daily"
                   },
-                  "name": "gcp.dim_listings.v1__0",
+                  "name": "gcp.dim_listings.listing_features__0",
                   "online": 1,
                   "outputNamespace": "data",
                   "team": "gcp",

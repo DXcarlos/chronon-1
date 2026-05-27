@@ -20,10 +20,10 @@
         ],
         "metaData": {
           "columnHashes": {
-            "impressed_unique_count_1d_sum": "2b5875611866ccd48d4f7fe966168806",
-            "place_id": "c8e65ca09b496f2a7847cb5f3e89c46c",
-            "s2CellId": "607fd7e2e7618db9323609f32bb902ab",
-            "viewed_unique_count_1d_sum": "267f118989b9cb954284bbdd7965e479"
+            "impressed_unique_count_1d_sum": "dee68ee14ede35dd7dfb8e02b89a51ed",
+            "place_id": "5f05a3249d836c4717c6b74fa47508dd",
+            "s2CellId": "c5b3f77b42a0db764a84f012added70b",
+            "viewed_unique_count_1d_sum": "5e1cf59ccef2374bcd64b6962af8d932"
           },
           "executionInfo": {
             "conf": {
@@ -70,7 +70,7 @@
             "historicalBackfill": 0,
             "onlineSchedule": "@daily"
           },
-          "name": "sample_team.sample_group_by.v1__0",
+          "name": "sample_team.sample_group_by.sample_features__0",
           "online": 1,
           "outputNamespace": "sample_namespace",
           "production": 0,
@@ -93,7 +93,7 @@
                 },
                 "startPartition": "2021-03-01"
               },
-              "snapshotTable": "sample_namespace.sample_team_sample_staging_query_v1__0"
+              "snapshotTable": "sample_namespace.sample_team_sample_staging_query_listing_features__0"
             }
           }
         ]
@@ -112,21 +112,21 @@
         },
         "startPartition": "2021-03-01"
       },
-      "snapshotTable": "sample_namespace.sample_team_sample_staging_query_v1__0"
+      "snapshotTable": "sample_namespace.sample_team_sample_staging_query_listing_features__0"
     }
   },
   "metaData": {
     "columnHashes": {
-      "impressed_unique_count_1d": "bfe3267325acd0b46d073e5c7967d363",
-      "place_id": "d2a684c2080c2cd796e161d1ff17d95a",
-      "s2CellId": "e01e2d23e9922d92248d9078f847850d",
-      "s2CellId_place_id_impressed_unique_count_1d_sum": "dda44268ae2a54fe50575b2afd02d4e5",
-      "s2CellId_place_id_viewed_unique_count_1d_sum": "f533a6312090c177118e339b53bc4958",
-      "viewed_unique_count_1d": "30ec61dcc722f2ba5dcd22e73b49f840"
+      "impressed_unique_count_1d": "dc3c2486aa85469c2294e1b392942cf4",
+      "place_id": "d630f613386076050410ae82c6552699",
+      "s2CellId": "867cafaa3c37532007f97afe3f5d0b8f",
+      "s2CellId_place_id_impressed_unique_count_1d_sum": "d18edfd52bbd2ed70bdd639eb53fb575",
+      "s2CellId_place_id_viewed_unique_count_1d_sum": "0b6b24c03dcfbff349c4ce71fee8ab7e",
+      "viewed_unique_count_1d": "f4e3aadff696fbd501aa3f0b4a89b940"
     },
     "consistencyCheck": 1,
     "consistencySamplePercent": 5.0,
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_sample_namespace_sample_team_sample_staging_query_v1__0_with_offset_0\", \"spec\": \"sample_namespace.sample_team_sample_staging_query_v1__0/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_sample_namespace_sample_team_sample_staging_query_listing_features__0_with_offset_0\", \"spec\": \"sample_namespace.sample_team_sample_staging_query_listing_features__0/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "conf": {
         "common": {

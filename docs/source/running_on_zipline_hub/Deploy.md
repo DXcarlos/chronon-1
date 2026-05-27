@@ -14,7 +14,7 @@ Once you have authored and tested your `GroupBy`, `Join` or `StagingQuery`, you 
 Deploys the online components of a single entity in a one-off manner. Useful for testing feature fetching without committing to a recurring schedule. **Note:** streaming jobs launched via `run-adhoc` will not be restarted automatically on failure.
 
 ```bash
-zipline hub run-adhoc --end-ds 2026-04-05 compiled/group_bys/aws/user_activities.v1__1
+zipline hub run-adhoc --end-ds 2026-04-05 compiled/group_bys/aws/user_activities.user_activity_features__1
 ```
 
 ### [schedule](/docs/reference/cli#zipline-hub-schedule)
@@ -22,7 +22,7 @@ zipline hub run-adhoc --end-ds 2026-04-05 compiled/group_bys/aws/user_activities
 Schedules a single `GroupBy` or `Join` for recurring execution. This ensures the relevant online and offline jobs run daily, and keeps any streaming job alive by restarting it on failure.
 
 ```bash
-zipline hub schedule compiled/group_bys/aws/user_activities.v1__1
+zipline hub schedule compiled/group_bys/aws/user_activities.user_activity_features__1
 ```
 
 ### [schedule-all](/docs/reference/cli#zipline-hub-schedule-all)

@@ -7,7 +7,7 @@ This example demonstrates how to configure a Chronon `Source` from a table,
 with a clear event time column and selected fields for downstream feature computation.
 """
 
-source_v1 = EventSource(
+purchase_events = EventSource(
     table="data.purchases",  # This points to the log table in the warehouse with historical purchase events, updated in batch daily
     query=Query(
         selects=selects("user_id", "purchase_price"),  # Select the fields we care about
@@ -16,4 +16,4 @@ source_v1 = EventSource(
     ),
 )
 
-# The `source_v1` object can now be used in a Chronon join or pipeline definition
+# The `purchase_events` object can now be used in a Chronon join or pipeline definition

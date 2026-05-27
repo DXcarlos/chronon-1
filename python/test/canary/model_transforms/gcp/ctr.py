@@ -8,7 +8,7 @@ from ai.chronon.data_types import DataType
 
 source = JoinSource(join=demo.derivations_v1)
 
-v1 = ModelTransforms(
+ctr_model_transforms = ModelTransforms(
     sources=[source], # noticed that this source is used in both ModelTransform and Models
     models=[click_through_rate.ctr_model],
     # include relevant pass through fields from the source / join lookup

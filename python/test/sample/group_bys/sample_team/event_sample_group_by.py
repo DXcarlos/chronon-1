@@ -16,7 +16,7 @@ from sources import sample_sources
 
 from ai.chronon.types import Aggregation, GroupBy, Operation
 
-v1 = GroupBy(
+event_features = GroupBy(
     sources=sample_sources.event_source,
     keys=["group_by_subject"],
     aggregations=[

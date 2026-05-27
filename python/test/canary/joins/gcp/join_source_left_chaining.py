@@ -25,19 +25,19 @@ source = EventSource(
     ),
 )
 
-join1_v1 = Join(
+latest_listing_join = Join(
     left=source,
     row_ids=["user_id"],
     right_parts=[
         JoinPart(
-            group_by=latest_listing_by_user.v1,
+            group_by=latest_listing_by_user.latest_listing_features,
         ),
     ],
     version=1,
 )
 
 join2_left = JoinSource(
-    join=join1_v1,
+    join=latest_listing_join,
     query=Query(
         selects=selects(
             user_id="user_id",
@@ -47,23 +47,23 @@ join2_left = JoinSource(
     ),
 )
 
-join2_v1 = Join(
+listing_feature_join = Join(
     left=join2_left,
     row_ids=["user_id"],
     right_parts=[
         JoinPart(
-            group_by=dim_listings.v1,
+            group_by=dim_listings.listing_features,
         ),
     ],
     version=1,
 )
 
-join1_modular_derived_v1 = Join(
+latest_listing_modular_derived_join = Join(
     left=source,
     row_ids=["user_id"],
     right_parts=[
         JoinPart(
-            group_by=latest_listing_by_user.v1,
+            group_by=latest_listing_by_user.latest_listing_features,
         ),
     ],
     derivations=[
@@ -76,9 +76,9 @@ join1_modular_derived_v1 = Join(
     version=3,
 )
 
-join2_modular_derived_v1 = Join(
+listing_feature_modular_derived_join = Join(
     left=JoinSource(
-        join=join1_modular_derived_v1,
+        join=latest_listing_modular_derived_join,
         query=Query(
             selects=selects(
                 user_id="user_id",
@@ -90,7 +90,7 @@ join2_modular_derived_v1 = Join(
     row_ids=["user_id"],
     right_parts=[
         JoinPart(
-            group_by=dim_listings.v1,
+            group_by=dim_listings.listing_features,
         ),
     ],
     version=3,

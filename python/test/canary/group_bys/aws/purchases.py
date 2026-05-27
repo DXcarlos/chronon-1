@@ -15,7 +15,7 @@ source = EventSource(
 
 window_sizes = [Window(length=day, time_unit=TimeUnit.DAYS) for day in [1, 3, 7]] # Define some window sizes to use below
 
-v1_dev = GroupBy(
+purchase_features_dev = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,
@@ -42,7 +42,7 @@ v1_dev = GroupBy(
     ],
 )
 
-v1_test = GroupBy(
+purchase_features_test = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,

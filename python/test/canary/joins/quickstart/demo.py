@@ -30,21 +30,21 @@ source = EventSource(
 )
 
 # Join with user behavioral features and listing/merchant attributes
-v1 = Join(
+event_enrichment = Join(
     left=source,
     row_ids=["event_id"],
     right_parts=[
         # User behavioral features (aggregated over time windows)
         JoinPart(
-            group_by=user_activities.v1,
+            group_by=user_activities.user_activity_features,
         ),
         # Listing dimension attributes (point-in-time lookup by listing_id)
         JoinPart(
-            group_by=dim_listings.v1,
+            group_by=dim_listings.listing_features,
         ),
         # Merchant dimension attributes (point-in-time lookup by merchant_id)
  #       JoinPart(
- #           group_by=dim_merchants.v1,
+ #           group_by=dim_merchants.merchant_features,
  #           prefix="merchant_",
  #       ),
     ],
@@ -61,10 +61,10 @@ derivations_v1 = Join(
     row_ids=["event_id"],
     right_parts=[
         JoinPart(
-            group_by=dim_listings.v1,
+            group_by=dim_listings.listing_features,
         ),
         JoinPart(
-            group_by=user_activities.v1,
+            group_by=user_activities.user_activity_features,
         ),
     ],
     derivations=[

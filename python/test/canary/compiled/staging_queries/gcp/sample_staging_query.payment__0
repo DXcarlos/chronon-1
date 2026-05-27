@@ -1,6 +1,6 @@
 {
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_v1_test__0_with_offset_1\", \"spec\": \"data.gcp_training_set_v1_test__0/ds={{ macros.ds_add(ds, -1) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_training_join_test__0_with_offset_1\", \"spec\": \"data.gcp_training_set_training_join_test__0/ds={{ macros.ds_add(ds, -1) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -88,7 +88,7 @@
     "team": "gcp",
     "version": "0"
   },
-  "query": "\n        SELECT\n            *,\n            'payment' as category_name\n        FROM data.gcp_training_set_v1_test__0\n        WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
+  "query": "\n        SELECT\n            *,\n            'payment' as category_name\n        FROM data.gcp_training_set_training_join_test__0\n        WHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
   "tableDependencies": [
     {
       "endOffset": {
@@ -105,7 +105,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.gcp_training_set_v1_test__0"
+        "table": "data.gcp_training_set_training_join_test__0"
       }
     }
   ]

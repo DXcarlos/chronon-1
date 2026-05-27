@@ -24,7 +24,7 @@ from ai.chronon.types import (
     Operation,
 )
 
-v1 = GroupBy(
+module_features = GroupBy(
     sources=[
         sample_sources.events_until_20210409,
         sample_sources.events_after_20210409,

@@ -27,23 +27,23 @@ from ai.chronon.types import BootstrapPart, Join, JoinPart, Query, selects
 
 v1_join_parts = [
     JoinPart(
-        group_by=event_sample_group_by.v1,
+        group_by=event_sample_group_by.event_features,
         key_mapping={"subject": "group_by_subject"},
     ),
     JoinPart(
-        group_by=entity_sample_group_by_from_module.v1,
+        group_by=entity_sample_group_by_from_module.entity_module_features,
         key_mapping={"subject": "group_by_subject"},
     ),
 ]
 
 v2_join_parts = [
     JoinPart(
-        group_by=group_by_with_kwargs.v1,
+        group_by=group_by_with_kwargs.features_with_kwargs,
         key_mapping={"subject": "group_by_subject"},
     ),
 ]
 
-v1 = Join(
+bootstrap_join = Join(
     left=sample_sources.event_source,
     right_parts=v1_join_parts,
     online=True,
@@ -64,7 +64,7 @@ v1 = Join(
     version=0,
 )
 
-v2 = Join(
+bootstrap_join_with_extra_parts = Join(
     left=sample_sources.event_source,
     right_parts=v1_join_parts + v2_join_parts,
     online=True,
@@ -73,7 +73,7 @@ v2 = Join(
     bootstrap_from_log=True,
     bootstrap_parts=[
         BootstrapPart(
-            table=v1.table,
+            table=bootstrap_join.table,
             query=Query(end_partition="2023-01-01"),
         )
     ],

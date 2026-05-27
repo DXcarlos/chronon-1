@@ -1,0 +1,99 @@
+{
+  "aggregations": [
+    {
+      "argMap": {},
+      "inputColumn": "entity",
+      "operation": 3
+    },
+    {
+      "argMap": {},
+      "inputColumn": "entity",
+      "operation": 3,
+      "windows": [
+        {
+          "length": 7,
+          "timeUnit": 1
+        }
+      ]
+    }
+  ],
+  "keyColumns": [
+    "group_by_subject"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "entity_last": "a5df4e47a8ad98c4a2ca4d4a898868fd",
+      "entity_last_7d": "a5df4e47a8ad98c4a2ca4d4a898868fd",
+      "group_by_subject": "d52239628ea8eeee5f5e169f315dcc2b"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_sample_table_sample_entity_snapshot_with_offset_0\", \"spec\": \"sample_table.sample_entity_snapshot/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}, {\"name\": \"wf_sample_table_sample_entity_mutations_hr_00_00_with_offset_0\", \"spec\": \"sample_table.sample_entity_mutations/hr=00:00/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}]}",
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "_test_column_sample"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "canary",
+          "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "VERSION": "latest"
+        },
+        "modeEnvironments": {
+          "backfill": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "streaming": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "upload": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "test-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          }
+        }
+      },
+      "historicalBackfill": 0,
+      "onlineSchedule": "@daily"
+    },
+    "name": "sample_team.entity_sample_group_by_from_module.entity_module_features__0",
+    "online": 1,
+    "outputNamespace": "test",
+    "sourceFile": "group_bys/sample_team/entity_sample_group_by_from_module.py",
+    "team": "sample_team",
+    "version": "0"
+  },
+  "sources": [
+    {
+      "entities": {
+        "mutationTable": "sample_table.sample_entity_mutations/hr=00:00",
+        "mutationTopic": "sample_topic",
+        "query": {
+          "selects": {
+            "entity": "entity_expr",
+            "group_by_subject": "group_by_subject_expr"
+          },
+          "startPartition": "2021-03-01",
+          "timeColumn": "ts"
+        },
+        "snapshotTable": "sample_table.sample_entity_snapshot"
+      }
+    }
+  ]
+}

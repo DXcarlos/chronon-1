@@ -21,10 +21,10 @@ from sources import sample_sources
 
 from ai.chronon.types import ContextualSource, DataType, ExternalPart, ExternalSource, Join, JoinPart
 
-v1 = Join(
+external_parts_join = Join(
     left=sample_sources.staging_entities,
     row_ids="place_id",
-    right_parts=[JoinPart(group_by=sample_group_by.v1)],
+    right_parts=[JoinPart(group_by=sample_group_by.sample_features)],
     online_external_parts=[
         ExternalPart(
             ExternalSource(

@@ -86,7 +86,7 @@ source = Source(
 
 window_sizes = [Window(length=day, timeUnit=TimeUnit.DAYS) for day in [3, 14, 30]] # Define some window sizes to use below
 
-v1 = GroupBy(
+purchase_features = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     aggregations=[Aggregation(
@@ -127,7 +127,7 @@ source = Source(
         )
     ))
 
-v1 = GroupBy(
+user_features = GroupBy(
     sources=[source],
     keys=["user_id"], # Primary key is the same as the primary key for the source table
     aggregations=None # In this case, there are no aggregations or windows to define
@@ -161,9 +161,9 @@ source = Source(
             ) # The event time used to compute feature values as-of
     ))
 
-v1 = Join(
+training_set_join = Join(
     left=source,
-    right_parts=[JoinPart(group_by=group_by) for group_by in [purchases_v1, refunds_v1, users]] # Include the three GroupBys
+    right_parts=[JoinPart(group_by=group_by) for group_by in [purchase_features, return_features, user_features]] # Include the three GroupBys
 )
 ```
 
@@ -185,7 +185,7 @@ This converts it into a thrift definition that we can submit to spark with the f
 
 
 ```shell
-run.py --conf production/joins/quickstart/training_set.v1
+run.py --conf production/joins/quickstart/training_set.training_set_join__0
 ```
 
 The output of the backfill would contain the user_id and ts columns from the left source, as well as the 11 feature columns from the three GroupBys that we created.
@@ -227,7 +227,7 @@ In order to serve online flows, we first need the data uploaded to the online KV
 Upload the purchases GroupBy:
 
 ```shell
-run.py --mode upload --conf production/group_bys/quickstart/purchases.v1 --ds  2023-12-01
+run.py --mode upload --conf production/group_bys/quickstart/purchases.purchase_features__0 --ds  2023-12-01
 
 spark-submit --class ai.chronon.quickstart.online.Spark2MongoLoader --master local[*] /srv/onlineImpl/target/scala-2.12/mongo-online-impl-assembly-0.1.0-SNAPSHOT.jar default.quickstart_purchases_v1_upload mongodb://admin:admin@mongodb:27017/?authSource=admin
 ```
@@ -235,7 +235,7 @@ spark-submit --class ai.chronon.quickstart.online.Spark2MongoLoader --master loc
 Upload the returns GroupBy:
 
 ```shell
-run.py --mode upload --conf production/group_bys/quickstart/returns.v1 --ds  2023-12-01
+run.py --mode upload --conf production/group_bys/quickstart/returns.return_features__0 --ds  2023-12-01
 
 spark-submit --class ai.chronon.quickstart.online.Spark2MongoLoader --master local[*] /srv/onlineImpl/target/scala-2.12/mongo-online-impl-assembly-0.1.0-SNAPSHOT.jar default.quickstart_returns_v1_upload mongodb://admin:admin@mongodb:27017/?authSource=admin
 ```
@@ -245,7 +245,7 @@ spark-submit --class ai.chronon.quickstart.online.Spark2MongoLoader --master loc
 If we want to use the `FetchJoin` api rather than `FetchGroupby`, then we also need to upload the join metadata:
 
 ```bash
-run.py --mode metadata-upload --conf production/joins/quickstart/training_set.v2
+run.py --mode metadata-upload --conf production/joins/quickstart/training_set.online_training_set_join__0
 ```
 
 This makes it so that the online fetcher knows how to take a request for this join and break it up into individual GroupBy requests, returning the unified vector, similar to how the Join backfill produces the wide view table with all features.
@@ -257,13 +257,13 @@ With the above entities defined, you can now easily fetch feature vectors with a
 Fetching a join:
 
 ```bash
-run.py --mode fetch --type join --name quickstart/training_set.v2 -k '{"user_id":"5"}'
+run.py --mode fetch --type join --name quickstart/training_set.online_training_set_join__0 -k '{"user_id":"5"}'
 ```
 
 You can also fetch a single GroupBy (this would not require the Join metadata upload step performed earlier):
 
 ```bash
-run.py --mode fetch --type group-by --name quickstart/purchases.v1 -k '{"user_id":"5"}'
+run.py --mode fetch --type group-by --name quickstart/purchases.purchase_features__0 -k '{"user_id":"5"}'
 ```
 
 For production, the Java client is usually embedded directly into services.
@@ -294,7 +294,7 @@ Step 1: log fetches
 
 First, make sure you've ran a few fetch requests. Run:
 
-`run.py --mode fetch --type join --name quickstart/training_set.v2 -k '{"user_id":"5"}'`
+`run.py --mode fetch --type join --name quickstart/training_set.online_training_set_join__0 -k '{"user_id":"5"}'`
 
 A few times to generate some fetches.
 
@@ -303,8 +303,8 @@ With that complete, you can run this to create a usable log table (these command
 ```bash
 spark-submit --class ai.chronon.quickstart.online.MongoLoggingDumper --master local[*] /srv/onlineImpl/target/scala-2.12/mongo-online-impl-assembly-0.1.0-SNAPSHOT.jar default.chronon_log_table mongodb://admin:admin@mongodb:27017/?authSource=admin
 compile.py --conf group_bys/quickstart/schema.py
-run.py --mode backfill --conf production/group_bys/quickstart/schema.v1
-run.py --mode log-flattener --conf production/joins/quickstart/training_set.v2 --log-table default.chronon_log_table --schema-table default.quickstart_schema_v1
+run.py --mode backfill --conf production/group_bys/quickstart/schema.schema_features__0
+run.py --mode log-flattener --conf production/joins/quickstart/training_set.online_training_set_join__0 --log-table default.chronon_log_table --schema-table default.quickstart_schema_schema_features__0
 ```
 
 This creates a `default.quickstart_training_set_v2_logged` table that contains the results of each of the fetch requests that you previously made, along with the timestamp at which you made them and the `user` that you requested.
@@ -314,7 +314,7 @@ This creates a `default.quickstart_training_set_v2_logged` table that contains t
 Now you can compute consistency metrics with this command:
 
 ```bash
-run.py --mode consistency-metrics-compute --conf production/joins/quickstart/training_set.v2
+run.py --mode consistency-metrics-compute --conf production/joins/quickstart/training_set.online_training_set_join__0
 ```
 
 This job takes will take the primary key(s) and timestamps from the log table (`default.quickstart_training_set_v2_logged` in this case), and uses those to create and run a join backfill. It then compares the backfilled results to the actual logged values that were fetched online

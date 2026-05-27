@@ -21,12 +21,12 @@ from sources import sample_sources
 
 from ai.chronon.types import Join, JoinPart
 
-v1 = Join(
+skipped_module_join = Join(
     left=sample_sources.event_source,
     row_ids=["group_by_subject", "event"],
     right_parts=[
         JoinPart(
-            group_by=sample_non_prod_group_by.v1,
+            group_by=sample_non_prod_group_by.non_prod_features,
             key_mapping={'subject': 'group_by_subject'},
         ),
     ],

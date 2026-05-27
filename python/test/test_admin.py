@@ -1205,7 +1205,7 @@ class TestUpgradeCommand:
         runner = CliRunner()
         result = runner.invoke(admin, [
             "upgrade", "data-plane",
-            "compiled/group_bys/aws/dim_listings.v1__0",
+            "compiled/group_bys/aws/dim_listings.listing_features__0",
             "--chronon-root", canary,
             "--no-use-auth",
         ])
@@ -1213,7 +1213,7 @@ class TestUpgradeCommand:
         mock_redeploy.assert_called_once()
         call_kwargs = mock_redeploy.call_args[1]
         assert call_kwargs["repo"] == canary
-        assert call_kwargs["confs"] == ["compiled/group_bys/aws/dim_listings.v1__0"]
+        assert call_kwargs["confs"] == ["compiled/group_bys/aws/dim_listings.listing_features__0"]
         assert call_kwargs["use_auth"] is False
 
     @patch("ai.chronon.repo.admin.redeploy_streaming")
@@ -1221,16 +1221,16 @@ class TestUpgradeCommand:
         runner = CliRunner()
         result = runner.invoke(admin, [
             "upgrade", "data-plane",
-            "compiled/group_bys/aws/dim_listings.v1__0",
-            "compiled/group_bys/aws/dim_merchants.v1__0",
+            "compiled/group_bys/aws/dim_listings.listing_features__0",
+            "compiled/group_bys/aws/dim_merchants.merchant_features__0",
             "--chronon-root", canary,
             "--no-use-auth",
         ])
         assert result.exit_code == 0
         call_kwargs = mock_redeploy.call_args[1]
         assert set(call_kwargs["confs"]) == {
-            "compiled/group_bys/aws/dim_listings.v1__0",
-            "compiled/group_bys/aws/dim_merchants.v1__0",
+            "compiled/group_bys/aws/dim_listings.listing_features__0",
+            "compiled/group_bys/aws/dim_merchants.merchant_features__0",
         }
 
     def test_upgrade_data_plane_no_confs_fails(self, canary):

@@ -20,7 +20,7 @@ from ai.chronon.types import (
     Operation,
 )
 
-v1 = GroupBy(
+non_prod_features = GroupBy(
     sources=sample_sources.event_source,
     keys=["group_by_subject"],
     aggregations=[

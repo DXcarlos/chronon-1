@@ -31,6 +31,14 @@ from ai.chronon.repo.compile import __compile, compile
 from ai.chronon.utils import OUTPUT_NAMESPACE_PLACEHOLDER
 
 
+def _compile_preserving_cwd(*args, **kwargs):
+    cwd = os.getcwd()
+    try:
+        return __compile(*args, **kwargs)
+    finally:
+        os.chdir(cwd)
+
+
 def user_authoring_folders():
     """Folder names under `chronon_root` that users place authoring `.py` files in.
     Derived from the canonical `CONFIG_INFOS` registry so adding a new conf type
@@ -42,7 +50,7 @@ def user_authoring_folders():
 def test_compile(repo):
     import sys
     sys.path.append(repo)
-    results = __compile(chronon_root=repo, ignore_python_errors=True)
+    results = _compile_preserving_cwd(chronon_root=repo, ignore_python_errors=True)
     assert len(results) != 0
 
 
@@ -50,21 +58,21 @@ def test_compile_gcp_resources(gcp_resources):
     """Test compilation of GCP resource examples."""
     import sys
     sys.path.insert(0, gcp_resources)
-    results = __compile(chronon_root=gcp_resources, ignore_python_errors=True)
+    results = _compile_preserving_cwd(chronon_root=gcp_resources, ignore_python_errors=True)
     assert len(results) != 0
 
 def test_compile_aws_resources(aws_resources):
     """Test compilation of AWS resource examples."""
     import sys
     sys.path.insert(0, aws_resources)
-    results = __compile(chronon_root=aws_resources, ignore_python_errors=True)
+    results = _compile_preserving_cwd(chronon_root=aws_resources, ignore_python_errors=True)
     assert len(results) != 0
 
 def test_compile_azure_resources(azure_resources):
     """Test compilation of Azure resource examples."""
     import sys
     sys.path.insert(0, azure_resources)
-    results = __compile(chronon_root=azure_resources, ignore_python_errors=True)
+    results = _compile_preserving_cwd(chronon_root=azure_resources, ignore_python_errors=True)
     assert len(results) != 0
 
 def test_discover_compile_envs_rejects_teams_prod_py_collision(tmp_path):

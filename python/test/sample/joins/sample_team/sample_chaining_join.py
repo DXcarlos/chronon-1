@@ -21,7 +21,7 @@ from sources import sample_sources
 
 from ai.chronon.types import Join, JoinPart
 
-v1 = Join(
+chained_join = Join(
     left=sample_sources.event_source,
     row_ids=["subject", "event"],
     right_parts=[

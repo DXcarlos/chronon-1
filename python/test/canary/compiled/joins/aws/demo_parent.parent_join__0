@@ -7,22 +7,22 @@
         ],
         "metaData": {
           "columnHashes": {
-            "brief_description": "c02f5fdfa63b63dc6a593a20cbab7d66",
-            "currency": "27d3da8403941e88f04007211468833e",
-            "headline": "961d1b3f1536af92638c63b2085fa728",
-            "inventory_count": "f3f379de8d3f9e74b60600f0356327d4",
-            "is_active": "b73c53f1089d15c7549d1be9e45bc05a",
-            "is_expensive": "dfe960db190729abde16b0eba360dfc4",
-            "is_in_stock": "6f24425755fd59b8a5a93de6912b111c",
-            "listing_id": "76323e9628393438a3d9bd1e0a0dcf40",
-            "long_description": "0588c5abbb679b56d18028e929d62124",
-            "main_image_path": "e670b87ebe0042f36d6dcb0379ce12da",
-            "merchant_id": "14059af75922b7fe7d8993867667f4af",
-            "price_cents": "33f80b9b819b9b68c65fc31652d4cc26",
-            "primary_category": "76c07f8cf4d4c3465843d890b89f8bb0",
-            "secondary_image_paths": "2d21e3616fce29041df8387677ef5193",
-            "tags": "b02298b5dc181fd94c357eef9f0623ca",
-            "weight_grams": "8b5ac3514f1c8f0db67748e07de128f4"
+            "brief_description": "7135679a7beb70818f5aedfa23c3acf2",
+            "currency": "17d73255eec09951d24a3714bccfb5d6",
+            "headline": "f05b31145447525ac38947a93f3e03bd",
+            "inventory_count": "3cb0c193f5bbd5edee7d8e001333b90d",
+            "is_active": "6c5380802ac8ad3f88148c2dc012c2d3",
+            "is_expensive": "032e9dc27b078bb9f09ce4077cebf5fb",
+            "is_in_stock": "08f7974696d0a8b62c2f0a8dca737c05",
+            "listing_id": "1177da57cb3525cc424a299ec4330662",
+            "long_description": "620fc5482e4919ce9a5cf72d4f40aedf",
+            "main_image_path": "e3db0f0c63641bfbda42d77f5171bf79",
+            "merchant_id": "09c57e29e667969ee9668475a94b2dec",
+            "price_cents": "95ac7a5fc5fc92ec3cb4ce230dede3d0",
+            "primary_category": "91746c2f8197be9923e23bde82a538e4",
+            "secondary_image_paths": "9b9e331ce48a168da6f2ac95506a24c8",
+            "tags": "d66aeba83107642bc47d7bcf785cafed",
+            "weight_grams": "c7244a44f4e5fc4975e401ce8b749e5a"
           },
           "executionInfo": {
             "clusterConf": {
@@ -118,7 +118,7 @@
             "onlineSchedule": "@daily",
             "stepDays": 10
           },
-          "name": "aws.dim_listings.v1__0",
+          "name": "aws.dim_listings.listing_features__0",
           "online": 1,
           "outputNamespace": "data",
           "team": "aws",

@@ -12,32 +12,30 @@ order: 8
 
 1. **Team**: Files are organized inside a team directory. I.e. `group_bys/my_team/...`
 2. **File path**: There may be subdirectories within the team directory, or files directly. I.e. `group_bys/my_team/user_features.py`
-3. **Variable name**: Within the file, the entity is assigned to a variable. i.e. `v0 = GroupBy(...)`. See more details below.
-4. **Version**: This is an argument to the constructure. I.e. `GroupBy(..., version=0)` See more details below.
+3. **Variable name**: Within the file, the entity is assigned to a Python variable. I.e. `purchase_features = GroupBy(...)`. See more details below.
+4. **Version**: This is an argument to the constructor. I.e. `GroupBy(..., version=0)`. See more details below.
 
-These four components combine to fully identify an entity. I.e. `my_team.user_features.v0__0`.
+These four components combine to fully identify an entity. I.e. `my_team.user_features.purchase_features__0`.
 
-This will be the name that is used for fetching features, and also corresponds to the output table name for backfilled data (`my_team_user_features_v0__0`).
+This will be the name that is used for fetching features, and also corresponds to the output table name for backfilled data (`my_team_user_features_purchase_features__0`).
 
 
 ## Variable naming
 
-Note that we often assign a variable name that looks like a version, in the above example `v0`. Since this is simply a python variable name, it can be set to anything (i.e. `base_features_v0`). Using a `v{N}` at the end is a best practice.
+Use a descriptive variable name for the feature set or training set being defined. Avoid naming the Python variable only `v0`, `v1`, etc.; those names are easy to confuse with the separate `version=` argument.
 
-**When to use a simple `v{N}` name versus a longer one?**
+**When should the variable name change?**
 
-Generally, if you're only putting a single `GroupBy`, `Staging Queries` or `Join` entity within your file, you can use a simple `v{N}` name.
-
-If, however, you have multiple within the same file, you might want to differentiate them with a more descriptive variable name. This can happen if you're creating two similar GroupBys with a small but meaningful difference in definition. 
+Generally, keep the same descriptive variable name and bump `version=` when you're iterating on an existing `GroupBy`, `StagingQuery`, or `Join`. Use a different variable name when you intentionally want a separate entity to exist side-by-side.
 
 For example, say you have features defined on user activities, and you want one set that filter out bot traffic and one that doesn't.
 
 Inside your `user_activities.py` file you might define:
 
 ```
-no_bots_v0 = GroupBy(...) # Includes a filter clause on the source
+human_activity_features = GroupBy(...) # Includes a filter clause on the source
 
-with_bots_v0 = GroupBy(...) # No filter clause
+all_activity_features = GroupBy(...) # No filter clause
 ```
 
 ## Versioning
@@ -45,13 +43,13 @@ with_bots_v0 = GroupBy(...) # No filter clause
 `GroupBy`s, `Staging Queries`s and `Join`s all take a `version: int` argument in their constructor, i.e.:
 
 ```
-v0 = GroupBy(
+purchase_features = GroupBy(
     ...
     version=0
 )
 ```
 
-When compiling, the version becomes part of the name of the entity as a `__{v}` suffix. In this example it would be `{team}.{file}.v0__0`.
+When compiling, the version becomes part of the name of the entity as a `__{v}` suffix. In this example it would be `{team}.{file}.purchase_features__0`.
 
 ### Developer flow for iterating on versions
 
@@ -80,10 +78,10 @@ You might want to do this if you intend to keep two versions running in producti
 
 ```
 # Warning -- to be deprecated
-v0 = GroupBy(...)
+legacy_purchase_features = GroupBy(...)
 
 # Use this version instead
-v1 = GroupBy(...)
+expanded_purchase_features = GroupBy(...)
 ```
 
 This would allow for both `GroupBy`s to be considered production at the same time.
@@ -96,12 +94,11 @@ File Naming:
 3. Avoid redundancy with team name or variable name
 
 Variable Naming:
-1. If only defining a single entity within a file, use a simple `v{N}` naming 
-2. Keep variable names short otherwise, and avoid redundancy with the file name
-3. Only change the variable name (i.e. `features_v0` -> `feature_v1`) if you want to treat it as a net new entity (otherwise use a version bump for incremental changes)
+1. Use a short descriptive name for what the entity produces, such as `purchase_features` or `training_join`.
+2. Avoid redundancy with the file name, but prefer clarity over version-only names like `v1`.
+3. Only change the variable name if you want to treat it as a net new entity; otherwise use a version bump for incremental changes.
 
 Versioning:
 1. When creating a new entity, start with `version=0`.
 2. When iterating on an entity, create a branch and bump the version
 3. Iterations on your branch can keep the same version (no need to bump version in between runs while iterating on a branch)
-

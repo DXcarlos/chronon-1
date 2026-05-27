@@ -1,4 +1,4 @@
-from sources.test.data import source_v1
+from sources.test.data import purchase_events
 
 from ai.chronon.types import Aggregation, GroupBy, Operation, TimeUnit, Window
 
@@ -6,8 +6,8 @@ window_sizes = [
     Window(length=day, time_unit=TimeUnit.DAYS) for day in [3, 14, 30]
 ]  # Define some window sizes to use below
 
-group_by_v1 = GroupBy(
-    sources=[source_v1],
+purchase_features = GroupBy(
+    sources=[purchase_events],
     keys=["user_id"],  # We are aggregating by user
     online=True,
     aggregations=[

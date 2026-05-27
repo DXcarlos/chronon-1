@@ -8,7 +8,7 @@ def get_staging_query(category_name):
         SELECT
             *,
             '{category_name}' as category_name
-        FROM {training_set.v1_test.table}
+        FROM {training_set.training_join_test.table}
         WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
     """
     return StagingQuery(
@@ -16,7 +16,7 @@ def get_staging_query(category_name):
         output_namespace="data",
         table_properties={"sample_config_json": """{"sample_key": "sample value"}"""},
         dependencies=[
-            TableDependency(table=training_set.v1_test.table, partition_column="ds", start_offset=1, end_offset=1)
+            TableDependency(table=training_set.training_join_test.table, partition_column="ds", start_offset=1, end_offset=1)
         ],
         version=0,
         step_days=10,
@@ -59,13 +59,13 @@ purchases_labels = StagingQuery(
 SELECT
     *,
     case when rand() < 0.5 then 0 else 1 end as label
-FROM {training_set.v1_test.table}
+FROM {training_set.training_join_test.table}
 WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 """,
     table_properties={"sample_config_json": """{"sample_key": "sample value"}"""},
     output_namespace="data",
     dependencies=[
-        TableDependency(table=training_set.v1_test.table, partition_column="ds", start_offset=0, end_offset=0),
+        TableDependency(table=training_set.training_join_test.table, partition_column="ds", start_offset=0, end_offset=0),
     ],
     version=0,
     step_days=10,
@@ -74,7 +74,7 @@ WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 query_hub = f"""
 SELECT
     *
-FROM {training_set.v1_hub.table}
+FROM {training_set.training_join_hub.table}
 WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 """
 
@@ -83,7 +83,7 @@ hub_training_set = StagingQuery(
     output_namespace="data",
     table_properties={"sample_config_json": """{"sample_key": "sample value"}"""},
     dependencies=[
-        TableDependency(table=training_set.v1_hub.table, partition_column="ds", start_offset=1, end_offset=1)
+        TableDependency(table=training_set.training_join_hub.table, partition_column="ds", start_offset=1, end_offset=1)
     ],
     version=0,
     step_days=10,
@@ -92,7 +92,7 @@ hub_training_set = StagingQuery(
 bigquery_import_query = f"""
 SELECT
     *
-FROM {training_set.v1_hub.table}
+FROM {training_set.training_join_hub.table}
 WHERE ds BETWEEN {{{{ start_date }}}} AND {{{{ end_date }}}}
 """
 
@@ -101,7 +101,7 @@ bigquery_training_set_import = StagingQuery(
     engine_type=EngineType.BIGQUERY,
     output_namespace="data",
     dependencies=[
-        TableDependency(table=training_set.v1_hub.table, partition_column="ds", start_offset=0, end_offset=0)
+        TableDependency(table=training_set.training_join_hub.table, partition_column="ds", start_offset=0, end_offset=0)
     ],
     version=0,
     step_days=10,

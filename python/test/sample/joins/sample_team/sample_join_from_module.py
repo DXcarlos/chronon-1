@@ -24,16 +24,16 @@ from sources import sample_sources
 
 from ai.chronon.types import Join, JoinPart
 
-v1 = Join(
+module_join = Join(
     left=sample_sources.staging_entities,
     row_ids="impressed_unique_count_1d",
     right_parts=[
         JoinPart(
-            group_by=sample_group_by_from_module.v1,
+            group_by=sample_group_by_from_module.module_features,
             key_mapping={"subject": "group_by_subject"},
         ),
         JoinPart(
-            group_by=entity_sample_group_by_from_module.v1,
+            group_by=entity_sample_group_by_from_module.entity_module_features,
             key_mapping={"subject": "group_by_subject"},
             prefix="entity"
         ),

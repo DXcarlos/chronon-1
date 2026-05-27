@@ -139,7 +139,7 @@
                     "historicalBackfill": 0,
                     "onlineSchedule": "@daily"
                   },
-                  "name": "azure.dim_listings.v3",
+                  "name": "azure.dim_listings.listing_features",
                   "online": 1,
                   "outputNamespace": "data",
                   "team": "azure"

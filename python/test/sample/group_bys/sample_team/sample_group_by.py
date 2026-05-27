@@ -16,7 +16,7 @@ from sources import sample_sources
 
 from ai.chronon.types import Aggregation, Derivation, GroupBy, Operation
 
-v1 = GroupBy(
+sample_features = GroupBy(
     sources=sample_sources.staging_entities,
     keys=["s2CellId", "place_id"],
     aggregations=[

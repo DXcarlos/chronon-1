@@ -92,7 +92,7 @@ zipline run \
 --conf compiled/joins/<TEAM_NAME>/<JOIN_NAME>
 ```
 
-Results are written to the configured BigQuery + Iceberg tables under the `outputNamespace` (e.g. `default.group_by_v1` or `default.v1`).
+Results are written to the configured BigQuery + Iceberg tables under the `outputNamespace` (e.g. `default.purchase_features` or `default.training_join`).
 
 ---
 
@@ -105,7 +105,7 @@ zipline run \
 --ds <DATE>
 ```
 
-Results are written to the configured BigQuery + Iceberg tables under the `outputNamespace` (e.g. `default.group_by_v1` or `default.v1`).
+Results are written to the configured BigQuery + Iceberg tables under the `outputNamespace` (e.g. `default.purchase_features` or `default.training_join`).
 
 ---
 

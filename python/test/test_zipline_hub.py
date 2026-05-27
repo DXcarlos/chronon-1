@@ -152,7 +152,7 @@ class TestZiplineHub:
 
         hub = ZiplineHub("http://example.com")
         result = hub.preview_clear_downstream(
-            conf_name="aws.demo.v1",
+            conf_name="aws.demo.event_enrichment",
             branch="main",
             user="test@example.com",
             start=date(2024, 1, 1),
@@ -172,7 +172,7 @@ class TestZiplineHub:
         hub = ZiplineHub("http://example.com")
         with pytest.raises(requests.RequestException):
             hub.preview_clear_downstream(
-                conf_name="aws.demo.v1",
+                conf_name="aws.demo.event_enrichment",
                 branch="main",
                 user="test@example.com",
                 start=date(2024, 1, 1),

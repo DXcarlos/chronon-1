@@ -7,7 +7,7 @@ isolated.  After the test, the copies are deleted — originals are
 never touched.
 
 Tests reference configs by their logical name (e.g.
-``"compiled/joins/gcp/demo.v1__1"``); the ``resolve_conf`` helper
+``"compiled/joins/gcp/demo.event_enrichment__1"``); the ``resolve_conf`` helper
 transparently maps it to the test-scoped path by inserting the
 test_id into the filename stem.
 """
@@ -56,8 +56,8 @@ def _collect_py_files(chronon_root: str, cloud: str) -> list[str]:
 def resolve_conf(conf_path: str, test_id: str) -> str:
     """Map a logical compiled conf path to its test-scoped equivalent.
 
-    >>> resolve_conf("compiled/joins/gcp/demo.v1__1", "abc123")
-    'compiled/joins/gcp/demo_abc123.v1__1'
+    >>> resolve_conf("compiled/joins/gcp/demo.event_enrichment__1", "abc123")
+    'compiled/joins/gcp/demo_abc123.event_enrichment__1'
     """
     parts = conf_path.rsplit("/", 1)
     if len(parts) != 2:
@@ -75,7 +75,7 @@ def resolve_conf(conf_path: str, test_id: str) -> str:
 def get_confs(cloud: str, test_id: str):
     """Return a callable that maps any logical conf path to its test-scoped path.
 
-    Usage: ``confs("compiled/joins/gcp/demo.v1__1")``
+    Usage: ``confs("compiled/joins/gcp/demo.event_enrichment__1")``
     """
     from functools import partial
     return partial(resolve_conf, test_id=test_id)

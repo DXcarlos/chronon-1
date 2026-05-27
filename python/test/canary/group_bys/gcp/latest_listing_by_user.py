@@ -24,7 +24,7 @@ source = EventSource(
     ),
 )
 
-v1 = GroupBy(
+latest_listing_features = GroupBy(
     sources=[source],
     keys=["user_id"],
     aggregations=[

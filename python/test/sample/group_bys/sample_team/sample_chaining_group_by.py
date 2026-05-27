@@ -39,11 +39,11 @@ parent_join = Join(
     row_ids="event",
     right_parts=[
         JoinPart(
-            group_by=event_sample_group_by.v1,
+            group_by=event_sample_group_by.event_features,
             key_mapping={"subject": "group_by_subject"},
         ),
         JoinPart(
-            group_by=entity_sample_group_by_from_module.v1,
+            group_by=entity_sample_group_by_from_module.entity_module_features,
             key_mapping={"subject": "group_by_subject"},
         ),
     ],

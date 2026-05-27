@@ -4,7 +4,7 @@ from ai.chronon.group_by import DefaultAggregation
 from ai.chronon.types import Accuracy, EntitySource, GroupBy, Query, selects
 
 """
-Mirrors dim_listings.v1 but uses an EntitySource with a mutation_table so
+Mirrors dim_listings.listing_features but uses an EntitySource with a mutation_table so
 point-in-time / temporal lookups against listing dimensions reflect mutations
 instead of only daily snapshots. Defaults to mutation_time_column="mutation_ts"
 and reversal_column="is_before", which match the dim_listing_mutations schema.
@@ -36,7 +36,7 @@ source = EntitySource(
     ),
 )
 
-v2 = GroupBy(
+listing_features_with_mutations = GroupBy(
     sources=[source],
     keys=["listing_id"],
     online=True,

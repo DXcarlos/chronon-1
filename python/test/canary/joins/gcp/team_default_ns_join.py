@@ -19,9 +19,9 @@ source = EventSource(
     ),
 )
 
-v1 = Join(
+team_default_training_join = Join(
     left=source,
     row_ids="user_id",
-    right_parts=[JoinPart(group_by=purchases.v1_test)],
+    right_parts=[JoinPart(group_by=purchases.purchase_features_test)],
     version=0,
 )

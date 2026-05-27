@@ -738,7 +738,7 @@ class TestHubRunner:
         mock_upload_diffs.return_value = []
         mock_post.return_value.json.return_value = {
             "results": [
-                {"metadataName": "aws.dim_listings.v1__0", "success": True, "message": "Redeploy initiated"},
+                {"metadataName": "aws.dim_listings.listing_features__0", "success": True, "message": "Redeploy initiated"},
             ],
             "totalCount": 1,
             "successCount": 1,
@@ -748,7 +748,7 @@ class TestHubRunner:
 
         redeploy_streaming(
             repo=canary,
-            confs=["compiled/group_bys/aws/dim_listings.v1__0"],
+            confs=["compiled/group_bys/aws/dim_listings.listing_features__0"],
             use_auth=False,
         )
 
@@ -758,7 +758,7 @@ class TestHubRunner:
         url = mock_post.call_args[0][0]
         assert "/streaming/v1/redeploy" in url
         body = mock_post.call_args[1]["json"]
-        assert body["metadataNames"] == ["aws.dim_listings.v1__0"]
+        assert body["metadataNames"] == ["aws.dim_listings.listing_features__0"]
 
     @patch('requests.post')
     @patch('ai.chronon.repo.hub_runner.get_current_branch')
@@ -778,8 +778,8 @@ class TestHubRunner:
         mock_upload_diffs.return_value = []
         mock_post.return_value.json.return_value = {
             "results": [
-                {"metadataName": "aws.dim_listings.v1__0", "success": True, "message": "Redeploy initiated"},
-                {"metadataName": "aws.dim_merchants.v1__0", "success": True, "message": "Redeploy initiated"},
+                {"metadataName": "aws.dim_listings.listing_features__0", "success": True, "message": "Redeploy initiated"},
+                {"metadataName": "aws.dim_merchants.merchant_features__0", "success": True, "message": "Redeploy initiated"},
             ],
             "totalCount": 2,
             "successCount": 2,
@@ -790,14 +790,14 @@ class TestHubRunner:
         redeploy_streaming(
             repo=canary,
             confs=[
-                "compiled/group_bys/aws/dim_listings.v1__0",
-                "compiled/group_bys/aws/dim_merchants.v1__0",
+                "compiled/group_bys/aws/dim_listings.listing_features__0",
+                "compiled/group_bys/aws/dim_merchants.merchant_features__0",
             ],
             use_auth=False,
         )
 
         body = mock_post.call_args[1]["json"]
-        assert set(body["metadataNames"]) == {"aws.dim_listings.v1__0", "aws.dim_merchants.v1__0"}
+        assert set(body["metadataNames"]) == {"aws.dim_listings.listing_features__0", "aws.dim_merchants.merchant_features__0"}
 
     @patch('requests.post')
     @patch('ai.chronon.repo.hub_runner.get_current_branch')
@@ -824,7 +824,7 @@ class TestHubRunner:
 
         redeploy_streaming(
             repo=canary,
-            confs=["compiled/group_bys/aws/dim_listings.v1__0"],
+            confs=["compiled/group_bys/aws/dim_listings.listing_features__0"],
             use_auth=False,
         )
 
@@ -849,8 +849,8 @@ class TestHubRunner:
         mock_upload_diffs.return_value = []
         mock_post.return_value.json.return_value = {
             "results": [
-                {"metadataName": "aws.dim_listings.v1__0", "success": True, "message": "Redeploy initiated"},
-                {"metadataName": "aws.dim_merchants.v1__0", "success": False, "message": "Job not found"},
+                {"metadataName": "aws.dim_listings.listing_features__0", "success": True, "message": "Redeploy initiated"},
+                {"metadataName": "aws.dim_merchants.merchant_features__0", "success": False, "message": "Job not found"},
             ],
             "totalCount": 2,
             "successCount": 1,
@@ -862,8 +862,8 @@ class TestHubRunner:
             redeploy_streaming(
                 repo=canary,
                 confs=[
-                    "compiled/group_bys/aws/dim_listings.v1__0",
-                    "compiled/group_bys/aws/dim_merchants.v1__0",
+                    "compiled/group_bys/aws/dim_listings.listing_features__0",
+                    "compiled/group_bys/aws/dim_merchants.merchant_features__0",
                 ],
                 use_auth=False,
             )
@@ -887,7 +887,7 @@ class TestHubRunner:
         mock_upload_diffs.return_value = []
         mock_post.return_value.json.return_value = {
             "results": [
-                {"metadataName": "aws.dim_listings.v1__0", "success": False, "message": "Timeout"},
+                {"metadataName": "aws.dim_listings.listing_features__0", "success": False, "message": "Timeout"},
             ],
             "totalCount": 1,
             "successCount": 0,
@@ -898,7 +898,7 @@ class TestHubRunner:
         with pytest.raises(SystemExit) as exc_info:
             redeploy_streaming(
                 repo=canary,
-                confs=["compiled/group_bys/aws/dim_listings.v1__0"],
+                confs=["compiled/group_bys/aws/dim_listings.listing_features__0"],
                 use_auth=False,
                 format=Format.JSON,
             )

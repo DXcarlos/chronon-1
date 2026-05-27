@@ -55,15 +55,15 @@ STAGING_QUERY_IMPORT_KEYS = {
 }
 
 GROUP_BY_KEY = {
-    "gcp": "compiled/group_bys/gcp/purchases.v1_test__0",
-    "aws": "compiled/group_bys/aws/user_activities.v1__1",
-    "azure": "compiled/group_bys/azure/purchases.v1_test__0",
+    "gcp": "compiled/group_bys/gcp/purchases.purchase_features_test__0",
+    "aws": "compiled/group_bys/aws/user_activities.user_activity_features__1",
+    "azure": "compiled/group_bys/azure/purchases.purchase_features_test__0",
 }
 
 JOIN_KEY = {
-    "gcp": "compiled/joins/gcp/training_set.v1_test__0",
-    "aws": "compiled/joins/aws/demo.v1__1",
-    "azure": "compiled/joins/azure/training_set.v1_test__0",
+    "gcp": "compiled/joins/gcp/training_set.training_join_test__0",
+    "aws": "compiled/joins/aws/demo.event_enrichment__1",
+    "azure": "compiled/joins/azure/training_set.training_join_test__0",
 }
 
 
@@ -96,7 +96,7 @@ def test_run_quickstart(test_id, confs, chronon_root, version, cloud):
 
     # 3. Backfill joins (parallel — both depend on group_by, not on each other)
     join_conf = confs(JOIN_KEY[cloud])
-    notds_key = f"compiled/joins/{cloud}/training_set.v1_dev_notds__0"
+    notds_key = f"compiled/joins/{cloud}/training_set.training_join_dev_notds__0"
     join_confs = [join_conf]
     notds_conf = confs(notds_key)
     if os.path.exists(os.path.join(chronon_root, notds_conf)):
@@ -121,7 +121,7 @@ def test_run_quickstart(test_id, confs, chronon_root, version, cloud):
     # The AWS runner (EMR) does not implement metastore, upload, or fetch modes.
     if cloud == "gcp":
         # 4. Check partitions
-        partition_name = f"data.{cloud}_purchases_{test_id}_v1_test__0/ds={end_ds}"
+        partition_name = f"data.{cloud}_purchases_{test_id}_purchase_features_test__0/ds={end_ds}"
         submit_check_partitions(
             runner, chronon_root,
             f"compiled/teams_metadata/{cloud}/{cloud}_team_metadata",
@@ -143,7 +143,7 @@ def test_run_quickstart(test_id, confs, chronon_root, version, cloud):
                    start_ds=start_ds, end_ds=end_ds)
 
         # 9. Fetch and verify
-        fetch_name = f"{cloud}.purchases_{test_id}.v1_test__0"
+        fetch_name = f"{cloud}.purchases_{test_id}.purchase_features_test__0"
         result = submit_fetch(runner, chronon_root, gb_conf, version,
                               keys='{"user_id":"5"}', name=fetch_name)
         assert "purchase_price_average_7d" in result.output, \

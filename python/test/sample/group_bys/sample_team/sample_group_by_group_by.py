@@ -19,7 +19,7 @@ from sources import sample_sources
 from ai.chronon import utils
 from ai.chronon.types import Aggregation, GroupBy, Operation
 
-v1 = GroupBy(
+nested_group_by_features = GroupBy(
     sources=sample_sources.basic_event_source(require_backfill.table),
     keys=["s2CellId", "place_id"],
     aggregations=[

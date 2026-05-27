@@ -1,7 +1,7 @@
 {
   "engineType": 1,
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_v1_hub__0_with_offset_0\", \"spec\": \"data.gcp_training_set_v1_hub__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_gcp_training_set_training_join_hub__0_with_offset_0\", \"spec\": \"data.gcp_training_set_training_join_hub__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "clusterConf": {
         "modeClusterConfigs": {
@@ -86,7 +86,7 @@
     "team": "gcp",
     "version": "0"
   },
-  "query": "\nSELECT\n    *\nFROM data.gcp_training_set_v1_hub__0\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
+  "query": "\nSELECT\n    *\nFROM data.gcp_training_set_training_join_hub__0\nWHERE ds BETWEEN {{ start_date }} AND {{ end_date }}\n",
   "tableDependencies": [
     {
       "endOffset": {
@@ -103,7 +103,7 @@
           "length": 1,
           "timeUnit": 1
         },
-        "table": "data.gcp_training_set_v1_hub__0"
+        "table": "data.gcp_training_set_training_join_hub__0"
       }
     }
   ]

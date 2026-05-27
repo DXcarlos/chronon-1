@@ -16,7 +16,7 @@ logging_schema_source = Source(
     )
 )
 
-v1 = GroupBy(
+schema_features = GroupBy(
     keys=["schema_hash"],
     sources=logging_schema_source,
     aggregations=[Aggregation(input_column="schema_value", operation=Operation.LAST)],

@@ -78,7 +78,7 @@ aggregations.extend([
     for col in last_k_columns
 ])
 
-v1 = GroupBy(
+user_activity_features = GroupBy(
     sources=[source],
     keys=["user_id"],  # Aggregate by user
     online=False,

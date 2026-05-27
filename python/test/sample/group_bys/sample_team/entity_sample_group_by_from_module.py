@@ -20,7 +20,7 @@ from sources import sample_sources
 
 from ai.chronon.types import Aggregation, GroupBy, Operation
 
-v1 = GroupBy(
+entity_module_features = GroupBy(
     sources=sample_sources.entity_source,
     keys=["group_by_subject"],
     aggregations=[

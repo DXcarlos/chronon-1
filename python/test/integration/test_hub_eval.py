@@ -11,9 +11,9 @@ from click.testing import CliRunner
 from .helpers.cli import compile_configs, submit_eval
 
 DEMO_JOIN = {
-    "gcp": "compiled/joins/gcp/demo.v1__1",
-    "aws": "compiled/joins/aws/demo.v1__1",
-    "azure": "compiled/group_bys/azure/dim_listings.v3",
+    "gcp": "compiled/joins/gcp/demo.event_enrichment__1",
+    "aws": "compiled/joins/aws/demo.event_enrichment__1",
+    "azure": "compiled/group_bys/azure/dim_listings.listing_features",
 }
 
 

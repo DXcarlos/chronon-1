@@ -7,14 +7,14 @@ from ai.chronon.types import JoinSource, ModelTransforms, Query
 from ai.chronon.data_types import DataType
 
 source = JoinSource(
-    join=demo.v1,
+    join=demo.event_enrichment,
     # filter rows where the headline / long_description is null as Vertex doesn't like empty content strings
     query=Query(
         wheres=["(listing_id_headline IS NOT NULL AND listing_id_headline != '') OR (listing_id_long_description IS NOT NULL AND listing_id_long_description != '')"]
     )
 )
 
-v1 = ModelTransforms(
+listing_model_transforms = ModelTransforms(
     sources=[source],
     models=[listing.item_description_model],
     # include a couple of pass through fields from the source / join lookup

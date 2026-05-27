@@ -52,7 +52,7 @@ And then you could use it in your `Join` as follows:
 ```python
 from staging_queries.team_name_folder import file_name
 
-v1 = Join(
+training_join = Join(
     left=EventSource(
         table=file_name.staging_query_var_name.table
         ...

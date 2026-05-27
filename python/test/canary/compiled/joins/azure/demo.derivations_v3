@@ -29,22 +29,22 @@
         ],
         "metaData": {
           "columnHashes": {
-            "brief_description": "3c179cccf0a9f57fda2fdfe3085a239f",
-            "currency": "8477ea4ad6b46f96255ce0905dfed26d",
-            "headline": "6bf685e11e97f4863d36fa953b964800",
-            "inventory_count": "9d63ce6eddf70502ad498603ec8b18b3",
-            "is_active": "9c9adf7999f230fc316c491f829b12d0",
-            "is_expensive": "255e0f554c8337c87a2a7f0b799c8d4b",
-            "is_in_stock": "80d7c029ebb919cfa22a82600ae3a3e1",
-            "listing_id": "e1d191582f23aad87ee1f5422600051f",
-            "long_description": "f3f74af9625f16c5d935e96d96e08698",
-            "main_image_path": "3ff96284663e8d05ad728b37f6acf122",
-            "merchant_id": "56b9c531a57e6d3f5320b72df8d63521",
-            "price_cents": "7be4ba1e811c96c5a4e5023ce1e05c38",
-            "primary_category": "d6beb0afb36cada1f65a9b1acdb5b995",
-            "secondary_image_paths": "de717ca6563464c24d63f8473a75ef85",
-            "tags": "f9ead5f03020ff66ff14e98fec19a774",
-            "weight_grams": "ac84b5b0b11dca76306214d5d2f12fa9"
+            "brief_description": "7754a805d20d044063887d59e0491191",
+            "currency": "4753ea347f61d5b57f26113d75996fc8",
+            "headline": "7f0c67fd8164b2f4a4940b3077c967b1",
+            "inventory_count": "b317863daca090ef6d37243649fbc5a9",
+            "is_active": "fec80fbf8c553512518e6bd60739721a",
+            "is_expensive": "ad55beb9271a614bbbd454d361215185",
+            "is_in_stock": "13798496ca4c9dcc98b397b628378390",
+            "listing_id": "dc2e0bc32862a424e5f0924979b320e2",
+            "long_description": "57c61007cd941a3bc2ef17cd9a6115d3",
+            "main_image_path": "11946d5ea5897e2ee08ac5a775604c62",
+            "merchant_id": "7b8a29c12516dbd33a807448dc802f17",
+            "price_cents": "4ce4b6bed2b13b66c963f17417ba6df9",
+            "primary_category": "ab923028328722b6567314f60a2d3737",
+            "secondary_image_paths": "2355597cce3fe60722a9f0ca882c6862",
+            "tags": "bfc621910893748068bf72a86b5105f9",
+            "weight_grams": "65efeda381a53fdc8197e4d1ce6be753"
           },
           "executionInfo": {
             "conf": {
@@ -96,7 +96,7 @@
             "historicalBackfill": 0,
             "onlineSchedule": "@daily"
           },
-          "name": "azure.dim_listings.v3",
+          "name": "azure.dim_listings.listing_features",
           "online": 1,
           "outputNamespace": "data",
           "team": "azure"

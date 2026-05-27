@@ -62,7 +62,7 @@ aggregations.append(
     Aggregation(input_column="user_event_struct", operation=Operation.LAST_K(128), windows=window_sizes)
 )
 
-v1 = GroupBy(
+user_activity_features = GroupBy(
     sources=[source],
     keys=["user_id"],
     online=True,

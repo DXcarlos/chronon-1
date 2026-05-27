@@ -27,13 +27,13 @@
   ],
   "metaData": {
     "columnHashes": {
-      "derived_field": "824c49cd301931bf973a15f5ac7ca6ac",
-      "impressed_unique_count_1d_sum": "66e22e3291b0344bc20b17de9048b444",
-      "place_id": "4a5b0e2045bc2c6692a1faad0ee20c2c",
-      "s2CellId": "b363b26e1dc7d01ee6d06812ed9b9240",
-      "viewed_unique_count_1d_sum": "735e6842c1f448d3f0f47c98839394ed"
+      "derived_field": "9500da18e50e42e80fc0d02240588210",
+      "impressed_unique_count_1d_sum": "04dbded020646756bc1ebcab2930d5b2",
+      "place_id": "d8750f99c2881a18dbe2611e18a62329",
+      "s2CellId": "574ad0dca9416fa2d13b5f5b9cf3a90e",
+      "viewed_unique_count_1d_sum": "a52e48cdd6741c3920fd07ef122c5246"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_sample_namespace_sample_team_sample_staging_query_v1__0_with_offset_0\", \"spec\": \"sample_namespace.sample_team_sample_staging_query_v1__0/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_sample_namespace_sample_team_sample_staging_query_listing_features__0_with_offset_0\", \"spec\": \"sample_namespace.sample_team_sample_staging_query_listing_features__0/_test_column_sample={{ macros.ds_add(ds, 0) }}\"}]}",
     "executionInfo": {
       "conf": {
         "common": {
@@ -98,7 +98,7 @@
           },
           "startPartition": "2021-03-01"
         },
-        "snapshotTable": "sample_namespace.sample_team_sample_staging_query_v1__0"
+        "snapshotTable": "sample_namespace.sample_team_sample_staging_query_listing_features__0"
       }
     }
   ]

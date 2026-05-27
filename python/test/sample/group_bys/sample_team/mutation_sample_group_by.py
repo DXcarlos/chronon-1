@@ -25,7 +25,7 @@ from ai.chronon.types import (
     Operation,
 )
 
-v0 = GroupBy(
+mutation_features = GroupBy(
     sources=sample_sources.entity_source,
     keys=["group_by_subject"],
     aggregations=[Aggregation(input_column="entity", operation=Operation.LAST)],

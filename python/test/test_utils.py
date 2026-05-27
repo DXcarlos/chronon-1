@@ -26,9 +26,9 @@ def event_group_by(repo):
     Sample source taken from one of the group bys.
     This is an event source, not streaming
     """
-    from group_bys.sample_team.sample_group_by_from_module import v1
+    from group_bys.sample_team.sample_group_by_from_module import module_features
 
-    return v1
+    return module_features
 
 
 @pytest.fixture

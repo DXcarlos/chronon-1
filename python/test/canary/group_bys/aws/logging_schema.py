@@ -22,7 +22,7 @@ source = EventSource(
     ),
 )
 
-v1 = GroupBy(
+logging_schema_features = GroupBy(
     sources=[source],
     keys=["schema_hash"],
     aggregations=[Aggregation(input_column="schema_value", operation=Operation.LAST)],

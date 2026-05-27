@@ -18,29 +18,29 @@ source = EventSource(
     ),
 )
 
-v1_test = Join(
+training_join_test = Join(
     left=source,
     row_ids="user_id",
     right_parts=[
-        JoinPart(group_by=purchases.v1_test)
+        JoinPart(group_by=purchases.purchase_features_test)
     ],
     version=0,
 )
 
-v1_hub = Join(
+training_join_hub = Join(
     left=source,
     row_ids="user_id",
     right_parts=[
-        JoinPart(group_by=purchases.v1_test)
+        JoinPart(group_by=purchases.purchase_features_test)
     ],
     version=0,
 )
 
-v1_dev = Join(
+training_join_dev = Join(
     left=source,
     row_ids="user_id",
     right_parts=[
-        JoinPart(group_by=purchases.v1_dev)
+        JoinPart(group_by=purchases.purchase_features_dev)
     ],
     version=0,
 )
@@ -56,20 +56,20 @@ source_notds = EventSource(
     ),
 )
 
-v1_test_notds = Join(
+training_join_test_notds = Join(
     left=source_notds,
     row_ids=["user_id"],
     right_parts=[
-        JoinPart(group_by=purchases.v1_test_notds)
+        JoinPart(group_by=purchases.purchase_features_test_notds)
     ],
     version=0,
 )
 
-v1_dev_notds = Join(
+training_join_dev_notds = Join(
     left=source_notds,
     row_ids=["user_id"],
     right_parts=[
-        JoinPart(group_by=purchases.v1_dev_notds)
+        JoinPart(group_by=purchases.purchase_features_dev_notds)
     ],
     version=0,
 )

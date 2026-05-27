@@ -33,7 +33,7 @@ source = Source(
 
 window_sizes = ["3d", "14d", "30d"]  # Define some window sizes to use below
 
-v1 = GroupBy(
+return_features = GroupBy(
     sources=[source],
     keys=["user_id"],  # We are aggregating by user
     online=True,

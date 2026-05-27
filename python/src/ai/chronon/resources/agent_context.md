@@ -182,8 +182,8 @@ grep -r "table_name" group_bys/<team_name>/
 **If you find a matching GroupBy:**
 
 **Default approach - Version up existing GroupBy:**
-- Iterate on the existing GroupBy by versioning up the variable name
-- Example: If `v1` exists, create `v2` with the new features added
+- Iterate on the existing GroupBy by bumping the constructor `version=` value
+- Example: If `purchase_features` exists with `version=1`, update the config as `version=2` with the new features added
 - This is preferred because it keeps related features together
 - Easier to maintain and understand feature evolution
 
@@ -197,7 +197,7 @@ grep -r "table_name" group_bys/<team_name>/
 ```
 Found existing GroupBy with same source + keys?
 ├─ YES
-│   ├─ Adding small/normal features? → Version up the existing GroupBy (v1→v2)
+│   ├─ Adding small/normal features? → Version up the existing GroupBy (`version=1` → `version=2`)
 │   ├─ Adding large features (embeddings, arrays)? → Ask user, may warrant separate GroupBy
 │   └─ Latency-sensitive use case? → Ask user, may warrant separate GroupBy
 └─ NO → Proceed with new GroupBy creation
@@ -517,7 +517,7 @@ query=Query(
 ```python
 from ai.chronon.types import Accuracy, Aggregation, EventSource, GroupBy, Operation, Query, selects
 
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EventSource(
             table="data.table_name",
@@ -552,7 +552,7 @@ v1 = GroupBy(
 ```python
 from ai.chronon.types import EntitySource, GroupBy, Query, selects
 
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EntitySource(
             snapshot_table="data.users",
@@ -580,7 +580,7 @@ For entity data that receives real-time updates via a mutation stream (e.g., Deb
 ```python
 from ai.chronon.types import Aggregation, EntitySource, GroupBy, Operation, Query, selects
 
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EntitySource(
             snapshot_table="data.merchants",
@@ -653,10 +653,10 @@ This will:
 
 If you have access to an eval server:
 ```bash
-zipline hub eval --conf compiled/group_bys/team/groupby_name.v1
+zipline hub eval --conf compiled/group_bys/team/groupby_name.user_features__0
 ```
 
-Replace `team/groupby_name.v1` with your actual compiled file path (found in `compiled/group_bys/`).
+Replace `team/groupby_name.user_features__0` with your actual compiled file path (found in `compiled/group_bys/`).
 
 **If compilation fails:**
 - Read the error message carefully
@@ -762,7 +762,7 @@ derivations=[
 ```python
 from ai.chronon.types import Derivation, Join, JoinPart
 
-v2 = Join(  # Increment variable name (v1 -> v2)
+expanded_training_join = Join(
     left=EventSource(
         table="data.training_labels",
         query=Query(
@@ -797,7 +797,7 @@ v2 = Join(  # Increment variable name (v1 -> v2)
 zipline compile --chronon-root <path_to_config_root> --force
 
 # Then validate
-zipline hub eval --conf compiled/joins/team/join_name.v2
+zipline hub eval --conf compiled/joins/team/join_name.training_join__0
 ```
 
 ---
@@ -970,14 +970,14 @@ from ai.chronon.data_types import DataType
 
 # Reference the join to use as input
 source = JoinSource(
-    join=demo.v1,  # The join containing listing_id_headline, listing_id_long_description
+    join=demo.event_enrichment,  # The join containing listing_id_headline, listing_id_long_description
     query=Query(
         # Optional: filter rows before inference
         wheres=["(listing_id_headline IS NOT NULL AND listing_id_headline != '') OR (listing_id_long_description IS NOT NULL AND listing_id_long_description != '')"]
     )
 )
 
-v1 = ModelTransforms(
+model_transforms = ModelTransforms(
     sources=[source],  # Can have multiple sources
     models=[item_description_model],  # Can have multiple models
     # Fields to pass through from source (alongside predictions)
@@ -1053,13 +1053,13 @@ from ai.chronon.types import JoinSource, ModelTransforms, Query
 from ai.chronon.data_types import DataType
 
 source = JoinSource(
-    join=demo.v1,
+    join=demo.event_enrichment,
     query=Query(
         wheres=["long_description IS NOT NULL AND long_description != ''"]
     )
 )
 
-v1 = ModelTransforms(
+model_transforms = ModelTransforms(
     sources=[source],
     models=[short_description_model],
     passthrough_fields=["listing_id", "headline"],
@@ -1248,7 +1248,7 @@ from ai.chronon.data_types import DataType
 
 source = JoinSource(join=demo.derivations_v1)
 
-v1 = ModelTransforms(
+model_transforms = ModelTransforms(
     sources=[source],
     models=[ctr_model],
     passthrough_fields=["user_id", "listing_id", "user_id_click_event_average_7d", "listing_id_price_cents", "price_log", "price_bucket"],
@@ -1583,7 +1583,7 @@ After creating a chained GroupBy:
 zipline compile --chronon-root <path> --force
 
 # Validate
-zipline hub eval --conf compiled/group_bys/team/chained_groupby.v1
+zipline hub eval --conf compiled/group_bys/team/chained_groupby.chained_features__0
 ```
 
 Check that:
@@ -1757,9 +1757,9 @@ Given the aggregation logic (e.g., SUM over 7d window), calculate what the resul
   - Example pattern seen in existing code: `# TODO -- kill this once the SPJ API change goes through`
 
 ### Version Management
-- **"Version up" means changing the variable name**: `v1` → `v2` → `v3`, etc.
-- Once in production, avoid changing configs - create new variable versions instead
-- Example: If `v1` exists in production, create `v2` as a new variable with updated features
+- **"Version up" means changing the constructor `version=` value**, while keeping the descriptive Python variable name stable.
+- Once in production, avoid changing configs in place unless the workflow explicitly calls for it.
+- Example: If `purchase_features` exists in production with `version=1`, keep the variable name and create the updated config with `version=2`.
 
 ### Column Naming Convention
 Output columns follow this pattern:
@@ -1811,7 +1811,7 @@ Is this event data (time-series, logs)?
 ### Pattern: Simple Event Aggregation
 ```python
 # From: python/test/canary/group_bys/gcp/purchases.py
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EventSource(
             table="data.purchases",
@@ -1837,7 +1837,7 @@ v1 = GroupBy(
 ### Pattern: Entity Passthrough with Transformations
 ```python
 # From: python/test/canary/group_bys/gcp/dim_listings.py
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EntitySource(
             snapshot_table="data.listings",
@@ -1861,7 +1861,7 @@ v1 = GroupBy(
 ### Pattern: Multi-Source Join
 ```python
 # From: python/test/canary/joins/gcp/demo.py
-v1 = Join(
+training_join = Join(
     left=EventSource(
         table="data.checkouts",
         query=Query(
@@ -1912,7 +1912,7 @@ Aggregation(
 ### Pattern: Combined Filtering (Column + Query Level)
 ```python
 # From: Based on python/test/canary/group_bys/gcp/item_event_canary.py
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EventSource(
             table="data.item_events",
@@ -2108,7 +2108,7 @@ wrapper_join = Join(
 # Step 3: Apply model via ModelTransforms
 from ai.chronon.types import JoinSource, ModelTransforms
 
-v1 = ModelTransforms(
+model_transforms = ModelTransforms(
     sources=[JoinSource(join=wrapper_join)],
     models=[embedding_model],
     passthrough_fields=["user_id", "user_id_event_category_last30_30d"],
@@ -2152,16 +2152,16 @@ zipline hub eval-table --table "<schema.table_name>" --engine-type BIGQUERY
 zipline compile --chronon-root <path_to_config_root> --force
 
 # Validate a feature configuration (after compiling)
-zipline hub eval --conf compiled/group_bys/team/config_name.v1
+zipline hub eval --conf compiled/group_bys/team/config_name.feature_set__0
 
 # Run a one-off adhoc job from the current branch (for testing before merge)
-zipline hub run-adhoc --conf compiled/group_bys/team/config_name.v1
+zipline hub run-adhoc --conf compiled/group_bys/team/config_name.feature_set__0
 
 # Schedule a pipeline from a branch (without merging)
 # Use this to run a dev version in parallel with prod for end-to-end A/B testing.
 # IMPORTANT: the config version on your branch must differ from the one on main,
 # so the branch pipeline writes to a separate table and doesn't collide with prod.
-zipline hub schedule --conf compiled/joins/team/join_name.v2
+zipline hub schedule --conf compiled/joins/team/join_name.training_join__0
 
 # Get help
 zipline --help
@@ -2407,7 +2407,7 @@ def user_demographics(users_df):
 ```python
 from ai.chronon.types import EntitySource, GroupBy, Query, selects
 
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EntitySource(
             snapshot_table="data.users",
@@ -2470,7 +2470,7 @@ def user_transaction_aggregates(transactions):
 ```python
 from ai.chronon.types import Aggregation, EventSource, GroupBy, Operation, Query, selects
 
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EventSource(
             table="data.transactions",
@@ -2531,7 +2531,7 @@ def transaction_ratio(request_data, user_features):
 ```python
 from ai.chronon.types import Derivation, EventSource, Join, JoinPart, Query, selects
 
-v1 = Join(
+training_join = Join(
     left=EventSource(
         table="data.requests",
         query=Query(
@@ -2737,7 +2737,7 @@ def user_transactions(transactions):
 ```python
 from ai.chronon.types import Aggregation, EventSource, GroupBy, Operation, Query, selects
 
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EventSource(
             table="data.transactions",
@@ -2815,7 +2815,7 @@ def user_click_features(clicks_df):
 ```python
 from ai.chronon.types import Aggregation, EventSource, GroupBy, Operation, Query, selects
 
-v1 = GroupBy(
+event_features = GroupBy(
     sources=[
         EventSource(
             table="data.clicks",
@@ -2864,7 +2864,7 @@ fraud_detection_features = FeatureService(
 ```python
 from ai.chronon.types import EventSource, Join, JoinPart, Query, selects
 
-v1 = Join(
+training_join = Join(
     left=EventSource(
         table="data.scoring_requests",
         query=Query(
@@ -2918,7 +2918,7 @@ def transaction_features(request_data, user_features):
 ```python
 from ai.chronon.types import Derivation, Join, JoinPart
 
-v1 = Join(
+training_join = Join(
     left=EventSource(
         table="data.transactions",
         query=Query(

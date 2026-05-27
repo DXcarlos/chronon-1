@@ -72,17 +72,17 @@ _TEAM_DEFAULT_FIXTURES = [
     ),
     (
         "Join (no output_namespace= -> gcp team default 'data')",
-        "compiled/joins/gcp/team_default_ns_join.v1__0",
+        "compiled/joins/gcp/team_default_ns_join.team_default_training_join__0",
         "data",
     ),
     (
         "GroupBy (no output_namespace= -> gcp team default 'data')",
-        "compiled/group_bys/gcp/team_default_ns_gb.v1__0",
+        "compiled/group_bys/gcp/team_default_ns_gb.team_default_purchase_features__0",
         "data",
     ),
     (
         "ModelTransforms (no output_namespace= -> gcp team default 'data')",
-        "compiled/model_transforms/gcp/team_default_ns_mt.v1__1",
+        "compiled/model_transforms/gcp/team_default_ns_mt.team_default_model_transforms__1",
         "data",
     ),
     (
@@ -126,7 +126,7 @@ def test_team_default_placeholder_resolves_through_cross_config_table_refs(canar
     """
     _compile_canary(canary)
 
-    path = os.path.join(canary, "compiled/joins/gcp/team_default_ns_join.v1__0")
+    path = os.path.join(canary, "compiled/joins/gcp/team_default_ns_join.team_default_training_join__0")
     payload = json.loads(open(path).read())
 
     left_table = payload["left"]["events"]["table"]
@@ -187,7 +187,7 @@ def test_gcp_join_compiles_to_both_folders_when_team_has_both_configs(canary):
     folders with distinct `executionInfo` reflecting the right teams file."""
     _compile_canary(canary)
 
-    relpath = "joins/gcp/training_set.v1_dev__0"
+    relpath = "joins/gcp/training_set.training_join_dev__0"
     prod_path = os.path.join(canary, "compiled", relpath)
     canary_path = os.path.join(canary, "compiled_canary", relpath)
 
@@ -298,8 +298,8 @@ def test_no_leak_canary_fields_into_compiled(canary):
 # teams declared via `from teams import …` rather than redefined.
 _IMPORTED_TEAM_CONFIGS = [
     ("aws_databricks", "compiled_canary/staging_queries/aws_databricks/exports.dim_listings__0"),
-    ("azure", "compiled_canary/group_bys/azure/dim_listings.v3"),
-    ("quickstart", "compiled_canary/group_bys/quickstart/dim_listings.v1__0"),
+    ("azure", "compiled_canary/group_bys/azure/dim_listings.listing_features"),
+    ("quickstart", "compiled_canary/group_bys/quickstart/dim_listings.listing_features__0"),
 ]
 
 

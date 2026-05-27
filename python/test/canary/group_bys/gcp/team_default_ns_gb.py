@@ -18,7 +18,7 @@ source = EventSource(
     ),
 )
 
-v1 = GroupBy(
+team_default_purchase_features = GroupBy(
     sources=[source],
     keys=["user_id"],
     version=0,

@@ -1,0 +1,78 @@
+{
+  "keyColumns": [
+    "user_id"
+  ],
+  "metaData": {
+    "columnHashes": {
+      "account_created_ds": "64265bb04c19ef7e1ff6adb955ea279e",
+      "email_verified": "907a75267fa81d3447cd07075e178af7",
+      "user_id": "1f19a80fae7e46391cf1fd422317bf7f"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_data_users_with_offset_0\", \"spec\": \"data.users/_DATE={{ macros.ds_add(ds, 0) }}\"}]}",
+    "executionInfo": {
+      "conf": {
+        "common": {
+          "spark.chronon.partition.column": "_DATE"
+        }
+      },
+      "env": {
+        "common": {
+          "CUSTOMER_ID": "canary",
+          "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+          "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+          "GCP_PROJECT_ID": "canary-443022",
+          "GCP_REGION": "us-central1",
+          "VERSION": "latest"
+        },
+        "modeEnvironments": {
+          "backfill": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "streaming": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          },
+          "upload": {
+            "CUSTOMER_ID": "canary",
+            "GCP_BIGTABLE_INSTANCE_ID": "zipline-canary-instance",
+            "GCP_DATAPROC_CLUSTER_NAME": "canary-2",
+            "GCP_PROJECT_ID": "canary-443022",
+            "GCP_REGION": "us-central1",
+            "VERSION": "latest"
+          }
+        }
+      },
+      "historicalBackfill": 0,
+      "onlineSchedule": "@daily"
+    },
+    "name": "quickstart.users.user_features__0",
+    "online": 1,
+    "outputNamespace": "quickstart",
+    "sourceFile": "group_bys/quickstart/users.py",
+    "team": "quickstart",
+    "version": "0"
+  },
+  "sources": [
+    {
+      "entities": {
+        "query": {
+          "selects": {
+            "account_created_ds": "account_created_ds",
+            "email_verified": "email_verified",
+            "user_id": "user_id"
+          }
+        },
+        "snapshotTable": "data.users"
+      }
+    }
+  ]
+}

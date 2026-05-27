@@ -49,7 +49,7 @@ source = Source(
 
 window_sizes = [Window(length=day, timeUnit=TimeUnit.DAYS) for day in [3, 14, 30]] # Define some window sizes to use below
 
-v1 = GroupBy(
+purchase_features = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,

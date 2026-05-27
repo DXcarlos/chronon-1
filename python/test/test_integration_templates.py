@@ -22,10 +22,10 @@ class TestConfResolver:
     """Test the resolve_conf helper."""
 
     def test_resolve_conf_with_version(self):
-        assert resolve_conf("compiled/joins/gcp/demo.v1__1", "abc") == "compiled/joins/gcp/demo_abc.v1__1"
+        assert resolve_conf("compiled/joins/gcp/demo.event_enrichment__1", "abc") == "compiled/joins/gcp/demo_abc.event_enrichment__1"
 
     def test_resolve_conf_without_version(self):
-        assert resolve_conf("compiled/joins/azure/demo.v2", "abc") == "compiled/joins/azure/demo_abc.v2"
+        assert resolve_conf("compiled/joins/azure/demo.event_enrichment", "abc") == "compiled/joins/azure/demo_abc.event_enrichment"
 
     def test_resolve_conf_no_dot(self):
         assert resolve_conf("compiled/joins/gcp/demo", "abc") == "compiled/joins/gcp/demo_abc"
@@ -46,13 +46,14 @@ class TestCompiledConfsExist:
         monkeypatch.syspath_prepend(_canary_root)
 
     def _cleanup_compiled(self, tid):
-        compiled_dir = os.path.join(_canary_root, "compiled")
-        if not os.path.isdir(compiled_dir):
-            return
-        for root, _, files in os.walk(compiled_dir):
-            for f in files:
-                if tid in f:
-                    os.remove(os.path.join(root, f))
+        for dirname in ("compiled", "compiled_canary"):
+            compiled_dir = os.path.join(_canary_root, dirname)
+            if not os.path.isdir(compiled_dir):
+                continue
+            for root, _, files in os.walk(compiled_dir):
+                for f in files:
+                    if tid in f:
+                        os.remove(os.path.join(root, f))
 
     def _compile_and_check(self, cloud):
         tid = "ctest"
@@ -144,12 +145,12 @@ class TestRewriteImports:
 
     def test_word_boundary_matches_standalone(self):
         """purchases should match when it appears as a standalone word."""
-        content = "from group_bys.gcp import purchases\nJoinPart(group_by=purchases.v1_test)"
+        content = "from group_bys.gcp import purchases\nJoinPart(group_by=purchases.purchase_features_test)"
         renames = {"purchases": "purchases_test1"}
         found = _find_imported_stems(content, renames)
         result = _apply_renames(content, found)
         assert "import purchases_test1" in result
-        assert "purchases_test1.v1_test" in result
+        assert "purchases_test1.purchase_features_test" in result
 
     def test_longest_first_ordering(self):
         """Longer names are replaced first to prevent double-suffixing."""

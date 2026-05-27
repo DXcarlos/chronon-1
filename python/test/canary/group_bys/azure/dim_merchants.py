@@ -20,7 +20,7 @@ source = EntitySource(
     ),
 )
 
-v2 = GroupBy(
+merchant_features = GroupBy(
     sources=[source],
     keys=["listing_id"],  # Key by listing_id for point lookups
     online=True,

@@ -63,15 +63,15 @@ Bootstrap table is a precomputed table which contains precomputed feature values
 
 ## API w/ Examples
 
-`payments_driver.v1` is a StagingQuery based on the log table of v1 Join, optionally unioned with historical data before logging is available source_v1 is a HiveEventSource based on this StagingQuery, used as `left` of v1 Join
+`payments_driver.current_driver` is a StagingQuery based on the log table of the current Join, optionally unioned with historical data before logging is available. `current_join_source` is a HiveEventSource based on this StagingQuery, used as `left` of the current Join.
 
 
 ```python
 
 ENTITY_KEYS = ['guest', 'host', 'listing']
 
-v1_source = EventSource(
-	table=payments_driver.v1.table,
+current_join_source = EventSource(
+	table=payments_driver.current_driver.table,
 	query=Query(
 		selects=select(
 			rng='rng',
@@ -82,10 +82,10 @@ v1_source = EventSource(
 ```
 
 
-`v1` Join presents a production model feature set
-`left` is a wrapped table based on `v1`’s own logging table and historical data
+`current_payments_join` Join presents a production model feature set
+`left` is a wrapped table based on `current_payments_join`’s own logging table and historical data
 `V1_FEATURES`/`V1_EXT_FEATURES` are file-level definitions to be shared across joins
-`bootstrap_from_log=True` enables bootstrap from `v1` join’s own logging table
+`bootstrap_from_log=True` enables bootstrap from `current_payments_join` join’s own logging table
 
 ```python
 V1_FEATURES = [...]
@@ -103,9 +103,9 @@ V1_EXT_FEATURES = [
 ]
 ROW_IDS = ['request_id']
 
-v1 = Join(
+current_payments_join = Join(
     online=True,
-    left=v1_source,
+    left=current_join_source,
     right_parts=V1_FEATURES,
     online_external_parts=V1_EXT_FEATURES,
     bootstrap_from_log=True,
@@ -113,14 +113,14 @@ v1 = Join(
 )
 ```
 
-To enable the next round of feature experimentation, we decide to create a new source based on the output table of `v1` join. 
-In particular, we would like the label information from `v1` join’s output table in order to run downsampling on the training examples. 
+To enable the next round of feature experimentation, we decide to create a new source based on the output table of `current_payments_join` join.
+In particular, we would like the label information from `current_payments_join` join’s output table in order to run downsampling on the training examples.
 
-Note: `rng` is an example for a column that clients can include in the StagingQuery `payments_driver.v1` in order to facilitate downsampling for sampling purpose and persisted for multiple runs 
+Note: `rng` is an example for a column that clients can include in the StagingQuery `payments_driver.current_driver` in order to facilitate downsampling for sampling purpose and persisted for multiple runs
 
 ```python
-v2_dev_source = EventSource(
-    table=v1.table,
+experimental_join_source = EventSource(
+    table=current_payments_join.table,
     query=Query(
          wheres=['label = 1 OR rng < 0.05'],
     )
@@ -129,27 +129,27 @@ v2_dev_source = EventSource(
 V2_FEATURES = [...]
 ```
 
-`v2_join` is a join created purely for offline experimental features, and its output table will contain production features from v1 join and new experimental features. For production features, we reuse data `v1` join without recomputation via bootstrap
+`experimental_payments_join` is a join created purely for offline experimental features, and its output table will contain production features from current join and new experimental features. For production features, we reuse data `current_payments_join` join without recomputation via bootstrap
 
 ```python
-v2_dev = Join(
+experimental_payments_join = Join(
 	online=False,
-	left=v2_dev_source,
+	left=experimental_join_source,
 	right_parts=V1_FEATURES+V2_FEATURES,
 	bootstrap_parts=[
 		BootstrapPart(
-			table=v1.table
+			table=current_payments_join.table
 		)
 	]
 )
 ```
 
-After experimentation we are ready to productionize and make v2 online.
-Similar to `v1_source`, we create a `v2_source` based on a new StagingQuery `payments_driver.v2`
+After experimentation we are ready to productionize and make the updated join online.
+Similar to `current_join_source`, we create an `updated_join_source` based on a new StagingQuery `payments_driver.updated_driver`
 
 ```python
-v2_source = EventSource(
-	table=payments_driver.v2.table,
+updated_join_source = EventSource(
+	table=payments_driver.updated_driver.table,
 	query=Query(
 		selects=select(
 			rng='rng',
@@ -160,25 +160,25 @@ v2_source = EventSource(
 ```
 
 
-`v2` is the join to serve the updated feature set (containing v1 and v2 features)
+`updated_payments_join` is the join to serve the updated feature set (containing current and updated features)
 Note it has 3 bootstrapping component:
 - `bootstrap_from_log` will populating ongoing data from logging table
-- `v1.table` will carry-over production features data from v1
-- `v2_dev.table` will carry-over partially backfilled v2 features
+- `current_payments_join.table` will carry-over production features data from the current join
+- `experimental_payments_join.table` will carry-over partially backfilled updated features
 during experimentation on 5% of downsampled data. The rest of 95% of data will be automatically backfilled when this join is run for the first time. This behavior is called “automatic hole filling”. 
 
 ```python
-v2 = Join(
+updated_payments_join = Join(
 	online=True,
-	left=v2_source,
+	left=updated_join_source,
 	right_parts=V1_FEATURES+V2_FEATURES,
 	bootstrap_from_log=True,
 	bootstrap_parts=[
 		BootstrapPart(
-			table=v1.table
+			table=current_payments_join.table
 		),
 		BootstrapPart(
-			table=v2_dev.table
+			table=experimental_payments_join.table
 		)
 	]
 )

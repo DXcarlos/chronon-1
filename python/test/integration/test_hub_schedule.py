@@ -10,9 +10,9 @@ from .helpers.cli import compile_configs, submit_schedule
 from .helpers.hub_api import delete_schedule, find_schedules_by_test_id
 
 DEMO_BACKFILL = {
-    "gcp": "compiled/joins/gcp/demo.v1__1",
-    "aws": "compiled/joins/aws/demo.v1__1",
-    "azure": "compiled/joins/azure/demo.v2",
+    "gcp": "compiled/joins/gcp/demo.event_enrichment__1",
+    "aws": "compiled/joins/aws/demo.event_enrichment__1",
+    "azure": "compiled/joins/azure/demo.event_enrichment",
 }
 
 

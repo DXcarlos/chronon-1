@@ -14,7 +14,7 @@ source = EventSource(
 )
 
 # Join with just a streaming GB
-canary_streaming_v1 = Join(
+canary_streaming_join = Join(
     left=source,
     row_ids="user_id",
     right_parts=[
@@ -25,24 +25,24 @@ canary_streaming_v1 = Join(
 )
 
 # Join with just a batch GB
-canary_batch_v1 = Join(
+canary_batch_join = Join(
     left=source,
     row_ids="listing_id",
     version=0,
     right_parts=[
-        JoinPart(group_by=purchases.v1_test)
+        JoinPart(group_by=purchases.purchase_features_test)
     ],
     online=True,
 )
 
 # Join with a streaming and batch GB
-canary_combined_v1 = Join(
+canary_combined_join = Join(
     left=source,
     row_ids=["user_id"],
     version=0,
     right_parts=[
         JoinPart(group_by=item_event_canary.actions_v1),
-        JoinPart(group_by=purchases.v1_test)
+        JoinPart(group_by=purchases.purchase_features_test)
     ],
     online=True,
 )

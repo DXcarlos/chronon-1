@@ -19,7 +19,7 @@ source = EntitySource(
     ),
 )
 
-v1 = GroupBy(
+merchant_features = GroupBy(
     sources=[source],
     keys=["merchant_id"],
     online=True,

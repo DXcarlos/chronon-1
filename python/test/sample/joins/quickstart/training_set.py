@@ -13,9 +13,9 @@
 #     limitations under the License.
 
 from gen_thrift.api.ttypes import EventSource, Source
-from group_bys.quickstart.purchases import v1 as purchases_v1
-from group_bys.quickstart.returns import v1 as returns_v1
-from group_bys.quickstart.users import v1 as users
+from group_bys.quickstart.purchases import purchase_features
+from group_bys.quickstart.returns import return_features
+from group_bys.quickstart.users import user_features
 
 from ai.chronon.types import Join, JoinPart, Query, selects
 
@@ -35,20 +35,20 @@ source = Source(
     )
 )
 
-v1 = Join(
+training_set_join = Join(
     left=source,
     row_ids="user_id",
     right_parts=[
-        JoinPart(group_by=group_by) for group_by in [purchases_v1, returns_v1, users]
+        JoinPart(group_by=group_by) for group_by in [purchase_features, return_features, user_features]
     ],  # Include the three GroupBys
     version=0,
 )
 
-v2 = Join(
+online_training_set_join = Join(
     left=source,
     row_ids=["user_id"],
     right_parts=[
-        JoinPart(group_by=group_by) for group_by in [purchases_v1, returns_v1]
+        JoinPart(group_by=group_by) for group_by in [purchase_features, return_features]
     ],  # Include the two online GroupBys
     online=True,
     version=0,

@@ -1,4 +1,4 @@
-from group_bys.test.data import group_by_v1
+from group_bys.test.data import purchase_features
 
 from ai.chronon.types import EventSource, Join, JoinPart, Query, selects
 
@@ -15,9 +15,9 @@ source = EventSource(
     ),
 )
 
-v1 = Join(
+training_join = Join(
     left=source,
-    right_parts=[JoinPart(group_by=group_by_v1)],
+    right_parts=[JoinPart(group_by=purchase_features)],
     row_ids="user_id",
     version=0,
 )

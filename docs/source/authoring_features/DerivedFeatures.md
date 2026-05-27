@@ -76,7 +76,7 @@ transactions_source = EventSource(
        query=Query(selects=select("amount")),
 )
 
-v1 = GroupBy(
+card_amount_features = GroupBy(
    sources=[transactions_source],
    keys=["merchant_id"],
    aggregations=[
@@ -106,16 +106,16 @@ File `joins/sample/txn_fraud.py`
 from group_bys.sample_team import card_features
 from ai.chronon.types import Derivation, EventSource, Join, JoinPart
 
-v1 = Join(
+transaction_z_score_join = Join(
     online=True,
     left=EventSource(
         table="namespace.your_driver_table" # which contains merchant_ids and timestamps you want backfill for
     ),
-    right_parts=[JoinPart(group_by=card_features.v1),],
+    right_parts=[JoinPart(group_by=card_features.card_amount_features),],
     derivations=[
         Derivation(
             name="txn_z_score",
-            expression="array_mean(map_values(map_zip_with(sample_team_card_features_v1_amount_average_by_card_id_7d, sample_team_card_features_v1_amount_variance_by_card_id_7d, (k, mean, variance) -> (txn_value - mean)/variance)))",
+            expression="array_mean(map_values(map_zip_with(sample_team_card_features_card_amount_features_amount_average_by_card_id_7d, sample_team_card_features_card_amount_features_amount_variance_by_card_id_7d, (k, mean, variance) -> (txn_value - mean)/variance)))",
         )
     ],
 )
@@ -162,7 +162,7 @@ ip_successes_source = EventSource(
 
 
 # use bucketing to produce map of {ip: success_rate} and the client processes into avg
-v1 = GroupBy(
+merchant_success_features = GroupBy(
    sources=[ip_successes_source],
    keys=["merchant_id"],
    aggregations=[
@@ -185,16 +185,16 @@ File `joins/sample/txn_fraud.py`
 from group_bys.sample_team import merchant_features
 from ai.chronon.types import Derivation, EventSource, Join, JoinPart
 
-v1 = Join(
+merchant_success_join = Join(
     online=True,
     left=EventSource(
         table="namespace.your_driver_table" # which contains merchant_ids and timestamps you want backfill for
     ),
-    right_parts=[JoinPart(group_by=merchant_features.v1),],
+    right_parts=[JoinPart(group_by=merchant_features.merchant_success_features),],
     derivations=[
         Derivation(
             name="merchant_success_rate_avg",
-            expression="array_mean(map_values(sample_team_merchant_features_v1_success_avg_by_ip_7d))",
+            expression="array_mean(map_values(sample_team_merchant_features_merchant_success_features_success_avg_by_ip_7d))",
         )
     ],
 )

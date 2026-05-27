@@ -26,7 +26,7 @@ parent_join = Join(
     row_ids=["event_id"],
     right_parts=[
         JoinPart(
-            group_by=dim_listings.v1,
+            group_by=dim_listings.listing_features,
         ),
     ],
     version=0,

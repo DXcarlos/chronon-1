@@ -23,9 +23,9 @@ source = Source(
             )
     ))
 
-v1 = Join(
+training_set_join = Join(
     left=source,
-    right_parts=[JoinPart(group_by=group_by) for group_by in [purchases_v1, returns_v1, users]] # Include the three GroupBys
+    right_parts=[JoinPart(group_by=group_by) for group_by in [purchase_features, return_features, user_features]] # Include the three GroupBys
 )
 ```
 
@@ -41,28 +41,28 @@ Here is what one row of sample output would look like after running this join:
 ```
 user_id                                            | 24
 ts                                                 | 1701320475364
-quickstart_purchases_v1_purchase_price_sum_3d      | 331
-quickstart_purchases_v1_purchase_price_sum_14d     | 1574
-quickstart_purchases_v1_purchase_price_sum_30d     | 1934
-quickstart_purchases_v1_purchase_price_count_3d    | 1
-quickstart_purchases_v1_purchase_price_count_14d   | 4
-quickstart_purchases_v1_purchase_price_count_30d   | 5
-quickstart_purchases_v1_purchase_price_average_3d  | 331.0
-quickstart_purchases_v1_purchase_price_average_14d | 393.5
-quickstart_purchases_v1_purchase_price_average_30d | 386.8
-quickstart_purchases_v1_purchase_price_last10      | [331, 474, 497, 272, 360]
-quickstart_returns_v1_refund_amt_sum_3d            | null
-quickstart_returns_v1_refund_amt_sum_14d           | 76
-quickstart_returns_v1_refund_amt_sum_30d           | 645
-quickstart_returns_v1_refund_amt_count_3d          | null
-quickstart_returns_v1_refund_amt_count_14d         | 1
-quickstart_returns_v1_refund_amt_count_30d         | 3
-quickstart_returns_v1_refund_amt_average_3d        | null
-quickstart_returns_v1_refund_amt_average_14d       | 76.0
-quickstart_returns_v1_refund_amt_average_30d       | 215.0
-quickstart_returns_v1_refund_amt_last2             | [76, 388]
-quickstart_users_v1_account_created_ds             | 2023-07-01
-quickstart_users_v1_email_verified                 | 0
+quickstart_purchases_purchase_features_purchase_price_sum_3d      | 331
+quickstart_purchases_purchase_features_purchase_price_sum_14d     | 1574
+quickstart_purchases_purchase_features_purchase_price_sum_30d     | 1934
+quickstart_purchases_purchase_features_purchase_price_count_3d    | 1
+quickstart_purchases_purchase_features_purchase_price_count_14d   | 4
+quickstart_purchases_purchase_features_purchase_price_count_30d   | 5
+quickstart_purchases_purchase_features_purchase_price_average_3d  | 331.0
+quickstart_purchases_purchase_features_purchase_price_average_14d | 393.5
+quickstart_purchases_purchase_features_purchase_price_average_30d | 386.8
+quickstart_purchases_purchase_features_purchase_price_last10      | [331, 474, 497, 272, 360]
+quickstart_returns_return_features_refund_amt_sum_3d            | null
+quickstart_returns_return_features_refund_amt_sum_14d           | 76
+quickstart_returns_return_features_refund_amt_sum_30d           | 645
+quickstart_returns_return_features_refund_amt_count_3d          | null
+quickstart_returns_return_features_refund_amt_count_14d         | 1
+quickstart_returns_return_features_refund_amt_count_30d         | 3
+quickstart_returns_return_features_refund_amt_average_3d        | null
+quickstart_returns_return_features_refund_amt_average_14d       | 76.0
+quickstart_returns_return_features_refund_amt_average_30d       | 215.0
+quickstart_returns_return_features_refund_amt_last2             | [76, 388]
+quickstart_users_user_features_account_created_ds             | 2023-07-01
+quickstart_users_user_features_email_verified                 | 0
 ds                                                 | 2023-11-30
 ```
 
@@ -119,7 +119,7 @@ search_features = GroupBy(
     aggregations=[...],
 )
 
-v1 = Join(
+search_join = Join(
     left=search_events,
     right_parts=[
         JoinPart(
@@ -253,7 +253,7 @@ training_driver = StagingQuery(
   query="...",
 )
 # ml_models/zipline/joins/team_name/model.py
-v1 = Join(
+new_model_join = Join(
   # driver table can be either output of an staging_query or custom hive table
   left=HiveEventSource(
     namespace="db_name",
@@ -262,8 +262,8 @@ v1 = Join(
   )
   # all group_bys for the model for both backfill & serving
   right_parts=[
-    JoinPart(group_by=feature_group_1.v1),
-    JoinPart(group_by=feature_group_2.v1),
+    JoinPart(group_by=feature_group_1.user_features),
+    JoinPart(group_by=feature_group_2.transaction_features),
     ...
   ],
   # set this to @daily if you want to enable continuous backfill in a daily DAG
@@ -326,7 +326,7 @@ log_refresh_driver = StagingQuery(
   """
 )
 # ml_models/zipline/joins/team_name/model.py
-v1 = Join(
+log_refresh_join = Join(
   # it's important to use the SAME staging query before and after.
   left=HiveEventSource(
     namespace="db_name",
@@ -335,8 +335,8 @@ v1 = Join(
   ),
   # all group_bys for the model for both backfill & serving
   right_parts=[
-    JoinPart(group_by=feature_group_1.v1),
-    JoinPart(group_by=feature_group_2.v1),
+    JoinPart(group_by=feature_group_1.user_features),
+    JoinPart(group_by=feature_group_2.transaction_features),
 
     ...
   ],
@@ -356,16 +356,16 @@ v1 = Join(
 It’s important to NOT change the left to a different table. It’s OK to change the underlying staging query logic, as long as the table name is unchanged. This is critical because if Chronon detects any changes on the left, it will treat it as a completely new join and archive the historical data.
 If indeed something like that happened, or if you must use a different left table, consider creating a new join and adding the output of the previous join as a bootstrap part.
 ```python
-v2 = Join(
+different_driver_join = Join(
   # if you must use a different driver table
   left=HiveEventSource(
     namespace="db_name",
     table=driver_table.new_segment_driver.table,
     query=Query(...)
   ),
-  # carry over all other parameters from v1 join
+  # carry over all other parameters from production join
   ...
-  # add v1 table as a bootstrap part
+  # add production join table as a bootstrap part
   bootstrap_parts=[BootstrapPart(table="db_name.team_name_model_v1")]
 )
 ```
@@ -382,23 +382,23 @@ right_parts_production = [...]
 right_parts_experimental = [...]
 driver_table = HiveEventSource(
   namespace="db_name",
-  table=driver_table.v1.table,
+  table=driver_table.training_driver.table,
   query=Query(wheres=downsampling_filters)
 )
 # config for existing model in production
-v1 = Join(
+production_join = Join(
   left=driver_table,
   right_parts=right_parts_production,
   ...
 )
 # config for next model for experimentation
-v2 = Join(
+experimental_join = Join(
   left=driver_table,
   right_parts=right_parts_production + right_parts_experimental,
   ...
   # include production join as a bootstrap_part
   bootstrap_parts=[
-    BootstrapPart(table=v1.table)
+    BootstrapPart(table=production_join.table)
   ]
 )
 ```
@@ -432,19 +432,19 @@ driver_table = HiveEventSource(
   query=Query(wheres=downsampling_filters)
 )
 # config for existing model in production
-v1 = Join(
+production_join = Join(
   left=driver_table,
   right_parts=right_parts,
   ...
 )
 # config for next model for experimentation
-v2 = Join(
+expanded_driver_join = Join(
   left=driver_table,
   right_parts=right_parts,
   ...
   # include production join as a bootstrap_part
   bootstrap_parts=[
-    BootstrapPart(table=v1.table)
+    BootstrapPart(table=production_join.table)
   ]
 )
 ```
@@ -456,15 +456,15 @@ Goal:
 2. Add that join as a bootstrap part in your join in order to reuse the data
 ```python
 # ml_models/zipline/joins/team_name_a/model_a.py
-v1 = Join(...)
+production_join = Join(...)
 # ml_models/zipline/joins/team_name_b/model_b.py
 from joins.team_name_a import model_a
 
-v2 = Join(
+reused_feature_join = Join(
 ...,
 bootstrap_parts=[
 	BootstrapPart(
-        table=model_a.v1.table,
+        table=model_a.production_join.table,
         query=Query(
             # select the list of features to reuse
             selects=select(
@@ -485,7 +485,7 @@ Goal:
 3. Since Chronon has no way to backfill the external features natively, instead we expect users to leverage bootstrap to
    ingest externally backfilled data for these external fields, such that they can be concatenated with other features
 ```python
-v1 = Join(
+advanced_feature_join = Join(
    left=...,
    right_parts=...,
    online_external_parts=[
@@ -559,7 +559,7 @@ CHRONON_TO_LEGACY_NAME_MAPPING_DICT = {
 	"chronon_output_column_name": "legacy_table_column_name",
 	...
 }
-v1 = Join(
+production_join = Join(
   # driver table with union history
   left=HiveEventSource(
     namespace="db_name",
@@ -588,7 +588,7 @@ Goal
 backfill_2023_05_01 = Join(
    left=HiveEventSource(
       namespace="db_name",
-      table=driver_table.v1.table,
+      table=driver_table.training_driver.table,
       query=Query(
          start_partition="2023-05-01",
          end_partition="2023-05-01"
@@ -598,7 +598,7 @@ backfill_2023_05_01 = Join(
       JoinPart(group_by=...)
    ]
 )
-v1 = Join(
+recovered_feature_join = Join(
    ...,
    bootstrap_parts=[
       BootstrapPart(table=backfill_2023_05_01.table)

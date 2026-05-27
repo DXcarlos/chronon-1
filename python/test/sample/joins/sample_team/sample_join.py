@@ -19,9 +19,9 @@ from ai.chronon.types import Join, JoinPart
 from ai.chronon.repo.constants import RunMode
 from ai.chronon.types import EnvironmentVariables
 
-v1 = Join(
+sample_join = Join(
     left=sample_sources.staging_entities,
-    right_parts=[JoinPart(group_by=sample_group_by.v1)],
+    right_parts=[JoinPart(group_by=sample_group_by.sample_features)],
     row_ids="place_id",
     table_properties={"config_json": """{"sample_key": "sample_value"}"""},
     output_namespace="sample_namespace",
@@ -36,7 +36,7 @@ v1 = Join(
 
 never = Join(
     left=sample_sources.staging_entities,
-    right_parts=[JoinPart(group_by=sample_group_by.v1)],
+    right_parts=[JoinPart(group_by=sample_group_by.sample_features)],
     row_ids=["s2CellId", "place_id"],
     output_namespace="sample_namespace",
     offline_schedule="@never",
@@ -45,7 +45,7 @@ never = Join(
 
 group_by_of_group_by = Join(
     left=sample_sources.staging_entities,
-    right_parts=[JoinPart(group_by=sample_group_by_group_by.v1)],
+    right_parts=[JoinPart(group_by=sample_group_by_group_by.nested_group_by_features)],
     row_ids="s2CellId",
     output_namespace="sample_namespace",
     version=0,
@@ -53,7 +53,7 @@ group_by_of_group_by = Join(
 
 consistency_check = Join(
     left=sample_sources.staging_entities,
-    right_parts=[JoinPart(group_by=sample_group_by.v1)],
+    right_parts=[JoinPart(group_by=sample_group_by.sample_features)],
     row_ids="place_id",
     output_namespace="sample_namespace",
     check_consistency=True,
@@ -62,7 +62,7 @@ consistency_check = Join(
 
 no_log_flattener = Join(
     left=sample_sources.staging_entities,
-    right_parts=[JoinPart(group_by=sample_group_by.v1)],
+    right_parts=[JoinPart(group_by=sample_group_by.sample_features)],
     row_ids=["place_id"],
     output_namespace="sample_namespace",
     sample_percent=0.0,

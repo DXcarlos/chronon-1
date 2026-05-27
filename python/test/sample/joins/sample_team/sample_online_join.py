@@ -26,20 +26,20 @@ from sources import sample_sources
 from ai.chronon.repo.constants import RunMode
 from ai.chronon.types import EnvironmentVariables, Join, JoinPart
 
-v1 = Join(
+online_join = Join(
     left=sample_sources.event_source,
     row_ids=["subject", "group_by_subject"],
     right_parts=[
         JoinPart(
-            group_by=event_sample_group_by.v1,
+            group_by=event_sample_group_by.event_features,
             key_mapping={"subject": "group_by_subject"},
         ),
         JoinPart(
-            group_by=entity_sample_group_by_from_module.v1,
+            group_by=entity_sample_group_by_from_module.entity_module_features,
             key_mapping={"subject": "group_by_subject"},
         ),
         JoinPart(
-            group_by=group_by_with_kwargs.v1,
+            group_by=group_by_with_kwargs.features_with_kwargs,
             key_mapping={"subject": "group_by_subject"},
         ),
     ],
