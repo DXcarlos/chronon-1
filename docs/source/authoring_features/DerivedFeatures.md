@@ -76,7 +76,7 @@ transactions_source = EventSource(
        query=Query(selects=select("amount")),
 )
 
-v1 = GroupBy(
+card_aggregates = GroupBy(
    sources=[transactions_source],
    keys=["merchant_id"],
    aggregations=[
@@ -106,16 +106,16 @@ File `joins/sample/txn_fraud.py`
 from group_bys.sample_team import card_features
 from ai.chronon.types import Derivation, EventSource, Join, JoinPart
 
-v1 = Join(
+transaction_fraud = Join(
     online=True,
     left=EventSource(
         table="namespace.your_driver_table" # which contains merchant_ids and timestamps you want backfill for
     ),
-    right_parts=[JoinPart(group_by=card_features.v1),],
+    right_parts=[JoinPart(group_by=card_features.card_aggregates),],
     derivations=[
         Derivation(
             name="txn_z_score",
-            expression="array_mean(map_values(map_zip_with(sample_team_card_features_v1_amount_average_by_card_id_7d, sample_team_card_features_v1_amount_variance_by_card_id_7d, (k, mean, variance) -> (txn_value - mean)/variance)))",
+            expression="array_mean(map_values(map_zip_with(sample_team_card_features_card_aggregates_amount_average_by_card_id_7d, sample_team_card_features_card_aggregates_amount_variance_by_card_id_7d, (k, mean, variance) -> (txn_value - mean)/variance)))",
         )
     ],
 )
@@ -162,7 +162,7 @@ ip_successes_source = EventSource(
 
 
 # use bucketing to produce map of {ip: success_rate} and the client processes into avg
-v1 = GroupBy(
+ip_success_features = GroupBy(
    sources=[ip_successes_source],
    keys=["merchant_id"],
    aggregations=[
@@ -185,16 +185,16 @@ File `joins/sample/txn_fraud.py`
 from group_bys.sample_team import merchant_features
 from ai.chronon.types import Derivation, EventSource, Join, JoinPart
 
-v1 = Join(
+transaction_fraud = Join(
     online=True,
     left=EventSource(
         table="namespace.your_driver_table" # which contains merchant_ids and timestamps you want backfill for
     ),
-    right_parts=[JoinPart(group_by=merchant_features.v1),],
+    right_parts=[JoinPart(group_by=merchant_features.ip_success_features),],
     derivations=[
         Derivation(
             name="merchant_success_rate_avg",
-            expression="array_mean(map_values(sample_team_merchant_features_v1_success_avg_by_ip_7d))",
+            expression="array_mean(map_values(sample_team_merchant_features_ip_success_features_success_avg_by_ip_7d))",
         )
     ],
 )
@@ -226,4 +226,4 @@ Chronon supports schema evolution for derived features. This means that you can 
 
 During offline computation, derived features are computed at the end of the join, at the same time when the final output table is computed. When Chronon detects that a new derived feature has been added to a join, how it works currently is that it will archive the final output table and recompute it, but it will not recompute any of the intermediate tables that store computed group by data.
 
-During online serving, derived features are computed in the `Fetcher`, instead of at `GroupByUpload` or `GroupByStreaming` time, so it naturally supports schema evolution. Derived features are also covered by logging. When derived features are added or modified, Chronon generates a new schema version similar to when group bys are added to joins, such that offline decoding can continue to work. 
+During online serving, derived features are computed in the `Fetcher`, instead of at `GroupByUpload` or `GroupByStreaming` time, so it naturally supports schema evolution. Derived features are also covered by logging. When derived features are added or modified, Chronon generates a new schema version similar to when group bys are added to joins, such that offline decoding can continue to work.

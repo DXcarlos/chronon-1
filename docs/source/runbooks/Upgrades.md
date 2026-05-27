@@ -49,13 +49,13 @@ zipline admin upgrade control-plane aws --release <release>
 If you have [scheduled some streaming GroupBys](../running_on_zipline_hub/Deploy.md), you can have them be redeployed to pick up the new release. To do so, run the following command for each relevant config:
 
 ```bash
-zipline admin upgrade data-plane compiled/group_bys/aws/user_activities.v1__1
+zipline admin upgrade data-plane compiled/group_bys/aws/user_activities.recent_activity__1
 ```
 
 Multiple configs can be passed in a single invocation:
 
 ```bash
-zipline admin upgrade data-plane compiled/group_bys/aws/user_activities.v1__1 compiled/group_bys/aws/payments.v2__1
+zipline admin upgrade data-plane compiled/group_bys/aws/user_activities.recent_activity__1 compiled/group_bys/aws/payments.purchase_features__1
 ```
 
 **Note**

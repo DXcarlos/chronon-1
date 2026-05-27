@@ -86,7 +86,7 @@ source = Source(
 
 window_sizes = [Window(length=day, timeUnit=TimeUnit.DAYS) for day in [3, 14, 30]] # Define some window sizes to use below
 
-v1 = GroupBy(
+purchase_features = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     aggregations=[Aggregation(
@@ -108,7 +108,7 @@ v1 = GroupBy(
 )
 ```
 
-See the whole code file here: [purchases GroupBy](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/quickstart/purchases.py). This is also in your docker image. We'll be running computation for it and the other GroupBys in [Step 3 - Backfilling Data](#step-3---backfilling-data).
+See the whole code file here: [purchases GroupBy](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/quickstart/purchases.py). This example is adapted from the file in your docker image. We'll be running computation for it and the other GroupBys in [Step 3 - Backfilling Data](#step-3---backfilling-data).
 
 **Feature set 2: Returns data features**
 
@@ -127,14 +127,14 @@ source = Source(
         )
     ))
 
-v1 = GroupBy(
+user_features = GroupBy(
     sources=[source],
     keys=["user_id"], # Primary key is the same as the primary key for the source table
     aggregations=None # In this case, there are no aggregations or windows to define
 )
 ```
 
-Taken from the [users GroupBy](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/quickstart/users.py).
+Adapted from the [users GroupBy](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/quickstart/users.py).
 
 
 ### Step 2 - Join the features together
@@ -161,13 +161,13 @@ source = Source(
             ) # The event time used to compute feature values as-of
     ))
 
-v1 = Join(
+training_set = Join(
     left=source,
-    right_parts=[JoinPart(group_by=group_by) for group_by in [purchases_v1, refunds_v1, users]] # Include the three GroupBys
+    right_parts=[JoinPart(group_by=group_by) for group_by in [purchase_features, return_features, user_features]] # Include the three GroupBys
 )
 ```
 
-Taken from the [training_set Join](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/joins/quickstart/training_set.py).
+Adapted from the [training_set Join](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/joins/quickstart/training_set.py).
 
 The `left` side of the join is what defines the timestamps and primary keys for the backfill (notice that it is built on top of the `checkout` event, as dictated by our use case).
 
@@ -185,7 +185,7 @@ This converts it into a thrift definition that we can submit to spark with the f
 
 
 ```shell
-run.py --conf production/joins/quickstart/training_set.v1
+run.py --conf production/joins/quickstart/training_set.offline_training_set
 ```
 
 The output of the backfill would contain the user_id and ts columns from the left source, as well as the 11 feature columns from the three GroupBys that we created.
@@ -201,10 +201,10 @@ spark-sql
 And then:
 
 ```sql
-spark-sql> SELECT user_id, quickstart_returns_v1_refund_amt_sum_30d, quickstart_purchases_v1_purchase_price_sum_14d, quickstart_users_v1_email_verified from default.quickstart_training_set_v1 limit 100;
+spark-sql> SELECT user_id, quickstart_returns_return_features_refund_amt_sum_30d, quickstart_purchases_purchase_features_purchase_price_sum_14d, quickstart_users_user_features_email_verified from default.quickstart_training_set_offline_training_set limit 100;
 ```
 
-Note that this only selects a few columns. You can also run a `select * from default.quickstart_training_set_v1 limit 100` to see all columns, however, note that the table is quite wide and the results might not be very readable on your screen.
+Note that this only selects a few columns. You can also run a `select * from default.quickstart_training_set_offline_training_set limit 100` to see all columns, however, note that the table is quite wide and the results might not be very readable on your screen.
 
 To exit the sql shell you can run:
 
@@ -227,17 +227,17 @@ In order to serve online flows, we first need the data uploaded to the online KV
 Upload the purchases GroupBy:
 
 ```shell
-run.py --mode upload --conf production/group_bys/quickstart/purchases.v1 --ds  2023-12-01
+run.py --mode upload --conf production/group_bys/quickstart/purchases.purchase_features --ds  2023-12-01
 
-spark-submit --class ai.chronon.quickstart.online.Spark2MongoLoader --master local[*] /srv/onlineImpl/target/scala-2.12/mongo-online-impl-assembly-0.1.0-SNAPSHOT.jar default.quickstart_purchases_v1_upload mongodb://admin:admin@mongodb:27017/?authSource=admin
+spark-submit --class ai.chronon.quickstart.online.Spark2MongoLoader --master local[*] /srv/onlineImpl/target/scala-2.12/mongo-online-impl-assembly-0.1.0-SNAPSHOT.jar default.quickstart_purchases_purchase_features_upload mongodb://admin:admin@mongodb:27017/?authSource=admin
 ```
 
 Upload the returns GroupBy:
 
 ```shell
-run.py --mode upload --conf production/group_bys/quickstart/returns.v1 --ds  2023-12-01
+run.py --mode upload --conf production/group_bys/quickstart/returns.return_features --ds  2023-12-01
 
-spark-submit --class ai.chronon.quickstart.online.Spark2MongoLoader --master local[*] /srv/onlineImpl/target/scala-2.12/mongo-online-impl-assembly-0.1.0-SNAPSHOT.jar default.quickstart_returns_v1_upload mongodb://admin:admin@mongodb:27017/?authSource=admin
+spark-submit --class ai.chronon.quickstart.online.Spark2MongoLoader --master local[*] /srv/onlineImpl/target/scala-2.12/mongo-online-impl-assembly-0.1.0-SNAPSHOT.jar default.quickstart_returns_return_features_upload mongodb://admin:admin@mongodb:27017/?authSource=admin
 ```
 
 ### Upload Join Metadata
@@ -245,7 +245,7 @@ spark-submit --class ai.chronon.quickstart.online.Spark2MongoLoader --master loc
 If we want to use the `FetchJoin` api rather than `FetchGroupby`, then we also need to upload the join metadata:
 
 ```bash
-run.py --mode metadata-upload --conf production/joins/quickstart/training_set.v2
+run.py --mode metadata-upload --conf production/joins/quickstart/training_set.online_training_set
 ```
 
 This makes it so that the online fetcher knows how to take a request for this join and break it up into individual GroupBy requests, returning the unified vector, similar to how the Join backfill produces the wide view table with all features.
@@ -257,13 +257,13 @@ With the above entities defined, you can now easily fetch feature vectors with a
 Fetching a join:
 
 ```bash
-run.py --mode fetch --type join --name quickstart/training_set.v2 -k '{"user_id":"5"}'
+run.py --mode fetch --type join --name quickstart/training_set.online_training_set -k '{"user_id":"5"}'
 ```
 
 You can also fetch a single GroupBy (this would not require the Join metadata upload step performed earlier):
 
 ```bash
-run.py --mode fetch --type group-by --name quickstart/purchases.v1 -k '{"user_id":"5"}'
+run.py --mode fetch --type group-by --name quickstart/purchases.purchase_features -k '{"user_id":"5"}'
 ```
 
 For production, the Java client is usually embedded directly into services.
@@ -271,7 +271,7 @@ For production, the Java client is usually embedded directly into services.
 ```Java
 Map<String, String> keyMap = new HashMap<>();
 keyMap.put("user_id", "123");
-Fetcher.fetch_join(new Request("quickstart/training_set_v1", keyMap))
+Fetcher.fetch_join(new Request("quickstart/training_set.online_training_set", keyMap))
 ```
 sample response
 ```
@@ -294,7 +294,7 @@ Step 1: log fetches
 
 First, make sure you've ran a few fetch requests. Run:
 
-`run.py --mode fetch --type join --name quickstart/training_set.v2 -k '{"user_id":"5"}'`
+`run.py --mode fetch --type join --name quickstart/training_set.online_training_set -k '{"user_id":"5"}'`
 
 A few times to generate some fetches.
 
@@ -303,28 +303,28 @@ With that complete, you can run this to create a usable log table (these command
 ```bash
 spark-submit --class ai.chronon.quickstart.online.MongoLoggingDumper --master local[*] /srv/onlineImpl/target/scala-2.12/mongo-online-impl-assembly-0.1.0-SNAPSHOT.jar default.chronon_log_table mongodb://admin:admin@mongodb:27017/?authSource=admin
 compile.py --conf group_bys/quickstart/schema.py
-run.py --mode backfill --conf production/group_bys/quickstart/schema.v1
-run.py --mode log-flattener --conf production/joins/quickstart/training_set.v2 --log-table default.chronon_log_table --schema-table default.quickstart_schema_v1
+run.py --mode backfill --conf production/group_bys/quickstart/schema.fetch_logging_schema
+run.py --mode log-flattener --conf production/joins/quickstart/training_set.online_training_set --log-table default.chronon_log_table --schema-table default.quickstart_schema_fetch_logging_schema
 ```
 
-This creates a `default.quickstart_training_set_v2_logged` table that contains the results of each of the fetch requests that you previously made, along with the timestamp at which you made them and the `user` that you requested.
+This creates a `default.quickstart_training_set_online_training_set_logged` table that contains the results of each of the fetch requests that you previously made, along with the timestamp at which you made them and the `user` that you requested.
 
-**Note:** Once you run the above command, it will create and "close" the log partitions, meaning that if you make additional fetches on the same day (UTC time) it will not append. If you want to go back and generate more requests for online/offline consistency, you can drop the table (run `DROP TABLE default.quickstart_training_set_v2_logged` in a `spark-sql` shell) before rerunning the above command.
+**Note:** Once you run the above command, it will create and "close" the log partitions, meaning that if you make additional fetches on the same day (UTC time) it will not append. If you want to go back and generate more requests for online/offline consistency, you can drop the table (run `DROP TABLE default.quickstart_training_set_online_training_set_logged` in a `spark-sql` shell) before rerunning the above command.
 
 Now you can compute consistency metrics with this command:
 
 ```bash
-run.py --mode consistency-metrics-compute --conf production/joins/quickstart/training_set.v2
+run.py --mode consistency-metrics-compute --conf production/joins/quickstart/training_set.online_training_set
 ```
 
-This job takes will take the primary key(s) and timestamps from the log table (`default.quickstart_training_set_v2_logged` in this case), and uses those to create and run a join backfill. It then compares the backfilled results to the actual logged values that were fetched online
+This job takes will take the primary key(s) and timestamps from the log table (`default.quickstart_training_set_online_training_set_logged` in this case), and uses those to create and run a join backfill. It then compares the backfilled results to the actual logged values that were fetched online
 
 It produces two output tables:
 
-1. `default.quickstart_training_set_v2_consistency`: A human readable table that you can query to see the results of the consistency checks.
+1. `default.quickstart_training_set_online_training_set_consistency`: A human readable table that you can query to see the results of the consistency checks.
    1. You can enter a sql shell by running `spark-sql` from your docker bash sesion, then query the table.
-   2.  Note that it has many columns (multiple metrics per feature), so you might want to run a `DESC default.quickstart_training_set_v2_consistency` first, then select a few columns that you care about to query.
-2. `default.quickstart_training_set_v2_consistency_upload`: A list of KV bytes that is uploaded to the online KV store, that can be used to power online data quality monitoring flows. Not meant to be human readable.
+   2.  Note that it has many columns (multiple metrics per feature), so you might want to run a `DESC default.quickstart_training_set_online_training_set_consistency` first, then select a few columns that you care about to query.
+2. `default.quickstart_training_set_online_training_set_consistency_upload`: A list of KV bytes that is uploaded to the online KV store, that can be used to power online data quality monitoring flows. Not meant to be human readable.
 
 
 ## Conclusion

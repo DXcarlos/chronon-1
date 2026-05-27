@@ -336,7 +336,7 @@ Since ExternalSources only work online, you must provide historical values for o
 Use logged online requests to populate training data:
 
 ```python
-v1 = Join(
+fraud_training_set = Join(
     left=...,
     right_parts=[...],
     online_external_parts=[
@@ -359,7 +359,7 @@ v1 = Join(
 Provide a custom backfill table with historical external feature values:
 
 ```python
-v1 = Join(
+model_with_custom_bootstrap = Join(
     left=...,
     right_parts=[...],
     online_external_parts=[
@@ -391,7 +391,7 @@ v1 = Join(
 Combine logged data for recent periods with custom backfill for historical periods:
 
 ```python
-v1 = Join(
+hybrid_training_set = Join(
     left=driver_table_with_union_history,  # Union of old and new drivers
     online_external_parts=[...],
     # Bootstrap from log for recent data
@@ -493,7 +493,7 @@ contextual = ContextualSource(
 )
 
 # Define the join
-v1 = Join(
+payment_fraud_features = Join(
     metadata=MetaData(
         name="fraud.payment_fraud_features",
         team="fraud",
@@ -507,8 +507,8 @@ v1 = Join(
         table="fraud.payment_events"
     ),
     right_parts=[
-        JoinPart(group_by=payment_history.v1),
-        JoinPart(group_by=user_profile.v1)
+        JoinPart(group_by=payment_history.purchase_features),
+        JoinPart(group_by=user_profile.user_features)
     ],
     online_external_parts=[
         ExternalPart(user_service, prefix="usr"),

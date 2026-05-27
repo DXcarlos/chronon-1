@@ -88,7 +88,7 @@ The agent will run `zipline hub list-tables analytics --engine-type BIGQUERY` an
 
 > *"Add a 10-day window to all aggregations in the `user_purchases` GroupBy. Bump the version."*
 
-The agent will read the existing GroupBy, add `"10d"` to every `windows` list, and rename the variable from `v1` to `v2` (or whichever the next version is). If you say "make the change in place" instead, it will edit the existing variable without versioning. The agent will recompile and re-eval after the change.
+The agent will read the existing GroupBy, add `"10d"` to every `windows` list, and bump the `version=` argument while keeping the descriptive variable name stable. If you say "make the change in place" instead, it will edit the existing version without bumping it. The agent will recompile and re-eval after the change.
 
 ---
 

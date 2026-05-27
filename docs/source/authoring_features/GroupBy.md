@@ -188,7 +188,8 @@ your_gb = GroupBy(
 ```
 > Note: Once a groupBy is marked online, the compiler `compile.py` will prevent you from updating it. This is so that
 > you don't accidentally merge a change that release modified features out-of-band with model updates. You can overwrite
-> this behavior by deleting the older compiled output. Our recommendation is to create a new version `your_gb_v2` instead.
+> this behavior by deleting the older compiled output. Our recommendation is to either bump the `version=` argument for
+> an intentional in-place rollout, or create a new descriptive GroupBy variable if both entities should run in parallel.
 
 
 ### Tuning
@@ -225,7 +226,7 @@ source = Source(
 
 window_sizes = ["3d", "14d", "30d"] # Define some window sizes to use below
 
-v1 = GroupBy(
+return_features = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,
@@ -267,7 +268,7 @@ source = Source(
 
 window_sizes = ["3d", "14d", "30d"]
 
-v1 = GroupBy(
+purchase_features_by_card = GroupBy(
     sources=[source],
     keys=["user_id"],
     online=True,
@@ -301,7 +302,7 @@ v1 = GroupBy(
 
 ### Simple Batch Event GroupBy examples
 
-Example GroupBy with windowed aggregations. Taken from [purchases.py](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/quickstart/purchases.py).
+Example GroupBy with windowed aggregations, adapted from [purchases.py](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/quickstart/purchases.py).
 
 Important things to note about this case relative to the streaming GroupBy:
 * The default accuracy here is `SNAPSHOT` meaning that updates to the online KV store only happen in batch, and also backfills will be midnight accurate rather than intra day accurate.
@@ -318,7 +319,7 @@ source = Source(
 
 window_sizes = ["3d", "14d", "30d"] # Define some window sizes to use below
 
-v1 = GroupBy(
+purchase_features = GroupBy(
     sources=[source],
     keys=["user_id"], # We are aggregating by user
     online=True,
@@ -347,7 +348,7 @@ v1 = GroupBy(
 
 #### Batch Entity GroupBy examples
 
-This is taken from the [Users GroupBy](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/quickstart/users.py) from the quickstart tutorial.
+This is adapted from the [Users GroupBy](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/quickstart/users.py) from the quickstart tutorial.
 
 
 ```python
@@ -364,7 +365,7 @@ source = Source(
         )
     ))
 
-v1 = GroupBy(
+user_features = GroupBy(
     sources=[source],
     keys=["user_id"], # Primary key is the same as the primary key for the source table
     aggregations=None, # In this case, there are no aggregations or windows to define

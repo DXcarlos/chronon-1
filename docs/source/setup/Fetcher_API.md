@@ -30,7 +30,7 @@ Names in path parameters are Chronon metadata names. URL-encode names that conta
 The v1 fetch endpoints accept a JSON array of entity key maps. Each map is one lookup. The response preserves request order.
 
 ```bash
-curl -X POST "http://localhost:9000/v1/fetch/join/quickstart.demo_v1" \
+curl -X POST "http://localhost:9000/v1/fetch/join/quickstart.demo_training_set" \
   -H "Content-Type: application/json" \
   -d '[{"user_id": "5"}, {"user_id": "7"}]'
 ```
@@ -56,7 +56,7 @@ Individual lookup failures are returned as result entries with `"status": "Failu
 `GET /v1/join/:name/schema` returns the Avro schemas used by online join fetching and logging.
 
 ```bash
-curl "http://localhost:9000/v1/join/quickstart.demo_v1/schema" | jq
+curl "http://localhost:9000/v1/join/quickstart.demo_training_set/schema" | jq
 ```
 
 Response fields:
@@ -74,7 +74,7 @@ Response fields:
 `GET /v1/groupby/:name/schema` returns the Avro schemas used by online GroupBy fetching.
 
 ```bash
-curl "http://localhost:9000/v1/groupby/quickstart.user_activity_v1/schema" | jq
+curl "http://localhost:9000/v1/groupby/quickstart.user_activity_features/schema" | jq
 ```
 
 Response fields:
@@ -94,7 +94,7 @@ GroupBy schema fetching is available only for online GroupBys. If a GroupBy is n
 `GET /v1/groupby/:name/status` returns the latest uploaded batch watermark for an online GroupBy.
 
 ```bash
-curl "http://localhost:9000/v1/groupby/quickstart.user_activity_v1/status" | jq
+curl "http://localhost:9000/v1/groupby/quickstart.user_activity_features/status" | jq
 ```
 
 Response fields:
@@ -109,6 +109,6 @@ Response fields:
 The Zipline CLI can call schema endpoints through the fetcher service:
 
 ```bash
-zipline hub fetch compiled/joins/quickstart/demo_v1 --schema --fetcher-url http://localhost:9000
-zipline hub fetch compiled/group_bys/quickstart/user_activity_v1 --schema --fetcher-url http://localhost:9000
+zipline hub fetch compiled/joins/quickstart/demo_training_set --schema --fetcher-url http://localhost:9000
+zipline hub fetch compiled/group_bys/quickstart/user_activity_features --schema --fetcher-url http://localhost:9000
 ```

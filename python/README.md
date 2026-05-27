@@ -70,7 +70,7 @@ from sources import sample_sources
 sum_cols = [f"active_{x}_days" for x in [30, 90, 120]]
 
 
-v0 = GroupBy(
+user_activity_features = GroupBy(
   sources=test_source.user_activity,
   keys=["user"],
   aggregations=Aggregations(
@@ -117,10 +117,10 @@ from ai.chronon.join import Join, JoinPart
 from sources import sample_sources
 from group_bys.example_team import example_group_by
 
-v1 = Join(
+website_activity_join = Join(
     left=sample_sources.website__views,
     right_parts=[
-        JoinPart(group_by=example_group_by.v0),
+        JoinPart(group_by=example_group_by.user_activity_features),
     ],
     online=True,       # True if this join will be fetched in production.
     production=False,  # True if this join should not use non-production group bys.
