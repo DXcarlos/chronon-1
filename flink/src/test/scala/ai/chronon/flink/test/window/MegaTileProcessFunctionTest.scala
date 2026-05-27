@@ -78,6 +78,62 @@ class MegaTileProcessFunctionTest extends AnyFlatSpec with Matchers {
         expectedKey = "gen_catchup",
         expectedDayStart = dayStart("2025-07-21T00:00:00Z"),
         expectedValues = windowValues(2L, 3L, 3L))
+
+      // When the watermark catches up enough for Live mode, the event path must rebuild from the
+      // current live range before applying the incremental update.
+      driver.processWatermark("2025-07-21T11:29:40Z")
+      driver.setProcessingTime("2025-07-21T11:35:09Z")
+      driver.processEvent("gen_catchup", "2025-07-21T11:35:09Z", "user_after_transition")
+      assertSingleOutput(
+        driver.drainNewOutputs(),
+        expectedKey = "gen_catchup",
+        expectedDayStart = dayStart("2025-07-21T00:00:00Z"),
+        expectedValues = windowValues(2L, 4L, 4L))
+    }
+  }
+
+  it should "Live event just after hop does not rebuild small-window cache at next hop" in {
+    withDriver(bufferingOutputTimeMillis = 0L) { driver =>
+      val key = "gen_live_after_hop"
+
+      driver.processWatermark("2025-07-21T10:30:00Z")
+      driver.setProcessingTime("2025-07-21T10:35:00Z")
+      driver.processEvent(key, "2025-07-21T10:35:00Z", "user_left_edge")
+      assertSingleOutput(
+        driver.drainNewOutputs(),
+        expectedKey = key,
+        expectedDayStart = dayStart("2025-07-21T00:00:00Z"),
+        expectedValues = windowValues(1L, 1L, 1L))
+
+      driver.processWatermark("2025-07-21T11:30:00Z")
+      driver.setProcessingTime("2025-07-21T11:35:09Z")
+      driver.drainNewOutputs().last.values shouldEqual windowValues(1L, 1L, 1L)
+
+      // If the event path rebuilt at 11:40, the live 1h start would advance to 10:40 and drop the
+      // left-edge 10:35 tile too early.
+      driver.processEvent(key, "2025-07-21T11:35:09Z", "user_current")
+      assertSingleOutput(
+        driver.drainNewOutputs(),
+        expectedKey = key,
+        expectedDayStart = dayStart("2025-07-21T00:00:00Z"),
+        expectedValues = windowValues(2L, 2L, 2L))
+    }
+  }
+
+  it should "Live event exactly on hop updates just-opened small-window tile" in {
+    withDriver(bufferingOutputTimeMillis = 0L) { driver =>
+      val key = "gen_live_exact_hop"
+
+      driver.processWatermark("2025-07-21T11:30:00Z")
+      driver.setProcessingTime("2025-07-21T11:35:00Z")
+      driver.processEvent(key, "2025-07-21T11:35:00Z", "user_exact_hop")
+
+      // processor.onEvent includes retained tiles using tileStart < smallWindowAsOfTs.
+      assertSingleOutput(
+        driver.drainNewOutputs(),
+        expectedKey = key,
+        expectedDayStart = dayStart("2025-07-21T00:00:00Z"),
+        expectedValues = windowValues(1L, 1L, 1L))
     }
   }
 

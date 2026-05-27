@@ -147,6 +147,9 @@ class MegaTileProcessFunction(
   private var nextEvictPtTimerState: ValueState[java.lang.Long] = _
   private var nextEmitPtTimerState: ValueState[java.lang.Long] = _
   private var lastEventProcessingTsState: ValueState[java.lang.Long] = _
+  // The floored as-of marker for the range currently covered by the TileStore's
+  // cachedSmallWindowIr. In Flink, that cached IR is backed by megaTileIrState.
+  private var cachedSmallWindowAsOfTsState: ValueState[java.lang.Long] = _
   private var todayDirtyState: ValueState[java.lang.Boolean] = _
   private var yesterdayDirtyState: ValueState[java.lang.Boolean] = _
 
@@ -158,8 +161,10 @@ class MegaTileProcessFunction(
       .addGroup("feature_group", groupBy.getMetaData.getName)
     eventProcessingErrorCounter = metricsGroup.counter("event_processing_error")
 
-    if (emissionPolicy == MegaTileEmissionPolicy.WallClockCadence &&
-        bufferingOutputJitterMillis > 0L) {
+    if (
+      emissionPolicy == MegaTileEmissionPolicy.WallClockCadence &&
+      bufferingOutputJitterMillis > 0L
+    ) {
       logger.warn(
         s"MegaTile emission policy ${MegaTileEmissionPolicy.WallClockCadenceName} ignores " +
           s"bufferingOutputJitterMillis=$bufferingOutputJitterMillis for " +
@@ -179,16 +184,17 @@ class MegaTileProcessFunction(
     earliestTileStartState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-earliest-tile", classOf[java.lang.Long]))
     pendingDayRollEmitTileBytesState = getRuntimeContext.getMapState(
-      new MapStateDescriptor[java.lang.Long, Array[Byte]](
-        "mega-tile-pending-emit-tile-bytes",
-        classOf[java.lang.Long],
-        classOf[Array[Byte]]))
+      new MapStateDescriptor[java.lang.Long, Array[Byte]]("mega-tile-pending-emit-tile-bytes",
+                                                          classOf[java.lang.Long],
+                                                          classOf[Array[Byte]]))
     nextEvictPtTimerState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-next-evict-pt-timer", classOf[java.lang.Long]))
     nextEmitPtTimerState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-next-emit-pt-timer", classOf[java.lang.Long]))
     lastEventProcessingTsState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Long]("mega-tile-last-event-processing-ts", classOf[java.lang.Long]))
+    cachedSmallWindowAsOfTsState = getRuntimeContext.getState(
+      new ValueStateDescriptor[java.lang.Long]("mega-tile-cached-small-window-as-of-ts", classOf[java.lang.Long]))
     todayDirtyState = getRuntimeContext.getState(
       new ValueStateDescriptor[java.lang.Boolean]("mega-tile-today-dirty", classOf[java.lang.Boolean]))
     yesterdayDirtyState = getRuntimeContext.getState(
@@ -249,8 +255,10 @@ class MegaTileProcessFunction(
 
       val mode = currentMode(processingTs, watermark)
       val smallWindowAsOfTs = smallWindowAsOfTsForEvent(mode, tsMills, processingTs, watermark)
+      rebuildCachedSmallWindowForEventIfNeeded(smallWindowAsOfTs)
       // Step 3.
       val result = processor.onEvent(row, tsMills, smallWindowAsOfTs)
+      recordCachedSmallWindowAsOfTs(smallWindowAsOfTs)
       // Step 4.
       markDirtyState(result.todayEntry != null, result.yesterdayEntry != null)
 
@@ -343,6 +351,30 @@ class MegaTileProcessFunction(
     if (hasYesterdayUpdate) yesterdayDirtyState.update(java.lang.Boolean.TRUE)
   }
 
+  private def cachedSmallWindowAsOfTs: Option[Long] =
+    Option(cachedSmallWindowAsOfTsState.value()).map(_.longValue())
+
+  private def recordCachedSmallWindowAsOfTs(asOfTs: Long): Unit = {
+    if (processor.hasSmallWindows) {
+      cachedSmallWindowAsOfTsState.update(floorToSmallWindowHop(asOfTs))
+    }
+  }
+
+  private def rebuildCachedSmallWindowForEventIfNeeded(smallWindowAsOfTs: Long): Unit = {
+    if (!processor.hasSmallWindows || !hasActiveSmallWindowState) {
+      return
+    }
+
+    val targetAsOfTs = floorToSmallWindowHop(smallWindowAsOfTs)
+    if (cachedSmallWindowAsOfTs.contains(targetAsOfTs)) {
+      return
+    }
+
+    val result = processor.onEviction(smallWindowAsOfTs)
+    recordCachedSmallWindowAsOfTs(smallWindowAsOfTs)
+    markDirtyState(result.todayEntry != null, hasYesterdayUpdate = false)
+  }
+
   private def runEvictionTimer(currentKey: java.util.List[Any],
                                timestamp: Long,
                                processingTs: Long,
@@ -354,6 +386,7 @@ class MegaTileProcessFunction(
     emitOrBufferTodayThenDayRoll(evictionTime, currentKey, processingTs, out)
 
     val result = processor.onEviction(evictionTime)
+    recordCachedSmallWindowAsOfTs(evictionTime)
     markDirtyState(result.todayEntry != null, hasYesterdayUpdate = false)
     scheduleEvictTimerIfNeeded(timerService, processingTs)
 
@@ -396,6 +429,10 @@ class MegaTileProcessFunction(
     }
 
     processor.advanceWatermark(dayTransitionTs)
+    val currentDayStart = flinkStore.getCurrentDayStart
+    if (currentDayStart != previousDayStart) {
+      recordCachedSmallWindowAsOfTs(dayTransitionTs)
+    }
   }
 
   sealed private trait Mode
@@ -450,11 +487,17 @@ class MegaTileProcessFunction(
       case NoWatermark =>
         nextSmallWindowHop(eventTs)
       case SparseKeyLag | Live =>
-        nextSmallWindowHop(processingTs)
+        if (processingTs == floorToSmallWindowHop(processingTs)) {
+          // processor.onEvent includes retained tiles with tileStart < smallWindowAsOfTs.
+          processingTs + 1L
+        } else processingTs
     }
 
+  private def floorToSmallWindowHop(ts: Long): Long =
+    TsUtils.round(ts, processor.minSmallWindowTileSize)
+
   private def nextSmallWindowHop(ts: Long): Long =
-    TsUtils.round(ts, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize
+    floorToSmallWindowHop(ts) + processor.minSmallWindowTileSize
 
   private def scheduleEvictTimerIfNeeded(timerService: TimerService, processingTs: Long): Unit = {
     if (!hasActiveSmallWindowState) {
@@ -465,8 +508,7 @@ class MegaTileProcessFunction(
     val current = nextEvictPtTimerState.value()
     if (current != null) return
 
-    val timestamp =
-      TsUtils.round(processingTs, processor.minSmallWindowTileSize) + processor.minSmallWindowTileSize
+    val timestamp = nextSmallWindowHop(processingTs)
     timerService.registerProcessingTimeTimer(timestamp)
     nextEvictPtTimerState.update(timestamp)
   }
@@ -593,11 +635,7 @@ class MegaTileProcessFunction(
       todayDirtyState.clear()
     }
     if (isYesterdayDirty) {
-      emitMegaTile(keys,
-                   processor.packYesterdayEntry(),
-                   currentDayStart - processor.DayMillis,
-                   processingTsMillis,
-                   out)
+      emitMegaTile(keys, processor.packYesterdayEntry(), currentDayStart - processor.DayMillis, processingTsMillis, out)
       yesterdayDirtyState.clear()
     }
   }
