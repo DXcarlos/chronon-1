@@ -54,18 +54,20 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
                                  Some((Map(tableUtils.partitionColumn -> null) ++ timeProjection).toMap),
                                  range = Some(dayStep))
 
-      if (df.isEmpty) {
-        logger.warn(s"Query produced 0 rows in range $dayStep. Skipping this partition.")
+      val dfWithTimeCol = if (source.dataModel == EVENTS) {
+        df.withTimeBasedColumn(Constants.TimePartitionColumn)
       } else {
-        val dfWithTimeCol = if (source.dataModel == EVENTS) {
-          df.withTimeBasedColumn(Constants.TimePartitionColumn)
-        } else {
-          df
-        }
-
-        // Save using the provided outputTable or compute one if not provided
-        dfWithTimeCol.save(outputTable, tableProperties = metaData.tableProps)
+        df
       }
+
+      if (df.isEmpty) {
+        logger.warn(s"Query produced 0 rows in range $dayStep. Writing empty output table for schema continuity.")
+        // Dynamic empty overwrites may not remove a previously-filled partition.
+        tableUtils.deleteRange(outputTable, dayStep)
+      }
+
+      // Save using the provided outputTable or compute one if not provided
+      dfWithTimeCol.save(outputTable, tableProperties = metaData.tableProps)
     }
   }
 

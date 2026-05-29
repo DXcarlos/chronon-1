@@ -21,7 +21,7 @@ import ai.chronon.api._
 import ai.chronon.api.planner.{MetaDataUtils, TableDependencies}
 import ai.chronon.observability.{TileSummaryKey, TileSummary}
 import ai.chronon.online.KVStore.PutRequest
-import ai.chronon.planner.{ExternalSourceSensorNode, GroupByBackfillNode, JoinStatsComputeNode, MonolithJoinNode, Node, NodeContent, StagingQueryNode}
+import ai.chronon.planner.{ExternalSourceSensorNode, GroupByBackfillNode, JoinStatsComputeNode, MonolithJoinNode, Node, NodeContent, SourceWithFilterNode, StagingQueryNode}
 import ai.chronon.spark.other.MockKVStore
 import ai.chronon.spark.utils.{MockApi, SparkTestBase}
 import ai.chronon.spark.catalog.TableUtils
@@ -236,6 +236,42 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     tempFile.getAbsolutePath
   }
 
+  private def createEmptyEventsSourceTable(inputTable: String): Unit = {
+    spark.sql(s"DROP TABLE IF EXISTS $inputTable")
+    spark.sql(
+      s"""
+         |CREATE TABLE $inputTable (
+         |  id INT,
+         |  ts LONG,
+         |  ds STRING
+         |)
+         |PARTITIONED BY (ds)
+         |""".stripMargin
+    )
+  }
+
+  private def runSourceJob(inputTable: String, outputTable: String, day: String): Unit = {
+    val source = Builders.Source.events(
+      query = Builders.Query(
+        selects = Builders.Selects("id"),
+        partitionColumn = "ds",
+        timeColumn = "ts"
+      ),
+      table = inputTable
+    )
+    val node = new SourceWithFilterNode().setSource(source)
+    val Array(namespace, name) = outputTable.split("\\.", 2)
+    val metadata = new MetaData()
+      .setName(name)
+      .setOutputNamespace(namespace)
+      .setTeam("test_team")
+    val range = new DateRange()
+      .setStartDate(day)
+      .setEndDate(day)
+
+    new SourceJob(node, metadata, range)(tableUtils).run()
+  }
+
   override def beforeEach(): Unit = {
     // Drop all test tables to ensure fresh start
     spark.sql("DROP TABLE IF EXISTS test_db.input_table")
@@ -244,6 +280,8 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     spark.sql("DROP TABLE IF EXISTS test_db.input_table_alt")
     spark.sql("DROP TABLE IF EXISTS test_db.output_table_alt")
     spark.sql("DROP TABLE IF EXISTS test_db.left_table_alt")
+    spark.sql("DROP TABLE IF EXISTS test_db.empty_source_input")
+    spark.sql("DROP TABLE IF EXISTS test_db.empty_source_output")
     spark.sql("DROP TABLE IF EXISTS test_db.output_table" + Constants.archiveReuseTableSuffix)
     spark.sql("DROP TABLE IF EXISTS test_db.tp_events")
     spark.sql("DROP TABLE IF EXISTS test_db.tp_staging_output")
@@ -332,6 +370,50 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     val join = new ai.chronon.spark.Join(joinConf, futureDate2, tableUtils)
 
     join.computeJoinOpt(Some(1), Some(futureDate1)) shouldBe None
+  }
+
+  "SourceJob" should "materialize an empty output table when the source range has no rows" in {
+    val inputTable = "test_db.empty_source_input"
+    val outputTable = "test_db.empty_source_output"
+
+    createEmptyEventsSourceTable(inputTable)
+    spark.sql(s"DROP TABLE IF EXISTS $outputTable")
+
+    runSourceJob(inputTable, outputTable, yesterday)
+
+    assertTrue("SourceJob should create the output table even when no rows are produced",
+               tableUtils.tableReachable(outputTable))
+    val outputDf = tableUtils.loadTable(outputTable)
+    assertEquals("Output table should be empty", 0, outputDf.count())
+    outputDf.columns should contain("id")
+    outputDf.columns should contain("ts")
+    outputDf.columns should contain("ts_ds")
+    outputDf.columns should contain("ds")
+  }
+
+  it should "clear a stale output partition when the source range has no rows" in {
+    import spark.implicits._
+
+    val inputTable = "test_db.empty_source_input"
+    val outputTable = "test_db.empty_source_output"
+    val staleRange = PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec)
+    val retainedRange = PartitionRange(twoDaysAgo, twoDaysAgo)(tableUtils.partitionSpec)
+
+    createEmptyEventsSourceTable(inputTable)
+    val staleOutputDf = Seq(
+      (1, 1L, twoDaysAgo, twoDaysAgo),
+      (2, 1L, yesterday, yesterday)
+    ).toDF("id", "ts", "ts_ds", "ds")
+    tableUtils.insertPartitions(staleOutputDf, outputTable)
+
+    runSourceJob(inputTable, outputTable, yesterday)
+
+    assertEquals("Empty source output should clear stale rows for the requested partition",
+                 0,
+                 tableUtils.scanDf(null, outputTable, range = Some(staleRange)).count())
+    assertEquals("Empty source output should not clear unrelated partitions",
+                 1,
+                 tableUtils.scanDf(null, outputTable, range = Some(retainedRange)).count())
   }
 
   "BatchNodeRunner.checkPartitions" should "succeed when all partitions are available" in {
