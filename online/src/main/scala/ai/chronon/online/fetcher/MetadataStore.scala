@@ -218,6 +218,60 @@ class MetadataStore(fetchContext: FetchContext) {
     doRetrieveAllListConfs(new mutable.ArrayBuffer[String]())
   }
 
+  def listGroupBys(isOnline: Boolean = true): Future[Seq[String]] = {
+    import ai.chronon.online.metrics
+
+    val context = metrics.Metrics.Context(metrics.Metrics.Environment.MetaDataFetching)
+    val startTimeMs = System.currentTimeMillis()
+
+    def parseGroupBys(response: ListResponse): Seq[String] = {
+      val result = response.values
+        .map { seqListValues =>
+          seqListValues
+            .map(kv => new String(kv.valueBytes, StandardCharsets.UTF_8))
+            .map(v => ThriftJsonCodec.fromJsonStr[GroupBy](v, check = false, classOf[GroupBy]))
+            .filter(_.metaData.online == isOnline)
+            .map(_.metaData.name)
+
+        }
+        .recover { case e: Exception =>
+          import ai.chronon.online.metrics
+          logger.error("Failed to list & parse groupBys from list response", e)
+          context.withSuffix("group_by_list").increment(metrics.Metrics.Name.Exception)
+          throw e
+        }
+
+      result.get
+    }
+
+    def doRetrieveAllListConfs(acc: mutable.ArrayBuffer[String],
+                               paginationKey: Option[Any] = None): Future[Seq[String]] = {
+      val propsMap = {
+        paginationKey match {
+          case Some(key) => Map(ListEntityType -> GroupByFolder, ContinuationKey -> key)
+          case None      => Map(ListEntityType -> GroupByFolder)
+        }
+      }
+
+      val listRequest = ListRequest(fetchContext.metadataDataset, propsMap)
+      fetchContext.kvStore.list(listRequest).flatMap { response =>
+        val groupBySeq: Seq[String] = parseGroupBys(response)
+        val newAcc = acc ++ groupBySeq
+        if (response.resultProps.contains(ContinuationKey)) {
+          doRetrieveAllListConfs(newAcc, response.resultProps.get(ContinuationKey))
+        } else {
+          import ai.chronon.online.metrics
+          context
+            .withSuffix("group_by_list")
+            .distribution(metrics.Metrics.Name.LatencyMillis, System.currentTimeMillis() - startTimeMs)
+          Future.successful(newAcc.toSeq)
+        }
+      }
+    }
+
+    doRetrieveAllListConfs(new mutable.ArrayBuffer[String]())
+  }
+
   private def buildJoinPartCodec(joinConf: Join, joinPart: JoinPartOps, servingInfo: GroupByServingInfoParsed)
       : (Iterable[StructField], Iterable[StructField], JoinRequestKeys.KeyMapping) = {
     val keySchema = servingInfo.keyCodec.chrononSchema.asInstanceOf[StructType]

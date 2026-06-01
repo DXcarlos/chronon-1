@@ -219,6 +219,12 @@ public class JavaFetcher {
     return FutureConverters.toJava(this.fetcher.metadataStore().listJoins(isOnline)).toCompletableFuture().thenApply(ScalaJavaConversions::toJava);
   }
 
+  public CompletableFuture<List<String>> listGroupBys(boolean isOnline) {
+    // Get responses from the fetcher
+    // convert to Java friendly types
+    return FutureConverters.toJava(this.fetcher.metadataStore().listGroupBys(isOnline)).toCompletableFuture().thenApply(ScalaJavaConversions::toJava);
+  }
+
   public JTry<JavaJoinSchemaResponse> fetchJoinSchema(String joinName) {
     Try<Fetcher.JoinSchemaResponse> scalaResponse = this.fetcher.fetchJoinSchema(joinName);
     return JTry.fromScala(scalaResponse).map(JavaJoinSchemaResponse::new);
