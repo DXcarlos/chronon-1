@@ -103,6 +103,7 @@ Response fields:
 |-------|-------------|
 | `groupByName` | GroupBy metadata name. |
 | `batchEndDate` | Date through which batch upload data is available in the online KV store. |
+| `maxTs` | Max event timestamp in milliseconds included in the upload, when available. |
 
 ## CLI
 

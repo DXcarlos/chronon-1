@@ -313,12 +313,13 @@ class GroupByUpload(endPartition: String, groupBy: ai.chronon.spark.GroupBy) ext
 object GroupByUpload {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  case class UploadResult(kvDf: DataFrame, nullCounts: Map[String, Long])
+  case class UploadResult(kvDf: DataFrame, nullCounts: Map[String, Long], maxTs: Option[Long] = None)
 
   // TODO - remove this if spark streaming can't reach hive tables
   private def buildServingInfo(groupByConf: api.GroupBy,
                                session: SparkSession,
-                               endDs: String): GroupByServingInfoParsed = {
+                               endDs: String,
+                               maxTs: Option[Long]): GroupByServingInfoParsed = {
     val groupByServingInfo = new GroupByServingInfo()
     val tableUtils: TableUtils = TableUtils(session)
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
@@ -332,6 +333,7 @@ object GroupByUpload {
     groupByServingInfo.setKeyAvroSchema(groupBy.keySchema.toAvroSchema("Key").toString(true))
     groupByServingInfo.setSelectedAvroSchema(groupBy.preAggSchema.toAvroSchema("Value").toString(true))
     groupByServingInfo.setDateFormat(tableUtils.partitionFormat)
+    maxTs.foreach(groupByServingInfo.setMaxTs)
 
     val inputSources = groupByConf.streamingSource.toSeq ++ groupByConf.sources.toScala
     if (inputSources.nonEmpty) {
@@ -386,8 +388,26 @@ object GroupByUpload {
         |   inputSchema: ${Try(result.inputChrononSchema.catalogString)}
         |selectedSchema: ${Try(result.selectedChrononSchema.catalogString)}
         |  streamSchema: ${Try(result.streamChrononSchema.catalogString)}
+        |        maxTs: $maxTs
         |""".stripMargin)
     result
+  }
+
+  private def maxEventTs(groupBy: ai.chronon.spark.GroupBy): Option[Long] = {
+    if (!groupBy.inputDf.schema.fieldNames.contains(Constants.TimeColumn)) {
+      logger.warn(s"Cannot compute event maxTs because ${Constants.TimeColumn} is not present in the upload input.")
+      None
+    } else {
+      val maxTsRow = groupBy.inputDf
+        .agg(max(col(Constants.TimeColumn)).as("max_ts"))
+        .head()
+      Option(maxTsRow.get(0)).map {
+        case value: java.lang.Number => value.longValue()
+        case value =>
+          throw new IllegalArgumentException(
+            s"Expected ${Constants.TimeColumn} max value to be numeric, but found ${value.getClass.getName}.")
+      }
+    }
   }
 
   private[spark] def generateDf(groupByConf: api.GroupBy,
@@ -427,11 +447,19 @@ object GroupByUpload {
                    |Data Model: ${groupByConf.dataModel}
                    |""".stripMargin)
 
-    val (kvDf, nullCounts) = (groupByConf.inferredAccuracy, groupByConf.dataModel) match {
-      case (Accuracy.SNAPSHOT, DataModel.EVENTS)   => groupByUpload.snapshotEvents(jsonPercent)
-      case (Accuracy.SNAPSHOT, DataModel.ENTITIES) => groupByUpload.snapshotEntities(jsonPercent)
-      case (Accuracy.TEMPORAL, DataModel.EVENTS)   => shiftedGroupByUpload.temporalEvents(jsonPercent)
-      case (Accuracy.TEMPORAL, DataModel.ENTITIES) => otherGroupByUpload.temporalEvents(jsonPercent)
+    val (kvDf, nullCounts, maxTs) = (groupByConf.inferredAccuracy, groupByConf.dataModel) match {
+      case (Accuracy.SNAPSHOT, DataModel.EVENTS) =>
+        val (kvDf, nullCounts) = groupByUpload.snapshotEvents(jsonPercent)
+        (kvDf, nullCounts, maxEventTs(groupBy))
+      case (Accuracy.SNAPSHOT, DataModel.ENTITIES) =>
+        val (kvDf, nullCounts) = groupByUpload.snapshotEntities(jsonPercent)
+        (kvDf, nullCounts, None)
+      case (Accuracy.TEMPORAL, DataModel.EVENTS) =>
+        val (kvDf, nullCounts) = shiftedGroupByUpload.temporalEvents(jsonPercent)
+        (kvDf, nullCounts, maxEventTs(shiftedGroupBy))
+      case (Accuracy.TEMPORAL, DataModel.ENTITIES) =>
+        val (kvDf, nullCounts) = otherGroupByUpload.temporalEvents(jsonPercent)
+        (kvDf, nullCounts, None)
     }
 
     // Emit null count metrics. We force-flush the OTel meter provider afterwards because
@@ -446,7 +474,7 @@ object GroupByUpload {
       ctx.flush(Constants.ScrapeWaitSeconds.seconds.toMillis)
     }
 
-    UploadResult(kvDf, nullCounts)
+    UploadResult(kvDf, nullCounts, maxTs)
   }
 
   def run(groupByConf: api.GroupBy,
@@ -474,7 +502,8 @@ object GroupByUpload {
       kvDf.prettyPrint()
     }
 
-    val groupByServingInfo = buildServingInfo(groupByConf, session = tableUtils.sparkSession, endDs).groupByServingInfo
+    val groupByServingInfo =
+      buildServingInfo(groupByConf, session = tableUtils.sparkSession, endDs, result.maxTs).groupByServingInfo
 
     val metaRows = Seq(
       Row(

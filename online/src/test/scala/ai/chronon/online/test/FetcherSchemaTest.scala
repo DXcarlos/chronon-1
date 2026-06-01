@@ -49,6 +49,7 @@ class FetcherSchemaTest extends AnyFlatSpec with Matchers {
 
     val servingInfo = GroupByDerivationsTest.makeTestGroupByServingInfoParsed().groupByServingInfo
     servingInfo.groupBy.metaData.setOnline(true)
+    servingInfo.setMaxTs(1700001234567L)
     val groupByName = servingInfo.groupBy.metaData.name
     val batchDataset = new GroupByOps(servingInfo.groupBy).batchDataset
     kvStore.create(batchDataset)
@@ -61,6 +62,7 @@ class FetcherSchemaTest extends AnyFlatSpec with Matchers {
 
     response.groupByName shouldBe groupByName
     response.batchEndDate shouldBe servingInfo.batchEndDate
+    response.maxTs shouldBe servingInfo.getMaxTs
   }
 
   it should "return a user-facing status error for offline groupBys" in {

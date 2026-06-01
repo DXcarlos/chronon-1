@@ -159,8 +159,9 @@ object Fetcher {
   /** Response for a groupBy status request.
     * @param groupByName - Name of the groupBy
     * @param batchEndDate - Date through which batch upload data is available in the KV store
+    * @param maxTs - Max event timestamp in milliseconds included in the upload, when available
     */
-  case class GroupByStatusResponse(groupByName: String, batchEndDate: String)
+  case class GroupByStatusResponse(groupByName: String, batchEndDate: String, maxTs: java.lang.Long)
 }
 
 private[online] case class FetcherResponseWithTs[T <: BaseResponse](responses: Seq[T], endTs: Long)
@@ -840,7 +841,8 @@ class Fetcher(val kvStore: KVStore,
         }
       }
       .map { servingInfo =>
-        val response = GroupByStatusResponse(groupByName, servingInfo.batchEndDate)
+        val maxTs = if (servingInfo.isSetMaxTs) java.lang.Long.valueOf(servingInfo.getMaxTs) else null
+        val response = GroupByStatusResponse(groupByName, servingInfo.batchEndDate, maxTs)
         ctx.distribution(Metrics.Name.LatencyMillis, System.currentTimeMillis() - startTime)
         response
       }

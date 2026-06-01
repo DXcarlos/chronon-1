@@ -69,7 +69,7 @@ public class GroupByStatusHandlerTest {
         Async async = context.async();
 
         JavaGroupByStatusResponse groupByStatusResponse =
-                new JavaGroupByStatusResponse("test_group_by", "2026-05-20");
+                new JavaGroupByStatusResponse("test_group_by", "2026-05-20", 1779256800000L);
         JTry<JavaGroupByStatusResponse> groupByStatusResponseTry = JTry.success(groupByStatusResponse);
 
         when(mockFetcher.fetchGroupByStatus(anyString())).thenReturn(groupByStatusResponseTry);
@@ -79,6 +79,7 @@ public class GroupByStatusHandlerTest {
 
             context.assertEquals(actualResponse.getString("groupByName"), "test_group_by");
             context.assertEquals(actualResponse.getString("batchEndDate"), "2026-05-20");
+            context.assertEquals(actualResponse.getLong("maxTs"), Long.valueOf(1779256800000L));
         });
 
         handler.handle(routingContext);

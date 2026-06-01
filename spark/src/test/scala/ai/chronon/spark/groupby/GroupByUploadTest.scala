@@ -98,6 +98,47 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     GroupByUpload.run(groupByConf, endDs = yesterday)
   }
 
+  it should "write max event timestamp into uploaded serving info" in {
+    val namespace = testNamespace("event_max_ts")
+    createDatabase(namespace)
+    tableUtils.sql(s"USE $namespace")
+
+    val eventsTable = s"$namespace.events_with_max_ts"
+    val eventColumns = Seq("user", "views", "ts", "ds")
+    val expectedMaxTs = TsUtils.datetimeToTs("2023-08-14 18:30:00")
+    val eventData =
+      Seq(
+        ("user1", 10, TsUtils.datetimeToTs("2023-08-14 10:00:00"), "2023-08-14"),
+        ("user1", 20, expectedMaxTs, "2023-08-14")
+      )
+
+    spark.createDataFrame(eventData).toDF(eventColumns: _*).save(eventsTable)
+
+    val groupByConf =
+      Builders.GroupBy(
+        sources = Seq(Builders.Source.events(Builders.Query(timeColumn = "ts"), table = eventsTable)),
+        keyColumns = Seq("user"),
+        aggregations = Seq(Builders.Aggregation(Operation.SUM, "views", Seq(new Window(1, TimeUnit.DAYS)))),
+        metaData = Builders.MetaData(namespace = namespace, name = "test_max_ts_upload"),
+        accuracy = Accuracy.SNAPSHOT
+      )
+
+    GroupByUpload.run(groupByConf, endDs = "2023-08-14", tableUtilsOpt = Some(tableUtils))
+
+    val metadataJson = tableUtils
+      .loadTable(groupByConf.metaData.uploadTable)
+      .where(s"key_json = '${Constants.GroupByServingInfoKey}'")
+      .select("value_json")
+      .collect()
+      .head
+      .getString(0)
+    val servingInfo =
+      ThriftJsonCodec.fromJsonStr[GroupByServingInfo](metadataJson, check = false, classOf[GroupByServingInfo])
+
+    servingInfo.isSetMaxTs shouldBe true
+    servingInfo.getMaxTs shouldBe expectedMaxTs
+  }
+
   it should "struct support" in {
     val namespace = testNamespace("struct_support")
     val today = tableUtils.partitionSpec.at(System.currentTimeMillis())

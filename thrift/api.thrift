@@ -481,6 +481,8 @@ struct GroupByServingInfo {
     //       2. batch_upload_lag = batch_upload_time - batch_data_time
     5: optional string batchEndDate
     6: optional string dateFormat
+    // Max event timestamp in milliseconds from the data included in the upload.
+    7: optional i64 maxTs
 }
 
 // DataKind + TypeParams = DataType
