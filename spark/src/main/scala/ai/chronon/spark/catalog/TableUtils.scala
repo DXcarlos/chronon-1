@@ -73,18 +73,56 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
   // for example, BigQueryImpl during reflecting with bq flavor
   @transient private lazy val tableFormatProvider: FormatProvider = FormatProvider.from(sparkSession)
 
-  sparkSession.sparkContext.setLogLevel("ERROR")
+  private def sparkContextOption: Option[AnyRef] =
+    try {
+      Some(sparkSession.getClass.getMethod("sparkContext").invoke(sparkSession).asInstanceOf[AnyRef])
+    } catch {
+      case _: NoSuchMethodException => None
+      case _: NoSuchMethodError     => None
+    }
+
+  private def sparkConfInt(key: String, defaultValue: Int): Int =
+    sparkContextOption
+      .flatMap { sc =>
+        try {
+          val conf = sc.getClass.getMethod("getConf").invoke(sc)
+          Some(
+            conf.getClass.getMethod("getInt", classOf[String], classOf[Int]).invoke(conf, key, Int.box(defaultValue)))
+        } catch {
+          case _: NoSuchMethodException => None
+          case _: NoSuchMethodError     => None
+        }
+      }
+      .map(_.asInstanceOf[Int])
+      .getOrElse(sparkSession.conf.get(key, defaultValue.toString).toInt)
+
+  sparkContextOption.foreach { sc =>
+    try sc.getClass.getMethod("setLogLevel", classOf[String]).invoke(sc, "ERROR")
+    catch {
+      case _: NoSuchMethodException => ()
+      case _: NoSuchMethodError     => ()
+    }
+  }
 
   def withJobDescription[T](desc: String)(block: => T): T = {
-    val sc = sparkSession.sparkContext
-    val prev = sc.getLocalProperty("spark.job.description")
-    sc.setJobDescription(s"[chronon] $desc")
-    try block
-    finally sc.setJobDescription(prev)
+    sparkContextOption match {
+      case Some(sc) =>
+        try {
+          val prev = sc.getClass.getMethod("getLocalProperty", classOf[String]).invoke(sc, "spark.job.description")
+          val setJobDescription = sc.getClass.getMethod("setJobDescription", classOf[String])
+          setJobDescription.invoke(sc, s"[chronon] $desc")
+          try block
+          finally setJobDescription.invoke(sc, prev.asInstanceOf[AnyRef])
+        } catch {
+          case _: NoSuchMethodException => block
+          case _: NoSuchMethodError     => block
+        }
+      case None => block
+    }
   }
 
   def tableReachable(tableName: String, ignoreFailure: Boolean = false): Boolean = {
-    Try { sparkSession.table(tableName) } match {
+    Try { sparkSession.table(tableName).limit(0).collect() } match {
       case Success(_) => true
       case Failure(ex: AnalysisException) if ex.getMessage.contains("TABLE_OR_VIEW_NOT_FOUND") =>
         if (!ignoreFailure) {
@@ -371,8 +409,8 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
   }
 
   def sql(query: String): DataFrame = {
-    val parallelism = sparkSession.sparkContext.getConf.getInt("spark.default.parallelism", 1000)
-    val coalesceFactor = sparkSession.sparkContext.getConf.getInt("spark.chronon.coalesce.factor", 10)
+    val parallelism = sparkConfInt("spark.default.parallelism", 1000)
+    val coalesceFactor = sparkConfInt("spark.chronon.coalesce.factor", 10)
     val stackTraceString = cleanStackTrace(new Throwable())
 
     logger.info(s"""
@@ -713,8 +751,8 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       df = df.where(whereStr)
     }
 
-    val parallelism = sparkSession.sparkContext.getConf.getInt("spark.default.parallelism", 1000)
-    val coalesceFactor = sparkSession.sparkContext.getConf.getInt("spark.chronon.coalesce.factor", 10)
+    val parallelism = sparkConfInt("spark.default.parallelism", 1000)
+    val coalesceFactor = sparkConfInt("spark.chronon.coalesce.factor", 10)
 
     // TODO: this is a temporary fix to handle the case where the partition column is not a string.
     //  This is the case for partitioned BigQuery native tables.

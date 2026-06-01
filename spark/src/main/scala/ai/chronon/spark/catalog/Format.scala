@@ -300,16 +300,16 @@ object Format {
     sanitizePartitionValues(partitions).reduceOption((x, y) => stringOrdering.max(x, y))
   }
 
-  /** Parse a (possibly multipart, possibly backticked) table identifier into its dotted segments,
-    * using the session parser so any session-level parser extensions apply. Does NOT fill in a
-    * default catalog: callers (e.g. [[resolveTableName]]) own that policy since different contexts
-    * have different defaults (read vs. write catalog, ephemeral eval catalog, etc.).
+  /** Parse a (possibly multipart, possibly backticked) table identifier into its dotted segments.
+    * Does NOT fill in a default catalog: callers (e.g. [[resolveTableName]]) own that policy since
+    * different contexts have different defaults (read vs. write catalog, ephemeral eval catalog,
+    * etc.).
     *
     * Prefer this over `split("\\.")` wherever you need to break up a table identifier — the naive
     * split drops backticks and corrupts segments containing escaped dots.
     */
   def parseIdentifier(identifier: String)(implicit sparkSession: SparkSession): Seq[String] =
-    sparkSession.sessionState.sqlParser.parseMultipartIdentifier(identifier)
+    org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parseMultipartIdentifier(identifier)
 
   def parseHiveStylePartition(pstring: String): List[(String, String)] = {
     pstring
