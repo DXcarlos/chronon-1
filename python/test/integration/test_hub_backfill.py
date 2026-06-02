@@ -8,7 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from .helpers.cli import compile_configs, submit_backfill
-from .helpers.workflow import poll_workflow
+from .helpers.workflow import poll_workflow, poll_workflow_until
 
 # Demo join conf paths differ across clouds (variable names / versions vary).
 DEMO_DERIVATIONS = {
@@ -28,8 +28,7 @@ def test_backfill_no_data(confs, chronon_root, hub_url, cloud):
         runner, chronon_root, hub_url,
         confs(DEMO_DERIVATIONS[cloud]), "1969-01-01", "1969-01-01",
     )
-    with pytest.raises(RuntimeError, match="ended with status FAILED"):
-        poll_workflow(hub_url, workflow_id, timeout=1800, interval=45)
+    poll_workflow_until(hub_url, workflow_id, target_statuses={"FAILED"}, timeout=1800, interval=45)
 
 
 # Conf for multi-day backfill that expects success.

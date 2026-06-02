@@ -12,7 +12,7 @@ from click.testing import CliRunner
 from .helpers.cleanup import DataprocFlinkCleanup
 from .helpers.cli import cancel_workflow, compile_configs, submit_run_adhoc
 from .helpers.hub_api import get_flink_job_ids
-from .helpers.workflow import poll_workflow_until
+from .helpers.workflow import poll_workflow_until, poll_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,6 @@ def test_run_adhoc_no_data(confs, chronon_root, hub_url, cloud):
         confs(DEMO_BACKFILL[cloud]), "1969-01-01",
     )
 
-    poll_workflow_until(
-        hub_url, workflow_id, target_statuses={"FAILED"}, timeout=1800, interval=30,
+    poll_workflow(
+        hub_url, workflow_id, timeout=1800, interval=30,
     )
