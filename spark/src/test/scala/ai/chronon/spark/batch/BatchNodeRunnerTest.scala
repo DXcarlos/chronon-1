@@ -280,6 +280,7 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     spark.sql("DROP TABLE IF EXISTS test_db.time_part_sensor")
     spark.sql("DROP TABLE IF EXISTS test_db.subdaily_stats_sensor")
     spark.sql("DROP TABLE IF EXISTS test_db.hourly_input_table")
+    spark.sql("DROP TABLE IF EXISTS test_db.hourly_timestamp_input_table")
     spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_events")
     spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_gb_test")
     spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_sq_test")
@@ -1115,6 +1116,57 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     assertEquals("Last available should preserve hourly partition", Some(requiredHour), status.get.lastAvailablePartition)
   }
 
+  it should "prefer aligned hourly partition readiness for timestamp columns when scheduleOffsetMs is set" in {
+    spark.sql(
+      """CREATE TABLE IF NOT EXISTS test_db.hourly_timestamp_input_table (
+        |  id INT,
+        |  created_at TIMESTAMP
+        |)""".stripMargin)
+    val query = new Query()
+      .setPartitionColumn("created_at")
+      .setPartitionFormat("yyyy-MM-dd-HH")
+      .setPartitionInterval(new Window(1, TimeUnit.HOURS))
+    val tableDependency = TableDependencies.fromTable("test_db.hourly_timestamp_input_table", query)
+    val readiness = new BatchNodeReadiness(tableUtils, Some(new Window(12, TimeUnit.HOURS).millis))
+
+    val target = readiness
+      .targetForScheduleOffset("test_db.hourly_timestamp_input_table",
+                               tableDependency.tableInfo,
+                               PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec),
+                               Seq(tableDependency),
+                               basePartitionSpec = tableUtils.partitionSpec)
+      .get
+
+    target shouldBe a[BatchNodeReadiness.PartitionTarget]
+    target.requiredEnd shouldBe s"${yesterday}-12"
+  }
+
+  it should "use timestamp stats for unaligned hourly timestamp partitions when scheduleOffsetMs is set" in {
+    spark.sql(
+      """CREATE TABLE IF NOT EXISTS test_db.hourly_timestamp_input_table (
+        |  id INT,
+        |  created_at TIMESTAMP
+        |)""".stripMargin)
+    val query = new Query()
+      .setPartitionColumn("created_at")
+      .setPartitionFormat("yyyy-MM-dd-HH")
+      .setPartitionInterval(new Window(1, TimeUnit.HOURS))
+    val tableDependency = TableDependencies.fromTable("test_db.hourly_timestamp_input_table", query)
+    val scheduleOffsetMs = new Window(12, TimeUnit.HOURS).millis + new Window(30, TimeUnit.MINUTES).millis
+    val readiness = new BatchNodeReadiness(tableUtils, Some(scheduleOffsetMs))
+
+    val target = readiness
+      .targetForScheduleOffset("test_db.hourly_timestamp_input_table",
+                               tableDependency.tableInfo,
+                               PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec),
+                               Seq(tableDependency),
+                               basePartitionSpec = tableUtils.partitionSpec)
+      .get
+
+    target shouldBe a[BatchNodeReadiness.TimestampStatsTarget]
+    target.requiredEnd shouldBe (tableUtils.partitionSpec.epochMillis(yesterday) + scheduleOffsetMs).toString
+  }
+
   it should "not use hourly partition readiness when scheduleOffsetMs does not align to an hourly partition" in {
     createHourlyInputTable()
     val query = new Query()
@@ -1146,6 +1198,30 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     assertEquals("Last available should not come from hourly partition metadata",
                  None,
                  status.get.lastAvailablePartition)
+  }
+
+  it should "fail unaligned non-timestamp partition targets without retrying" in {
+    val tableInfo = new TableInfo()
+      .setTable("test_db.hourly_input_table")
+      .setPartitionColumn("hr")
+      .setPartitionFormat("yyyy-MM-dd-HH")
+      .setPartitionInterval(new Window(1, TimeUnit.HOURS))
+    val readiness = new BatchNodeReadiness(tableUtils, None)
+    val target = BatchNodeReadiness.UnalignedPartitionTarget("hr",
+                                                             tableUtils.partitionSpec.epochMillis(yesterday) +
+                                                               new Window(12, TimeUnit.HOURS).millis +
+                                                               new Window(30, TimeUnit.MINUTES).millis,
+                                                             tableInfo.partitionSpec(tableUtils.partitionSpec))
+
+    val result = readiness.checkSensorTarget("test_db.hourly_input_table", "hr", target, 0L, 1L)
+
+    result match {
+      case Success(_) => fail("unaligned partition target should fail")
+      case Failure(e) =>
+        assertTrue("Failure should describe the deterministic unaligned target",
+                   e.getMessage.startsWith("Schedule offset"))
+        assertFalse("Failure should not be wrapped by sensor retry timeout", e.getMessage.contains("Sensor timed out"))
+    }
   }
 
   it should "use timestamp stats in input table readiness when scheduleOffsetMs is set" in {

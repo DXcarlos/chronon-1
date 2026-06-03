@@ -111,6 +111,28 @@ class IcebergTest extends SparkTestBase with Matchers {
     parts shouldBe List("2024-03-01")
   }
 
+  it should "cast primary partition values before filtering null hour partitions" in {
+    val tableName = "default.iceberg_date_with_hr_partition_test"
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+
+    spark.sql(s"""
+      CREATE TABLE $tableName (
+        id INT,
+        ds DATE,
+        hr STRING
+      ) USING iceberg
+      PARTITIONED BY (ds, hr)
+    """)
+
+    spark.sql(s"""
+      INSERT INTO $tableName VALUES
+      (1, DATE '2024-03-01', NULL),
+      (2, DATE '2024-03-02', '12')
+    """)
+
+    Iceberg.primaryPartitions(tableName, "ds", "") shouldBe List("2024-03-01")
+  }
+
   it should "derive virtual partitions from Iceberg file stats for a clustered timestamp column" in {
     val tableName = "default.iceberg_time_stats_test"
     spark.sql(s"DROP TABLE IF EXISTS $tableName")

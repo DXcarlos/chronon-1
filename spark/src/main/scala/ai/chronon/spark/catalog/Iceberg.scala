@@ -131,7 +131,7 @@ case object Iceberg extends Format {
       // Hour filter is currently buggy in iceberg. https://github.com/apache/iceberg/issues/4718
       // so we collect and then filter.
       partitionsDf
-        .select(col(s"partition.$partitionColumn"), col("partition.hr"))
+        .select(col(s"partition.$partitionColumn").cast("string"), col("partition.hr"))
         .collect()
         .filter(_.get(1) == null)
         .flatMap(row => Option(row.getString(0)))

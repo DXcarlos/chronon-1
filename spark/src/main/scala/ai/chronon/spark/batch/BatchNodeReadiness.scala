@@ -49,7 +49,9 @@ private[batch] class BatchNodeReadiness(tableUtils: TableUtils, scheduleOffsetMs
       endMs <- requiredEndMs
       column <- partitionColumn
     } yield {
-      if (isTimestampColumn(tableName, column)) {
+      if (partitionSpecAlignsWithSubdailySchedule(spec, basePartitionSpec, endMs)) {
+        PartitionTarget(spec, spec.at(endMs), normalizeToBasePartitionSpec = false)
+      } else if (isTimestampColumn(tableName, column)) {
         TimestampStatsTarget(column, endMs)
       } else if (partitionSpecCoversRequiredEnd(spec, basePartitionSpec, endMs)) {
         PartitionTarget(spec, spec.at(endMs), normalizeToBasePartitionSpec = false)
@@ -58,6 +60,11 @@ private[batch] class BatchNodeReadiness(tableUtils: TableUtils, scheduleOffsetMs
       }
     }
   }
+
+  private def partitionSpecAlignsWithSubdailySchedule(spec: PartitionSpec,
+                                                      basePartitionSpec: PartitionSpec,
+                                                      requiredEndMs: Long): Boolean =
+    spec.spanMillis < basePartitionSpec.spanMillis && spec.epochMillis(spec.at(requiredEndMs)) == requiredEndMs
 
   private def partitionSpecCoversRequiredEnd(spec: PartitionSpec,
                                              basePartitionSpec: PartitionSpec,
@@ -118,15 +125,20 @@ private[batch] class BatchNodeReadiness(tableUtils: TableUtils, scheduleOffsetMs
                         target: ReadinessTarget,
                         retryCount: Long,
                         retryIntervalMin: Long): Try[Unit] =
-    retrySensorCheck(retryCount, retryIntervalMin) {
-      target match {
-        case timestampTarget: TimestampStatsTarget => checkTimestampStats(tableName, timestampTarget)
-        case target: UnalignedPartitionTarget =>
-          throw new RuntimeException(
+    target match {
+      case target: UnalignedPartitionTarget =>
+        Failure(
+          new RuntimeException(
             s"Schedule offset ${target.requiredEndMs} does not align with partition spec " +
-              s"${target.spec.format} for ${tableName}.${target.column}; timestamp stats are required")
-        case partitionTarget: PartitionTarget => checkPartition(tableName, partitionColumn, partitionTarget)
-      }
+              s"${target.spec.format} for ${tableName}.${target.column}; timestamp stats are required"))
+      case timestampTarget: TimestampStatsTarget =>
+        retrySensorCheck(retryCount, retryIntervalMin) {
+          checkTimestampStats(tableName, timestampTarget)
+        }
+      case partitionTarget: PartitionTarget =>
+        retrySensorCheck(retryCount, retryIntervalMin) {
+          checkPartition(tableName, partitionColumn, partitionTarget)
+        }
     }
 
   def inputTableStatus(tableName: String,
