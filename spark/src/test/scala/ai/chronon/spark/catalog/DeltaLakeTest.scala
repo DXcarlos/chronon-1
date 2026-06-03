@@ -9,6 +9,12 @@ import org.scalatest.matchers.should.Matchers._
 
 class DeltaLakeTest extends AnyFlatSpec with BeforeAndAfterAll {
 
+  private def toEpochMillis(value: Any): Long =
+    value match {
+      case timestamp: java.sql.Timestamp => timestamp.getTime
+      case instant: java.time.Instant    => instant.toEpochMilli
+    }
+
   private implicit lazy val spark: SparkSession =
     SparkSessionBuilder.build(
       "DeltaLakeTest",
@@ -46,6 +52,8 @@ class DeltaLakeTest extends AnyFlatSpec with BeforeAndAfterAll {
 
       DeltaLake.statsDateRange(tableName, "created_at", PartitionSpec.daily) shouldBe
         Some(StatsDateRange(start = "2024-01-01", end = "2024-01-03"))
+      DeltaLake.maxTimestampMillisFromStats(tableName, "created_at") shouldBe
+        Some(toEpochMillis(spark.table(tableName).selectExpr("MAX(created_at)").head().get(0)))
       DeltaLake.virtualPartitions(tableName, "created_at", PartitionSpec.daily) shouldBe
         List("2024-01-01", "2024-01-02", "2024-01-03")
       DeltaLake.firstAvailablePartition(tableName, "created_at", PartitionSpec.daily) shouldBe Some("2024-01-01")
@@ -197,6 +205,7 @@ class DeltaLakeTest extends AnyFlatSpec with BeforeAndAfterAll {
       """)
 
       DeltaLake.statsDateRange(tableName, "created_at", PartitionSpec.daily) shouldBe None
+      DeltaLake.maxTimestampMillisFromStats(tableName, "created_at") shouldBe None
       DeltaLake.virtualPartitions(tableName, "created_at", PartitionSpec.daily) shouldBe
         List("2024-02-01", "2024-02-02", "2024-02-03")
       DeltaLake.firstAvailablePartition(tableName, "created_at", PartitionSpec.daily) shouldBe Some("2024-02-01")

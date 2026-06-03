@@ -6,6 +6,12 @@ import org.scalatest.matchers.should.Matchers
 
 class IcebergTest extends SparkTestBase with Matchers {
 
+  private def toEpochMillis(value: Any): Long =
+    value match {
+      case timestamp: java.sql.Timestamp => timestamp.getTime
+      case instant: java.time.Instant    => instant.toEpochMilli
+    }
+
   override def sparkConfs: Map[String, String] = Map(
     "spark.serializer" -> "org.apache.spark.serializer.JavaSerializer",
     "spark.sql.extensions" -> (
@@ -162,6 +168,8 @@ class IcebergTest extends SparkTestBase with Matchers {
 
     Iceberg.statsDateRange(tableName, "created_at", PartitionSpec.daily) shouldBe
       Some(StatsDateRange(start = "2024-04-01", end = "2024-04-03"))
+    Iceberg.maxTimestampMillisFromStats(tableName, "created_at") shouldBe
+      Some(toEpochMillis(spark.table(tableName).selectExpr("MAX(created_at)").head().get(0)))
     Iceberg.virtualPartitions(tableName, "created_at", PartitionSpec.daily) shouldBe
       List("2024-04-01", "2024-04-02", "2024-04-03")
     Iceberg.firstAvailablePartition(tableName, "created_at", PartitionSpec.daily) shouldBe Some("2024-04-01")
@@ -230,6 +238,7 @@ class IcebergTest extends SparkTestBase with Matchers {
     """)
 
     Iceberg.statsDateRange(tableName, "created_at", PartitionSpec.daily) shouldBe None
+    Iceberg.maxTimestampMillisFromStats(tableName, "created_at") shouldBe None
     Iceberg.virtualPartitions(tableName, "created_at", PartitionSpec.daily) shouldBe
       List("2024-05-01", "2024-05-02", "2024-05-03")
     Iceberg.firstAvailablePartition(tableName, "created_at", PartitionSpec.daily) shouldBe Some("2024-05-01")

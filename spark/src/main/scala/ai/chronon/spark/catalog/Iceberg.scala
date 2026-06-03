@@ -10,6 +10,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{StructType, TimestampType}
+import org.slf4j.{Logger, LoggerFactory}
 
 import java.time.{LocalDate, ZoneOffset}
 import scala.collection.JavaConverters._
@@ -104,6 +105,10 @@ case object Iceberg extends Format {
       .orElse(statsLastAvailablePartition(tableName, partitionColumn, partitionSpec))
       .orElse(scanLastAvailablePartition(tableName, partitionColumn, partitionSpec))
 
+  override def maxTimestampMillisFromStats(tableName: String, timestampColumn: String)(implicit
+      sparkSession: SparkSession): Option[Long] =
+    IcebergStats.maxTimestampMillis(tableName, timestampColumn)
+
   private def statsLastAvailablePartition(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] =
     statsDateRange(tableName, columnName, partitionSpec).map { range =>
@@ -115,109 +120,7 @@ case object Iceberg extends Format {
 
   private[catalog] def statsDateRange(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[StatsDateRange] =
-    Try {
-      val table = loadIcebergTable(tableName).getOrElse {
-        throw new IllegalStateException(s"Could not load Iceberg table: $tableName")
-      }
-      val field = Option(table.schema().findField(columnName)).getOrElse {
-        throw new IllegalArgumentException(s"Column $columnName not found in Iceberg schema for $tableName")
-      }
-      val fieldId = field.fieldId().asInstanceOf[java.lang.Integer]
-      val fieldType = field.`type`()
-      val extractor = new IcebergPartitionStatsExtractor(sparkSession)
-
-      currentDataFilesDateRange(table, fieldId, fieldType, partitionSpec, extractor)
-    } match {
-      case Success(result) =>
-        if (result.isDefined) {
-          logger.info(s"Resolved Iceberg file stats boundaries for $tableName.$columnName: ${result.get}")
-        } else {
-          logger.info(s"Iceberg file stats were incomplete for $tableName.$columnName; falling back to table scan")
-        }
-        result
-      case Failure(e) =>
-        logger.warn(
-          s"Failed to resolve Iceberg file stats boundaries for $tableName.$columnName: ${Option(e.getMessage).getOrElse("(no message)")}")
-        None
-    }
-
-  private def fileDateRange(file: DataFile,
-                            fieldId: java.lang.Integer,
-                            fieldType: org.apache.iceberg.types.Type,
-                            partitionSpec: PartitionSpec,
-                            extractor: IcebergPartitionStatsExtractor): Option[(Long, Long)] = {
-    val lower = Option(file.lowerBounds()).flatMap(bounds => Option(bounds.get(fieldId)))
-    val upper = Option(file.upperBounds()).flatMap(bounds => Option(bounds.get(fieldId)))
-
-    for {
-      lowerBound <- lower
-      upperBound <- upper
-    } yield {
-      val lowerMillis = boundMillis(extractor.convertBoundValue(lowerBound, fieldType), fieldType, partitionSpec)
-      val upperMillis = boundMillis(extractor.convertBoundValue(upperBound, fieldType), fieldType, partitionSpec)
-      lowerMillis -> upperMillis
-    }
-  }
-
-  private def boundMillis(value: Any, fieldType: Type, partitionSpec: PartitionSpec): Long =
-    fieldType.typeId() match {
-      case Type.TypeID.TIMESTAMP =>
-        Math.floorDiv(value.asInstanceOf[java.lang.Long].longValue(), 1000L)
-      case Type.TypeID.DATE =>
-        LocalDate
-          .ofEpochDay(value.asInstanceOf[java.lang.Integer].longValue())
-          .atStartOfDay()
-          .toInstant(ZoneOffset.UTC)
-          .toEpochMilli
-      case Type.TypeID.STRING =>
-        partitionSpec.epochMillis(value.toString)
-      case other =>
-        throw new IllegalArgumentException(s"Unsupported Iceberg bound type $other for value $value")
-    }
-
-  private def currentDataFilesDateRange(table: org.apache.iceberg.Table,
-                                        fieldId: java.lang.Integer,
-                                        fieldType: org.apache.iceberg.types.Type,
-                                        partitionSpec: PartitionSpec,
-                                        extractor: IcebergPartitionStatsExtractor): Option[StatsDateRange] =
-    Option(table.currentSnapshot()).flatMap { _ =>
-      val tasks = table.newScan().includeColumnStats().planFiles()
-      try {
-        val range = tasks.iterator().asScala.foldLeft(Some(None): Option[Option[(Long, Long)]]) {
-          case (None, _) => None
-          case (Some(acc), task) =>
-            fileDateRange(task.file(), fieldId, fieldType, partitionSpec, extractor).map {
-              case (lowerMillis, upperMillis) =>
-                Some(acc.fold(lowerMillis -> upperMillis) { case (minMillis, maxMillis) =>
-                  Math.min(minMillis, lowerMillis) -> Math.max(maxMillis, upperMillis)
-                })
-            }
-        }
-
-        range.flatten.map { case (minMillis, maxMillis) =>
-          StatsDateRange(
-            start = partitionSpec.at(minMillis),
-            end = partitionSpec.at(maxMillis)
-          )
-        }
-      } finally {
-        tasks.close()
-      }
-    }
-
-  private def loadIcebergTable(tableName: String)(implicit
-      sparkSession: SparkSession): Option[org.apache.iceberg.Table] =
-    Try {
-      val resolved = Format.resolveTableName(tableName)
-      val catalog = sparkSession.sessionState.catalogManager
-        .catalog(resolved.catalog)
-        .asInstanceOf[TableCatalog]
-
-      catalog.loadTable(resolved.toIdentifier) match {
-        case sparkTable: SparkTable => sparkTable.table()
-        case other => throw new IllegalStateException(s"Not an Iceberg SparkTable: ${other.getClass.getName}")
-      }
-    }.toOption
+    IcebergStats.millisRange(tableName, columnName, partitionSpec).map(_.toDateRange(partitionSpec))
 
   private def getIcebergPartitions(tableName: String, partitionColumn: String)(implicit
       sparkSession: SparkSession): List[String] = {
@@ -249,4 +152,167 @@ case object Iceberg extends Format {
   }
 
   override def supportSubPartitionsFilter: Boolean = false
+}
+
+private[catalog] object IcebergStats {
+  @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
+
+  def millisRange(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[StatsMillisRange] =
+    Try {
+      val table = loadIcebergTable(tableName).getOrElse {
+        throw new IllegalStateException(s"Could not load Iceberg table: $tableName")
+      }
+      val field = Option(table.schema().findField(columnName)).getOrElse {
+        throw new IllegalArgumentException(s"Column $columnName not found in Iceberg schema for $tableName")
+      }
+      val fieldId = field.fieldId().asInstanceOf[java.lang.Integer]
+      val fieldType = field.`type`()
+      val extractor = new IcebergPartitionStatsExtractor(sparkSession)
+
+      currentDataFilesMillisRange(table, fieldId, fieldType, partitionSpec, extractor)
+    } match {
+      case Success(result) =>
+        if (result.isDefined) {
+          logger.info(s"Resolved Iceberg file stats millis boundaries for $tableName.$columnName: ${result.get}")
+        } else {
+          logger.info(s"Iceberg file stats were incomplete for $tableName.$columnName")
+        }
+        result
+      case Failure(e) =>
+        logger.warn(
+          s"Failed to resolve Iceberg file stats boundaries for $tableName.$columnName: ${Option(e.getMessage).getOrElse("(no message)")}")
+        None
+    }
+
+  def maxTimestampMillis(tableName: String, timestampColumn: String)(implicit
+      sparkSession: SparkSession): Option[Long] =
+    Try {
+      val columnType = sparkSession.read.table(tableName).schema(timestampColumn).dataType
+      if (columnType != TimestampType) {
+        None
+      } else {
+        val table = loadIcebergTable(tableName).getOrElse {
+          throw new IllegalStateException(s"Could not load Iceberg table: $tableName")
+        }
+        val field = Option(table.schema().findField(timestampColumn)).getOrElse {
+          throw new IllegalArgumentException(s"Column $timestampColumn not found in Iceberg schema for $tableName")
+        }
+        val fieldId = field.fieldId().asInstanceOf[java.lang.Integer]
+        val fieldType = field.`type`()
+        val extractor = new IcebergPartitionStatsExtractor(sparkSession)
+
+        currentDataFilesMaxMillis(table, fieldId, fieldType, extractor)
+      }
+    } match {
+      case Success(result) =>
+        if (result.isDefined) {
+          logger.info(s"Resolved Iceberg file stats max timestamp for $tableName.$timestampColumn: ${result.get}")
+        } else {
+          logger.warn(s"Iceberg file stats max timestamp unavailable for $tableName.$timestampColumn")
+        }
+        result
+      case Failure(e) =>
+        logger.warn(
+          s"Failed to resolve Iceberg file stats max timestamp for $tableName.$timestampColumn: ${Option(e.getMessage).getOrElse("(no message)")}")
+        None
+    }
+
+  private def currentDataFilesMillisRange(table: org.apache.iceberg.Table,
+                                          fieldId: java.lang.Integer,
+                                          fieldType: org.apache.iceberg.types.Type,
+                                          partitionSpec: PartitionSpec,
+                                          extractor: IcebergPartitionStatsExtractor): Option[StatsMillisRange] =
+    Option(table.currentSnapshot()).flatMap { _ =>
+      val tasks = table.newScan().includeColumnStats().planFiles()
+      try {
+        val range = tasks.iterator().asScala.foldLeft(Some(None): Option[Option[(Long, Long)]]) {
+          case (None, _) => None
+          case (Some(acc), task) =>
+            fileMillisRange(task.file(), fieldId, fieldType, partitionSpec, extractor).map {
+              case (lowerMillis, upperMillis) =>
+                Some(acc.fold(lowerMillis -> upperMillis) { case (minMillis, maxMillis) =>
+                  Math.min(minMillis, lowerMillis) -> Math.max(maxMillis, upperMillis)
+                })
+            }
+        }
+
+        range.flatten.map { case (minMillis, maxMillis) =>
+          StatsMillisRange(startMillis = minMillis, endMillis = maxMillis)
+        }
+      } finally {
+        tasks.close()
+      }
+    }
+
+  private def currentDataFilesMaxMillis(table: org.apache.iceberg.Table,
+                                        fieldId: java.lang.Integer,
+                                        fieldType: org.apache.iceberg.types.Type,
+                                        extractor: IcebergPartitionStatsExtractor): Option[Long] =
+    Option(table.currentSnapshot()).flatMap { _ =>
+      val tasks = table.newScan().includeColumnStats().planFiles()
+      try {
+        tasks.iterator().asScala.foldLeft(Some(None): Option[Option[Long]]) {
+          case (None, _) => None
+          case (Some(acc), task) =>
+            val upper = Option(task.file().upperBounds()).flatMap(bounds => Option(bounds.get(fieldId)))
+            upper.map { upperBound =>
+              val upperMillis = boundMillis(extractor.convertBoundValue(upperBound, fieldType),
+                                            fieldType,
+                                            PartitionSpec.daily)
+              Some(acc.fold(upperMillis)(existing => Math.max(existing, upperMillis)))
+            }
+        }.flatten
+      } finally {
+        tasks.close()
+      }
+    }
+
+  private def fileMillisRange(file: DataFile,
+                              fieldId: java.lang.Integer,
+                              fieldType: org.apache.iceberg.types.Type,
+                              partitionSpec: PartitionSpec,
+                              extractor: IcebergPartitionStatsExtractor): Option[(Long, Long)] = {
+    val lower = Option(file.lowerBounds()).flatMap(bounds => Option(bounds.get(fieldId)))
+    val upper = Option(file.upperBounds()).flatMap(bounds => Option(bounds.get(fieldId)))
+
+    for {
+      lowerBound <- lower
+      upperBound <- upper
+    } yield {
+      val lowerMillis = boundMillis(extractor.convertBoundValue(lowerBound, fieldType), fieldType, partitionSpec)
+      val upperMillis = boundMillis(extractor.convertBoundValue(upperBound, fieldType), fieldType, partitionSpec)
+      lowerMillis -> upperMillis
+    }
+  }
+
+  private def boundMillis(value: Any, fieldType: Type, partitionSpec: PartitionSpec): Long =
+    fieldType.typeId() match {
+      case Type.TypeID.TIMESTAMP =>
+        Math.floorDiv(value.asInstanceOf[java.lang.Long].longValue(), 1000L)
+      case Type.TypeID.DATE =>
+        LocalDate
+          .ofEpochDay(value.asInstanceOf[java.lang.Integer].longValue())
+          .atStartOfDay()
+          .toInstant(ZoneOffset.UTC)
+          .toEpochMilli
+      case Type.TypeID.STRING =>
+        partitionSpec.epochMillis(value.toString)
+      case other =>
+        throw new IllegalArgumentException(s"Unsupported Iceberg bound type $other for value $value")
+    }
+
+  private def loadIcebergTable(tableName: String)(implicit
+      sparkSession: SparkSession): Option[org.apache.iceberg.Table] =
+    Try {
+      val resolved = Format.resolveTableName(tableName)
+      val catalog = sparkSession.sessionState.catalogManager
+        .catalog(resolved.catalog)
+        .asInstanceOf[TableCatalog]
+
+      catalog.loadTable(resolved.toIdentifier) match {
+        case sparkTable: SparkTable => sparkTable.table()
+        case other => throw new IllegalStateException(s"Not an Iceberg SparkTable: ${other.getClass.getName}")
+      }
+    }.toOption
 }

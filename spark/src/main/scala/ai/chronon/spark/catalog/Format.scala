@@ -213,6 +213,9 @@ trait Format {
     metadataLastAvailablePartition(tableName, partitionColumn)
       .orElse(scanLastAvailablePartition(tableName, partitionColumn, partitionSpec))
 
+  def maxTimestampMillisFromStats(tableName: String, timestampColumn: String)(implicit
+      sparkSession: SparkSession): Option[Long] = None
+
   // Unified first available partition: handles both string partition columns and timestamp/date columns.
   // For string columns that are catalog partitions, uses metadata-only lookup.
   // For timestamp/date columns, falls back to a scan.
@@ -278,6 +281,14 @@ private[catalog] case class StatsDateRange(start: String, end: String) {
   def firstAvailablePartition: String = start
 
   def lastAvailablePartition: String = end
+}
+
+private[catalog] case class StatsMillisRange(startMillis: Long, endMillis: Long) {
+  def toDateRange(partitionSpec: PartitionSpec): StatsDateRange =
+    StatsDateRange(
+      start = partitionSpec.at(startMillis),
+      end = partitionSpec.at(endMillis)
+    )
 }
 
 case class ResolvedTableName(catalog: String, namespace: String, table: String) {

@@ -8,7 +8,6 @@ import org.apache.spark.sql.functions.{
   coalesce,
   col,
   count,
-  date_format,
   from_json,
   lit,
   min,
@@ -18,6 +17,7 @@ import org.apache.spark.sql.functions.{
   when
 }
 import org.apache.spark.sql.types.{DataType, DateType, MapType, StringType, StructField, StructType, TimestampType}
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Success, Try}
 
@@ -25,8 +25,6 @@ import scala.util.{Failure, Success, Try}
 // across Delta versions (e.g. 2 params in 3.2, 3 params in 3.3), so compiling against an older
 // version will cause NoSuchMethodError at runtime if the EMR-bundled Delta jar has a newer signature.
 case object DeltaLake extends Format {
-
-  private val DayMillis = 24L * 60L * 60L * 1000L
 
   override def tableTypeString: String = "delta"
 
@@ -75,6 +73,10 @@ case object DeltaLake extends Format {
       .orElse(statsLastAvailablePartition(tableName, partitionColumn, partitionSpec))
       .orElse(scanLastAvailablePartition(tableName, partitionColumn, partitionSpec))
 
+  override def maxTimestampMillisFromStats(tableName: String, timestampColumn: String)(implicit
+      sparkSession: SparkSession): Option[Long] =
+    DeltaStats.maxTimestampMillis(tableName, timestampColumn)
+
   private def statsLastAvailablePartition(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] =
     statsDateRange(tableName, columnName, partitionSpec).map { range =>
@@ -85,13 +87,23 @@ case object DeltaLake extends Format {
     }
 
   private[catalog] def statsDateRange(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
-      sparkSession: SparkSession): Option[StatsDateRange] = {
+      sparkSession: SparkSession): Option[StatsDateRange] =
+    DeltaStats.millisRange(tableName, columnName, partitionSpec).map(_.toDateRange(partitionSpec))
+
+  override def supportSubPartitionsFilter: Boolean = true
+}
+
+private[catalog] object DeltaStats {
+  @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
+
+  private val DayMillis = 24L * 60L * 60L * 1000L
+
+  def millisRange(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[StatsMillisRange] = {
     import sparkSession.implicits._
 
     Try {
-      val describeResult = sparkSession.sql(s"DESCRIBE DETAIL $tableName")
-      val tablePath = describeResult.select("location").head().getString(0)
-      val activeFiles = DeltaLog.forTable(sparkSession, tablePath).update().allFiles.toDF()
+      val activeFiles = deltaActiveFiles(tableName)
       val columnType = sparkSession.read.table(tableName).schema(columnName).dataType
 
       val statsSchema = StructType(
@@ -111,20 +123,16 @@ case object DeltaLake extends Format {
         .agg(
           count(lit(1)).as("fileCount"),
           count(when(col("min_value").isNull || col("max_value").isNull, lit(1))).as("missingCount"),
-          date_format(min(statsBoundary("min_value", columnType, partitionSpec)), partitionSpec.format).as("start"),
-          date_format(max(statsBoundary("max_value", columnType, partitionSpec)), partitionSpec.format).as("end")
+          min(statsBoundaryTimestamp("min_value", columnType, partitionSpec)).as("startTimestamp"),
+          max(statsBoundaryTimestamp("max_value", columnType, partitionSpec)).as("endTimestamp")
         )
+        .as[(Long, Long, java.sql.Timestamp, java.sql.Timestamp)]
         .collect()
         .headOption
 
-      boundaries.flatMap { row =>
-        val fileCount = row.getAs[Long]("fileCount")
-        val missingCount = row.getAs[Long]("missingCount")
-        val start = row.getAs[String]("start")
-        val end = row.getAs[String]("end")
-
-        if (fileCount > 0 && missingCount == 0 && start != null && end != null) {
-          Some(StatsDateRange(start = start, end = end))
+      boundaries.flatMap { case (fileCount, missingCount, startTs, endTs) =>
+        if (fileCount > 0 && missingCount == 0 && startTs != null && endTs != null) {
+          Some(StatsMillisRange(startMillis = startTs.getTime, endMillis = endTs.getTime))
         } else {
           None
         }
@@ -132,9 +140,9 @@ case object DeltaLake extends Format {
     } match {
       case Success(result) =>
         if (result.isDefined) {
-          logger.info(s"Resolved Delta log stats boundaries for $tableName.$columnName: ${result.get}")
+          logger.info(s"Resolved Delta log stats millis boundaries for $tableName.$columnName: ${result.get}")
         } else {
-          logger.info(s"Delta log stats were incomplete for $tableName.$columnName; falling back to table scan")
+          logger.info(s"Delta log stats were incomplete for $tableName.$columnName")
         }
         result
       case Failure(e) =>
@@ -144,17 +152,65 @@ case object DeltaLake extends Format {
     }
   }
 
-  private def statsBoundary(boundaryColumn: String, columnType: DataType, partitionSpec: PartitionSpec): Column =
+  def maxTimestampMillis(tableName: String, timestampColumn: String)(implicit sparkSession: SparkSession): Option[Long] = {
+    import sparkSession.implicits._
+
+    Try {
+      val columnType = sparkSession.read.table(tableName).schema(timestampColumn).dataType
+      if (columnType != TimestampType) {
+        None
+      } else {
+        val statsSchema = StructType(
+          Seq(
+            StructField("maxValues", MapType(StringType, StringType), nullable = true)
+          ))
+
+        val maxTimestamp = deltaActiveFiles(tableName)
+          .select(from_json(col("stats"), statsSchema).as("stats"))
+          .select(col("stats.maxValues").getItem(timestampColumn).as("max_value"))
+          .agg(
+            count(lit(1)).as("fileCount"),
+            count(when(col("max_value").isNull, lit(1))).as("missingCount"),
+            max(statsBoundaryTimestamp("max_value", columnType, PartitionSpec.daily)).as("maxTimestamp")
+          )
+          .as[(Long, Long, java.sql.Timestamp)]
+          .collect()
+          .headOption
+
+        maxTimestamp.flatMap { case (fileCount, missingCount, maxTs) =>
+          if (fileCount > 0 && missingCount == 0 && maxTs != null) Some(maxTs.getTime) else None
+        }
+      }
+    } match {
+      case Success(result) =>
+        if (result.isDefined) {
+          logger.info(s"Resolved Delta log stats max timestamp for $tableName.$timestampColumn: ${result.get}")
+        } else {
+          logger.warn(s"Delta log stats max timestamp unavailable for $tableName.$timestampColumn")
+        }
+        result
+      case Failure(e) =>
+        logger.warn(
+          s"Failed to resolve Delta log stats max timestamp for $tableName.$timestampColumn: ${Option(e.getMessage).getOrElse("(no message)")}")
+        None
+    }
+  }
+
+  private def deltaActiveFiles(tableName: String)(implicit sparkSession: SparkSession) = {
+    val describeResult = sparkSession.sql(s"DESCRIBE DETAIL $tableName")
+    val tablePath = describeResult.select("location").head().getString(0)
+    DeltaLog.forTable(sparkSession, tablePath).update().allFiles.toDF()
+  }
+
+  private def statsBoundaryTimestamp(boundaryColumn: String, columnType: DataType, partitionSpec: PartitionSpec): Column =
     columnType match {
       case DateType =>
-        col(boundaryColumn).cast(DateType)
+        col(boundaryColumn).cast(DateType).cast("timestamp")
       case StringType if partitionSpec.spanMillis >= DayMillis =>
-        coalesce(to_date(col(boundaryColumn), partitionSpec.format), col(boundaryColumn).cast(DateType))
+        coalesce(to_date(col(boundaryColumn), partitionSpec.format), col(boundaryColumn).cast(DateType)).cast("timestamp")
       case StringType =>
         coalesce(to_timestamp(col(boundaryColumn), partitionSpec.format), col(boundaryColumn).cast("timestamp"))
       case _ =>
         col(boundaryColumn).cast("timestamp")
     }
-
-  override def supportSubPartitionsFilter: Boolean = true
 }

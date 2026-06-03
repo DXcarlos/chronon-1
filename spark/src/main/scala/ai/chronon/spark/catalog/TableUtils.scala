@@ -173,6 +173,18 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       .flatMap(_.maxTimestampDate(tableName, timestampColumn, effectiveSpec)(sparkSession))
   }
 
+  def maxTimestampMillisFromStats(tableName: String, timestampColumn: String): Option[Long] = {
+    val columnType = getSchemaFromTable(tableName)(timestampColumn).dataType
+    if (columnType != TimestampType) {
+      logger.warn(s"Column $tableName.$timestampColumn is $columnType, not timestamp; stats watermark unavailable")
+      None
+    } else {
+      tableFormatProvider
+        .readFormat(tableName)
+        .flatMap(_.maxTimestampMillisFromStats(tableName, timestampColumn)(sparkSession))
+    }
+  }
+
   def tableCoversRange(table: String, range: PartitionRange): Boolean = {
     try {
       lastAvailablePartition(table) match {
