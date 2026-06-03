@@ -2,7 +2,7 @@ package ai.chronon.spark.batch
 
 import ai.chronon.api.Extensions._
 import ai.chronon.api._
-import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
+import ai.chronon.api.planner.NodeRunner
 import ai.chronon.api.secrets.SecretResolver
 import ai.chronon.observability.{TileStats, TileStatsType}
 import ai.chronon.online.{Api, KVStore}
@@ -50,11 +50,19 @@ class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
     default = None
   )
 
+  val scheduleOffsetMs: ScallopOption[Long] = opt[Long](
+    required = false,
+    descr =
+      "Logical scheduled run offset in milliseconds from the --end-ds partition start. Enables stats-backed subdaily readiness checks."
+  )
+
   verify()
 }
 
-class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends NodeRunner {
+class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api, scheduleOffsetMs: Option[Long] = None)
+    extends NodeRunner {
   @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
+  private val readiness = new BatchNodeReadiness(tableUtils, scheduleOffsetMs)
 
   // in ad-hoc flows, the jobs downstream of external tables will simply fail (albeit, with retries)
   // in scheduled flow, the jobs downstream of external sensors will be stalled by the sensor
@@ -120,40 +128,25 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       return retryTriggerExpr(0)
     }
 
+    readiness
+      .targetForScheduleOffset(tableName,
+                               tableInfo,
+                               range,
+                               Seq(conf.sourceTableDependency),
+                               basePartitionSpec = range.partitionSpec)
+      .foreach { target =>
+        return readiness.checkSensorTarget(tableName, tableInfo.partitionColumn, target, retryCount, retryIntervalMin)
+      }
+
     // Case 2: Has partition column — unified check: lastAvailablePartition >= range.end
     // Works for dense Hive, sparse Hive, Iceberg hidden partitions, timestamp columns — all the same.
     if (hasPartitionColumn) {
-      val spec = tableInfo.partitionSpec(tableUtils.partitionSpec)
-      @tailrec
-      def retry(attempt: Long): Try[Unit] = {
-        Try {
-          logger.info(s"Checking last available partition for ${tableName} column ${tableInfo.partitionColumn}")
-          val lastPartition = tableUtils
-            .lastAvailablePartition(tableName, tablePartitionSpec = Some(spec))
-            .getOrElse(throw new RuntimeException(s"Could not determine last available partition for ${tableName}"))
-
-          val requiredEnd = range.end
-          logger.info(s"Last available partition: ${lastPartition}, required end: ${requiredEnd}")
-
-          if (lastPartition >= requiredEnd) {
-            logger.info(s"Sensor succeeded: ${lastPartition} >= ${requiredEnd}")
-            ()
-          } else {
-            throw new RuntimeException(
-              s"Sensor check failed: last available partition ${lastPartition} < required end ${requiredEnd}")
-          }
-        } match {
-          case Success(_) => Success(())
-          case Failure(e) if attempt < retryCount =>
-            logger.warn(s"Attempt ${attempt + 1} failed: ${e.getMessage}. Retrying in ${retryIntervalMin} minutes")
-            Thread.sleep(retryIntervalMin * 60 * 1000)
-            retry(attempt + 1)
-          case Failure(e) =>
-            Failure(
-              new RuntimeException(s"Sensor timed out after ${retryIntervalMin * attempt} minutes. ${e.getMessage}", e))
-        }
-      }
-      return retry(0)
+      val target =
+        readiness.defaultPartitionTarget(tableInfo,
+                                         range,
+                                         tableUtils.partitionSpec,
+                                         normalizeToBasePartitionSpec = false)
+      return readiness.checkSensorTarget(tableName, tableInfo.partitionColumn, target, retryCount, retryIntervalMin)
     }
 
     // Case 3: No partition column, no trigger — just check table existence
@@ -540,6 +533,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       range: PartitionRange,
       tableUtils: TableUtils
   ): Iterable[TablePartitionStatus] = {
+    val inputReadiness = new BatchNodeReadiness(tableUtils, scheduleOffsetMs)
     val inputTableDependencies: Map[String, Array[TableDependency]] =
       Option(metadata.executionInfo.getTableDependencies)
         .map(_.asScala.toArray)
@@ -552,27 +546,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     inputTableDependencies
       .filterNot(_._2.forall(td => td.isSetIsSoftNodeDependency && td.isSoftNodeDependency))
       .flatMap { case (table, deps) =>
-        val requiredEnds = deps
-          .flatMap { td =>
-            DependencyResolver
-              .computeInputRange(range, td)
-              .map(_.translate(tableUtils.partitionSpec).end)
-          }
-          .toSeq
-          .sorted
-
-        if (requiredEnds.isEmpty) {
-          None
-        } else {
-          val inputPartitionSpec = deps.head.tableInfo.partitionSpec(tableUtils.partitionSpec)
-
-          val firstPartition =
-            tableUtils.firstAvailablePartition(table, partitionSpec = inputPartitionSpec)
-          val lastPartition = tableUtils.lastAvailablePartition(table, tablePartitionSpec = Some(inputPartitionSpec))
-          val requiredEnd = requiredEnds.last
-
-          val ready = lastPartition.exists(_ >= requiredEnd)
-
+        inputReadiness.inputTableStatus(table, deps, range).map { status =>
           // Collect semanticHash values from all dependencies for this table
           val semanticHashes = deps.flatMap { td =>
             if (td.isSetSemanticHash && td.semanticHash.nonEmpty) {
@@ -589,7 +563,12 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             semanticHashes.headOption
           }
 
-          Some(TablePartitionStatus(table, firstPartition, lastPartition, ready, requiredEnd, semanticHash))
+          TablePartitionStatus(table,
+                               status.firstAvailablePartition,
+                               status.lastAvailablePartition,
+                               status.ready,
+                               status.requiredEnd,
+                               semanticHash)
         }
       }
   }
@@ -700,7 +679,7 @@ object BatchNodeRunner {
     val node = NodeConfReader.read(batchArgs.confPath())
     val tableUtils = TableUtils(SparkSessionBuilder.build(s"batch-node-runner-${node.metaData.name}"))
     val api = instantiateApi(batchArgs.onlineClass(), batchArgs.apiProps ++ driverSecrets)
-    val runner = new BatchNodeRunner(node, tableUtils, api)
+    val runner = new BatchNodeRunner(node, tableUtils, api, batchArgs.scheduleOffsetMs.toOption)
     val exitCode =
       runner.runFromArgs(batchArgs.startDs(), batchArgs.endDs(), batchArgs.tableStatsDataset.toOption)
     tableUtils.sparkSession.stop()

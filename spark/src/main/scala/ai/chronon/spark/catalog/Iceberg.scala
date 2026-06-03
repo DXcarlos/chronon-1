@@ -7,7 +7,6 @@ import org.apache.iceberg.spark.source.SparkTable
 import org.apache.iceberg.types.Type
 import org.apache.spark.sql.connector.catalog.TableCatalog
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.slf4j.{Logger, LoggerFactory}
@@ -57,7 +56,7 @@ case object Iceberg extends Format {
 
   override def partitions(tableName: String, partitionFilters: String)(implicit
       sparkSession: SparkSession): List[Map[String, String]] = {
-    val partitionsDf = sparkSession.table(s"${qualifyWithCatalog(tableName)}.partitions")
+    val partitionsDf = sparkSession.table(s"${Format.resolveTableName(tableName).quoted}.partitions")
 
     val index = partitionsDf.schema.fieldIndex("partition")
     val partitionColumnNames = partitionsDf.schema(index).dataType.asInstanceOf[StructType].fieldNames
@@ -80,7 +79,7 @@ case object Iceberg extends Format {
     * for other formats.
     */
   def partitionColumnNames(tableName: String)(implicit sparkSession: SparkSession): Array[String] = {
-    val partitionsDf = sparkSession.table(s"${qualifyWithCatalog(tableName)}.partitions")
+    val partitionsDf = sparkSession.table(s"${Format.resolveTableName(tableName).quoted}.partitions")
     val index = partitionsDf.schema.fieldIndex("partition")
     partitionsDf.schema(index).dataType.asInstanceOf[StructType].fieldNames
   }
@@ -125,7 +124,7 @@ case object Iceberg extends Format {
   private def getIcebergPartitions(tableName: String, partitionColumn: String)(implicit
       sparkSession: SparkSession): List[String] = {
 
-    val partitionsDf = sparkSession.table(s"${qualifyWithCatalog(tableName)}.partitions")
+    val partitionsDf = sparkSession.table(s"${Format.resolveTableName(tableName).quoted}.partitions")
 
     val index = partitionsDf.schema.fieldIndex("partition")
     if (partitionsDf.schema(index).dataType.asInstanceOf[StructType].fieldNames.contains("hr")) {
@@ -144,11 +143,6 @@ case object Iceberg extends Format {
         .flatMap(row => Option(row.getString(0)))
         .toList
     }
-  }
-
-  private[catalog] def qualifyWithCatalog(tableName: String)(implicit sparkSession: SparkSession): String = {
-    val resolved = Format.resolveTableName(tableName)
-    s"${QuotingUtils.quoteIdentifier(resolved.catalog)}.${QuotingUtils.quoteIdentifier(resolved.namespace)}.${QuotingUtils.quoteIdentifier(resolved.table)}"
   }
 
   override def supportSubPartitionsFilter: Boolean = false
@@ -192,17 +186,7 @@ private[catalog] object IcebergStats {
       if (columnType != TimestampType) {
         None
       } else {
-        val table = loadIcebergTable(tableName).getOrElse {
-          throw new IllegalStateException(s"Could not load Iceberg table: $tableName")
-        }
-        val field = Option(table.schema().findField(timestampColumn)).getOrElse {
-          throw new IllegalArgumentException(s"Column $timestampColumn not found in Iceberg schema for $tableName")
-        }
-        val fieldId = field.fieldId().asInstanceOf[java.lang.Integer]
-        val fieldType = field.`type`()
-        val extractor = new IcebergPartitionStatsExtractor(sparkSession)
-
-        currentDataFilesMaxMillis(table, fieldId, fieldType, extractor)
+        millisRange(tableName, timestampColumn, PartitionSpec.daily).map(_.endMillis)
       }
     } match {
       case Success(result) =>
@@ -226,43 +210,28 @@ private[catalog] object IcebergStats {
     Option(table.currentSnapshot()).flatMap { _ =>
       val tasks = table.newScan().includeColumnStats().planFiles()
       try {
-        val range = tasks.iterator().asScala.foldLeft(Some(None): Option[Option[(Long, Long)]]) {
-          case (None, _) => None
-          case (Some(acc), task) =>
-            fileMillisRange(task.file(), fieldId, fieldType, partitionSpec, extractor).map {
-              case (lowerMillis, upperMillis) =>
-                Some(acc.fold(lowerMillis -> upperMillis) { case (minMillis, maxMillis) =>
-                  Math.min(minMillis, lowerMillis) -> Math.max(maxMillis, upperMillis)
-                })
-            }
+        var range = Option.empty[(Long, Long)]
+        var statsComplete = true
+        val iterator = tasks.iterator().asScala
+
+        while (statsComplete && iterator.hasNext) {
+          fileMillisRange(iterator.next().file(), fieldId, fieldType, partitionSpec, extractor) match {
+            case Some((lowerMillis, upperMillis)) =>
+              range = Some(range.fold(lowerMillis -> upperMillis) { case (minMillis, maxMillis) =>
+                Math.min(minMillis, lowerMillis) -> Math.max(maxMillis, upperMillis)
+              })
+            case None =>
+              statsComplete = false
+          }
         }
 
-        range.flatten.map { case (minMillis, maxMillis) =>
-          StatsMillisRange(startMillis = minMillis, endMillis = maxMillis)
+        if (statsComplete) {
+          range.map { case (minMillis, maxMillis) =>
+            StatsMillisRange(startMillis = minMillis, endMillis = maxMillis)
+          }
+        } else {
+          None
         }
-      } finally {
-        tasks.close()
-      }
-    }
-
-  private def currentDataFilesMaxMillis(table: org.apache.iceberg.Table,
-                                        fieldId: java.lang.Integer,
-                                        fieldType: org.apache.iceberg.types.Type,
-                                        extractor: IcebergPartitionStatsExtractor): Option[Long] =
-    Option(table.currentSnapshot()).flatMap { _ =>
-      val tasks = table.newScan().includeColumnStats().planFiles()
-      try {
-        tasks.iterator().asScala.foldLeft(Some(None): Option[Option[Long]]) {
-          case (None, _) => None
-          case (Some(acc), task) =>
-            val upper = Option(task.file().upperBounds()).flatMap(bounds => Option(bounds.get(fieldId)))
-            upper.map { upperBound =>
-              val upperMillis = boundMillis(extractor.convertBoundValue(upperBound, fieldType),
-                                            fieldType,
-                                            PartitionSpec.daily)
-              Some(acc.fold(upperMillis)(existing => Math.max(existing, upperMillis)))
-            }
-        }.flatten
       } finally {
         tasks.close()
       }

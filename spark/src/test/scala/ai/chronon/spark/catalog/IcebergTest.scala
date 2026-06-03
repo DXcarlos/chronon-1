@@ -36,42 +36,6 @@ class IcebergTest extends SparkTestBase with Matchers {
     Iceberg.supportSubPartitionsFilter shouldBe false
   }
 
-  "qualifyWithCatalog" should "qualify a single-part name with catalog and current namespace" in {
-    val result = Iceberg.qualifyWithCatalog("my_table")
-    result shouldBe "`spark_catalog`.`default`.`my_table`"
-  }
-
-  it should "qualify a two-part name with the default catalog" in {
-    val result = Iceberg.qualifyWithCatalog("my_ns.my_table")
-    result shouldBe "`spark_catalog`.`my_ns`.`my_table`"
-  }
-
-  it should "re-quote a fully qualified three-part name" in {
-    val result = Iceberg.qualifyWithCatalog("spark_catalog.my_ns.my_table")
-    result shouldBe "`spark_catalog`.`my_ns`.`my_table`"
-  }
-
-  it should "properly quote identifiers with special characters" in {
-    val result = Iceberg.qualifyWithCatalog("`my-ns`.`my-table`")
-    result shouldBe "`spark_catalog`.`my-ns`.`my-table`"
-  }
-
-  it should "properly quote SQL reserved words" in {
-    val result = Iceberg.qualifyWithCatalog("`select`.`table`")
-    result shouldBe "`spark_catalog`.`select`.`table`"
-  }
-
-  it should "properly quote a three-part name with special characters" in {
-    val result = Iceberg.qualifyWithCatalog("`my-catalog`.`my-ns`.`my-table`")
-    result shouldBe "`my-catalog`.`my-ns`.`my-table`"
-  }
-
-  it should "handle identifiers containing backticks" in {
-    // Spark parses ``a`b`` as the identifier a`b
-    val result = Iceberg.qualifyWithCatalog("`a``b`.`c``d`")
-    result shouldBe "`spark_catalog`.`a``b`.`c``d`"
-  }
-
   "Iceberg.partitions" should "return partition values for an Iceberg table" in {
     val tableName = "default.iceberg_partitions_test"
 
@@ -96,6 +60,9 @@ class IcebergTest extends SparkTestBase with Matchers {
       Map("ds" -> "2024-01-01"),
       Map("ds" -> "2024-01-02")
     )
+
+    Iceberg.partitions("`default`.`iceberg_partitions_test`", "") should contain theSameElementsAs parts
+    Iceberg.partitions("`spark_catalog`.`default`.`iceberg_partitions_test`", "") should contain theSameElementsAs parts
   }
 
   "Iceberg.primaryPartitions" should "return primary partition values" in {

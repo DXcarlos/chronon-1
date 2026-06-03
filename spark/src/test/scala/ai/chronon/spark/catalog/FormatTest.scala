@@ -189,6 +189,11 @@ class FormatTest extends SparkTestBase {
     assertEquals("tbl", resolved.table)
   }
 
+  it should "quote resolved table names" in {
+    Format.resolveTableName("`my-catalog`.`my-ns`.`my-table`").quoted shouldBe "`my-catalog`.`my-ns`.`my-table`"
+    Format.resolveTableName("`a``b`.`c``d`").quoted shouldBe "`spark_catalog`.`a``b`.`c``d`"
+  }
+
   it should "strip destination catalog in rename SQL when source and destination share a catalog" in {
     val sql = Format.renameTableSql(
       "spark_non_default_catalog.custom_test_db.src_table",

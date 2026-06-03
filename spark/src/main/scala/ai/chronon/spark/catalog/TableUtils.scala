@@ -229,7 +229,8 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
   def lastAvailablePartition(tableName: String,
                              partitionRange: Option[PartitionRange] = None,
                              subPartitionFilters: Map[String, String] = Map.empty,
-                             tablePartitionSpec: Option[PartitionSpec] = None): Option[String] = {
+                             tablePartitionSpec: Option[PartitionSpec] = None,
+                             normalizeToBasePartitionSpec: Boolean = true): Option[String] = {
     val effectiveSpec = tablePartitionSpec.getOrElse(partitionSpec)
     val effectivePartColumn = effectiveSpec.column
     if (subPartitionFilters.nonEmpty) {
@@ -240,15 +241,15 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       val result = tableFormatProvider
         .readFormat(tableName)
         .flatMap(_.lastAvailablePartition(tableName, effectivePartColumn, effectiveSpec)(sparkSession))
-      // Translate to global partitionSpec if needed
-      result.map(date => effectiveSpec.translate(date, partitionSpec))
+      if (normalizeToBasePartitionSpec) result.map(date => effectiveSpec.translate(date, partitionSpec)) else result
     }
   }
 
   def firstAvailablePartition(tableName: String,
                               partitionSpec: PartitionSpec = partitionSpec,
                               partitionRange: Option[PartitionRange] = None,
-                              subPartitionFilters: Map[String, String] = Map.empty): Option[String] = {
+                              subPartitionFilters: Map[String, String] = Map.empty,
+                              normalizeToBasePartitionSpec: Boolean = true): Option[String] = {
     if (subPartitionFilters.nonEmpty) {
       // Fall back to enumeration when sub-partition filters are needed
       Format.pickMinPartition(
@@ -263,8 +264,8 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       val result = tableFormatProvider
         .readFormat(tableName)
         .flatMap(_.firstAvailablePartition(tableName, effectivePartColumn, partitionSpec)(sparkSession))
-      // Translate to global partitionSpec if needed
-      result.map(date => partitionSpec.translate(date, this.partitionSpec))
+      if (normalizeToBasePartitionSpec) result.map(date => partitionSpec.translate(date, this.partitionSpec))
+      else result
     }
   }
 

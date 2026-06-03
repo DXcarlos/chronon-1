@@ -278,6 +278,8 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     spark.sql("DROP TABLE IF EXISTS test_db.tp_staging_output")
     spark.sql("DROP TABLE IF EXISTS test_db.tp_gb_output")
     spark.sql("DROP TABLE IF EXISTS test_db.time_part_sensor")
+    spark.sql("DROP TABLE IF EXISTS test_db.subdaily_stats_sensor")
+    spark.sql("DROP TABLE IF EXISTS test_db.hourly_input_table")
     spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_events")
     spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_gb_test")
     spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_sq_test")
@@ -286,6 +288,55 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
 
     setupTestTables()
     mockKVStore.reset()
+  }
+
+  private def createSubdailyStatsSensorTable(): Unit = {
+    spark.sql(
+      """CREATE TABLE IF NOT EXISTS test_db.subdaily_stats_sensor (
+        |  id INT,
+        |  created_at TIMESTAMP
+        |) USING iceberg
+        |TBLPROPERTIES (
+        |  'write.metadata.metrics.default' = 'full',
+        |  'write.metadata.metrics.column.created_at' = 'full'
+        |)""".stripMargin)
+    spark.sql(
+      s"""INSERT INTO test_db.subdaily_stats_sensor VALUES
+         |(1, TIMESTAMP '${yesterday} 09:00:00'),
+         |(2, TIMESTAMP '${yesterday} 12:00:00')
+         |""".stripMargin)
+  }
+
+  private def subdailySensorNode(endOffset: Option[Window] = None,
+                                 endCutOff: Option[String] = None): ExternalSourceSensorNode = {
+    val tableInfo = new TableInfo()
+      .setTable("test_db.subdaily_stats_sensor")
+      .setPartitionColumn("created_at")
+    val tableDependency = new TableDependency().setTableInfo(tableInfo)
+    endOffset.foreach(tableDependency.setEndOffset)
+    endCutOff.foreach(tableDependency.setEndCutOff)
+
+    new ExternalSourceSensorNode()
+      .setSourceTableDependency(tableDependency)
+      .setRetryCount(0L)
+      .setRetryIntervalMin(1L)
+  }
+
+  private def createHourlyInputTable(): String = {
+    val requiredHour = s"${yesterday}-12"
+    spark.sql(
+      """CREATE TABLE IF NOT EXISTS test_db.hourly_input_table (
+        |  id INT,
+        |  value STRING,
+        |  hr STRING
+        |)
+        |PARTITIONED BY (hr)
+        |""".stripMargin)
+    spark.sql(
+      s"""INSERT INTO test_db.hourly_input_table VALUES
+         |(1, 'value1', '${requiredHour}')
+         |""".stripMargin)
+    requiredHour
   }
 
   "BatchNodeRunner.runFromArgs" should "succeed for valid partition range" ignore {
@@ -414,6 +465,30 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
       // Test passed
       case Failure(exception) =>
         fail(s"checkPartitions should have succeeded but failed with: ${exception.getMessage}")
+    }
+  }
+
+  it should "preserve triggerExpr checks when scheduleOffsetMs is set" in {
+    val tableInfo = new TableInfo()
+      .setTable("test_db.input_table")
+      .setPartitionColumn("ds")
+      .setTriggerExpr("MAX(ds)")
+    val tableDependency = new TableDependency().setTableInfo(tableInfo)
+    val sensorNode = new ExternalSourceSensorNode()
+      .setSourceTableDependency(tableDependency)
+      .setEngineType(EngineType.SPARK)
+      .setRetryCount(0L)
+      .setRetryIntervalMin(1L)
+
+    val metadata = createTestMetadata("test_db.input_table", "test_db.output_table")
+    val node = new Node().setMetaData(metadata)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi, Some(new Window(12, TimeUnit.HOURS).millis))
+
+    val result = runner.checkPartitions(sensorNode, PartitionRange(twoDaysAgo, twoDaysAgo)(tableUtils.partitionSpec))
+
+    result match {
+      case Success(_) => // Test passed
+      case Failure(e) => fail(s"triggerExpr check should have succeeded: ${e.getMessage}")
     }
   }
 
@@ -890,6 +965,214 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
         assertTrue("Error should mention sensor",
           e.getMessage.contains("Sensor"))
     }
+  }
+
+  "BatchNodeRunner.checkPartitions with scheduleOffsetMs" should "use timestamp stats for subdaily readiness" in {
+    createSubdailyStatsSensorTable()
+
+    val maxTimestamp = tableUtils.maxTimestampMillisFromStats("test_db.subdaily_stats_sensor", "created_at").get
+    val scheduleOffsetMs = maxTimestamp - tableUtils.partitionSpec.epochMillis(yesterday) - 1000L
+    val runner = new BatchNodeRunner(new Node().setMetaData(createTestMetadata("test_db.input_table", "test_db.output_table")),
+                                     tableUtils,
+                                     mockApi,
+                                     Some(scheduleOffsetMs))
+
+    val result = runner.checkPartitions(subdailySensorNode(), PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec))
+
+    result match {
+      case Success(_) => // Test passed
+      case Failure(e) => fail(s"scheduled stats check should have succeeded: ${e.getMessage}")
+    }
+  }
+
+  it should "fail subdaily readiness when timestamp stats do not reach schedule offset" in {
+    createSubdailyStatsSensorTable()
+
+    val maxTimestamp = tableUtils.maxTimestampMillisFromStats("test_db.subdaily_stats_sensor", "created_at").get
+    val scheduleOffsetMs = maxTimestamp - tableUtils.partitionSpec.epochMillis(yesterday) + 1000L
+    val runner = new BatchNodeRunner(new Node().setMetaData(createTestMetadata("test_db.input_table", "test_db.output_table")),
+                                     tableUtils,
+                                     mockApi,
+                                     Some(scheduleOffsetMs))
+
+    val result = runner.checkPartitions(subdailySensorNode(), PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec))
+
+    result match {
+      case Success(_) => fail("scheduled stats check should have failed")
+      case Failure(e) => assertTrue("Error should mention max timestamp", e.getMessage.contains("max timestamp"))
+    }
+  }
+
+  it should "apply endOffset to subdaily scheduled readiness" in {
+    createSubdailyStatsSensorTable()
+
+    val maxTimestamp = tableUtils.maxTimestampMillisFromStats("test_db.subdaily_stats_sensor", "created_at").get
+    val runStartMs = maxTimestamp + new Window(3, TimeUnit.HOURS).millis
+    val scheduleOffsetMs = runStartMs - tableUtils.partitionSpec.epochMillis(yesterday)
+    val runner = new BatchNodeRunner(new Node().setMetaData(createTestMetadata("test_db.input_table", "test_db.output_table")),
+                                     tableUtils,
+                                     mockApi,
+                                     Some(scheduleOffsetMs))
+
+    val result = runner.checkPartitions(
+      subdailySensorNode(endOffset = Some(new Window(3, TimeUnit.HOURS))),
+      PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec)
+    )
+
+    result match {
+      case Success(_) => // Test passed
+      case Failure(e) => fail(s"scheduled stats check should have honored endOffset: ${e.getMessage}")
+    }
+  }
+
+  it should "apply endCutOff to subdaily scheduled readiness" in {
+    createSubdailyStatsSensorTable()
+
+    val maxTimestamp = tableUtils.maxTimestampMillisFromStats("test_db.subdaily_stats_sensor", "created_at").get
+    val scheduleOffsetMs = maxTimestamp - tableUtils.partitionSpec.epochMillis(yesterday) + 1000L
+    val runner = new BatchNodeRunner(new Node().setMetaData(createTestMetadata("test_db.input_table", "test_db.output_table")),
+                                     tableUtils,
+                                     mockApi,
+                                     Some(scheduleOffsetMs))
+
+    val result = runner.checkPartitions(
+      subdailySensorNode(endCutOff = Some(twoDaysAgo)),
+      PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec)
+    )
+
+    result match {
+      case Success(_) => // Test passed
+      case Failure(e) => fail(s"scheduled stats check should have honored endCutOff: ${e.getMessage}")
+    }
+  }
+
+  it should "use partition readiness for string partition sensors when scheduleOffsetMs is set" in {
+    val tableInfo = new TableInfo()
+      .setTable("test_db.input_table")
+      .setPartitionColumn("ds")
+    val tableDependency = new TableDependency().setTableInfo(tableInfo)
+    val sensorNode = new ExternalSourceSensorNode()
+      .setSourceTableDependency(tableDependency)
+      .setRetryCount(0L)
+      .setRetryIntervalMin(1L)
+    val runner = new BatchNodeRunner(new Node().setMetaData(createTestMetadata("test_db.input_table", "test_db.output_table")),
+                                     tableUtils,
+                                     mockApi,
+                                     Some(new Window(12, TimeUnit.HOURS).millis))
+
+    val result = runner.checkPartitions(sensorNode, PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec))
+
+    result match {
+      case Success(_) => // Test passed
+      case Failure(e) => fail(s"scheduled partition check should have succeeded: ${e.getMessage}")
+    }
+  }
+
+  it should "use partition readiness for non-timestamp input tables when scheduleOffsetMs is set" in {
+    val metadata = createTestMetadata("test_db.input_table", "test_db.output_table")
+    val runner =
+      new BatchNodeRunner(new Node().setMetaData(metadata),
+                          tableUtils,
+                          mockApi,
+                          Some(new Window(12, TimeUnit.HOURS).millis))
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata,
+                                                             PartitionRange(twoDaysAgo, yesterday)(tableUtils.partitionSpec),
+                                                             tableUtils)
+    val status = statuses.find(_.name == "test_db.input_table")
+
+    assertTrue("Should have status for daily input table", status.isDefined)
+    assertTrue("Table should be ready from partition metadata", status.get.ready)
+    assertEquals("Required end should remain the daily dependency end", yesterday, status.get.requiredEnd)
+    assertEquals("Last available should come from partitions", Some(yesterday), status.get.lastAvailablePartition)
+  }
+
+  it should "use hourly partition readiness for hourly input tables when scheduleOffsetMs is set" in {
+    val requiredHour = createHourlyInputTable()
+    val query = new Query()
+      .setPartitionColumn("hr")
+      .setPartitionFormat("yyyy-MM-dd-HH")
+      .setPartitionInterval(new Window(1, TimeUnit.HOURS))
+    val metadata = createTestMetadata(
+      "test_db.hourly_input_table",
+      "test_db.output_table"
+    )
+    metadata.executionInfo.setTableDependencies(Seq(TableDependencies.fromTable("test_db.hourly_input_table", query)).asJava)
+    val runner =
+      new BatchNodeRunner(new Node().setMetaData(metadata),
+                          tableUtils,
+                          mockApi,
+                          Some(new Window(12, TimeUnit.HOURS).millis))
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata,
+                                                             PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec),
+                                                             tableUtils)
+    val status = statuses.find(_.name == "test_db.hourly_input_table")
+
+    assertTrue("Should have status for hourly input table", status.isDefined)
+    assertTrue("Table should be ready from hourly partition metadata", status.get.ready)
+    assertEquals("Required end should be the scheduled hourly partition", requiredHour, status.get.requiredEnd)
+    assertEquals("Last available should preserve hourly partition", Some(requiredHour), status.get.lastAvailablePartition)
+  }
+
+  it should "not use hourly partition readiness when scheduleOffsetMs does not align to an hourly partition" in {
+    createHourlyInputTable()
+    val query = new Query()
+      .setPartitionColumn("hr")
+      .setPartitionFormat("yyyy-MM-dd-HH")
+      .setPartitionInterval(new Window(1, TimeUnit.HOURS))
+    val metadata = createTestMetadata(
+      "test_db.hourly_input_table",
+      "test_db.output_table"
+    )
+    metadata.executionInfo.setTableDependencies(Seq(TableDependencies.fromTable("test_db.hourly_input_table", query)).asJava)
+    val scheduleOffsetMs = new Window(12, TimeUnit.HOURS).millis + new Window(30, TimeUnit.MINUTES).millis
+    val runner =
+      new BatchNodeRunner(new Node().setMetaData(metadata),
+                          tableUtils,
+                          mockApi,
+                          Some(scheduleOffsetMs))
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata,
+                                                             PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec),
+                                                             tableUtils)
+    val status = statuses.find(_.name == "test_db.hourly_input_table")
+
+    assertTrue("Should have status for hourly input table", status.isDefined)
+    assertFalse("Unaligned hourly partition should require timestamp stats", status.get.ready)
+    assertEquals("Required end should be the unaligned schedule millis",
+                 (tableUtils.partitionSpec.epochMillis(yesterday) + scheduleOffsetMs).toString,
+                 status.get.requiredEnd)
+    assertEquals("Last available should not come from hourly partition metadata",
+                 None,
+                 status.get.lastAvailablePartition)
+  }
+
+  it should "use timestamp stats in input table readiness when scheduleOffsetMs is set" in {
+    createSubdailyStatsSensorTable()
+
+    val metadata = createTestMetadata(
+      "test_db.subdaily_stats_sensor",
+      "test_db.output_table",
+      partitionColumn = "created_at"
+    )
+    val maxTimestamp = tableUtils.maxTimestampMillisFromStats("test_db.subdaily_stats_sensor", "created_at").get
+    val scheduleOffsetMs = maxTimestamp - tableUtils.partitionSpec.epochMillis(yesterday) - 1000L
+    val runner = new BatchNodeRunner(new Node().setMetaData(metadata), tableUtils, mockApi, Some(scheduleOffsetMs))
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata,
+                                                             PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec),
+                                                             tableUtils)
+    val status = statuses.find(_.name == "test_db.subdaily_stats_sensor")
+
+    assertTrue("Should have status for subdaily stats table", status.isDefined)
+    assertTrue("Table should be ready from timestamp stats", status.get.ready)
+    assertEquals(
+      "Required end should be the scheduled watermark",
+      (tableUtils.partitionSpec.epochMillis(yesterday) + scheduleOffsetMs).toString,
+      status.get.requiredEnd
+    )
+    assertEquals("Last available should be max timestamp from stats", Some(maxTimestamp.toString), status.get.lastAvailablePartition)
   }
 
   private def createTimePartitionedEventsTable(): Unit = {
