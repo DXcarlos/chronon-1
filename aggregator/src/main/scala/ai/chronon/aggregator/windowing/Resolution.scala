@@ -18,6 +18,7 @@ package ai.chronon.aggregator.windowing
 
 import ai.chronon.api.Extensions.WindowOps
 import ai.chronon.api.Extensions.WindowUtils
+import ai.chronon.api.Aggregation
 import ai.chronon.api.GroupBy
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api.TimeUnit
@@ -47,6 +48,22 @@ object FiveMinuteResolution extends Resolution {
     Array(WindowUtils.Day.millis, WindowUtils.Hour.millis, WindowUtils.FiveMinutes)
 }
 
+private[windowing] object MinuteWindowResolution extends Resolution {
+  private val OneHourMillis = new Window(1, TimeUnit.HOURS).millis
+
+  def calculateTailHop(window: Window): Long =
+    window.millis match {
+      case x if x <= 0                                     => WindowUtils.FiveMinutes
+      case x if x >= new Window(12, TimeUnit.DAYS).millis  => WindowUtils.Day.millis
+      case x if x >= new Window(12, TimeUnit.HOURS).millis => WindowUtils.Hour.millis
+      case x if x >= OneHourMillis                         => WindowUtils.FiveMinutes
+      case _                                               => WindowUtils.Minute
+    }
+
+  val hopSizes: Array[Long] =
+    Array(WindowUtils.Day.millis, WindowUtils.Hour.millis, WindowUtils.FiveMinutes, WindowUtils.Minute)
+}
+
 object DailyResolution extends Resolution {
 
   def calculateTailHop(window: Window): Long =
@@ -63,11 +80,25 @@ object DailyResolution extends Resolution {
 }
 
 object ResolutionUtils {
+  private val MinuteResolutionWindowThresholdMillis: Long = new Window(1, TimeUnit.HOURS).millis
+
+  private def hasMinuteWindow(aggregations: Seq[Aggregation]): Boolean =
+    Option(aggregations)
+      .exists(_.exists(agg =>
+        Option(agg.windows).exists(_.iterator().toScala.exists(window =>
+          window != null && window.millis > 0 && window.millis < MinuteResolutionWindowThresholdMillis))))
+
+  def effectiveResolution(aggregations: Seq[Aggregation], resolution: Resolution): Resolution =
+    if ((resolution eq FiveMinuteResolution) && hasMinuteWindow(aggregations)) MinuteWindowResolution
+    else resolution
 
   /** Find the smallest tail window resolution in a GroupBy. Returns 1D if the GroupBy does not define any windows (all-time aggregates).
-    * The window resolutions are: 5 min for a GroupBy a window < 12 hrs, 1 hr for < 12 days, 1 day for > 12 days.
+    * The window resolutions are: 1 min for a GroupBy window < 1 hr, 5 min for < 12 hrs,
+    * 1 hr for < 12 days, 1 day for > 12 days.
     */
   def getSmallestTailHopMillis(groupBy: GroupBy): Long = {
+    val aggregations = Option(groupBy.aggregations).map(_.toScala.toSeq).getOrElse(Seq.empty)
+    val resolution = effectiveResolution(aggregations, FiveMinuteResolution)
 
     val tailHops =
       for (
@@ -76,7 +107,7 @@ object ResolutionUtils {
         windows <- Option(agg.windows).toSeq;
         window <- windows.iterator().toScala
       ) yield {
-        FiveMinuteResolution.calculateTailHop(window)
+        resolution.calculateTailHop(window)
       }
 
     if (tailHops.isEmpty) WindowUtils.Day.millis

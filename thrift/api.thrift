@@ -253,7 +253,8 @@ struct Aggregation {
     For TEMPORAL case windows are sawtooth. Meaning head slides ahead continuously in time, whereas, the tail only hops ahead, at discrete points in time. Hop is determined by the window size automatically. The maximum hop size is 1/12 of window size. You can specify multiple such windows at once.
       - Window > 12 days  -> Hop Size = 1 day
       - Window > 12 hours -> Hop Size = 1 hr
-      - Window > 1hr      -> Hop Size = 5 minutes
+      - Window >= 1hr     -> Hop Size = 5 minutes
+      - Window < 1hr      -> Hop Size = 1 minute
     */
     4: optional list<common.Window> windows
 

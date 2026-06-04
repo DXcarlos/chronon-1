@@ -36,9 +36,11 @@ import java.util
 class HopsAggregatorBase(aggregations: Seq[Aggregation], inputSchema: Seq[(String, DataType)], resolution: Resolution)
     extends Serializable {
 
+  protected val effectiveResolution: Resolution = ResolutionUtils.effectiveResolution(aggregations, resolution)
+
   @transient lazy val rowAggregator =
     new RowAggregator(inputSchema, aggregations.flatMap(_.unWindowed))
-  val hopSizes: Array[Long] = resolution.hopSizes
+  val hopSizes: Array[Long] = effectiveResolution.hopSizes
 
   def init(): IrMapType =
     Array.fill(hopSizes.length)(new java.util.HashMap[Long, HopIr])
@@ -110,20 +112,20 @@ class HopsAggregator(minQueryTs: Long,
     // from where(leftBoundary) a particular hops size is relevant
     val hopSizeToMaxWindow =
       allWindows
-        .groupBy(resolution.calculateTailHop)
+        .groupBy(effectiveResolution.calculateTailHop)
         .mapValues(_.map(_.millis).max)
 
-    val maxHopSize = resolution.calculateTailHop(allWindows.maxBy(_.millis))
+    val maxHopSize = effectiveResolution.calculateTailHop(allWindows.maxBy(_.millis))
 
-    val result: Array[Option[Long]] = resolution.hopSizes.indices.map { hopIndex =>
-      val hopSize = resolution.hopSizes(hopIndex)
+    val result: Array[Option[Long]] = effectiveResolution.hopSizes.indices.map { hopIndex =>
+      val hopSize = effectiveResolution.hopSizes(hopIndex)
       // for windows with this hop as the tail hop size
       val windowBasedLeftBoundary = hopSizeToMaxWindow.get(hopSize).map(TsUtils.round(minQueryTs, hopSize) - _)
       // for windows larger with tail hop larger than this hop
       val largerWindowBasedLeftBoundary = if (hopIndex == 0) { // largest window already
         None
       } else { // smaller hop is only used to construct windows' head with larger hopsize.
-        val previousHopSize = resolution.hopSizes(hopIndex - 1)
+        val previousHopSize = effectiveResolution.hopSizes(hopIndex - 1)
         Some(TsUtils.round(minQueryTs, previousHopSize))
       }
       if (hopSize > maxHopSize) { // this hop size is not relevant
@@ -134,7 +136,7 @@ class HopsAggregator(minQueryTs: Long,
       }
     }.toArray
 
-    val readableHopSizes = resolution.hopSizes.map(WindowUtils.millisToString)
+    val readableHopSizes = effectiveResolution.hopSizes.map(WindowUtils.millisToString)
     val readableLeftBounds = result.map(_.map(TsUtils.toStr).getOrElse("unused"))
     val readableHopsToBoundsMap = readableHopSizes
       .zip(readableLeftBounds)

@@ -45,11 +45,12 @@ import scala.collection.mutable
 class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(String, DataType)], resolution: Resolution)
     extends Serializable {
 
-  protected val hopSizes = resolution.hopSizes
+  protected val effectiveResolution: Resolution = ResolutionUtils.effectiveResolution(aggregations, resolution)
+  protected val hopSizes = effectiveResolution.hopSizes
 
   @transient lazy val unpackedAggs: UnpackedAggregations = UnpackedAggregations.from(aggregations)
   @transient lazy protected val tailHopIndices: Array[Int] = windowMappings.map { mapping =>
-    hopSizes.indexOf(resolution.calculateTailHop(mapping.aggregationPart.window))
+    hopSizes.indexOf(effectiveResolution.calculateTailHop(mapping.aggregationPart.window))
   }
 
   @transient lazy val windowMappings: Array[WindowMapping] = unpackedAggs.perWindow
@@ -61,7 +62,7 @@ class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(Strin
   // the cache uses this space to work out the IRs for the whole window based on hops
   // we only create this arena once, so GC kicks in fewer times
   @transient private lazy val arena =
-    Array.fill(resolution.hopSizes.length)(Array.fill[Entry](windowedAggregator.length)(null))
+    Array.fill(hopSizes.length)(Array.fill[Entry](windowedAggregator.length)(null))
 
   def computeWindowsIterator(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Iterator[Array[Any]] = {
 

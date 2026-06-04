@@ -16,7 +16,7 @@
 
 package ai.chronon.aggregator.windowing
 
-import ai.chronon.api.Extensions.WindowOps
+import ai.chronon.api.Extensions.{WindowOps, WindowUtils}
 import ai.chronon.api._
 
 import java.util
@@ -47,7 +47,7 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
                                inputSchema: Seq[(String, DataType)],
                                resolution: Resolution) {
 
-  val hopsAggregator = new HopsAggregatorBase(aggregations, inputSchema, resolution)
+  val hopsAggregator = new HopsAggregatorBase(aggregations, inputSchema, effectiveResolution)
 
   def batchIrSchema: Array[(String, DataType)] = {
     val collapsedSchema = windowedAggregator.irSchema
@@ -69,6 +69,18 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
     windowMappings.map { mapping => Option(mapping.aggregationPart.window).map { batchEndTs - _.millis } }
 
   def init: BatchIr = BatchIr(Array.fill(windowedAggregator.length)(null), hopsAggregator.init())
+
+  // Minutely resolution appends a 1-minute hop after the legacy [1d, 1h, 5m] layout.
+  // Existing online batch IRs can therefore be missing only that newest tail bucket.
+  protected def storedTailHopIndex(batchIr: FinalBatchIr, hopIndex: Int): Int = {
+    val storedHopCount = Option(batchIr.tailHops).map(_.length).getOrElse(0)
+    if (hopIndex < storedHopCount) {
+      hopIndex
+    } else {
+      val fiveMinuteHopIndex = hopSizes.indexOf(WindowUtils.FiveMinutes)
+      if (fiveMinuteHopIndex >= 0 && fiveMinuteHopIndex < storedHopCount) fiveMinuteHopIndex else hopIndex
+    }
+  }
 
   def update(batchEndTs: Long, batchIr: BatchIr, row: Row): BatchIr = {
     val batchTails = tailTs(batchEndTs)
@@ -163,8 +175,9 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
       val window = windowMappings(i).aggregationPart.window
       if (window != null) { // no hops for unwindowed
         val hopIndex = tailHopIndices(i)
-        val queryTail = TsUtils.round(queryTs - windowMillis, hopSizes(hopIndex))
-        val hopIrs = batchIr.tailHops(hopIndex)
+        val storedHopIndex = storedTailHopIndex(batchIr, hopIndex)
+        val queryTail = TsUtils.round(queryTs - windowMillis, hopSizes(storedHopIndex))
+        val hopIrs = batchIr.tailHops(storedHopIndex)
         val relevantHops = mutable.ArrayBuffer[Any](ir(i))
         var idx: Int = 0
         while (idx < hopIrs.length) {

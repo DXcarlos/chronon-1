@@ -28,13 +28,14 @@ class TwoStackLiteAggregator(inputSchema: StructType,
                              aggregations: Seq[Aggregation],
                              resolution: Resolution = FiveMinuteResolution) {
 
+  private val effectiveResolution = ResolutionUtils.effectiveResolution(aggregations, resolution)
   private val allParts = aggregations.flatMap(_.unpack)
   allParts.map(_.outputColumnName)
   // create row aggregator per window - we will loop over data as many times as there are unique windows
   // we will use different row aggregators to do so
   case class PerWindowAggregator(window: Window, agg: RowAggregator, indexMapping: Array[Int]) {
     private val windowLength: Long = window.millis
-    private val tailHopSize = resolution.calculateTailHop(window)
+    private val tailHopSize = effectiveResolution.calculateTailHop(window)
     def tailTs(queryTs: Long): Long = ((queryTs - windowLength) / tailHopSize) * tailHopSize
     def bankersBuffer(inputSize: Int) = new TwoStackLiteAggregationBuffer[Row, Array[Any], Array[Any]](agg, inputSize)
     def init = new Array[Any](agg.length)

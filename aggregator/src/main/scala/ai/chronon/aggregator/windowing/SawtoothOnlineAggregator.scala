@@ -195,9 +195,10 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
       val hasNonNull = if (window != null) { // no hops for unwindowed
         val windowMillis = windowMappings(i).millis
         val hopIndex = tailHopIndices(i)
-        val queryTail = TsUtils.round(batchEndTs - windowMillis, hopSizes(hopIndex))
+        val storedHopIndex = storedTailHopIndex(batchIr, hopIndex)
+        val queryTail = TsUtils.round(batchEndTs - windowMillis, hopSizes(storedHopIndex))
 
-        val hopIrs = batchIr.tailHops(hopIndex)
+        val hopIrs = batchIr.tailHops(storedHopIndex)
         var idx: Int = 0
 
         lazy val hasNonNullTailHop = {

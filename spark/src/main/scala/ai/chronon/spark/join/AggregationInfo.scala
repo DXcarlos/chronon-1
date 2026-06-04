@@ -1,6 +1,12 @@
 package ai.chronon.spark.join
 
-import ai.chronon.aggregator.windowing.{FiveMinuteResolution, HopsAggregator, Resolution, SawtoothAggregator}
+import ai.chronon.aggregator.windowing.{
+  FiveMinuteResolution,
+  HopsAggregator,
+  Resolution,
+  ResolutionUtils,
+  SawtoothAggregator
+}
 import ai.chronon.api
 import ai.chronon.api.ScalaJavaConversions.IterableOps
 import ai.chronon.api.{Constants, TsUtils}
@@ -26,7 +32,7 @@ class CGenericRow(val values: Array[Any]) extends SparkRow {
 
   override def get(i: Int): Any = values(i)
 
-  override def toSeq: Seq[Any] = values.clone()
+  override def toSeq: Seq[Any] = values.clone().toIndexedSeq
 
   override def copy(): CGenericRow = this
 }
@@ -76,13 +82,14 @@ object AggregationInfo {
            rightSchema: spark.StructType,
            resolution: Resolution = FiveMinuteResolution): AggregationInfo = {
 
-    val specs = groupBy.aggregations.toScala.toArray
-    val schema = SparkConversions.toChrononSchema(rightSchema)
+    val specs = groupBy.aggregations.toScala.toIndexedSeq
+    val schema = SparkConversions.toChrononSchema(rightSchema).toIndexedSeq
+    val effectiveResolution = ResolutionUtils.effectiveResolution(specs, resolution)
 
     val hopsAggregator =
-      new HopsAggregator(minQueryTs, specs, schema, resolution)
+      new HopsAggregator(minQueryTs, specs, schema, effectiveResolution)
     val sawtoothAggregator =
-      new SawtoothAggregator(specs, schema, resolution)
+      new SawtoothAggregator(specs, schema, effectiveResolution)
 
     val rightTimeIndex = rightSchema.indexWhere(_.name == Constants.TimeColumn)
     val leftTimeIndex = leftSchema.indexWhere(_.name == Constants.TimeColumn)
@@ -105,7 +112,7 @@ object AggregationInfo {
       leftSchema = leftSchema,
       aggregateChrononSchema = aggregateSchema,
       outputSparkSchema = outputSparkSchema,
-      resolution = resolution
+      resolution = effectiveResolution
     )
   }
 }

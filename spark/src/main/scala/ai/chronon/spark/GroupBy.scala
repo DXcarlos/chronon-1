@@ -348,15 +348,16 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
                      queryTimeRange: Option[TimeRange] = None,
                      resolution: Resolution = FiveMinuteResolution): DataFrame =
     tableUtils.withJobDescription(s"temporalEvents(${keyColumns.mkString(",")})") {
+      val effectiveResolution = ResolutionUtils.effectiveResolution(aggregations, resolution)
 
       val queriesDf = skewFilter
         .map { queriesUnfilteredDf.filter }
         .getOrElse(queriesUnfilteredDf.removeNulls(keyColumns))
 
       val TimeRange(minQueryTs, maxQueryTs) = queryTimeRange.getOrElse(queriesDf.calculateTimeRange)
-      val hopsDs = hopsAggregate(minQueryTs, resolution)
+      val hopsDs = hopsAggregate(minQueryTs, effectiveResolution)
 
-      def headStart(ts: Long): Long = TsUtils.round(ts, resolution.hopSizes.min)
+      def headStart(ts: Long): Long = TsUtils.round(ts, effectiveResolution.hopSizes.min)
       queriesDf.validateJoinKeys(inputDf, keyColumns)
 
       val queriesKeyGen = FastHashing.generateKeyBuilder(keyColumns.toArray, queriesDf.schema)
@@ -395,7 +396,7 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
       }
 
       val sawtoothAggregator =
-        new SawtoothAggregator(aggregations, selectedSchema, resolution)
+        new SawtoothAggregator(aggregations, selectedSchema, effectiveResolution)
 
       // create the IRs up to minHop accuracy
       val headStartsWithIrsDs: Dataset[(CKey, Array[Any])] = {

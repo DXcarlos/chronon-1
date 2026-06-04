@@ -95,7 +95,7 @@ object Extensions {
     val Null: Window = null
 
     private val SecondMillis: Long = 1000
-    private val Minute: Long = 60 * SecondMillis
+    val Minute: Long = 60 * SecondMillis
     val FiveMinutes: Long = 5 * Minute
     private val defaultPartitionSize: api.TimeUnit = api.TimeUnit.DAYS
     val onePartition: api.Window = new api.Window(1, defaultPartitionSize)
