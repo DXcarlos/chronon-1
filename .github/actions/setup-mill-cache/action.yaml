@@ -26,6 +26,20 @@ inputs:
 runs:
   using: composite
   steps:
+    # TODO(david): remove once chronon-ci:latest is republished from main with JDK 17.
+    # Mill 1.1.6 launcher is class file v61 (JDK 17); stale image still has JDK 11.
+    - name: Ensure JDK 17
+      shell: bash
+      run: |
+        set -eo pipefail
+        if ! ls -d /usr/lib/jvm/java-17-openjdk-* >/dev/null 2>&1; then
+          apt-get update
+          apt-get install -y --no-install-recommends openjdk-17-jdk
+        fi
+        JDK17=$(ls -d /usr/lib/jvm/java-17-openjdk-* | head -n1)
+        echo "JAVA_HOME=$JDK17" >> "$GITHUB_ENV"
+        echo "$JDK17/bin" >> "$GITHUB_PATH"
+
     - name: Configure cache paths
       shell: bash
       env:
