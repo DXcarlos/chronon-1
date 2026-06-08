@@ -199,7 +199,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '11'
+          java-version: '17'
       - name: Install Thrift
         run: |
           sudo apt-get update
@@ -301,7 +301,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '11'
+          java-version: '17'
       - name: Install Thrift
         run: |
           sudo apt-get update
@@ -338,7 +338,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '11'
+          java-version: '17'
       - name: Check Scalafmt
         run: |
           ./mill __.checkFormat

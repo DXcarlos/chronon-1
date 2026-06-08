@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zstd \
     python3 \
     python3-pip \
-    openjdk-11-jdk \
+    openjdk-17-jdk \
     python3.12-venv
 
 # java

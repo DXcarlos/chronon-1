@@ -305,13 +305,11 @@ trait BaseModule extends CrossScalaModule with ScalafmtModule with GcsPublishMod
     "-unchecked",
     "-language:implicitConversions",
     "-language:postfixOps",
-    "-language:reflectiveCalls"
+    "-language:reflectiveCalls",
+    "-release:11"
   )
 
-  def javacOptions = Seq(
-    "-source", "11",
-    "-target", "11"
-  )
+  def javacOptions = Seq("--release", "11")
 
   // Merge strategy for assembly
   override def assemblyRules = Assembly.defaultRules ++ Seq(
@@ -402,13 +400,13 @@ trait ArtifactsModule extends Cross.Module[String] {
   def scalaVersion = crossValue
   def all = Task {
     Seq(
-      flink(scalaVersion).assembly(),
-      cloud_gcp(scalaVersion).assembly(),
-      cloud_aws(scalaVersion).assembly(),
-      cloud_azure(scalaVersion).assembly(),
-      service(scalaVersion).assembly(),
-      flink_connectors.pubsub(scalaVersion).assembly(),
-      flink_connectors.kinesis(scalaVersion).assembly()
+      build.flink(scalaVersion).assembly(),
+      build.cloud_gcp(scalaVersion).assembly(),
+      build.cloud_aws(scalaVersion).assembly(),
+      build.cloud_azure(scalaVersion).assembly(),
+      build.service(scalaVersion).assembly(),
+      build.flink_connectors.pubsub(scalaVersion).assembly(),
+      build.flink_connectors.kinesis(scalaVersion).assembly()
     )
   }
 }
