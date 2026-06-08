@@ -106,7 +106,18 @@ class AzureApiImpl(conf: Map[String, String]) extends Api(conf) {
           Option(sharedEnhancedStatsKvStore.get()) match {
             case Some(existingStore) => existingStore
             case None =>
-              val newStore = genKvStore
+              val kvStoreType = conf.getOrElse("kv.store.type", sys.env.getOrElse("KV_STORE_TYPE", "cosmos"))
+              val newStore = kvStoreType.toLowerCase match {
+                case "cosmos" =>
+                  logger.info("Initializing Cosmos DB enhanced stats KV store")
+                  CosmosKVStoreFactory.create(conf)
+                case "redis" =>
+                  logger.info("Initializing Redis enhanced stats KV store")
+                  RedisKVStoreFactory.create(conf)
+                case other =>
+                  throw new IllegalArgumentException(
+                    s"Unsupported KV store type: $other. Supported types: cosmos, redis")
+              }
               sharedEnhancedStatsKvStore.set(newStore)
               newStore
           }
