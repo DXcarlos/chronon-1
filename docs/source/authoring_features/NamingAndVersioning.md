@@ -63,6 +63,29 @@ The version argument is helpful When making a change to an existing entity. For 
 4. (Optionally) Deploy the branch with the new version for A/B testing (see docs on deploying)
 5. Merge the branch to production
 
+### Running branch versions safely
+
+When you run a version from a branch with `zipline hub backfill` or deploy/schedule it through Zipline Hub, Zipline syncs your compiled configs to Hub and records which branch owns each config name and hash. Before submitting the run, Zipline checks whether the target config and any upstream configs that would be computed by the run are already claimed by another branch with a different hash.
+
+If another branch is already running the same version name with different contents, Zipline prints a warning like:
+
+```
+v2 is already being run on branch feature_branch_a.
+Here are the currently claimed versions to branches:
+{
+  "team.user_features.v2__0 (v2)": [
+    "feature_branch_a"
+  ]
+}
+Run anyway? [y/N]:
+```
+
+Choose `N` unless you intentionally want both branches to run different definitions for the same version. Running anyway can cause the two branches to write incompatible data for the same versioned entity.
+
+This check allows branches that have the same compiled hash for a version. That is the expected case when you create a branch from another branch that already introduced the version, or after the change has merged to `main`.
+
+`zipline hub eval` does not submit jobs and does not claim versions. Use eval freely while iterating; the branch-claim warning appears when you backfill or deploy/schedule work that can write data.
+
 Doing this with a new version vs with an entirely new entity has a number of benefits:
 
 1. Compute reuse: When running a backfill with your new `GroupBy` or `Join`, only the new features are computed. The unchanged ones are reused from existing backfills wherever possible.
@@ -104,4 +127,3 @@ Versioning:
 1. When creating a new entity, start with `version=0`.
 2. When iterating on an entity, create a branch and bump the version
 3. Iterations on your branch can keep the same version (no need to bump version in between runs while iterating on a branch)
-
