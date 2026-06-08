@@ -6,6 +6,7 @@ import java.time.LocalDate
 import ai.chronon.api.TilingUtils
 import ai.chronon.integrations.aws.DynamoDBKVStoreConstants.isTimedSorted
 import ai.chronon.online.KVStore._
+import ai.chronon.spark.IonPathConfig
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.scalatest.BeforeAndAfterAll
@@ -20,6 +21,7 @@ import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
 
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.time.Duration
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success, Try}
@@ -613,6 +615,14 @@ class DynamoDBKVStoreTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
       software.amazon.awssdk.services.dynamodb.model.DescribeTimeToLiveRequest.builder().tableName(dataset).build()
     ).join().timeToLiveDescription()
     ttlDesc.timeToLiveStatus() shouldBe software.amazon.awssdk.services.dynamodb.model.TimeToLiveStatus.DISABLED
+  }
+
+  it should "configure DynamoDB import timeout from ion writer timeout millis" in {
+    val defaultStore = new DynamoDBKVStoreImpl(client)
+    defaultStore.configuredImportTimeout shouldBe Duration.ofMinutes(30)
+
+    val configuredStore = new DynamoDBKVStoreImpl(client, Map(IonPathConfig.IonWriterTimeoutKey -> "3600000"))
+    configuredStore.configuredImportTimeout shouldBe Duration.ofHours(1)
   }
 
   it should "gcOldBatchTables deletes tables older than the GC threshold" in {

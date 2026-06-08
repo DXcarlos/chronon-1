@@ -15,6 +15,7 @@ jobs:
     outputs:
       scala: ${{ steps.filter.outputs.scala }}
       python: ${{ steps.filter.outputs.python }}
+      smoke: ${{ steps.filter.outputs.smoke }}
       azure: ${{ steps.filter.outputs.azure }}
       redis: ${{ steps.filter.outputs.redis }}
       security: ${{ steps.filter.outputs.security }}
@@ -34,6 +35,8 @@ jobs:
             python:
               - 'python/**'
               - 'thrift/**'
+            smoke:
+              - 'scripts/ci/scaffold_smoke_test.sh'
             azure:
               - 'cloud_azure/**'
               - 'online/**'
@@ -180,6 +183,39 @@ jobs:
         with:
           name: htmlcov
           path: out/python/test/coverageHtml.dest/htmlcov
+
+  python-scaffold-smoke:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.smoke == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-mill-cache
+        with:
+          coursier-repositories: ${{ vars.COURSIER_REPOSITORIES }}
+      - name: Configure Git
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+      - name: Verify uv
+        shell: bash
+        run: |
+          uv --version
+      - name: Run scaffold smoke test (zipline admin init + compile)
+        shell: bash
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          ./scripts/ci/scaffold_smoke_test.sh
 
   cosmos:
     needs: changes
@@ -350,7 +386,7 @@ jobs:
 
   ci-gate:
     if: always()
-    needs: [spark, non-spark, python-lint, python-tests, cosmos, redis, format, grype, ci-infra]
+    needs: [spark, non-spark, python-lint, python-tests, python-scaffold-smoke, cosmos, redis, format, grype, ci-infra]
     runs-on: ubuntu-latest
     steps:
       - name: Check CI results

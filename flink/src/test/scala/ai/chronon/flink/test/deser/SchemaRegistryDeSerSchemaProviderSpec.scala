@@ -1,10 +1,10 @@
 package ai.chronon.flink.test.deser
 
-import ai.chronon.api.{IntType, StringType, StructField}
+import ai.chronon.api.{BooleanType, Constants, IntType, LongType, StringType, StructField}
 import ai.chronon.flink.deser.SchemaRegistrySerDe
 import ai.chronon.flink.deser.SchemaRegistrySerDe._
 import ai.chronon.online.TopicInfo
-import ai.chronon.online.serde.AvroCodec
+import ai.chronon.online.serde.{AvroCodec, DebeziumAvroSerDe, DebeziumMutationMapper}
 import com.google.protobuf.DynamicMessage
 import io.confluent.kafka.schemaregistry.SchemaProvider
 import io.confluent.kafka.schemaregistry.avro.{AvroSchema, AvroSchemaProvider}
@@ -473,5 +473,112 @@ class SchemaRegistrySerDeSpec extends AnyFlatSpec {
     val mutation = serDe.fromBytes(wireMessage)
     assert(mutation.after(0) == "Bob")
     assert(mutation.after(1) == 35, "age should be 35 — Avro resolution matches fields by name, not position")
+  }
+
+  // ============== Debezium Tests ==============
+
+  private val debeziumEnvelopeSchemaStr =
+    """{
+      |  "type": "record", "name": "Envelope", "namespace": "debezium",
+      |  "fields": [
+      |    {"name": "op", "type": "string"},
+      |    {"name": "before", "type": ["null", {
+      |      "type": "record", "name": "Value",
+      |      "fields": [
+      |        {"name": "id",   "type": "int"},
+      |        {"name": "name", "type": ["null", "string"], "default": null}
+      |      ]
+      |    }], "default": null},
+      |    {"name": "after",  "type": ["null", "debezium.Value"], "default": null},
+      |    {"name": "source", "type": {
+      |      "type": "record", "name": "Source",
+      |      "fields": [{"name": "ts_ms", "type": ["null", "long"], "default": null}]
+      |    }},
+      |    {"name": "ts_ms", "type": ["null", "long"], "default": null}
+      |  ]
+      |}""".stripMargin
+
+  it should "use DebeziumAvroSerDe as delegate when debezium=true" in {
+    val freshClient = new MockSchemaRegistryClient(Seq(avroSchemaProvider).asJava)
+    freshClient.register("debezium-topic-value", new AvroSchema(debeziumEnvelopeSchemaStr))
+
+    val topicInfo = TopicInfo(
+      "debezium-topic",
+      "kafka",
+      Map(RegistryHostKey -> "localhost", DebeziumMutationMapper.DebeziumKey -> "true", SchemaRegistryWireFormat -> "false")
+    )
+    val serDe = new MockSchemaRegistrySerDe(topicInfo, freshClient)
+
+    // Schema should include mutation columns
+    val schema = serDe.schema
+    assert(schema.fields.length == 4, s"Expected 4 fields (id, name, mutation_ts, is_before), got ${schema.fields.length}")
+    assert(schema.fields(2).name == Constants.MutationTimeColumn)
+    assert(schema.fields(2).fieldType == LongType)
+    assert(schema.fields(3).name == Constants.ReversalColumn)
+    assert(schema.fields(3).fieldType == BooleanType)
+  }
+
+  it should "deserialize Debezium UPDATE envelope into Mutation with both before and after when debezium=true" in {
+    val ts = 1710631967915L
+    val freshClient = new MockSchemaRegistryClient(Seq(avroSchemaProvider).asJava)
+    freshClient.register("debezium-update-topic-value", new AvroSchema(debeziumEnvelopeSchemaStr))
+
+    val topicInfo = TopicInfo(
+      "debezium-update-topic",
+      "kafka",
+      Map(RegistryHostKey -> "localhost", DebeziumMutationMapper.DebeziumKey -> "true", SchemaRegistryWireFormat -> "false")
+    )
+    val serDe = new MockSchemaRegistrySerDe(topicInfo, freshClient)
+
+    val envelopeAvroSchema = AvroCodec.of(debeziumEnvelopeSchemaStr).schema
+    val valueSchema = envelopeAvroSchema.getField("before").schema().getTypes.get(1)
+    val sourceSchema = envelopeAvroSchema.getField("source").schema()
+
+    def makeValue(id: Int, name: String) = {
+      val r = new GenericData.Record(valueSchema)
+      r.put("id", id)
+      r.put("name", name)
+      r
+    }
+    val source = new GenericData.Record(sourceSchema)
+    source.put("ts_ms", ts: java.lang.Long)
+
+    val codec = new AvroCodec(debeziumEnvelopeSchemaStr)
+    val envelope = new GenericData.Record(envelopeAvroSchema)
+    envelope.put("op", "u")
+    envelope.put("before", makeValue(1, "Alice"))
+    envelope.put("after", makeValue(1, "Alicia"))
+    envelope.put("source", source)
+    envelope.put("ts_ms", null)
+
+    val mutation = serDe.fromBytes(codec.encodeBinary(envelope))
+
+    // UPDATE: both before and after should be populated
+    assert(mutation.before != null, "before should not be null for UPDATE")
+    assert(mutation.after != null, "after should not be null for UPDATE")
+    assert(mutation.before(1) == "Alice")
+    assert(mutation.after(1) == "Alicia")
+    assert(mutation.before(3) == (true: java.lang.Boolean), "before row should have is_before=true")
+    assert(mutation.after(3) == (false: java.lang.Boolean), "after row should have is_before=false")
+    assert(mutation.before(2) == (ts: java.lang.Long))
+    assert(mutation.after(2) == (ts: java.lang.Long))
+  }
+
+  it should "throw IllegalArgumentException when debezium=true with a Protobuf schema" in {
+    val proto3SchemaStr =
+      """syntax = "proto3";
+        |message Envelope { string op = 1; }""".stripMargin
+    val freshClient = new MockSchemaRegistryClient(Seq(protoSchemaProvider).asJava)
+    freshClient.register("debezium-proto-value", new ProtobufSchema(proto3SchemaStr))
+
+    val topicInfo = TopicInfo(
+      "debezium-proto",
+      "kafka",
+      Map(RegistryHostKey -> "localhost", DebeziumMutationMapper.DebeziumKey -> "true", SchemaRegistryWireFormat -> "false")
+    )
+    val serDe = new MockSchemaRegistrySerDe(topicInfo, freshClient)
+    assertThrows[IllegalArgumentException] {
+      serDe.schema
+    }
   }
 }

@@ -379,7 +379,7 @@ class DynamoDBKVStoreImpl(rawDynamoDbClient: DynamoDbAsyncClient, conf: Map[Stri
 
       logger.info(s"DynamoDB import initiated with ARN: $importArn for table: $physicalTableName")
 
-      waitForImportCompletion(importArn, physicalTableName)
+      waitForImportCompletion(importArn, physicalTableName, configuredImportTimeout)
 
       // ImportTable API does not support TTL configuration; must be applied after import completes
       if (enableTtl) {
@@ -499,8 +499,14 @@ class DynamoDBKVStoreImpl(rawDynamoDbClient: DynamoDbAsyncClient, conf: Map[Stri
       .build()
   }
 
-  private def waitForImportCompletion(importArn: String, tableName: String): Unit = {
-    val maxWaitTimeMs = 30 * 60 * 1000L // 30 minutes
+  private[aws] def configuredImportTimeout: Duration =
+    conf
+      .get(IonPathConfig.IonWriterTimeoutKey)
+      .map(timeoutMillis => Duration.ofMillis(timeoutMillis.toLong))
+      .getOrElse(DynamoImportDefaultTimeout)
+
+  private def waitForImportCompletion(importArn: String, tableName: String, timeout: Duration): Unit = {
+    val maxWaitTimeMs = timeout.toMillis
     val pollIntervalMs = 10 * 1000L // 10 seconds
     val startTime = System.currentTimeMillis()
 
@@ -550,7 +556,7 @@ class DynamoDBKVStoreImpl(rawDynamoDbClient: DynamoDbAsyncClient, conf: Map[Stri
         logger.error(diagnostics)
         throw new RuntimeException(diagnostics)
       case ImportStatus.IN_PROGRESS =>
-        throw new RuntimeException(s"DynamoDB import timed out after ${maxWaitTimeMs}ms for table: $tableName")
+        throw new RuntimeException(s"DynamoDB import timed out after $timeout for table: $tableName")
       case _ =>
         logger.warn(s"Unknown import status: $status for table: $tableName")
     }
@@ -704,6 +710,7 @@ object DynamoDBKVStoreConstants {
 
   val DataTTLSeconds = 5.days.toSeconds.toInt
   val MillisPerDay = 1.day.toMillis
+  val DynamoImportDefaultTimeout: Duration = Duration.ofMinutes(30)
 
   val BatchTableGCAgeDays = 30
   val BatchTableGCMaxDelete = 10
