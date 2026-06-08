@@ -1167,7 +1167,12 @@ object Driver {
           val partColumnName = spec.head._1
           val partitionSpec =
             PartitionSpec(partColumnName, tableUtils.partitionSpec.format, tableUtils.partitionSpec.spanMillis)
-          val partList = tableUtils.partitions(tbl, spec.tail.toMap, tablePartitionSpec = Option(partitionSpec))
+          val partitionRange = Some(PartitionRange(spec.head._2, spec.head._2)(partitionSpec))
+          val partList = tableUtils.partitions(tbl,
+                                               spec.tail.toMap,
+                                               partitionRange = partitionRange,
+                                               tablePartitionSpec = Option(partitionSpec),
+                                               deriveLogicalPartitions = true)
           logger.info(
             s"Checking for presence of partition: ${spec.head} for table: ${tbl} with subpartitions: ${spec.tail}")
           partList.contains(spec.head._2)

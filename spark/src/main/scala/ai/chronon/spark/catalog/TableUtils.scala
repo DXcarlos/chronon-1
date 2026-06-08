@@ -114,7 +114,8 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                  subPartitionsFilter: Map[String, String] = Map.empty,
                  partitionRange: Option[PartitionRange] = None,
                  tablePartitionSpec: Option[PartitionSpec] = None,
-                 timePartitioned: Boolean = false): List[String] = {
+                 timePartitioned: Boolean = false,
+                 deriveLogicalPartitions: Boolean = false): List[String] = {
     val rangeWheres = andPredicates(partitionRange.map(_.whereClauses).getOrElse(Seq.empty))
 
     val effectivePartColumn = tablePartitionSpec.map(_.column).getOrElse(partitionSpec.column)
@@ -123,7 +124,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     val partitions = tableFormatProvider
       .readFormat(tableName)
       .map((format) => {
-        if (timePartitioned) {
+        val rawPartitions = if (timePartitioned) {
           logger.info(
             s"Getting virtual partitions for time-partitioned table ${tableName} using column ${effectivePartColumn}")
           val allPartitions = format.virtualPartitions(tableName, effectivePartColumn, effectiveSpec)(sparkSession)
@@ -140,17 +141,38 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
             s"Getting partitions for ${tableName} with partitionColumnName ${effectivePartColumn} and subpartitions: ${subPartitionsFilter}")
           format.primaryPartitions(tableName, effectivePartColumn, rangeWheres, subPartitionsFilter)(sparkSession)
         }
-      })
-      .map { partitions =>
-        val nonNullPartitions = Format.sanitizePartitionValues(partitions)
-        if (nonNullPartitions.isEmpty) {
-          logger.info(s"No partitions found for table: $tableName with subpartition filters ${subPartitionsFilter}")
+
+        val catalogPartitions = Format.sanitizePartitionValues(rawPartitions)
+        // Some Iceberg join-part outputs are clustered or otherwise not physically partitioned
+        // by Chronon's logical partition column. In that case the catalog partition list is
+        // empty, but StepRunner still needs exact logical ds values to decide whether to skip.
+        val shouldQueryLogicalPartitions =
+          deriveLogicalPartitions &&
+            format == Iceberg &&
+            !timePartitioned &&
+            catalogPartitions.isEmpty &&
+            subPartitionsFilter.isEmpty
+
+        val effectivePartitions =
+          if (shouldQueryLogicalPartitions) {
+            queryLogicalPartitions(tableName, effectivePartColumn, rangeWheres, effectiveSpec, format)
+          } else {
+            catalogPartitions
+          }
+
+        if (effectivePartitions.nonEmpty) {
+          if (shouldQueryLogicalPartitions) {
+            logger.info(
+              s"Found ${effectivePartitions.size} logical partitions for unpartitioned or clustered table $tableName by scanning column $effectivePartColumn")
+          } else {
+            logger.info(
+              s"Found ${effectivePartitions.size}, between (${effectivePartitions.min}, ${effectivePartitions.max}) partitions for table: $tableName")
+          }
         } else {
-          logger.info(
-            s"Found ${nonNullPartitions.size}, between (${nonNullPartitions.min}, ${nonNullPartitions.max}) partitions for table: $tableName")
+          logger.info(s"No partitions found for table: $tableName with subpartition filters ${subPartitionsFilter}")
         }
-        nonNullPartitions
-      }
+        effectivePartitions
+      })
       .getOrElse(List.empty)
 
     // if table is yyyyMMdd and global partitionSpec is yyyy-MM-dd, partitions will use yyyyMMdd
@@ -161,6 +183,44 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
         .getOrElse(partitions)
     } else {
       partitions
+    }
+  }
+
+  private def queryLogicalPartitions(tableName: String,
+                                     partitionColumn: String,
+                                     partitionFilters: String,
+                                     partitionSpec: PartitionSpec,
+                                     format: Format): List[String] = {
+    Try {
+      val df = format.table(tableName, partitionFilters)(sparkSession)
+      val resolvedColumn = df.schema.fieldNames.find(_.equalsIgnoreCase(partitionColumn))
+      resolvedColumn match {
+        case None =>
+          logger.info(s"Cannot derive logical partitions for $tableName because column $partitionColumn is missing")
+          List.empty[String]
+        case Some(columnName) =>
+          val partitionExpr = df.schema(columnName).dataType match {
+            case StringType => col(QuotingUtils.quoteIdentifier(columnName)).cast(StringType)
+            case DateType | TimestampType =>
+              date_format(col(QuotingUtils.quoteIdentifier(columnName)), partitionSpec.format)
+            case _ =>
+              date_format(col(QuotingUtils.quoteIdentifier(columnName)).cast(DateType), partitionSpec.format)
+          }
+
+          import sparkSession.implicits._
+          df.select(partitionExpr.as("partitions"))
+            .filter(col("partitions").isNotNull)
+            .distinct()
+            .as[String]
+            .collect()
+            .toList
+      }
+    } match {
+      case Success(result) => Format.sanitizePartitionValues(result)
+      case Failure(e) =>
+        logger.warn(
+          s"Failed to derive logical partitions for $tableName from column $partitionColumn: ${e.getClass.getSimpleName}: ${Option(e.getMessage).getOrElse("(no message)")}")
+        List.empty
     }
   }
 
@@ -453,7 +513,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       if (validPartitionRange.partitionSpec == partitionSpec) validPartitionRange
       else validPartitionRange.translate(partitionSpec)
 
-    val outputExisting = partitions(outputTable)
+    val outputExisting = partitions(outputTable, partitionRange = Some(canonicalRange), deriveLogicalPartitions = true)
     // To avoid recomputing partitions removed by retention mechanisms we will not fill holes in the very beginning of the range
     // If a user fills a new partition in the newer end of the range, then we will never fill any partitions before that range.
     // We instead log a message saying why we won't fill the earliest hole.

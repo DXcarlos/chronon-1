@@ -83,7 +83,11 @@ object StepRunner {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   def apply(requestedDateRange: DateRange, metaData: MetaData)(body: DateRange => Unit)(implicit
-      tableUtils: TableUtils): Unit = {
+      tableUtils: TableUtils): Unit =
+    apply(requestedDateRange, metaData, deriveLogicalPartitions = false)(body)
+
+  def apply(requestedDateRange: DateRange, metaData: MetaData, deriveLogicalPartitions: Boolean)(
+      body: DateRange => Unit)(implicit tableUtils: TableUtils): Unit = {
 
     val requestedRange = PartitionRange(requestedDateRange.startDate, requestedDateRange.endDate)(PartitionSpec.daily)
 
@@ -92,7 +96,11 @@ object StepRunner {
     val stepRunner = StepRunner(
       tableName,
       body,
-      { t => tableUtils.partitions(t) },
+      { t =>
+        tableUtils.partitions(t,
+                              partitionRange = Some(requestedRange),
+                              deriveLogicalPartitions = deriveLogicalPartitions)
+      },
       Some(stepSize)
     )(tableUtils, tableUtils.partitionSpec)
 

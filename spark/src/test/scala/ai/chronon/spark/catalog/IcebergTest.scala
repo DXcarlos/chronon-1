@@ -1,6 +1,7 @@
 package ai.chronon.spark.catalog
 
-import ai.chronon.api.PartitionSpec
+import ai.chronon.api.{DateRange, ExecutionInfo, MetaData, PartitionRange, PartitionSpec, TableInfo}
+import ai.chronon.spark.batch.StepRunner
 import ai.chronon.spark.utils.SparkTestBase
 import org.scalatest.matchers.should.Matchers
 
@@ -113,6 +114,81 @@ class IcebergTest extends SparkTestBase with Matchers {
 
     val parts = Iceberg.primaryPartitions(tableName, "ds", "")
     parts should contain theSameElementsAs List("2024-02-01", "2024-02-02", "2024-02-03")
+  }
+
+  "StepRunner" should "skip Iceberg tables when logical partitions cover the requested range" in {
+    val tableName = "default.iceberg_step_runner_logical_partitions_test"
+    val tableUtils = TableUtils(spark)
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          id INT,
+          value STRING,
+          ds STRING
+        ) USING iceberg
+      """)
+
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+        (1, 'a', '2024-02-01'),
+        (2, 'b', '2024-02-02'),
+        (3, 'c', '2024-02-03')
+      """)
+
+      val dateRange = new DateRange().setStartDate("2024-02-01").setEndDate("2024-02-03")
+      val metadata = new MetaData()
+        .setName("iceberg_step_runner_logical_partitions_test")
+        .setOutputNamespace("default")
+        .setExecutionInfo(
+          new ExecutionInfo()
+            .setOutputTableInfo(new TableInfo().setTable(tableName))
+            .setStepDays(1)
+        )
+
+      var defaultRuns = 0
+      StepRunner(dateRange, metadata) { _ =>
+        defaultRuns += 1
+      }(tableUtils)
+      defaultRuns shouldBe 3
+
+      var logicalPartitionRuns = 0
+      StepRunner(dateRange, metadata, deriveLogicalPartitions = true) { _ =>
+        logicalPartitionRuns += 1
+      }(tableUtils)
+      logicalPartitionRuns shouldBe 0
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  "TableUtils.unfilledRanges" should "reuse unpartitioned Iceberg tables using logical partitions" in {
+    val tableName = "default.iceberg_unfilled_ranges_logical_partitions_test"
+    val tableUtils = TableUtils(spark)
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          id INT,
+          value STRING,
+          ds STRING
+        ) USING iceberg
+      """)
+
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+        (1, 'a', '2024-02-01'),
+        (2, 'b', '2024-02-02'),
+        (3, 'c', '2024-02-03')
+      """)
+
+      val requestedRange = PartitionRange("2024-02-01", "2024-02-03")(PartitionSpec.daily)
+      tableUtils.unfilledRanges(tableName, requestedRange) shouldBe None
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
   }
 
   it should "throw NotImplementedError when subPartitionsFilter is non-empty" in {

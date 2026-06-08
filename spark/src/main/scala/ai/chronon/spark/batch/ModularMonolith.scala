@@ -136,7 +136,7 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
   }
 
   private def runJoinPartJob(joinPartNode: JoinPartNode, metaData: MetaData, nodeRange: DateRange): Unit = {
-    StepRunner(nodeRange, metaData) { stepRange =>
+    StepRunner(nodeRange, metaData, deriveLogicalPartitions = true) { stepRange =>
       // alignOutput=false: SNAPSHOT join parts write to the shifted (D-1) partition, which MergeJob reads.
       // Enabling alignOutput consistently requires MergeJob to also stop shifting its reads, which is a
       // larger change tracked separately.
