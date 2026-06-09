@@ -22,6 +22,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.nio.file.Paths
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 
 class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
@@ -1261,6 +1262,55 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
     }
 
     assert(exception.getMessage.contains("cannot be used for job submission"))
+  }
+
+  it should "surface async cluster creation failures on next readiness check and retry creation" in {
+    val mockClusterControllerClient = mock[ClusterControllerClient]
+    val mockOperationFuture = mock[OperationFuture[Cluster, ClusterOperationMetadata]]
+    val clusterConfigStr =
+      """{
+      "masterConfig": {
+        "numInstances": 1,
+        "machineTypeUri": "n1-standard-4"
+      }
+    }"""
+    val clusterConf = Some(Map("dataproc.config" -> clusterConfigStr))
+
+    when(mockClusterControllerClient.getCluster(any[String], any[String], any[String]))
+      .thenReturn(null)
+    when(mockClusterControllerClient.createClusterAsync(any[CreateClusterRequest]))
+      .thenReturn(mockOperationFuture)
+    when(mockOperationFuture.get(anyLong(), any[TimeUnit]))
+      .thenThrow(new RuntimeException("create failed"))
+
+    val submitterWithClusterClient = new DataprocSubmitter(
+      jobControllerClient = mock[JobControllerClient],
+      gcsClient = mock[GCSClient],
+      region = "test-region",
+      projectId = "test-project",
+      clusterControllerClient = Some(mockClusterControllerClient)
+    )
+
+    val directExecutionContext = new ExecutionContext {
+      override def execute(runnable: Runnable): Unit = runnable.run()
+      override def reportFailure(cause: Throwable): Unit = throw cause
+    }
+
+    val result = submitterWithClusterClient.ensureClusterReady(
+      "test-cluster",
+      clusterConf
+    )(directExecutionContext)
+    assert(result.isEmpty)
+
+    val exception = intercept[RuntimeException] {
+      submitterWithClusterClient.ensureClusterReady(
+        "test-cluster",
+        clusterConf
+      )(directExecutionContext)
+    }
+
+    assert(exception.getMessage.contains("Previous async Dataproc cluster creation attempt for test-cluster failed"))
+    verify(mockClusterControllerClient, times(2)).createClusterAsync(any[CreateClusterRequest])
   }
 
   it should "throw IllegalArgumentException when getOrCreateCluster is called with no config" in {
