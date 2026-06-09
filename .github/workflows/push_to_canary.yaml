@@ -44,6 +44,7 @@ jobs:
         shell: bash
         run: |
           # Build the mill venv (installs deps + generates thrift sources)
+          set -euxo pipefail
           ./mill python.pythonExe
           ./mill python.generatedSources
           VENV_PYTHON="$(pwd)/out/python/pythonExe.dest/venv/bin/python3"
