@@ -47,6 +47,18 @@ jobs:
           set -euxo pipefail
           ./mill python.pythonExe
           ./mill python.generatedSources
+
+          echo "=== DEBUG: mill show python.pythonExe ==="
+          ./mill show python.pythonExe || true
+          echo "=== DEBUG: pythonExe.json ==="
+          cat out/python/pythonExe.json 2>/dev/null || echo "(missing)"
+          echo "=== DEBUG: out/python tree (venv/python*) ==="
+          find out/python -maxdepth 5 \( -name "venv" -o -name "python*" \) 2>/dev/null || true
+          echo "=== DEBUG: expected path listing ==="
+          ls -la "$(pwd)/out/python/pythonExe.dest/" 2>&1 || true
+          ls -la "$(pwd)/out/python/pythonExe.dest/venv/bin/" 2>&1 || true
+          echo "=== END DEBUG ==="
+
           VENV_PYTHON="$(pwd)/out/python/pythonExe.dest/venv/bin/python3"
 
           export PYTHONHASHSEED=0
