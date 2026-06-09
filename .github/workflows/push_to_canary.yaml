@@ -37,6 +37,9 @@ jobs:
           fetch-depth: 2
       - name: Configure Git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: ./.github/actions/setup-mill-cache
+        with:
+          coursier-repositories: ${{ vars.COURSIER_REPOSITORIES }}
       - name: Compile canary configs against previous baseline
         shell: bash
         run: |
@@ -75,6 +78,10 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-mill-cache
+        with:
+          coursier-repositories: ${{ vars.COURSIER_REPOSITORIES }}
 
       - name: Configure AWS Credentials for Canary Project
         uses: aws-actions/configure-aws-credentials@v4
@@ -179,6 +186,10 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-mill-cache
+        with:
+          coursier-repositories: ${{ vars.COURSIER_REPOSITORIES }}
 
       - name: Configure GCP Credentials for Canary Project
         uses: google-github-actions/auth@v2
