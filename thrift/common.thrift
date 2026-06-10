@@ -75,6 +75,8 @@ struct TableInfo {
     100: optional string partitionColumn
     101: optional string partitionFormat
     102: optional Window partitionInterval
+    // anchor offset of the partition grid from UTC midnight; must be smaller than partitionInterval
+    103: optional Window partitionOffset
 
     /**
     * If isCumulative is true, then for a given output partition any single partition from input on or after the output
@@ -160,6 +162,8 @@ struct ExecutionInfo {
     # relevant for batch jobs
     # temporal workflow nodes maintain their own cron schedule
     10: optional string offlineSchedule
+    # day-denominated regardless of output partition span: sub-daily nodes get a day's worth
+    # of partitions (24h / span) per step
     11: optional i32 stepDays
     12: optional bool historicalBackfill
     13: optional list<TableDependency> tableDependencies

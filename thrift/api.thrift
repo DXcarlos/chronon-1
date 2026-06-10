@@ -58,6 +58,12 @@ struct Query {
     **/
     25: optional bool timePartitioned
 
+    /**
+    * Anchor offset of the partition grid from UTC midnight. Must be smaller than partitionInterval.
+    * e.g. interval=3h, offset=1h means partition boundaries at 01:00, 04:00, ..., 22:00 UTC.
+    **/
+    26: optional common.Window partitionOffset
+
 }
  
 /**
@@ -481,6 +487,17 @@ struct GroupByServingInfo {
     //       2. batch_upload_lag = batch_upload_time - batch_data_time
     5: optional string batchEndDate
     6: optional string dateFormat
+
+    // span and anchor offset of the upload partition grid; absent means daily at midnight UTC
+    7: optional common.Window partitionInterval
+    8: optional common.Window partitionOffset
+
+    /**
+    * Authoritative watermark of the last upload: the exact epoch boundary (exclusive) the batch
+    * data covers up to. Streaming events at or after this timestamp are merged in by the fetcher.
+    * When absent, derived by parsing batchEndDate with dateFormat under a daily spec.
+    **/
+    9: optional i64 batchEndTs
 }
 
 // DataKind + TypeParams = DataType
