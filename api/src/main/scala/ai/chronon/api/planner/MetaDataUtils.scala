@@ -7,6 +7,19 @@ import java.util
 
 object MetaDataUtils {
 
+  /** TableInfo carrying a table's partition spec; offset emitted only when nonzero so existing
+    * daily confs serialize byte-identically
+    */
+  def specTableInfo(table: String, spec: PartitionSpec): TableInfo = {
+    val info = new TableInfo()
+      .setTable(table)
+      .setPartitionColumn(spec.column)
+      .setPartitionFormat(spec.format)
+      .setPartitionInterval(WindowUtils.fromMillis(spec.spanMillis))
+    if (spec.offsetMillis != 0) info.setPartitionOffset(WindowUtils.fromMillis(spec.offsetMillis))
+    info
+  }
+
   def layer(baseMetadata: MetaData,
             modeName: String,
             nodeName: String,
@@ -44,10 +57,15 @@ object MetaDataUtils {
         copy.executionInfo.outputTableInfo.setTable(copy.outputTable)
       }
 
-    tableInfo
-      .setPartitionColumn(partitionSpec.column)
-      .setPartitionFormat(partitionSpec.format)
-      .setPartitionInterval(WindowUtils.hours(partitionSpec.spanMillis))
+    // respect author-declared output partition fields (e.g. a sub-daily output spec set from
+    // python); only fill the gaps from the implicit spec. Offset is emitted only when nonzero so
+    // existing daily confs serialize byte-identically.
+    if (!tableInfo.isSetPartitionColumn) tableInfo.setPartitionColumn(partitionSpec.column)
+    if (!tableInfo.isSetPartitionFormat) tableInfo.setPartitionFormat(partitionSpec.format)
+    if (!tableInfo.isSetPartitionInterval)
+      tableInfo.setPartitionInterval(WindowUtils.fromMillis(partitionSpec.spanMillis))
+    if (!tableInfo.isSetPartitionOffset && partitionSpec.offsetMillis != 0)
+      tableInfo.setPartitionOffset(WindowUtils.fromMillis(partitionSpec.offsetMillis))
 
     // set table dependencies
     copy.executionInfo.setTableDependencies(tableDependencies.toJava)

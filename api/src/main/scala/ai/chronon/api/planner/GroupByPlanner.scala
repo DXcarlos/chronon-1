@@ -15,6 +15,8 @@ import scala.collection.JavaConverters._
 case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: PartitionSpec)
     extends ConfPlanner[GroupBy](groupBy)(outputPartitionSpec) {
 
+  SubDailyValidation.assertGroupByUploadSupported(groupBy)
+
   // execInfo can be heavy - and we don't want to duplicate it
   private def eraseExecutionInfo: GroupBy = {
     val result = groupBy.deepCopy()
@@ -70,13 +72,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
 
   def uploadToKVNode: Node = {
     val tableDep = new TableDependency()
-      .setTableInfo(
-        new TableInfo()
-          .setTable(uploadNode.metaData.outputTable)
-          .setPartitionColumn(outputPartitionSpec.column)
-          .setPartitionFormat(outputPartitionSpec.format)
-          .setPartitionInterval(WindowUtils.hours(outputPartitionSpec.spanMillis))
-      )
+      .setTableInfo(MetaDataUtils.specTableInfo(uploadNode.metaData.outputTable, outputPartitionSpec))
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())
     val uploadToKVTableDeps = Seq(tableDep)

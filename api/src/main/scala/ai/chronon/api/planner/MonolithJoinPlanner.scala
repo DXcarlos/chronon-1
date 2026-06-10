@@ -12,6 +12,8 @@ import scala.collection.JavaConverters._
 case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     extends ConfPlanner[Join](join)(outputPartitionSpec) {
 
+  SubDailyValidation.assertJoinSupported(join)
+
   private def semanticMonolithJoin(join: Join): Join = {
     val semanticJoin = join.deepCopy()
     semanticJoin.unsetMetaData()
@@ -94,13 +96,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
 
     // Stats compute depends on the monolith join output
     val tableDep = new TableDependency()
-      .setTableInfo(
-        new TableInfo()
-          .setTable(monolithJoinNode.metaData.outputTable)
-          .setPartitionColumn(outputPartitionSpec.column)
-          .setPartitionFormat(outputPartitionSpec.format)
-          .setPartitionInterval(WindowUtils.hours(outputPartitionSpec.spanMillis))
-      )
+      .setTableInfo(MetaDataUtils.specTableInfo(monolithJoinNode.metaData.outputTable, outputPartitionSpec))
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())
 

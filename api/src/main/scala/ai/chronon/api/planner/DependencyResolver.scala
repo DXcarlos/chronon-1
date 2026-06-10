@@ -9,7 +9,9 @@ object DependencyResolver {
   private def minus(partition: String, offset: Window)(implicit partitionSpec: PartitionSpec): String = {
     if (partition == null) return null
     if (offset == null) return null
-    partitionSpec.minusFast(partition, offset)
+    // defense in depth: unbounded offsets mean "no bound", not BCE-era label arithmetic
+    if (offset.isUnboundedSentinel) return null
+    partitionSpec.minus(partition, offset)
   }
 
   private def max(partition: String, cutOff: String): String = {
@@ -84,7 +86,7 @@ object DependencyResolver {
     val missingPartitions = requiredPartitions.filterNot(existingPartitions.contains)
     val missingPartitionRanges = PartitionRange.collapseToRange(missingPartitions)(requiredPartitionRange.partitionSpec)
 
-    val missingSteps = missingPartitionRanges.flatMap(_.steps(stepDays))
+    val missingSteps = missingPartitionRanges.flatMap(_.stepsByDays(stepDays))
     missingSteps
   }
 }

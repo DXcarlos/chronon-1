@@ -12,6 +12,8 @@ import scala.language.{implicitConversions, reflectiveCalls}
 class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     extends ConfPlanner[Join](join)(outputPartitionSpec) {
 
+  SubDailyValidation.assertJoinSupported(join)
+
   // will mutate the join in place - use on deepCopy-ied objects only
   private def joinWithoutMetadata(join: Join): Unit = {
     join.unsetMetaData()
@@ -203,13 +205,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         val stepDays = 1 // Stats computed daily
 
         val tableDep = new TableDependency()
-          .setTableInfo(
-            new TableInfo()
-              .setTable(inputTable)
-              .setPartitionColumn(outputPartitionSpec.column)
-              .setPartitionFormat(outputPartitionSpec.format)
-              .setPartitionInterval(WindowUtils.hours(outputPartitionSpec.spanMillis))
-          )
+          .setTableInfo(MetaDataUtils.specTableInfo(inputTable, outputPartitionSpec))
           .setStartOffset(WindowUtils.zero())
           .setEndOffset(WindowUtils.zero())
 

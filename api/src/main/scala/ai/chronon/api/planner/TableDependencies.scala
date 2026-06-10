@@ -70,6 +70,11 @@ object TableDependencies {
       // we go by the amount of data that is available in the source.
       case (DataModel.EVENTS, None, _) => null
 
+      // an unbounded aggregation window means the same thing as no max window: every available
+      // partition matters. It must NOT enter label arithmetic - Int.MaxValue days lands in BCE
+      // territory whose year-of-era labels sort BEFORE real dates and poison range minimums.
+      case (DataModel.EVENTS, Some(aggregationWindow), _) if aggregationWindow.isUnboundedSentinel => null
+
       case (DataModel.EVENTS, Some(aggregationWindow), _) =>
         lagOpt match {
           case Some(lag) => WindowUtils.plus(aggregationWindow, lag)
@@ -85,6 +90,7 @@ object TableDependencies {
       .setPartitionColumn(source.query.getPartitionColumn)
       .setPartitionFormat(source.query.getPartitionFormat)
       .setPartitionInterval(source.query.getPartitionInterval)
+      .setPartitionOffset(source.query.getPartitionOffset)
 
     val tableDep = new TableDependency()
       .setTableInfo(tableInfo)
@@ -116,6 +122,7 @@ object TableDependencies {
       .setPartitionColumn(query.getPartitionColumn)
       .setPartitionFormat(query.getPartitionFormat)
       .setPartitionInterval(query.getPartitionInterval)
+      .setPartitionOffset(query.getPartitionOffset)
 
     new TableDependency()
       .setTableInfo(tableInfo)
