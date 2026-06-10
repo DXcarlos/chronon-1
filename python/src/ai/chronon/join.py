@@ -292,6 +292,8 @@ def Join(
     enable_stats_compute: bool = None,
     modular_execution: bool = False,
     environments: Optional[List[str]] = None,
+    output_partition_interval: Optional[Union[str, common.Window]] = None,
+    output_partition_offset: Optional[Union[str, common.Window]] = None,
 ) -> api.Join:
     """
     Construct a join object. A join can pull together data from various GroupBy's both offline and online. This is also
@@ -492,6 +494,9 @@ def Join(
         historicalBackfill=historical_backfill,
         clusterConf=cluster_conf,
         enableStatsCompute=enable_stats_compute,
+        outputTableInfo=utils.output_partition_table_info(
+            output_partition_interval, output_partition_offset
+        ),
     )
 
     metadata = api.MetaData(

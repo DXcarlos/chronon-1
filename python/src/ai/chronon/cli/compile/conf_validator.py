@@ -100,6 +100,64 @@ def _source_has_topic(source: Source) -> bool:
     return False
 
 
+_DAY_MILLIS = 24 * 60 * 60 * 1000
+_TIME_UNIT_MILLIS = {
+    common.TimeUnit.HOURS: 60 * 60 * 1000,
+    common.TimeUnit.DAYS: _DAY_MILLIS,
+    common.TimeUnit.MINUTES: 60 * 1000,
+}
+
+
+def _window_millis(window: common.Window) -> int:
+    return window.length * _TIME_UNIT_MILLIS[window.timeUnit]
+
+
+def _output_partition_millis(obj) -> Tuple[int, int]:
+    """(interval, offset) millis of the conf's declared output grid; daily midnight default."""
+    exec_info = obj.metaData.executionInfo if obj.metaData else None
+    table_info = exec_info.outputTableInfo if exec_info else None
+    interval = (
+        _window_millis(table_info.partitionInterval)
+        if table_info and table_info.partitionInterval
+        else _DAY_MILLIS
+    )
+    offset = (
+        _window_millis(table_info.partitionOffset)
+        if table_info and table_info.partitionOffset
+        else 0
+    )
+    return interval, offset
+
+
+def _validate_sub_daily_sources(name: str, sources, output_interval_millis: int) -> List[BaseException]:
+    """A sub-daily schedule promises freshness its inputs must deliver: every driving EVENTS
+    source must declare a grain at least as fine as the output interval, or be
+    time_partitioned so its watermark moves intraday. Mirrors the scala
+    SubDailyValidation.assertSourcesIntradayReady so authors hit this at compile time
+    instead of at planning/runtime."""
+    errors = []
+    for source in sources or []:
+        if not source.events or source.events.isCumulative:
+            continue  # entities/joinSource (daily-lookback or chained) and cumulative are exempt
+        query = source.events.query
+        time_partitioned = bool(query and query.timePartitioned)
+        declared = (
+            _window_millis(query.partitionInterval)
+            if query and query.partitionInterval
+            else _DAY_MILLIS
+        )
+        if not time_partitioned and declared > output_interval_millis:
+            errors.append(
+                ValueError(
+                    f"{name}: events source {source.events.table} cannot deliver sub-daily freshness "
+                    f"for a {output_interval_millis}ms output interval. Either declare "
+                    "partition_interval (<= the output interval) matching the table's actual grain, "
+                    "set time_partitioned=True for timestamp-backed tables, or use a daily schedule."
+                )
+            )
+    return errors
+
+
 def _group_by_has_topic(groupBy: GroupBy) -> bool:
     return any(_source_has_topic(source) for source in groupBy.sources)
 
@@ -426,6 +484,27 @@ class ConfValidator(object):
         ]
         errors = []
 
+        output_interval, output_offset = _output_partition_millis(join)
+        if output_interval < _DAY_MILLIS or output_offset != 0:
+            join_name = f"join {join.metaData.name}"
+            if join.left and join.left.entities:
+                errors.append(
+                    ValueError(
+                        f"{join_name}: sub-daily output partitions are not supported for ENTITIES "
+                        "left sources; entity snapshots are daily. Use daily partitions."
+                    )
+                )
+            errors.extend(_validate_sub_daily_sources(join_name, [join.left], output_interval))
+            for gb in included_group_bys:
+                # snapshot-accuracy parts bind to daily snapshots by design (lookback semantics)
+                temporal = gb.accuracy == Accuracy.TEMPORAL or (
+                    gb.accuracy is None and _group_by_has_topic(gb)
+                )
+                if temporal:
+                    errors.extend(
+                        _validate_sub_daily_sources(join_name, gb.sources, output_interval)
+                    )
+
         if join.left and (left_query := get_query(join.left)) is not None:
             left_query_err = self._validate_time_partitioned_query(
                 left_query, f"join {join.metaData.name} left"
@@ -512,6 +591,20 @@ class ConfValidator(object):
         online_joins = [join.metaData.name for join in joins if join.metaData.online is True]
         prod_joins = [join.metaData.name for join in joins if join.metaData.production is True]
         errors = []
+
+        output_interval, output_offset = _output_partition_millis(group_by)
+        if output_interval < _DAY_MILLIS or output_offset != 0:
+            gb_name = f"group_by {group_by.metaData.name}"
+            if any(src.entities for src in group_by.sources or []):
+                errors.append(
+                    ValueError(
+                        f"{gb_name}: sub-daily output partitions are not supported for ENTITIES "
+                        "sources; entity snapshots are daily."
+                    )
+                )
+            errors.extend(
+                _validate_sub_daily_sources(gb_name, group_by.sources, output_interval)
+            )
 
         non_temporal = group_by.accuracy is None or group_by.accuracy == Accuracy.SNAPSHOT
 

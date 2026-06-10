@@ -13,9 +13,12 @@
 #     limitations under the License.
 
 from collections import OrderedDict
-from typing import Dict, List
+from typing import Dict, List, Union
 
 import gen_thrift.api.ttypes as api
+import gen_thrift.common.ttypes as common
+
+from ai.chronon.windows import normalize_window
 
 
 def Query(
@@ -31,6 +34,8 @@ def Query(
     partition_format: str = None,
     sub_partitions_to_wait_for: List[str] = None,
     time_partitioned: bool = None,
+    partition_interval: Union[str, common.Window] = None,
+    partition_offset: Union[str, common.Window] = None,
 ) -> api.Query:
     """
     Create a query object that is used to scan data from various data sources.
@@ -91,6 +96,14 @@ def Query(
         partitions via MIN/MAX of that column and use timestamp-based WHERE clauses.
         Common for BigQuery, Snowflake, and Delta Lake tables that aren't Hive-partitioned.
     :type time_partitioned: bool, optional
+    :param partition_interval:
+        Time span of one partition of this source, e.g. "1d" (default), "3h", "90m".
+        Must cleanly divide 24 hours, or be a whole number of days.
+    :type partition_interval: str or common.Window, optional
+    :param partition_offset:
+        Anchor offset of the partition grid from UTC midnight, e.g. "1h" with a "3h" interval
+        means partition boundaries at 01:00, 04:00, ..., 22:00. Must be smaller than the interval.
+    :type partition_offset: str or common.Window, optional
     :return: A Query object that Chronon can use to scan just the necessary data efficiently.
     """
     return api.Query(
@@ -106,6 +119,8 @@ def Query(
         subPartitionsToWaitFor=sub_partitions_to_wait_for,
         partitionFormat=partition_format,
         timePartitioned=time_partitioned,
+        partitionInterval=normalize_window(partition_interval) if partition_interval else None,
+        partitionOffset=normalize_window(partition_offset) if partition_offset else None,
     )
 
 

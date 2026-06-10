@@ -499,6 +499,8 @@ def GroupBy(
     step_days: int = None,
     disable_historical_backfill: bool = False,
     environments: Optional[List[str]] = None,
+    output_partition_interval: Optional[Union[str, common.Window]] = None,
+    output_partition_offset: Optional[Union[str, common.Window]] = None,
 ) -> ttypes.GroupBy:
     """
 
@@ -716,6 +718,9 @@ def GroupBy(
         stepDays=step_days,
         historicalBackfill=disable_historical_backfill,
         clusterConf=cluster_conf,
+        outputTableInfo=utils.output_partition_table_info(
+            output_partition_interval, output_partition_offset
+        ),
     )
 
     column_tags = {}

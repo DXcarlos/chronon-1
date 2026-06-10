@@ -107,6 +107,10 @@ class TableDependency:
     start_cutoff: Optional[str] = None
     end_cutoff: Optional[str] = None
     time_partitioned: Optional[bool] = None
+    # span of one partition of the upstream table ("1d" default; "3h", "90m", ...) and the
+    # anchor offset of its grid from UTC midnight; start/end offsets above stay day-denominated
+    partition_interval: Optional[Union[str, common.Window]] = None
+    partition_offset: Optional[Union[str, common.Window]] = None
 
     def resolved_offsets(self) -> Tuple[Optional[int], int]:
         """Resolve ``(start_offset, end_offset)`` from the dataclass fields using
@@ -146,12 +150,17 @@ class TableDependency:
 
         resolved_start_offset, resolved_end_offset = self.resolved_offsets()
 
+        from ai.chronon.windows import normalize_window
+
         return common.TableDependency(
             tableInfo=common.TableInfo(
                 table=self.table,
                 partitionColumn=self.partition_column,
                 partitionFormat=self.partition_format,
-                partitionInterval=common.Window(1, common.TimeUnit.DAYS),
+                partitionInterval=normalize_window(self.partition_interval or "1d"),
+                partitionOffset=(
+                    normalize_window(self.partition_offset) if self.partition_offset else None
+                ),
                 timePartitioned=self.time_partitioned,
             ),
             startOffset=(
@@ -183,6 +192,8 @@ def StagingQuery(
     recompute_days: Optional[int] = None,
     additional_partitions: List[str] = None,
     environments: Optional[List[str]] = None,
+    output_partition_interval: Optional[Union[str, common.Window]] = None,
+    output_partition_offset: Optional[Union[str, common.Window]] = None,
 ) -> ttypes.StagingQuery:
     """
     Creates a StagingQuery object for executing arbitrary SQL queries with templated date parameters.
@@ -243,6 +254,15 @@ def StagingQuery(
         List of environments where this StagingQuery should be deployed/available.
         Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     :type environments: List[str]
+    :param output_partition_interval:
+        Time span of one output partition, e.g. "1d" (default), "3h". Must cleanly divide
+        24 hours or be a whole number of days. Sub-daily outputs need a partition format
+        with time fields (e.g. 'yyyy-MM-dd-HH') configured for the team/table.
+    :type output_partition_interval: str or common.Window, optional
+    :param output_partition_offset:
+        Anchor offset of the output partition grid from UTC midnight, e.g. "1h" with a "3h"
+        interval gives boundaries 01:00, 04:00, ..., 22:00. Must be smaller than the interval.
+    :type output_partition_offset: str or common.Window, optional
     :return:
         A StagingQuery object
     """
@@ -290,6 +310,9 @@ def StagingQuery(
         env=env_vars,
         stepDays=step_days,
         clusterConf=cluster_conf,
+        outputTableInfo=utils.output_partition_table_info(
+            output_partition_interval, output_partition_offset
+        ),
     )
 
     airflow_dependencies = []

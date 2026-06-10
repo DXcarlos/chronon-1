@@ -433,3 +433,25 @@ def clean_expression(expr):
     Cleans up an expression by removing leading and trailing whitespace and newlines.
     """
     return re.sub(r"\s+", " ", expr).strip()
+
+
+def output_partition_table_info(partition_interval=None, partition_offset=None):
+    """Builds the executionInfo.outputTableInfo declaring a node's output partition spec.
+
+    Returns None when neither field is set so existing daily confs serialize unchanged.
+    The planner (MetaDataUtils.layer) respects pre-set fields and fills the rest from the
+    global spec; the table name itself is also filled in by the planner.
+    """
+    if not partition_interval and not partition_offset:
+        return None
+    if partition_offset and not partition_interval:
+        raise ValueError("output_partition_offset requires output_partition_interval to be set")
+
+    import gen_thrift.common.ttypes as common
+
+    from ai.chronon.windows import normalize_window
+
+    return common.TableInfo(
+        partitionInterval=normalize_window(partition_interval),
+        partitionOffset=normalize_window(partition_offset) if partition_offset else None,
+    )
