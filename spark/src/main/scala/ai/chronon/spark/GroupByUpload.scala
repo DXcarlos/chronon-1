@@ -18,7 +18,7 @@ package ai.chronon.spark
 
 import ai.chronon.aggregator.windowing._
 import ai.chronon.api
-import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, SourceOps}
+import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, SourceOps, WindowUtils}
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
 import ai.chronon.online.Extensions.ChrononStructTypeOps
@@ -318,20 +318,31 @@ object GroupByUpload {
   // TODO - remove this if spark streaming can't reach hive tables
   private def buildServingInfo(groupByConf: api.GroupBy,
                                session: SparkSession,
-                               endDs: String): GroupByServingInfoParsed = {
+                               endDs: String,
+                               uploadSpec: Option[PartitionSpec] = None): GroupByServingInfoParsed = {
     val groupByServingInfo = new GroupByServingInfo()
     val tableUtils: TableUtils = TableUtils(session)
-    implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
-    val nextDay = tableUtils.partitionSpec.after(endDs)
+    implicit val partitionSpec: PartitionSpec =
+      uploadSpec.getOrElse(groupByConf.metaData.dateRangeSpec(tableUtils.partitionSpec))
+    val batchEndDate = partitionSpec.after(endDs)
 
     val groupBy = ai.chronon.spark.GroupBy
       .from(groupByConf, PartitionRange(endDs, endDs), TableUtils(session), computeDependency = false)
 
-    groupByServingInfo.setBatchEndDate(nextDay)
+    groupByServingInfo.setBatchEndDate(batchEndDate)
+    // authoritative watermark of this upload: streaming merges events at or after this boundary
+    groupByServingInfo.setBatchEndTs(partitionSpec.epochMillis(batchEndDate))
     groupByServingInfo.setGroupBy(groupByConf)
     groupByServingInfo.setKeyAvroSchema(groupBy.keySchema.toAvroSchema("Key").toString(true))
     groupByServingInfo.setSelectedAvroSchema(groupBy.preAggSchema.toAvroSchema("Value").toString(true))
-    groupByServingInfo.setDateFormat(tableUtils.partitionFormat)
+    groupByServingInfo.setDateFormat(partitionSpec.format)
+    // thrift contract: absent interval/offset means daily-at-midnight, so emit them for
+    // anything else regardless of what the global spec happens to be
+    if (!partitionSpec.isDaily) {
+      groupByServingInfo.setPartitionInterval(WindowUtils.fromMillis(partitionSpec.spanMillis))
+      if (partitionSpec.offsetMillis != 0)
+        groupByServingInfo.setPartitionOffset(WindowUtils.fromMillis(partitionSpec.offsetMillis))
+    }
 
     val inputSources = groupByConf.streamingSource.toSeq ++ groupByConf.sources.toScala
     if (inputSources.nonEmpty) {
@@ -395,10 +406,14 @@ object GroupByUpload {
                                 showDf: Boolean = false,
                                 tableUtils: TableUtils,
                                 jsonPercent: Int = 1,
-                                maybeContext: Option[Metrics.Context] = None): UploadResult = {
-    implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+                                maybeContext: Option[Metrics.Context] = None,
+                                uploadSpec: Option[PartitionSpec] = None): UploadResult = {
+    // direct driver invocations don't pass uploadSpec - fall back to the conf's own declared
+    // output spec so sub-daily endDs labels parse on the right grid
+    implicit val partitionSpec: PartitionSpec =
+      uploadSpec.getOrElse(groupByConf.metaData.dateRangeSpec(tableUtils.partitionSpec))
     Option(groupByConf.setups).foreach(_.foreach(tableUtils.sql))
-    // add 1 day to the batch end time to reflect data [ds 00:00:00.000, ds + 1 00:00:00.000)
+    // one partition step ahead: batch data covers [epoch(endDs), epoch(endDs) + span)
     val batchEndDate = partitionSpec.after(endDs)
     // for snapshot accuracy - we don't need to scan mutations
     lazy val groupBy =
@@ -453,7 +468,8 @@ object GroupByUpload {
           endDs: String,
           tableUtilsOpt: Option[TableUtils] = None,
           showDf: Boolean = false,
-          jsonPercent: Int = 1): Unit = {
+          jsonPercent: Int = 1,
+          uploadSpec: Option[PartitionSpec] = None): Unit = {
     import ai.chronon.spark.submission.SparkSessionBuilder
     val tableUtils: TableUtils =
       tableUtilsOpt.getOrElse(
@@ -467,14 +483,16 @@ object GroupByUpload {
                             showDf = showDf,
                             tableUtils = tableUtils,
                             jsonPercent = jsonPercent,
-                            maybeContext = Option(context))
+                            maybeContext = Option(context),
+                            uploadSpec = uploadSpec)
     val kvDf = result.kvDf
 
     if (showDf) {
       kvDf.prettyPrint()
     }
 
-    val groupByServingInfo = buildServingInfo(groupByConf, session = tableUtils.sparkSession, endDs).groupByServingInfo
+    val groupByServingInfo =
+      buildServingInfo(groupByConf, session = tableUtils.sparkSession, endDs, uploadSpec).groupByServingInfo
 
     val metaRows = Seq(
       Row(

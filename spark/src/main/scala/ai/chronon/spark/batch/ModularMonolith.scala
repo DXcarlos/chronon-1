@@ -1,7 +1,7 @@
 package ai.chronon.spark.batch
 
 import ai.chronon.api
-import ai.chronon.api.Extensions.{GroupByOps, JoinOps, MetadataOps, SourceOps}
+import ai.chronon.api.Extensions.{DateRangeOps, GroupByOps, JoinOps, MetadataOps, SourceOps}
 import ai.chronon.api.ScalaJavaConversions.{IterableOps, JListOps}
 import ai.chronon.api.{Accuracy, DataModel, DateRange, MetaData, PartitionRange, PartitionSpec}
 import ai.chronon.api.planner.{DependencyResolver, JoinPlanner}
@@ -29,7 +29,7 @@ import scala.collection.JavaConverters._
 class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils: TableUtils) {
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
-  implicit val partitionSpec: api.PartitionSpec = tableUtils.partitionSpec
+  implicit val partitionSpec: api.PartitionSpec = join.metaData.dateRangeSpec(tableUtils.partitionSpec)
 
   // Use JoinPlanner to generate the node plan
   private val planner = new JoinPlanner(join)
@@ -40,8 +40,8 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
     logger.info(s"Starting ModularMonolith pipeline for join: ${join.metaData.name}")
     logger.info(s"Executing ${nodes.size} nodes in topological order")
 
-    // DateRange is guaranteed to be in daily spec
-    val queryRange = PartitionRange(dateRange)
+    // DateRange labels are in this node's output spec format (daily here, from tableUtils)
+    val queryRange = dateRange.toPartitionRange
 
     nodes.foreach { node =>
       runNode(node, queryRange)
@@ -166,7 +166,7 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
 
   private def runUnionJoinJob(unionJoinNode: UnionJoinNode, metaData: MetaData, nodeRange: DateRange): Unit = {
     StepRunner(nodeRange, metaData) { stepRange =>
-      val range = PartitionRange(stepRange)
+      val range = stepRange.toPartitionRange
       ai.chronon.spark.join.UnionJoin.computeJoinAndSave(unionJoinNode.join, range)(tableUtils)
     }
     logger.info(s"UnionJoin completed, output table: ${metaData.outputTable}")

@@ -735,8 +735,10 @@ object GroupBy {
                                   window: Option[api.Window]): PartitionRange = {
 
     implicit val tu: TableUtils = tableUtils
-    val effectiveQueryRange = queryRange.translate(source.query.partitionSpec(tableUtils.partitionSpec))
     implicit val sourcePartitionSpec: PartitionSpec = source.query.partitionSpec(tableUtils.partitionSpec)
+    // coveringRange so a coarser-grained source keeps the full coverage of the query range
+    // (translate would floor the end label and drop the rest of its interval)
+    val effectiveQueryRange = queryRange.coveringRange(sourcePartitionSpec)
 
     // from here on down - the math is based entirely on source partition spec
     val PartitionRange(queryStart, queryEnd) = effectiveQueryRange

@@ -18,7 +18,7 @@ then each join may have a further Bootstrap computation to produce the left side
 class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange)(implicit tableUtils: TableUtils) {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   private val sourceWithFilter = node
-  private val dateRange = range.toPartitionRange(tableUtils.partitionSpec)
+  private val dateRange = range.toPartitionRange(metaData.dateRangeSpec(tableUtils.partitionSpec))
   private val outputTable = metaData.outputTable
 
   def parseSkewKeys(jmap: java.util.Map[String, java.util.List[String]]): Option[Map[String, Seq[String]]] = {
@@ -48,7 +48,7 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
       .getOrElse(source)
 
     // This job benefits from a step day of 1 to avoid needing to shuffle on writing output (single partition)
-    dateRange.steps(days = 1).foreach { dayStep =>
+    dateRange.stepsByDays(1).foreach { dayStep =>
       val df = tableUtils.scanDf(skewFilteredSource.query,
                                  skewFilteredSource.table,
                                  Some((Map(tableUtils.partitionColumn -> null) ++ timeProjection).toMap),

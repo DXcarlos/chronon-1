@@ -6,7 +6,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.functions.{col, date_format, date_sub, min, max}
-import org.apache.spark.sql.types.{DateType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, DateType, LongType, NumericType, StringType, StructType, TimestampType}
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Success, Try}
@@ -121,6 +121,34 @@ trait Format {
   // Does this format support sub partitions filters
   def supportSubPartitionsFilter: Boolean
 
+  /** Logical partitions for tables with no catalog partitions (e.g. clustered tables over a
+    * string ds column): the distinct values of the partition column. Compute planning
+    * (unfilledRanges, step runners) needs the SET of partitions, not just boundaries - an
+    * empty catalog listing would otherwise read as "everything missing" and force full
+    * recomputes of join-part/output tables that are fully populated. This is a single
+    * distinct aggregation and only runs on the empty-catalog path; string columns only,
+    * since timestamp-backed tables go through the timePartitioned/virtualPartitions path.
+    */
+  def scanDistinctPartitions(tableName: String, partitionColumn: String, partitionFilters: String)(implicit
+      sparkSession: SparkSession): List[String] = {
+    import sparkSession.implicits._
+    Try {
+      val df = sparkSession.read.table(tableName)
+      df.schema(partitionColumn).dataType match {
+        case StringType =>
+          val filtered = if (partitionFilters.isEmpty) df else df.where(partitionFilters)
+          filtered.select(col(partitionColumn)).distinct().as[String].collect().toList
+        case _ => List.empty
+      }
+    } match {
+      case Success(result) => result
+      case Failure(e) =>
+        logger.warn(
+          s"Failed to scan distinct partition values for $tableName.$partitionColumn: ${Option(e.getMessage).getOrElse("(no message)")}")
+        List.empty
+    }
+  }
+
   protected def metadataPartitions(tableName: String, partitionColumn: String)(implicit
       sparkSession: SparkSession): Option[List[String]] =
     Try(primaryPartitions(tableName, partitionColumn, "")(sparkSession)) match {
@@ -140,6 +168,14 @@ trait Format {
       sparkSession: SparkSession): Option[String] =
     metadataPartitions(tableName, partitionColumn).flatMap(Format.pickMaxPartition)
 
+  // chronon's convention: numeric time columns hold epoch MILLIS already; casting a numeric
+  // through TimestampType would interpret it as seconds and scramble units by 1000x
+  protected def epochMillisCol(c: org.apache.spark.sql.Column, dt: DataType): org.apache.spark.sql.Column =
+    dt match {
+      case _: NumericType => c.cast(LongType)
+      case _              => c.cast(TimestampType).cast(LongType) * 1000
+    }
+
   protected def scanLastAvailablePartition(tableName: String, partitionColumn: String, partitionSpec: PartitionSpec)(
       implicit sparkSession: SparkSession): Option[String] = {
     import sparkSession.implicits._
@@ -153,13 +189,16 @@ trait Format {
             .collect()
             .headOption
             .flatMap(v => Option(v))
-        case _ =>
-          df.select(date_format(date_sub(max(col(partitionColumn)).cast(DateType), 1), partitionSpec.format)
-            .as("last_partition"))
-            .as[String]
+        case dt =>
+          // raw epoch millis + spec math: last COMPLETE partition is the one before the
+          // partition containing the max timestamp - identical to DATE(MAX) - 1 for daily,
+          // but grid-correct for sub-daily and offset-anchored specs (a DATE cast would
+          // produce midnight labels that sit off-grid)
+          df.select(epochMillisCol(max(col(partitionColumn)), dt).as("max_millis"))
             .collect()
             .headOption
-            .flatMap(v => Option(v))
+            .filterNot(_.isNullAt(0))
+            .map(row => partitionSpec.before(partitionSpec.at(row.getLong(0))))
       }
     } match {
       case Success(result) => result
@@ -186,12 +225,12 @@ trait Format {
             .collect()
             .headOption
             .flatMap(v => Option(v))
-        case _ =>
-          df.select(date_format(min(col(partitionColumn)).cast(DateType), partitionSpec.format).as("first_partition"))
-            .as[String]
+        case dt =>
+          df.select(epochMillisCol(min(col(partitionColumn)), dt).as("min_millis"))
             .collect()
             .headOption
-            .flatMap(v => Option(v))
+            .filterNot(_.isNullAt(0))
+            .map(row => partitionSpec.at(row.getLong(0)))
       }
     } match {
       case Success(result) => result
@@ -246,19 +285,23 @@ trait Format {
     import sparkSession.implicits._
     Try {
       val df = sparkSession.read.table(tableName)
+      val colType = df.schema(timestampColumn).dataType
+      // raw epoch min/max, floored onto the partition grid via spec.at - a DateType cast would
+      // floor to midnight and produce off-grid labels for sub-daily or offset-anchored specs
       val result = df
         .select(
-          date_format(min(col(timestampColumn)).cast(DateType), partitionSpec.format).as("min_date"),
-          date_format(max(col(timestampColumn)).cast(DateType), partitionSpec.format).as("max_date")
+          epochMillisCol(min(col(timestampColumn)), colType).as("min_millis"),
+          epochMillisCol(max(col(timestampColumn)), colType).as("max_millis")
         )
-        .as[(String, String)]
+        .as[(Option[Long], Option[Long])]
         .collect()
         .headOption
 
       result
-        .flatMap { case (minDate, maxDate) =>
-          if (minDate == null || maxDate == null) None
-          else Some(partitionSpec.expandRange(minDate, maxDate))
+        .flatMap {
+          case (Some(minMillis), Some(maxMillis)) =>
+            Some(partitionSpec.expandRange(partitionSpec.at(minMillis), partitionSpec.at(maxMillis)))
+          case _ => None
         }
         .getOrElse(List.empty)
     } match {

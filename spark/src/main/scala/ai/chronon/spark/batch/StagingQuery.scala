@@ -17,6 +17,10 @@ class StagingQuery(stagingQueryConf: api.StagingQuery, endPartition: String, tab
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   assert(Option(stagingQueryConf.metaData.outputNamespace).nonEmpty, "output namespace could not be empty or null")
   protected val outputTable = stagingQueryConf.metaData.outputTable
+  // macros and range labels bind to the same spec every runner uses for DateRange/CLI labels:
+  // the global spec for daily-grid outputs (whatever the table's storage format), the output
+  // spec for sub-daily ones - identical to the global spec for every existing staging query
+  private val outputSpec = stagingQueryConf.metaData.dateRangeSpec(tableUtils.partitionSpec)
   private val tableProps = Option(stagingQueryConf.metaData.tableProperties)
     .map(_.toScala.toMap)
     .orNull
@@ -36,11 +40,11 @@ class StagingQuery(stagingQueryConf: api.StagingQuery, endPartition: String, tab
     Option(stagingQueryConf.setups).foreach(_.toScala.foreach(tableUtils.sql))
     val overrideStart = overrideStartPartition.getOrElse(stagingQueryConf.startPartition)
     val rangeToRun =
-      if (forceOverwrite) Seq(PartitionRange(overrideStart, endPartition)(tableUtils.partitionSpec))
+      if (forceOverwrite) Seq(PartitionRange(overrideStart, endPartition)(outputSpec))
       else {
         val unfilledRanges =
           tableUtils.unfilledRanges(outputTable,
-                                    PartitionRange(overrideStart, endPartition)(tableUtils.partitionSpec),
+                                    PartitionRange(overrideStart, endPartition)(outputSpec),
                                     skipFirstHole = skipFirstHole)
 
         if (unfilledRanges.isEmpty) {
@@ -57,7 +61,8 @@ class StagingQuery(stagingQueryConf: api.StagingQuery, endPartition: String, tab
     val exceptions = mutable.Buffer.empty[String]
     rangeToRun.foreach { stagingQueryUnfilledRange =>
       try {
-        val stepRanges = stepDays.map(stagingQueryUnfilledRange.steps).getOrElse(Seq(stagingQueryUnfilledRange))
+        val stepRanges =
+          stepDays.map(stagingQueryUnfilledRange.stepsByDays).getOrElse(Seq(stagingQueryUnfilledRange))
         logger.info(s"Staging query ranges to compute: ${stepRanges.map { _.toString }.pretty}")
         stepRanges.zipWithIndex.foreach { case (range, index) =>
           val progress = s"| [${index + 1}/${stepRanges.size}]"
@@ -84,7 +89,7 @@ class StagingQuery(stagingQueryConf: api.StagingQuery, endPartition: String, tab
   def compute(range: PartitionRange, setups: Seq[String], enableAutoExpand: Option[Boolean]): Unit = {
     Option(setups).foreach(_.foreach(tableUtils.sql))
     val renderedQuery =
-      StagingQuery.substitute(tableUtils, stagingQueryConf.query, range.start, range.end, endPartition)
+      StagingQuery.substitute(tableUtils, stagingQueryConf.query, range.start, range.end, endPartition, Some(outputSpec))
     logger.info(s"Rendered Staging Query to run is:\n$renderedQuery")
     val df = tableUtils.sql(renderedQuery)
     df.save(outputTable, tableProps, partitionCols, autoExpand = enableAutoExpand.get)
@@ -115,7 +120,13 @@ object StagingQuery {
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  def substitute(tu: TableUtils, query: String, start: String, end: String, latest: String): String = {
+  def substitute(tu: TableUtils,
+                 query: String,
+                 start: String,
+                 end: String,
+                 latest: String,
+                 spec: Option[api.PartitionSpec] = None): String = {
+    val macroSpec = spec.getOrElse(tu.partitionSpec)
 
     val maxDateMacro = ParametricMacro(
       "max_date",
@@ -131,7 +142,7 @@ object StagingQuery {
       }
     )
 
-    val queryWithBasicMacrosReplaced = ParametricMacro.applyBasicDateMacros(start, end, latest, tu.partitionSpec)(query)
+    val queryWithBasicMacrosReplaced = ParametricMacro.applyBasicDateMacros(start, end, latest, macroSpec)(query)
 
     maxDateMacro.replace(queryWithBasicMacrosReplaced)
   }

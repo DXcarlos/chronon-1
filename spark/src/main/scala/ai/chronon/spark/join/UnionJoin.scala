@@ -3,6 +3,7 @@ package ai.chronon.spark.join
 import ai.chronon.api
 import ai.chronon.api.Extensions.{DerivationOps, GroupByOps, JoinPartOps, MetadataOps}
 import ai.chronon.api.ScalaJavaConversions.ListOps
+import ai.chronon.api.planner.SubDailyValidation
 import ai.chronon.api.{Accuracy, Constants, PartitionRange}
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.JoinUtils
@@ -235,6 +236,7 @@ object UnionJoin {
   def computeJoinAndSave(joinConf: api.Join, dateRange: PartitionRange, semanticHash: Option[String] = None)(implicit
       tableUtils: TableUtils): Unit =
     tableUtils.withJobDescription(s"UnionJoin(${joinConf.metaData.name}) $dateRange") {
+      SubDailyValidation.assertJoinSupported(joinConf)(dateRange.partitionSpec)
       val resultDf = computeJoin(joinConf, dateRange)
       logger.info(s"Saving output to ${joinConf.metaData.outputTable}")
       resultDf.save(joinConf.metaData.outputTable, semanticHash = semanticHash)

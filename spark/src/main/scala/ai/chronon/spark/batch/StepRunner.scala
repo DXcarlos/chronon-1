@@ -1,7 +1,7 @@
 package ai.chronon.spark.batch
 
 import ai.chronon.api.Extensions.MetadataOps
-import ai.chronon.api.{DateRange, MetaData, PartitionRange, PartitionSpec}
+import ai.chronon.api.{DateRange, MetaData, PartitionRange, PartitionSpec, TsUtils}
 import ai.chronon.spark.catalog.TableUtils
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -47,7 +47,7 @@ case class StepRunner(
     val stepped = stepSize match {
       case Some(size) =>
         logger.info(s"Breaking ${unfilled.size} unfilled ranges into steps of size $size")
-        unfilled.flatMap(_.steps(size))
+        unfilled.flatMap(_.stepsByDays(size))
       case None =>
         logger.info(s"Processing ${unfilled.size} unfilled ranges without stepping")
         unfilled
@@ -85,25 +85,32 @@ object StepRunner {
   def apply(requestedDateRange: DateRange, metaData: MetaData)(body: DateRange => Unit)(implicit
       tableUtils: TableUtils): Unit = {
 
-    val requestedRange = PartitionRange(requestedDateRange.startDate, requestedDateRange.endDate)(PartitionSpec.daily)
+    val outputSpec = metaData.outputPartitionSpec(tableUtils.partitionSpec)
+    val labelSpec = metaData.dateRangeSpec(tableUtils.partitionSpec)
+
+    val requestedRange = PartitionRange(requestedDateRange.startDate, requestedDateRange.endDate)(labelSpec)
 
     val tableName = metaData.outputTable
     val stepSize = metaData.stepSize
     val stepRunner = StepRunner(
       tableName,
       body,
-      { t => tableUtils.partitions(t) },
+      { t => tableUtils.partitions(t, tablePartitionSpec = Some(outputSpec)) },
       Some(stepSize)
-    )(tableUtils, tableUtils.partitionSpec)
+    )(tableUtils, labelSpec)
 
     stepRunner.run(requestedRange)
 
-    val lastPartition = tableUtils.lastAvailablePartition(tableName)
-    lastPartition match {
-      case Some(lp) if lp >= requestedRange.end =>
-        logger.info(s"Output table $tableName covers requested range (last: $lp >= end: ${requestedRange.end})")
-      case Some(lp) =>
-        logger.error(s"Output table $tableName last partition $lp < required end ${requestedRange.end}")
+    // coverage check in time space - no label-format coupling between range and listing
+    val watermark = tableUtils.dataWatermarkMillis(tableName, Some(outputSpec))
+    val requiredCoverageEnd = requestedRange.coverageEnd
+    watermark match {
+      case Some(w) if w > requiredCoverageEnd =>
+        logger.info(s"Output table $tableName covers requested range " +
+          s"(watermark: ${TsUtils.toStr(w)} > coverage end: ${TsUtils.toStr(requiredCoverageEnd)})")
+      case Some(w) =>
+        logger.error(s"Output table $tableName watermark ${TsUtils.toStr(w)} <= " +
+          s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
       case None =>
         logger.error(s"Output table $tableName has no partitions after run")
     }

@@ -51,7 +51,7 @@ due to bootstrap can be omitted from this map.
 class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinParts: Seq[JoinPart])(implicit
     tableUtils: TableUtils) {
 
-  implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+  implicit val partitionSpec: PartitionSpec = metaData.dateRangeSpec(tableUtils.partitionSpec)
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
@@ -85,7 +85,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     archiveOutputTableIfRequired()
 
     // This job benefits from a step day of 1 to avoid needing to shuffle on writing output (single partition)
-    dateRange.steps(days = 1).foreach { dayStep =>
+    dateRange.stepsByDays(1).foreach { dayStep =>
       // Scan left input table once to get schema and potentially reuse
       val leftInputDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(dayStep))
 
@@ -159,7 +159,8 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       val partTable = RelevantLeftForJoinPart.fullPartTableName(join, joinPart)
       val effectiveRange =
         if (join.left.dataModel == DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
-          dayStep.shift(-1)
+          // part tables live at the daily snapshot grain; look back to the covering days' snapshots
+          JoinUtils.snapshotLookbackRange(dayStep, tableUtils.partitionSpec)
         } else {
           dayStep
         }

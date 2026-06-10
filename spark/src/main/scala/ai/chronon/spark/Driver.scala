@@ -287,7 +287,7 @@ object Driver {
           s"Filling partitions for join:$joinName, partitions:[$startPartition, $endPartition], steps:$stepDays")
 
         val partitionRange = PartitionRange(startPartition, endPartition)(tableUtils.partitionSpec)
-        val partitionSteps = partitionRange.steps(stepDays)
+        val partitionSteps = partitionRange.stepsByDays(stepDays)
 
         partitionSteps.zipWithIndex.foreach { case (stepRange, idx) =>
           logger.info(s"Processing range $stepRange (${idx + 1}/${partitionSteps.length})")

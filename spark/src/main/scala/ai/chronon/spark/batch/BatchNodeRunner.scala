@@ -2,7 +2,7 @@ package ai.chronon.spark.batch
 
 import ai.chronon.api.Extensions._
 import ai.chronon.api._
-import ai.chronon.api.planner.{DependencyResolver, NodeRunner}
+import ai.chronon.api.planner.{DependencyResolver, NodeRunner, SubDailyValidation}
 import ai.chronon.api.secrets.SecretResolver
 import ai.chronon.observability.{TileStats, TileStatsType}
 import ai.chronon.online.{Api, KVStore}
@@ -120,27 +120,30 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       return retryTriggerExpr(0)
     }
 
-    // Case 2: Has partition column — unified check: lastAvailablePartition >= range.end
-    // Works for dense Hive, sparse Hive, Iceberg hidden partitions, timestamp columns — all the same.
+    // Case 2: Has partition column — unified check in time space: data watermark must pass the
+    // end of the required range's coverage. Works for dense Hive, sparse Hive, Iceberg hidden
+    // partitions, timestamp columns — and across grains/formats without label translation.
     if (hasPartitionColumn) {
       val spec = tableInfo.partitionSpec(tableUtils.partitionSpec)
       @tailrec
       def retry(attempt: Long): Try[Unit] = {
         Try {
-          logger.info(s"Checking last available partition for ${tableName} column ${tableInfo.partitionColumn}")
-          val lastPartition = tableUtils
-            .lastAvailablePartition(tableName, tablePartitionSpec = Some(spec))
-            .getOrElse(throw new RuntimeException(s"Could not determine last available partition for ${tableName}"))
+          logger.info(s"Checking data watermark for ${tableName} column ${tableInfo.partitionColumn}")
+          val watermark = tableUtils
+            .dataWatermarkMillis(tableName, Some(spec))
+            .getOrElse(throw new RuntimeException(s"Could not determine data watermark for ${tableName}"))
 
-          val requiredEnd = range.end
-          logger.info(s"Last available partition: ${lastPartition}, required end: ${requiredEnd}")
+          val requiredCoverageEnd = range.coverageEnd
+          logger.info(
+            s"Data watermark: ${TsUtils.toStr(watermark)}, required coverage end: ${TsUtils.toStr(requiredCoverageEnd)}")
 
-          if (lastPartition >= requiredEnd) {
-            logger.info(s"Sensor succeeded: ${lastPartition} >= ${requiredEnd}")
+          if (watermark > requiredCoverageEnd) {
+            logger.info(s"Sensor succeeded: ${TsUtils.toStr(watermark)} > ${TsUtils.toStr(requiredCoverageEnd)}")
             ()
           } else {
             throw new RuntimeException(
-              s"Sensor check failed: last available partition ${lastPartition} < required end ${requiredEnd}")
+              s"Sensor check failed: data watermark ${TsUtils.toStr(watermark)} has not passed " +
+                s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
           }
         } match {
           case Success(_) => Success(())
@@ -179,16 +182,19 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   private def runGroupByUpload(metadata: MetaData, groupByUpload: GroupByUploadNode, range: PartitionRange): Unit = {
     require(groupByUpload.isSetGroupBy, "GroupByUploadNode must have a groupBy set")
     val groupBy = groupByUpload.groupBy
-    logger.info(s"Running groupBy upload for '${metadata.name}' for day: ${range.end}")
+    SubDailyValidation.assertGroupByUploadSupported(groupBy)(range.partitionSpec)
+    logger.info(s"Running groupBy upload for '${metadata.name}' for partition: ${range.end}")
 
-    GroupByUpload.run(groupBy, range.end, Option(tableUtils))
-    logger.info(s"Successfully completed groupBy upload for '${metadata.name}' for day: ${range.end}")
+    GroupByUpload.run(groupBy, range.end, Option(tableUtils), uploadSpec = Some(range.partitionSpec))
+    logger.info(s"Successfully completed groupBy upload for '${metadata.name}' for partition: ${range.end}")
   }
 
   private def runMonolithJoin(metadata: MetaData, monolithJoin: MonolithJoinNode, range: PartitionRange): Unit = {
     require(monolithJoin.isSetJoin, "MonolithJoinNode must have a join set")
 
     val joinConf = monolithJoin.join
+    // defense in depth for directly-invoked nodes - planners reject this at compile time
+    SubDailyValidation.assertJoinSupported(joinConf)(range.partitionSpec)
     val joinName = metadata.name
 
     val standaloneUnionJoinEligible = UnionJoin.isEligibleForStandaloneRun(joinConf)
@@ -477,31 +483,24 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   }
 
   private def postJobActions(metadata: MetaData, range: PartitionRange, tableStatsDataset: Option[String]): Unit = {
-    val outputTablePartitionSpec = (for {
-      meta <- Option(metadata)
-      executionInfo <- Option(meta.executionInfo)
-      outputTableInfo <- Option(executionInfo.outputTableInfo)
-      definedSpec = outputTableInfo.partitionSpec(tableUtils.partitionSpec)
-    } yield definedSpec).getOrElse(tableUtils.partitionSpec)
+    val outputTablePartitionSpec = metadata.outputPartitionSpec(tableUtils.partitionSpec)
     val outputTable = metadata.executionInfo.outputTableInfo.table
 
-    val firstOutputPartition =
-      tableUtils.firstAvailablePartition(outputTable, partitionSpec = outputTablePartitionSpec)
-    val lastOutputPartition =
-      tableUtils.lastAvailablePartition(outputTable, tablePartitionSpec = Option(outputTablePartitionSpec))
-    val translatedRange = range.translate(tableUtils.partitionSpec)
+    // coverage is validated in time space - spec-free, no cross-format label comparison
+    val watermark = tableUtils.dataWatermarkMillis(outputTable, Some(outputTablePartitionSpec))
+    val requiredCoverageEnd = range.coverageEnd
 
     logger.info(
-      s"Output table last available partition for '${metadata.name}': ${lastOutputPartition.getOrElse("none")}")
+      s"Output table data watermark for '${metadata.name}': ${watermark.map(TsUtils.toStr).getOrElse("none")}")
 
     // Validate output covers the requested range
-    lastOutputPartition match {
-      case Some(lastPartition) if lastPartition >= translatedRange.end =>
-        logger.info(
-          s"Output table $outputTable covers requested range (last: $lastPartition >= end: ${translatedRange.end})")
-      case Some(lastPartition) =>
-        logger.error(
-          s"After job completion, output table $outputTable last partition $lastPartition < required end ${translatedRange.end}")
+    watermark match {
+      case Some(w) if w > requiredCoverageEnd =>
+        logger.info(s"Output table $outputTable covers requested range " +
+          s"(watermark: ${TsUtils.toStr(w)} > coverage end: ${TsUtils.toStr(requiredCoverageEnd)})")
+      case Some(w) =>
+        logger.error(s"After job completion, output table $outputTable watermark ${TsUtils.toStr(w)} <= " +
+          s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
       case None =>
         logger.error(s"After job completion, output table $outputTable has no partitions")
     }
@@ -529,7 +528,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
                                   firstAvailablePartition: Option[String],
                                   lastAvailablePartition: Option[String],
                                   ready: Boolean,
-                                  requiredEnd: String,
+                                  requiredCoverageEnd: Long,
                                   semanticHash: Option[String])
 
   /** Computes partition statuses for input tables using lastAvailablePartition >= required end.
@@ -552,26 +551,35 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     inputTableDependencies
       .filterNot(_._2.forall(td => td.isSetIsSoftNodeDependency && td.isSoftNodeDependency))
       .flatMap { case (table, deps) =>
-        val requiredEnds = deps
+        // readiness compares epoch watermarks - spec-free, so a sub-daily consumer over a
+        // daily (or differently-formatted) input needs no label translation at all
+        val requiredCoverageEnds = deps
           .flatMap { td =>
             DependencyResolver
               .computeInputRange(range, td)
-              .map(_.translate(tableUtils.partitionSpec).end)
+              // start may be unbounded (null) - only the end label's coverage matters here
+              .map(_.coverageEnd)
           }
           .toSeq
           .sorted
 
-        if (requiredEnds.isEmpty) {
+        if (requiredCoverageEnds.isEmpty) {
           None
         } else {
           val inputPartitionSpec = deps.head.tableInfo.partitionSpec(tableUtils.partitionSpec)
 
           val firstPartition =
             tableUtils.firstAvailablePartition(table, partitionSpec = inputPartitionSpec)
-          val lastPartition = tableUtils.lastAvailablePartition(table, tablePartitionSpec = Some(inputPartitionSpec))
-          val requiredEnd = requiredEnds.last
-
-          val ready = lastPartition.exists(_ >= requiredEnd)
+          // one metadata read answers both the display label and readiness
+          val watermark = tableUtils.dataWatermark(table, Some(inputPartitionSpec))
+          // diagnostics keep the historical global-format presentation for same-grain tables
+          val lastPartition = watermark.map { case (label, _) =>
+            if (inputPartitionSpec.gridEquals(tableUtils.partitionSpec))
+              inputPartitionSpec.translate(label, tableUtils.partitionSpec)
+            else label
+          }
+          val requiredCoverageEnd = requiredCoverageEnds.last
+          val ready = watermark.exists(_._2 > requiredCoverageEnd)
 
           // Collect semanticHash values from all dependencies for this table
           val semanticHashes = deps.flatMap { td =>
@@ -589,7 +597,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             semanticHashes.headOption
           }
 
-          Some(TablePartitionStatus(table, firstPartition, lastPartition, ready, requiredEnd, semanticHash))
+          Some(TablePartitionStatus(table, firstPartition, lastPartition, ready, requiredCoverageEnd, semanticHash))
         }
       }
   }
@@ -605,7 +613,19 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   ): Int = {
     Try {
       val metadata = node.metaData
-      val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
+      // CLI dates stay in the global daily format for daily-grid nodes regardless of the
+      // table's storage format (jobs translate internally); sub-daily nodes take labels in
+      // their output spec format
+      val spec = metadata.dateRangeSpec(tableUtils.partitionSpec)
+      // catch a daily-formatted arg handed to a sub-daily node (and vice versa) before any work runs
+      Seq(startDs, endDs).foreach { ds =>
+        require(
+          Try(spec.at(spec.epochMillis(ds)) == ds).getOrElse(false),
+          s"--start-ds/--end-ds value '$ds' is not a valid partition label for node '${metadata.name}' " +
+            s"(expected format '${spec.format}' on a ${spec.spanMillis}ms grid with offset ${spec.offsetMillis}ms)"
+        )
+      }
+      val range = PartitionRange(startDs, endDs)(spec)
 
       val inputTablePartitionStatuses = computeInputTablePartitionStatuses(metadata, range, tableUtils)
 
@@ -629,7 +649,8 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             "(if the table exists, check logs above for credential or connectivity errors):\n" +
             notReadyTables
               .map { tps =>
-                s"Table: ${tps.name}, last available: ${tps.lastAvailablePartition.getOrElse("none")}, required end: ${tps.requiredEnd}"
+                s"Table: ${tps.name}, last available: ${tps.lastAvailablePartition.getOrElse("none")}, " +
+                  s"required coverage end: ${TsUtils.toStr(tps.requiredCoverageEnd)}"
               }
               .mkString("\n")
         )

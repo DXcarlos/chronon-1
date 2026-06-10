@@ -2,7 +2,6 @@ package ai.chronon.spark.batch
 
 import ai.chronon.api.DataModel.{ENTITIES, EVENTS}
 import ai.chronon.api.Extensions.{DateRangeOps, DerivationOps, GroupByOps, JoinPartOps, MetadataOps}
-import ai.chronon.api.PartitionRange.toTimeRange
 import ai.chronon.api._
 import ai.chronon.online.metrics.Metrics
 import ai.chronon.planner.JoinPartNode
@@ -32,7 +31,7 @@ class JoinPartJob(node: JoinPartNode,
                   showDf: Boolean = false,
                   alignOutput: Boolean = false)(implicit tableUtils: TableUtils) {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
-  implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+  implicit val partitionSpec: PartitionSpec = metaData.dateRangeSpec(tableUtils.partitionSpec)
 
   private val leftTable = node.leftSourceTable
   private val joinPart = node.joinPart
@@ -93,7 +92,7 @@ class JoinPartJob(node: JoinPartNode,
     // val partMetrics = Metrics.Context(metrics, joinPart) -- TODO is this metrics context sufficient, or should we pass thru for monolith join?
     val partMetrics = Metrics.Context(Metrics.Environment.JoinOffline, joinPart.groupBy)
 
-    val rightRange = JoinUtils.shiftDays(node.leftDataModel, joinPart, leftRange)
+    val rightRange = JoinUtils.snapshotScanRange(node.leftDataModel, joinPart, leftRange, tableUtils.partitionSpec)
 
     // Can kill the option after we deprecate monolith join job
     jobContext.leftDf.foreach { leftDf =>
@@ -206,7 +205,11 @@ class JoinPartJob(node: JoinPartNode,
       skewFilteredLeft.select(columns: _*)
     }
 
-    lazy val shiftedPartitionRange = if (alignOutput) unfilledPartitionRange else unfilledPartitionRange.shift(-1)
+    // sub-daily left partitions always look back to daily snapshots, even when aligning output
+    lazy val shiftedPartitionRange =
+      if (alignOutput && unfilledPartitionRange.partitionSpec.gridEquals(tableUtils.partitionSpec))
+        unfilledPartitionRange
+      else JoinUtils.snapshotLookbackRange(unfilledPartitionRange, tableUtils.partitionSpec)
 
     val renamedLeftDf = renamedLeftRawDf.select(renamedLeftRawDf.columns.map {
       case c if c == tableUtils.partitionColumn =>
@@ -236,14 +239,15 @@ class JoinPartJob(node: JoinPartNode,
 
         } else {
           // Use traditional temporalEvents approach
-          genGroupBy(unfilledPartitionRange).temporalEvents(renamedLeftDf, Some(toTimeRange(unfilledPartitionRange)))
+          genGroupBy(unfilledPartitionRange).temporalEvents(renamedLeftDf, Some(unfilledPartitionRange.coverage))
         }
 
       case (EVENTS, ENTITIES, Accuracy.SNAPSHOT) => genGroupBy(shiftedPartitionRange).snapshotEntities
 
       case (EVENTS, ENTITIES, Accuracy.TEMPORAL) =>
         // Snapshots and mutations are partitioned with ds holding data between <ds 00:00> and ds <23:59>.
-        genGroupBy(unfilledPartitionRange.shift(-1)).temporalEntities(renamedLeftDf)
+        genGroupBy(JoinUtils.snapshotLookbackRange(unfilledPartitionRange, tableUtils.partitionSpec))
+          .temporalEntities(renamedLeftDf)
     }
 
     val rightDfWithDerivations = if (joinPart.groupBy.hasDerivations) {

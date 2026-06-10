@@ -21,7 +21,7 @@ import ai.chronon.spark.catalog.TableUtils
   * columns that may be used in derivations). Otherwise, the left source table can be used directly in final join.
   */
 class JoinBootstrapJob(node: JoinBootstrapNode, metaData: MetaData, range: DateRange)(implicit tableUtils: TableUtils) {
-  private implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+  private implicit val partitionSpec: PartitionSpec = metaData.dateRangeSpec(tableUtils.partitionSpec)
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   private val join = node.join

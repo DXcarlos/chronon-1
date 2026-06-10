@@ -170,7 +170,8 @@ object KVUploadNodeRunner {
 
       val api = instantiateApi(onlineClass, mergedProps)
 
-      implicit val partitionSpec: PartitionSpec = PartitionSpec.daily
+      // endDs labels arrive in the node's output spec format (daily CLI format for daily nodes)
+      implicit val partitionSpec: PartitionSpec = metadata.dateRangeSpec(PartitionSpec.daily)
       val range = Some(PartitionRange(null, endDs))
 
       val runner = new KVUploadNodeRunner(api)

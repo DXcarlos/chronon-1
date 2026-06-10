@@ -197,7 +197,8 @@ class Join(joinConf: api.Join,
       val partTable = joinConfCloned.partOutputTable(joinPart)
       val effectiveRange =
         if (joinConfCloned.left.dataModel != ENTITIES && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
-          leftRange.shift(-1)
+          // part tables live at the daily snapshot grain; look back to the covering days' snapshots
+          JoinUtils.snapshotLookbackRange(leftRange, tableUtils.partitionSpec)
         } else {
           leftRange
         }
@@ -303,7 +304,7 @@ class Join(joinConf: api.Join,
               Option(selectsMap).isDefined && selectsMap.values.exists(_.contains(Constants.ChrononRunDs)))
           ) {
             assert(
-              leftRange.isSingleDay,
+              leftRange.isSinglePartition,
               s"Macro ${Constants.ChrononRunDs} is only supported for single day join, current range is $leftRange")
           }
 

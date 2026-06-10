@@ -2,7 +2,7 @@ package ai.chronon.spark.batch
 
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions.ListOps
-import ai.chronon.api.{DateRange, MetaData}
+import ai.chronon.api.{DateRange, MetaData, PartitionSpec}
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.planner.JoinDerivationNode
 import ai.chronon.spark.Extensions._
@@ -20,7 +20,7 @@ Source -> True left table -> Bootstrap table (sourceTable here)
  */
 class JoinDerivationJob(node: JoinDerivationNode, metaData: MetaData, range: DateRange)(implicit
     tableUtils: TableUtils) {
-  implicit val partitionSpec = tableUtils.partitionSpec
+  implicit val partitionSpec: PartitionSpec = metaData.dateRangeSpec(tableUtils.partitionSpec)
   private val join = node.join
   private val dateRange = range.toPartitionRange
   private val derivations = join.derivations.toScala
