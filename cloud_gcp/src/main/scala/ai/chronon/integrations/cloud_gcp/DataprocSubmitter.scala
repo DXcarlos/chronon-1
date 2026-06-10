@@ -16,7 +16,7 @@ import com.google.protobuf.util.JsonFormat
 
 import java.time.{Duration, Instant}
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success}
 import scala.util.matching.Regex
@@ -763,7 +763,8 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
 
   private def surfaceFailedAsyncClusterCreation(clusterName: String,
                                                 clusterConf: Option[Map[String, String]],
-                                                ccClient: ClusterControllerClient)(implicit ec: ExecutionContext): Unit = {
+                                                ccClient: ClusterControllerClient)(implicit
+      ec: ExecutionContext): Unit = {
     asyncClusterCreationAttempts.get(clusterName).foreach { creationAttempt =>
       creationAttempt.value match {
         case Some(Failure(ex)) =>
@@ -786,21 +787,30 @@ class DataprocSubmitter(jobControllerClient: JobControllerClient,
                                           clusterConf: Option[Map[String, String]],
                                           ccClient: ClusterControllerClient)(implicit ec: ExecutionContext): Unit = {
     if (hasDataprocClusterConfig(clusterConf)) {
-      asyncClusterCreationAttempts.get(clusterName) match {
-        case Some(existingAttempt) if !existingAttempt.isCompleted =>
-          logger.info(s"Async Dataproc cluster creation already in progress for $clusterName.")
-        case _ =>
-          logger.info(s"Cluster $clusterName not ready. Triggering creation asynchronously.")
-          val creationAttempt = Future {
-            DataprocSubmitter.getOrCreateCluster(clusterName, clusterConf, projectId, region, ccClient)
-          }
-          asyncClusterCreationAttempts.put(clusterName, creationAttempt)
-          creationAttempt.onComplete {
-            case Success(_) =>
-              asyncClusterCreationAttempts.remove(clusterName, creationAttempt)
-            case Failure(ex) =>
-              logger.error(s"Failed to create cluster $clusterName asynchronously", ex)
-          }
+      val creationAttemptToStart = asyncClusterCreationAttempts.synchronized {
+        asyncClusterCreationAttempts.get(clusterName) match {
+          case Some(_) =>
+            logger.info(s"Async Dataproc cluster creation already tracked for $clusterName.")
+            None
+          case None =>
+            logger.info(s"Cluster $clusterName not ready. Triggering creation asynchronously.")
+            val creationAttempt = Promise[String]()
+            asyncClusterCreationAttempts.put(clusterName, creationAttempt.future)
+            Some(creationAttempt)
+        }
+      }
+
+      creationAttemptToStart.foreach { creationAttempt =>
+        Future {
+          DataprocSubmitter.getOrCreateCluster(clusterName, clusterConf, projectId, region, ccClient)
+        }.onComplete {
+          case Success(cluster) =>
+            creationAttempt.success(cluster)
+            asyncClusterCreationAttempts.remove(clusterName, creationAttempt.future)
+          case Failure(ex) =>
+            creationAttempt.failure(ex)
+            logger.error(s"Failed to create cluster $clusterName asynchronously", ex)
+        }
       }
     } else {
       logger.error(s"Cluster $clusterName does not exist and no cluster configuration provided to create it.")

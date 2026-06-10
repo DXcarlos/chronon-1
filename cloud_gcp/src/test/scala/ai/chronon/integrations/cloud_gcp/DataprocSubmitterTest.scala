@@ -21,7 +21,8 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.nio.file.Paths
 import java.util.UUID
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 
@@ -1311,6 +1312,97 @@ class DataprocSubmitterTest extends AnyFlatSpec with MockitoSugar {
 
     assert(exception.getMessage.contains("Previous async Dataproc cluster creation attempt for test-cluster failed"))
     verify(mockClusterControllerClient, times(2)).createClusterAsync(any[CreateClusterRequest])
+  }
+
+  it should "dedupe concurrent async cluster creation attempts" in {
+    val mockClusterControllerClient = mock[ClusterControllerClient]
+    val mockOperationFuture = mock[OperationFuture[Cluster, ClusterOperationMetadata]]
+    val clusterConfigStr =
+      """{
+      "masterConfig": {
+        "numInstances": 1,
+        "machineTypeUri": "n1-standard-4"
+      }
+    }"""
+    val clusterConf = Some(Map("dataproc.config" -> clusterConfigStr))
+
+    val readinessChecksReady = new CountDownLatch(2)
+    val createStarted = new CountDownLatch(1)
+    val releaseCreate = new CountDownLatch(1)
+    val oneReadinessCheckReturned = new CountDownLatch(1)
+    val getClusterCalls = new AtomicInteger(0)
+    val createClusterCalls = new AtomicInteger(0)
+    val threadErrors = new ConcurrentLinkedQueue[Throwable]()
+
+    when(mockClusterControllerClient.getCluster(any[String], any[String], any[String]))
+      .thenAnswer { _ =>
+        if (getClusterCalls.incrementAndGet() <= 2) {
+          readinessChecksReady.countDown()
+          readinessChecksReady.await(5, TimeUnit.SECONDS)
+        }
+        null
+      }
+    when(mockClusterControllerClient.createClusterAsync(any[CreateClusterRequest]))
+      .thenAnswer { _ =>
+        createClusterCalls.incrementAndGet()
+        mockOperationFuture
+      }
+    when(mockOperationFuture.get(anyLong(), any[TimeUnit]))
+      .thenAnswer { _ =>
+        createStarted.countDown()
+        releaseCreate.await(5, TimeUnit.SECONDS)
+        throw new RuntimeException("create failed")
+      }
+
+    val submitterWithClusterClient = new DataprocSubmitter(
+      jobControllerClient = mock[JobControllerClient],
+      gcsClient = mock[GCSClient],
+      region = "test-region",
+      projectId = "test-project",
+      clusterControllerClient = Some(mockClusterControllerClient)
+    )
+
+    val directExecutionContext = new ExecutionContext {
+      override def execute(runnable: Runnable): Unit = runnable.run()
+      override def reportFailure(cause: Throwable): Unit = ()
+    }
+
+    val start = new CountDownLatch(1)
+    val done = new CountDownLatch(2)
+    val threads = (1 to 2).map { _ =>
+      new Thread(() => {
+        try {
+          start.await(5, TimeUnit.SECONDS)
+          val result = submitterWithClusterClient.ensureClusterReady(
+            "test-cluster",
+            clusterConf
+          )(directExecutionContext)
+          assert(result.isEmpty)
+          oneReadinessCheckReturned.countDown()
+        } catch {
+          case ex: Throwable => threadErrors.add(ex)
+        } finally {
+          done.countDown()
+        }
+      })
+    }
+
+    threads.foreach(_.start())
+    start.countDown()
+
+    try {
+      assert(createStarted.await(5, TimeUnit.SECONDS))
+      assert(oneReadinessCheckReturned.await(5, TimeUnit.SECONDS))
+      assertEquals("Concurrent readiness checks should share one async cluster creation attempt",
+                   1,
+                   createClusterCalls.get())
+    } finally {
+      releaseCreate.countDown()
+      assert(done.await(5, TimeUnit.SECONDS))
+    }
+
+    assert(threadErrors.asScala.isEmpty)
+    verify(mockClusterControllerClient, times(1)).createClusterAsync(any[CreateClusterRequest])
   }
 
   it should "throw IllegalArgumentException when getOrCreateCluster is called with no config" in {
