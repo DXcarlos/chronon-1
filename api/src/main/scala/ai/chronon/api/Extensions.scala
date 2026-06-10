@@ -70,6 +70,9 @@ object Extensions {
   }
 
   implicit class WindowOps(window: Window) {
+    // distinct from the display notion of `unbounded` below: a zero-length window is a valid
+    // no-op OFFSET, but Int.MaxValue means "no bound" and must never enter label arithmetic
+    def isUnboundedSentinel: Boolean = window.length == Int.MaxValue
     private def unbounded: Boolean = window.length == Int.MaxValue || window.length <= 0
 
     def str: String =
@@ -100,7 +103,15 @@ object Extensions {
     private val defaultPartitionSize: api.TimeUnit = api.TimeUnit.DAYS
     val onePartition: api.Window = new api.Window(1, defaultPartitionSize)
 
-    def hours(millis: Long): Window = new Window((millis / Hour.millis).toInt, TimeUnit.HOURS)
+    // HOURS preferred over DAYS for whole-day spans so daily specs keep serializing as
+    // Window(24, HOURS), byte-identical with the historical hours() output in compiled confs
+    def fromMillis(millis: Long): Window = {
+      if (millis % Hour.millis == 0) new Window((millis / Hour.millis).toInt, TimeUnit.HOURS)
+      else {
+        require(millis % Minute == 0, s"window must be whole minutes, got ${millis}ms")
+        new Window((millis / Minute).toInt, TimeUnit.MINUTES)
+      }
+    }
 
     def millisToString(millis: Long): String = {
       if (millis % Day.millis == 0) {
@@ -154,6 +165,20 @@ object Extensions {
     def zero(timeUnits: api.TimeUnit = api.TimeUnit.DAYS): Window = new Window(0, timeUnits)
   }
 
+  // shared by QueryOps/TableInfoOps: a conf that declares its own interval gets offset 0 unless it
+  // also declares one - the default spec's anchor must not leak into an explicitly-intervaled source
+  private def derivePartitionSpec(defaultSpec: PartitionSpec,
+                                  column: Option[String],
+                                  format: Option[String],
+                                  interval: Option[Window],
+                                  offset: Option[Window]): PartitionSpec = {
+    val span = interval.map(_.millis).getOrElse(defaultSpec.spanMillis)
+    val offsetMillis = offset
+      .map(_.millis)
+      .getOrElse(if (interval.isDefined) 0L else defaultSpec.offsetMillis)
+    PartitionSpec(column.getOrElse(defaultSpec.column), format.getOrElse(defaultSpec.format), span, offsetMillis)
+  }
+
   implicit class MetadataOps(metaData: MetaData) {
     def cleanName: String = metaData.name.sanitize
 
@@ -184,6 +209,22 @@ object Extensions {
         .filter(_.isSetStepDays)
         .map(_.stepDays)
         .getOrElse(14)
+    }
+
+
+    def outputPartitionSpec(defaultSpec: PartitionSpec): PartitionSpec =
+      (for {
+        executionInfo <- Option(metaData.executionInfo)
+        outputTableInfo <- Option(executionInfo.outputTableInfo)
+      } yield outputTableInfo.partitionSpec(defaultSpec)).getOrElse(defaultSpec)
+
+    /** spec for interpreting this node's DateRange labels: the default (global) spec when the
+      * output grid matches it - existing daily behavior, where jobs translate storage formats
+      * internally - and the output spec when the node is sub-daily
+      */
+    def dateRangeSpec(defaultSpec: PartitionSpec): PartitionSpec = {
+      val out = outputPartitionSpec(defaultSpec)
+      if (out.gridEquals(defaultSpec)) defaultSpec else out
     }
 
     private def comparisonPrefix = "comparison"
@@ -1220,13 +1261,12 @@ object Extensions {
   }
 
   implicit class TableInfoOps(ti: TableInfo) {
-    def partitionSpec(defaultSpec: PartitionSpec): PartitionSpec = {
-      val column = Option(ti).flatMap((q) => Option(q.partitionColumn)).getOrElse(defaultSpec.column)
-      val format = Option(ti).flatMap((q) => Option(q.partitionFormat)).getOrElse(defaultSpec.format)
-      val interval = Option(ti).flatMap((q) => Option(q.partitionInterval)).getOrElse(WindowUtils.Day)
-      PartitionSpec(column, format, interval.millis)
-    }
-
+    def partitionSpec(defaultSpec: PartitionSpec): PartitionSpec =
+      Extensions.derivePartitionSpec(defaultSpec,
+                                     Option(ti).flatMap(t => Option(t.partitionColumn)),
+                                     Option(ti).flatMap(t => Option(t.partitionFormat)),
+                                     Option(ti).flatMap(t => Option(t.partitionInterval)),
+                                     Option(ti).flatMap(t => Option(t.partitionOffset)))
   }
 
   implicit class QueryOps(query: Query) {
@@ -1255,12 +1295,12 @@ object Extensions {
       result
     }
 
-    def partitionSpec(defaultSpec: PartitionSpec): PartitionSpec = {
-      val column = Option(query).flatMap(q => Option(q.partitionColumn)).getOrElse(defaultSpec.column)
-      val format = Option(query).flatMap(q => Option(q.partitionFormat)).getOrElse(defaultSpec.format)
-      val interval = Option(query).flatMap(q => Option(q.partitionInterval)).getOrElse(WindowUtils.Day)
-      PartitionSpec(column, format, interval.millis)
-    }
+    def partitionSpec(defaultSpec: PartitionSpec): PartitionSpec =
+      Extensions.derivePartitionSpec(defaultSpec,
+                                     Option(query).flatMap(q => Option(q.partitionColumn)),
+                                     Option(query).flatMap(q => Option(q.partitionFormat)),
+                                     Option(query).flatMap(q => Option(q.partitionInterval)),
+                                     Option(query).flatMap(q => Option(q.partitionOffset)))
   }
 
   implicit class ThrowableOps(throwable: Throwable) {

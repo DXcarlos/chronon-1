@@ -22,7 +22,7 @@ sealed trait DataRange {
 case class TimeRange(start: Long, end: Long)(implicit partitionSpec: PartitionSpec) extends DataRange {
   def toTimePoints: Array[Long] = {
     Stream
-      .iterate(TsUtils.round(start, partitionSpec.spanMillis))(_ + partitionSpec.spanMillis)
+      .iterate(partitionSpec.floor(start))(_ + partitionSpec.spanMillis)
       .takeWhile(_ <= end)
       .toArray
   }
@@ -46,7 +46,7 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
     }
   }
 
-  def isSingleDay: Boolean = {
+  def isSinglePartition: Boolean = {
     start == end
   }
 
@@ -80,12 +80,17 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
       s"${partitionSpec.column} <= '$e'")).toSeq
   }
 
-  def steps(days: Int): Seq[PartitionRange] = {
+  def steps(partitionCount: Int): Seq[PartitionRange] = {
     partitions
-      .sliding(days, days) // sliding(x, x) => tumbling(x)
+      .sliding(partitionCount, partitionCount) // sliding(x, x) => tumbling(x)
       .map { step => PartitionRange(step.head, step.last) }
       .toSeq
   }
+
+  // thrift ExecutionInfo.stepDays stays day-denominated; sub-daily specs get a day's worth
+  // of partitions per step, so existing daily configs behave identically
+  def stepsByDays(stepDays: Int): Seq[PartitionRange] =
+    steps(math.max(1, stepDays * partitionSpec.partitionsPerDay))
 
   def partitions: Seq[String] = {
     require(wellDefined, s"Invalid partition range $this")
@@ -97,45 +102,45 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
   // no nulls in start or end and start <= end - used as a pre-check before the `partitions` function
   def wellDefined: Boolean = start != null && end != null && start <= end
 
-  def shift(days: Int): PartitionRange = {
-    if (days == 0) {
+  def shift(steps: Int): PartitionRange = {
+    if (steps == 0) {
       this
     } else {
-      PartitionRange(partitionSpec.shift(start, days), partitionSpec.shift(end, days))
+      PartitionRange(partitionSpec.shift(start, steps), partitionSpec.shift(end, steps))
     }
   }
 
+  // labels stay in this range's spec; the consuming node recovers the spec from its metadata
   def toDateRange: DateRange = {
-    val dailyRange = translate(PartitionSpec.daily)
     new DateRange()
-      .setStartDate(dailyRange.start)
-      .setEndDate(dailyRange.end)
+      .setStartDate(start)
+      .setEndDate(end)
   }
 
-  def shiftMillis(millis: Long): PartitionRange = {
-    if (millis == 0) {
-      this
-    } else {
-      // Handle start date (00:00:00.000)
-      val newStart = if (start == null) {
-        null
-      } else {
-        val startTimeMillis = partitionSpec.epochMillis(start) // Already represents 00:00:00.000
-        partitionSpec.at(startTimeMillis + millis)
-      }
+  /** half-open time coverage of the whole range: [epoch(start), epoch(end) + span), inclusive-millis */
+  def coverage: TimeRange = {
+    require(wellDefined, s"coverage undefined for unbounded range $this")
+    TimeRange(partitionSpec.epochMillis(start), coverageEnd)(partitionSpec)
+  }
 
-      // Handle end date (23:59:59.999)
-      val newEnd = if (end == null) {
-        null
-      } else {
-        val endTimeMillis = partitionSpec.epochMillis(end) + (24 * 60 * 60 * 1000 - 1) // End of day (23:59:59.999)
-        val shiftedEndTimeMillis = endTimeMillis + millis
-        // Get the date part (without time)
-        partitionSpec.at(shiftedEndTimeMillis)
-      }
+  /** inclusive-millis end of coverage; tolerates an unbounded start (used for readiness checks
+    * where only "data through when?" matters)
+    */
+  def coverageEnd: Long = {
+    require(end != null, s"coverage end undefined for end-unbounded range $this")
+    partitionSpec.epochMillis(end) + partitionSpec.spanMillis - 1
+  }
 
-      PartitionRange(newStart, newEnd)
-    }
+  /** The range of `otherSpec` labels whose coverage intersects this range's coverage.
+    * Unlike translate(), the end label is derived from the *end* of coverage, so translating a
+    * daily range into a finer spec keeps the whole day instead of just its first sub-partition.
+    */
+  def coveringRange(otherSpec: PartitionSpec): PartitionRange = {
+    if (otherSpec == partitionSpec) return this
+    val newStart = Option(start).map(s => otherSpec.at(partitionSpec.epochMillis(s))).orNull
+    val newEnd =
+      Option(end).map(e => otherSpec.at(partitionSpec.epochMillis(e) + partitionSpec.spanMillis - 1)).orNull
+    PartitionRange(newStart, newEnd)(otherSpec)
   }
 
   override def compare(that: PartitionRange): Int = {
@@ -171,15 +176,28 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
 }
 
 object PartitionRange {
-  def apply(dateRange: DateRange): PartitionRange = {
-    val start = dateRange.startDate
-    val end = dateRange.endDate
-    new PartitionRange(start, end)(PartitionSpec.daily)
-  }
-
   def rangesToString(ranges: Iterable[PartitionRange]): String = {
     val tuples = ranges.map(r => s"(${r.start} -> ${r.end})").mkString(", ")
     s"$tuples"
+  }
+
+  /** Which `targetSpec` partitions are fully covered by `labels` (in `labelSpec`)?
+    * The rule: a target partition counts iff its whole coverage interval is contained in the
+    * union of the labels' coverage. Same grain: 1:1 translation. Across grains, candidates
+    * are every target partition intersecting a label's coverage, kept only when ALL the
+    * labels covering them exist - so a 3h@01:00 partition straddling midnight needs BOTH
+    * surrounding daily labels, and a daily partition needs all 24 hourly labels.
+    */
+  def coveredPartitions(labels: Seq[String], labelSpec: PartitionSpec, targetSpec: PartitionSpec): Seq[String] = {
+    if (labelSpec.gridEquals(targetSpec)) {
+      if (labelSpec == targetSpec) labels else labels.map(labelSpec.translate(_, targetSpec))
+    } else {
+      val labelSet = labels.toSet
+      labels
+        .flatMap(l => PartitionRange(l, l)(labelSpec).coveringRange(targetSpec).partitions)
+        .distinct
+        .filter { t => PartitionRange(t, t)(targetSpec).coveringRange(labelSpec).partitions.forall(labelSet) }
+    }
   }
 
   // takes a list of partitions and collapses them into ranges
@@ -239,11 +257,5 @@ object PartitionRange {
     } catch {
       case _: Exception => Seq.empty
     }
-  }
-
-  def toTimeRange(partitionRange: PartitionRange): TimeRange = {
-    val spec = partitionRange.partitionSpec
-    val shiftedEnd = spec.after(partitionRange.end)
-    TimeRange(spec.epochMillis(partitionRange.start), spec.epochMillis(shiftedEnd) - 1)(spec)
   }
 }
