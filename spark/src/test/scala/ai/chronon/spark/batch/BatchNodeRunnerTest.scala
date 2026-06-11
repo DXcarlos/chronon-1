@@ -272,6 +272,7 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     spark.sql("DROP TABLE IF EXISTS test_db.input_table_alt")
     spark.sql("DROP TABLE IF EXISTS test_db.output_table_alt")
     spark.sql("DROP TABLE IF EXISTS test_db.left_table_alt")
+    spark.sql("DROP TABLE IF EXISTS test_db.cutoff_input_table")
     spark.sql("DROP TABLE IF EXISTS test_db.output_table" + Constants.archiveReuseTableSuffix)
     spark.sql("DROP TABLE IF EXISTS test_db.tp_events")
     spark.sql("DROP TABLE IF EXISTS test_db.tp_staging_output")
@@ -561,6 +562,30 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     inputTableStatus.foreach { status =>
       assertFalse("Should not be ready (today's data not available)", status.ready)
     }
+  }
+
+  it should "skip dependencies whose requested range starts after endCutOff" in {
+    val query = new Query().setPartitionColumn("ds").setPartitionFormat("yyyy-MM-dd")
+    val tableDependency = TableDependencies.fromTable("test_db.cutoff_input_table", query)
+    tableDependency.setEndCutOff(twoDaysAgo)
+
+    val metadata = MetaDataUtils.layer(
+      baseMetadata = new MetaData().setOutputNamespace("test_db").setTeam("test_team"),
+      modeName = "test_mode",
+      nodeName = "test_batch_node",
+      tableDependencies = Seq(tableDependency),
+      stepDays = Some(1),
+      outputTableOverride = Some("test_db.output_table")
+    )(tableUtils.partitionSpec)
+
+    val node = new Node().setMetaData(metadata).setContent(createTestNodeContent())
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange(yesterday, today)(tableUtils.partitionSpec)
+
+    val status = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+      .find(_.name == "test_db.cutoff_input_table")
+
+    assertTrue("Should not check a dependency with no required input range", status.isEmpty)
   }
 
   it should "handle same table used for multiple dependencies (labels and groupBy)" in {

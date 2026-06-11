@@ -3,11 +3,12 @@ import glob
 import importlib
 import os
 import sys
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from ai.chronon import airflow_helpers
 from ai.chronon.cli.compile import parse_teams, serializer
 from ai.chronon.cli.compile.compile_context import CompileContext
+from ai.chronon.cli.compile.config_origin import get_factory_origin_file
 from ai.chronon.cli.compile.display.compiled_obj import CompiledObj
 from ai.chronon.cli.logger import get_logger
 from gen_thrift.api.ttypes import GroupBy, Join
@@ -23,21 +24,33 @@ def from_folder(target_classes: List[type], input_dir: str, compile_context: Com
     """
 
     python_files = glob.glob(os.path.join(input_dir, "**/*.py"), recursive=True)
-    # Visit shallowest paths first, then alphabetical within depth. Combined
-    # with the dependency-ordered CONFIG_INFOS in CompileContext, this keeps
-    # "first sighting" == "canonical file" for the id()-based dedup in
-    # from_file: a utility module like joins/util.py is processed before
-    # joins/team/data.py that imports from it.
+    # Visit shallowest paths first, then alphabetical within depth, so utility
+    # modules are loaded before team-specific files that may depend on them.
     python_files.sort(key=lambda p: (p.count(os.sep), p))
 
     # Results keyed by class type
     results = {cls: [] for cls in target_classes}
+    authoring_folders = {
+        config_info.folder_name
+        for config_info in compile_context.config_infos
+        if config_info.config_type is not None
+    }
+    factory_enforced_classes = {
+        config_info.cls
+        for config_info in compile_context.config_infos
+        if config_info.config_type is not None
+    }
 
     for f in python_files:
         try:
             # Get objects of all target types from this file
             multi_type_results = from_file(
-                f, target_classes, input_dir, compile_context.seen_obj_ids
+                f,
+                target_classes,
+                input_dir,
+                compile_context.seen_obj_ids,
+                authoring_folders,
+                factory_enforced_classes,
             )
 
             # Process each type's results
@@ -99,25 +112,18 @@ def from_file(
     target_classes: List[type],
     input_dir: str,
     seen_obj_ids: Set[int],
+    authoring_folders: Set[str],
+    factory_enforced_classes: Set[type],
 ) -> Dict[type, Dict[str, Any]]:
     """
     Extract config objects from a Python file.
     Supports extracting multiple config types from a single file.
 
-    `seen_obj_ids` carries object identities across all files in the compile
-    run. The first file we encounter an object in becomes its canonical
-    location; any later file that imports the same object will see its id()
-    already in the set and skip it. This is what prevents duplicate-config
-    errors when a Join file imports a GroupBy — both files have the GroupBy
-    in their `module.__dict__`, but only the file scanned first claims it.
-
-    Scan order is enforced by:
-      - `CONFIG_INFOS` in compile_context — dependency-first (group_bys
-        before joins, etc.), so an imported config's home directory is
-        visited before any directory that might import from it.
-      - `from_folder` — shallowest path first, alphabetical within depth,
-        so utility modules win over the team-specific files that import
-        from them.
+    Imported config objects appear in the importing module's `__dict__`, just
+    like local objects. We skip objects whose identity is already owned by a
+    different authoring module so a dependency import cannot change a config's
+    canonical module path. Local objects still use `seen_obj_ids` to dedup
+    aliases and repeated sightings.
 
     Args:
         file_path: Path to the Python file to parse
@@ -125,6 +131,9 @@ def from_file(
         input_dir: Root directory for the config type
         seen_obj_ids: Mutable set of id()s for objects already claimed by an
             earlier file in this compile run. Updated in place.
+        authoring_folders: User-authored config folders under chronon_root.
+        factory_enforced_classes: Config classes that must be constructed via
+            the ai.chronon.types factory layer.
 
     Returns:
         Nested dict: {GroupBy: {name: obj}, Join: {name: obj}, ...}
@@ -164,11 +173,28 @@ def from_file(
         # Check if object is an instance of any target class
         for target_cls in target_classes:
             if isinstance(obj, target_cls):
-                # Identity dedup: an imported config object appears in
-                # `module.__dict__` of every file that imports it. Only the
-                # first file to see it (via the dependency-ordered scan)
-                # should compile it; later sightings are imports and get
-                # skipped here.
+                origin_file = get_factory_origin_file(obj)
+                if target_cls in factory_enforced_classes and origin_file is None:
+                    raise ValueError(
+                        _missing_factory_origin_error(
+                            obj,
+                            target_cls,
+                            var_name,
+                            file_path,
+                            chronon_root,
+                        )
+                    )
+                if _factory_origin_owned_elsewhere(
+                    obj,
+                    origin_file,
+                    file_path,
+                    chronon_root,
+                    authoring_folders,
+                ):
+                    break
+
+                # Identity dedup keeps aliases to the same local object from
+                # compiling multiple times in one run.
                 if id(obj) in seen_obj_ids:
                     break
                 seen_obj_ids.add(id(obj))
@@ -188,6 +214,64 @@ def from_file(
                 break  # Each object belongs to only one type
 
     return result
+
+
+def _factory_origin_owned_elsewhere(
+    obj: Any,
+    origin_file: Optional[str],
+    file_path: str,
+    chronon_root: str,
+    authoring_folders: Set[str],
+) -> bool:
+    if origin_file is None:
+        return False
+    if not _is_authoring_path(origin_file, chronon_root, authoring_folders):
+        return False
+
+    origin_file = os.path.abspath(origin_file)
+    if origin_file == os.path.abspath(file_path):
+        return False
+
+    return any(
+        _module_file(module) == origin_file and _module_binds_obj(module, obj)
+        for module in list(sys.modules.values())
+    )
+
+
+def _module_file(module: Any) -> str:
+    module_file = getattr(module, "__file__", None)
+    return os.path.abspath(module_file) if module_file else ""
+
+
+def _module_binds_obj(module: Any, obj: Any) -> bool:
+    return any(value is obj for value in vars(module).values())
+
+
+def _missing_factory_origin_error(
+    obj: Any,
+    target_cls: type,
+    var_name: str,
+    file_path: str,
+    chronon_root: str,
+) -> str:
+    rel_path = os.path.relpath(file_path, chronon_root)
+    type_name = type(obj).__name__
+    factory_name = target_cls.__name__
+    return (
+        f"{rel_path}:{var_name} is a {type_name} config object without the "
+        "Chronon factory origin marker. "
+        "Chronon configs must be constructed through the ai.chronon.types "
+        f"factory layer, e.g. `from ai.chronon.types import {factory_name}`."
+    )
+
+
+def _is_authoring_path(file_path: str, chronon_root: str, authoring_folders: Set[str]) -> bool:
+    rel_path = os.path.relpath(os.path.abspath(file_path), os.path.abspath(chronon_root))
+    if rel_path == os.pardir or rel_path.startswith(os.pardir + os.sep):
+        return False
+
+    first_component = rel_path.split(os.sep, 1)[0]
+    return first_component in authoring_folders
 
 
 def populate_column_hashes(obj: Any):

@@ -12,6 +12,7 @@ import gen_thrift.api.ttypes as ttypes
 import gen_thrift.common.ttypes as common
 from ai.chronon import utils
 from ai.chronon.airflow_helpers import AIRFLOW_DEPENDENCIES_KEY
+from ai.chronon.cli.compile.config_origin import mark_factory_created_config
 
 logger = logging.getLogger(__name__)
 
@@ -353,4 +354,4 @@ def StagingQuery(
         lambda self: _get_output_table_name(self, full_name=True)
     )
 
-    return staging_query
+    return mark_factory_created_config(staging_query)

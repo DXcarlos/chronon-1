@@ -126,6 +126,7 @@ def test_parse_configs_relative_source_file():
     mock_compile_context.seen_obj_ids = set()
     mock_compile_context.env = PROD_ENV
     mock_compile_context.teams_file_name = PROD_TEAMS_FILE
+    mock_compile_context.config_infos = CONFIG_INFOS
 
     # Configure mocks
     with patch('ai.chronon.cli.compile.parse_configs.from_file') as mock_from_file, \
@@ -1229,6 +1230,64 @@ def test_duplicate_config_names_across_directories_detected(tmp_path, monkeypatc
         )
 
 
+def test_duplicate_join_names_across_non_join_directories_detected(tmp_path, monkeypatch):
+    """Relaxed folder discovery must still enforce unique normalized names.
+
+    A Join authored in group_bys/team/file.py and another Join authored in
+    staging_queries/team/file.py both normalize to sample_team.file.join_parent__1,
+    so the second one must be rejected as a duplicate even though neither lives
+    under joins/.
+    """
+    _scaffold_repo(tmp_path)
+
+    join_template = """
+        from ai.chronon.types import EventSource, Join, Query, selects
+
+        join_parent = Join(
+            left=EventSource(
+                table="{table}",
+                query=Query(
+                    selects=selects(user_id="user_id"),
+                    time_column="event_time",
+                ),
+            ),
+            right_parts=[],
+            row_ids=["user_id"],
+            output_namespace="data",
+            version=1,
+        )
+    """
+
+    _write(
+        tmp_path / "staging_queries" / "sample_team" / "file.py",
+        dedent(join_template.format(table="external.events_from_staging")).strip(),
+    )
+    _write(
+        tmp_path / "group_bys" / "sample_team" / "file.py",
+        dedent(join_template.format(table="external.events_from_group_bys")).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=True)
+
+    from gen_thrift.api.ttypes import ConfType
+
+    join_result = results[ConfType.JOIN]
+    duplicate_name = "sample_team.file.join_parent__1"
+
+    assert duplicate_name in join_result.obj_dict
+    assert duplicate_name in join_result.error_dict
+
+    error_message = str(join_result.error_dict[duplicate_name][0])
+    assert "Duplicate config name" in error_message
+    assert "staging_queries" in error_message
+    assert "group_bys" in error_message
+
+    assert (
+        join_result.obj_dict[duplicate_name].metaData.sourceFile
+        == "staging_queries/sample_team/file.py"
+    )
+
+
 def test_imported_configs_not_recompiled(tmp_path, monkeypatch):
     """Test that imported config objects are NOT compiled again in the importing file.
 
@@ -1343,4 +1402,457 @@ def test_imported_configs_not_recompiled(tmp_path, monkeypatch):
     # The GroupBy should only appear once in obj_dict (not duplicated from joins/)
     assert len(group_by_result.obj_dict) == 1, (
         f"Expected exactly 1 GroupBy, got {len(group_by_result.obj_dict)}: {list(group_by_result.obj_dict.keys())}"
+    )
+
+
+def test_raw_thrift_config_objects_are_rejected(tmp_path, monkeypatch):
+    """Top-level configs must be created through ai.chronon.types factories so
+    compile can reliably track the authoring module that owns each object."""
+    _scaffold_repo(tmp_path)
+
+    _write(
+        tmp_path / "joins" / "sample_team" / "raw_join.py",
+        dedent(
+            """
+            from gen_thrift.api.ttypes import Join, MetaData
+
+            raw_join = Join(metaData=MetaData(version="1"))
+            """
+        ).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=True)
+    assert has_errors
+
+    from gen_thrift.api.ttypes import ConfType
+
+    staging_query_result = results[ConfType.STAGING_QUERY]
+    error_text = "\n".join(
+        str(error)
+        for errors in staging_query_result.error_dict.values()
+        for error in errors
+    )
+    assert "without the Chronon factory origin marker" in error_text
+    assert "ai.chronon.types" in error_text
+
+    assert not (
+        tmp_path / "compiled" / "joins" / "sample_team" / "raw_join.raw_join__1"
+    ).exists()
+
+
+def test_chronon_config_without_origin_marker_is_rejected(tmp_path, monkeypatch):
+    """A top-level Chronon config without the factory origin marker must fail
+    compilation, even if it was otherwise created by the public factory."""
+    _scaffold_repo(tmp_path)
+
+    _write(
+        tmp_path / "joins" / "sample_team" / "missing_marker.py",
+        dedent(
+            """
+            from ai.chronon.cli.compile.config_origin import CONFIG_ORIGIN_FILE_ATTR
+            from ai.chronon.types import EventSource, Join, Query, selects
+
+            unmarked_join = Join(
+                left=EventSource(
+                    table="external.events",
+                    query=Query(
+                        selects=selects(user_id="user_id"),
+                        time_column="event_time",
+                    ),
+                ),
+                right_parts=[],
+                row_ids=["user_id"],
+                output_namespace="data",
+                version=1,
+            )
+            delattr(unmarked_join, CONFIG_ORIGIN_FILE_ATTR)
+            """
+        ).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=True)
+    assert has_errors
+
+    from gen_thrift.api.ttypes import ConfType
+
+    staging_query_result = results[ConfType.STAGING_QUERY]
+    error_text = "\n".join(
+        str(error)
+        for errors in staging_query_result.error_dict.values()
+        for error in errors
+    )
+    assert "without the Chronon factory origin marker" in error_text
+    assert "missing_marker.py:unmarked_join" in error_text
+    assert not (
+        tmp_path / "compiled" / "joins" / "sample_team" / "missing_marker.unmarked_join__1"
+    ).exists()
+
+
+def test_factory_origin_file_owns_imported_config(tmp_path, monkeypatch):
+    """Factory-created configs keep the file that called the factory as their
+    canonical owner, even when another module imports and aliases the object."""
+    _scaffold_repo(tmp_path)
+
+    _write(
+        tmp_path / "joins" / "sample_team" / "definition.py",
+        dedent(
+            """
+            from ai.chronon.types import EventSource, Join, Query, selects
+
+            owned_join = Join(
+                left=EventSource(
+                    table="external.events",
+                    query=Query(
+                        selects=selects(user_id="user_id"),
+                        time_column="event_time",
+                    ),
+                ),
+                right_parts=[],
+                row_ids=["user_id"],
+                output_namespace="data",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+    _write(
+        tmp_path / "joins" / "sample_team" / "downstream.py",
+        dedent(
+            """
+            from joins.sample_team.definition import owned_join
+
+            imported_alias = owned_join
+            """
+        ).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=False)
+    assert not has_errors
+
+    from gen_thrift.api.ttypes import ConfType
+
+    join_result = results[ConfType.JOIN]
+    assert "sample_team.definition.owned_join__1" in join_result.obj_dict
+    assert "sample_team.downstream.owned_join__1" not in join_result.obj_dict
+    assert "sample_team.downstream.imported_alias__1" not in join_result.obj_dict
+    assert (
+        join_result.obj_dict["sample_team.definition.owned_join__1"].metaData.sourceFile
+        == "joins/sample_team/definition.py"
+    )
+    assert (
+        tmp_path / "compiled" / "joins" / "sample_team" / "definition.owned_join__1"
+    ).exists()
+    assert not (
+        tmp_path / "compiled" / "joins" / "sample_team" / "downstream.imported_alias__1"
+    ).exists()
+
+
+def test_helper_factory_config_is_owned_by_binding_module(tmp_path, monkeypatch):
+    """A helper can construct a config without owning its final compiled name.
+
+    The destination file that assigns the helper return value is the canonical
+    owner as long as the helper module does not bind that object at top level.
+    """
+    _scaffold_repo(tmp_path)
+
+    _write(
+        tmp_path / "joins" / "sample_team" / "helpers.py",
+        dedent(
+            """
+            from ai.chronon.types import EventSource, Join, Query, selects
+
+            def make_join():
+                return Join(
+                    left=EventSource(
+                        table="external.events",
+                        query=Query(
+                            selects=selects(user_id="user_id"),
+                            time_column="event_time",
+                        ),
+                    ),
+                    right_parts=[],
+                    row_ids=["user_id"],
+                    output_namespace="data",
+                    version=1,
+                )
+            """
+        ).strip(),
+    )
+    _write(
+        tmp_path / "joins" / "sample_team" / "downstream.py",
+        dedent(
+            """
+            from joins.sample_team.helpers import make_join
+
+            generated_join = make_join()
+            """
+        ).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=False)
+    assert not has_errors
+
+    from gen_thrift.api.ttypes import ConfType
+
+    join_result = results[ConfType.JOIN]
+    assert "sample_team.downstream.generated_join__1" in join_result.obj_dict
+    assert "sample_team.helpers.generated_join__1" not in join_result.obj_dict
+    assert (
+        join_result.obj_dict[
+            "sample_team.downstream.generated_join__1"
+        ].metaData.sourceFile
+        == "joins/sample_team/downstream.py"
+    )
+    assert (
+        tmp_path / "compiled" / "joins" / "sample_team" / "downstream.generated_join__1"
+    ).exists()
+    assert not (
+        tmp_path / "compiled" / "joins" / "sample_team" / "helpers.generated_join__1"
+    ).exists()
+
+
+def test_staging_query_imported_join_keeps_join_canonical_path(tmp_path, monkeypatch):
+    """A staging query may import a Join as a dependency helper, but that import
+    must not make the Join compile as if it were defined in staging_queries/."""
+    _scaffold_repo(tmp_path)
+
+    _write(
+        tmp_path / "joins" / "sample_team" / "upstream.py",
+        dedent(
+            """
+            from ai.chronon.types import EventSource, Join, Query, selects
+
+            upstream_join = Join(
+                left=EventSource(
+                    table="external.events",
+                    query=Query(
+                        selects=selects(user_id="user_id"),
+                        time_column="event_time",
+                    ),
+                ),
+                right_parts=[],
+                row_ids=["user_id"],
+                output_namespace="data",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+
+    _write(
+        tmp_path / "staging_queries" / "sample_team" / "downstream.py",
+        dedent(
+            """
+            from joins.sample_team.upstream import upstream_join
+            from ai.chronon.types import StagingQuery
+
+            join_dependency = upstream_join
+
+            downstream_query = StagingQuery(
+                query="SELECT 1 AS user_id",
+                output_namespace="data",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=False)
+    assert not has_errors
+
+    from gen_thrift.api.ttypes import ConfType
+
+    join_result = results[ConfType.JOIN]
+    assert "sample_team.upstream.upstream_join__1" in join_result.obj_dict
+    assert "sample_team.downstream.upstream_join__1" not in join_result.obj_dict
+    assert "sample_team.downstream.join_dependency__1" not in join_result.obj_dict
+    assert (
+        join_result.obj_dict["sample_team.upstream.upstream_join__1"].metaData.sourceFile
+        == "joins/sample_team/upstream.py"
+    )
+
+    assert (
+        tmp_path / "compiled" / "joins" / "sample_team" / "upstream.upstream_join__1"
+    ).exists()
+    assert not (
+        tmp_path / "compiled" / "joins" / "sample_team" / "downstream.upstream_join__1"
+    ).exists()
+    assert not (
+        tmp_path / "compiled" / "joins" / "sample_team" / "downstream.join_dependency__1"
+    ).exists()
+
+
+def test_join_defined_in_staging_query_dir_keeps_canonical_path_when_imported_by_join(
+    tmp_path, monkeypatch
+):
+    """A Join defined outside joins/ should keep that defining module path even
+    when it is imported by a joins/ module."""
+    _scaffold_repo(tmp_path)
+
+    _write(
+        tmp_path / "staging_queries" / "sample_team" / "upstream.py",
+        dedent(
+            """
+            from ai.chronon.types import EventSource, Join, Query, selects
+
+            upstream_join = Join(
+                left=EventSource(
+                    table="external.events",
+                    query=Query(
+                        selects=selects(user_id="user_id"),
+                        time_column="event_time",
+                    ),
+                ),
+                right_parts=[],
+                row_ids=["user_id"],
+                output_namespace="data",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+
+    _write(
+        tmp_path / "joins" / "sample_team" / "downstream.py",
+        dedent(
+            """
+            from staging_queries.sample_team.upstream import upstream_join
+
+            join_dependency = upstream_join
+            """
+        ).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=False)
+    assert not has_errors
+
+    from gen_thrift.api.ttypes import ConfType
+
+    join_result = results[ConfType.JOIN]
+    assert "sample_team.upstream.upstream_join__1" in join_result.obj_dict
+    assert "sample_team.downstream.upstream_join__1" not in join_result.obj_dict
+    assert "sample_team.downstream.join_dependency__1" not in join_result.obj_dict
+    assert (
+        join_result.obj_dict["sample_team.upstream.upstream_join__1"].metaData.sourceFile
+        == "staging_queries/sample_team/upstream.py"
+    )
+
+    assert (
+        tmp_path / "compiled" / "joins" / "sample_team" / "upstream.upstream_join__1"
+    ).exists()
+    assert not (
+        tmp_path / "compiled" / "joins" / "sample_team" / "downstream.upstream_join__1"
+    ).exists()
+    assert not (
+        tmp_path / "compiled" / "joins" / "sample_team" / "downstream.join_dependency__1"
+    ).exists()
+
+
+def test_same_depth_importer_does_not_claim_imported_config(tmp_path, monkeypatch):
+    """Alphabetically earlier sibling modules should not claim config objects
+    imported from later sibling modules."""
+    _scaffold_repo(tmp_path)
+
+    _write(
+        tmp_path / "joins" / "sample_team" / "z_definition.py",
+        dedent(
+            """
+            from ai.chronon.types import EventSource, Join, Query, selects
+
+            upstream_join = Join(
+                left=EventSource(
+                    table="external.events",
+                    query=Query(
+                        selects=selects(user_id="user_id"),
+                        time_column="event_time",
+                    ),
+                ),
+                right_parts=[],
+                row_ids=["user_id"],
+                output_namespace="data",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+    _write(
+        tmp_path / "joins" / "sample_team" / "a_importer.py",
+        dedent(
+            """
+            from joins.sample_team.z_definition import upstream_join
+
+            imported_alias = upstream_join
+            """
+        ).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=False)
+    assert not has_errors
+
+    from gen_thrift.api.ttypes import ConfType
+
+    join_result = results[ConfType.JOIN]
+    assert "sample_team.z_definition.upstream_join__1" in join_result.obj_dict
+    assert "sample_team.a_importer.upstream_join__1" not in join_result.obj_dict
+    assert "sample_team.a_importer.imported_alias__1" not in join_result.obj_dict
+    assert (
+        join_result.obj_dict["sample_team.z_definition.upstream_join__1"].metaData.sourceFile
+        == "joins/sample_team/z_definition.py"
+    )
+
+
+def test_same_type_staging_query_importer_does_not_claim_imported_query(
+    tmp_path, monkeypatch
+):
+    """A staging query file may import another staging query, but that import
+    must not make the imported query compile under the importing module path."""
+    _scaffold_repo(tmp_path)
+
+    _write(
+        tmp_path / "staging_queries" / "sample_team" / "z_definition.py",
+        dedent(
+            """
+            from ai.chronon.types import StagingQuery
+
+            upstream_query = StagingQuery(
+                query="SELECT 1 AS user_id",
+                output_namespace="data",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+    _write(
+        tmp_path / "staging_queries" / "sample_team" / "a_importer.py",
+        dedent(
+            """
+            from staging_queries.sample_team.z_definition import upstream_query
+            from ai.chronon.types import StagingQuery
+
+            imported_alias = upstream_query
+
+            local_query = StagingQuery(
+                query="SELECT 2 AS user_id",
+                output_namespace="data",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=False)
+    assert not has_errors
+
+    from gen_thrift.api.ttypes import ConfType
+
+    staging_query_result = results[ConfType.STAGING_QUERY]
+    assert "sample_team.z_definition.upstream_query__1" in staging_query_result.obj_dict
+    assert "sample_team.a_importer.local_query__1" in staging_query_result.obj_dict
+    assert "sample_team.a_importer.upstream_query__1" not in staging_query_result.obj_dict
+    assert "sample_team.a_importer.imported_alias__1" not in staging_query_result.obj_dict
+    assert (
+        staging_query_result.obj_dict[
+            "sample_team.z_definition.upstream_query__1"
+        ].metaData.sourceFile
+        == "staging_queries/sample_team/z_definition.py"
     )

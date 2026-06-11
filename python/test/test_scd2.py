@@ -3,6 +3,7 @@ from gen_thrift.api import ttypes
 from gen_thrift.common import ttypes as common
 
 from ai.chronon import query, scd2, source
+from ai.chronon.types import Join, JoinSource
 
 
 def event_source():
@@ -114,6 +115,56 @@ def test_scd2_group_by_sets_time_column_from_valid_from_when_missing():
     )
 
     assert gb.sources[0].events.query.timeColumn == "valid_from_ms"
+
+
+def test_scd2_group_by_accepts_pre_named_join_source_after_deepcopy():
+    inner_join = Join(
+        left=source.EventSource(
+            table="data.claimcontact",
+            query=query.Query(
+                selects={
+                    "id": "id",
+                    "claimid": "claimid",
+                },
+                time_column="record_begin_timestamp",
+            ),
+        ),
+        right_parts=[],
+        row_ids=["id"],
+        version=1,
+    )
+    inner_join.metaData.name = "azure.scd2_under18_contacts.claimcontact_contact_join__1"
+    inner_join.metaData.team = "azure"
+
+    gb = scd2.GroupBy(
+        sources=[
+            JoinSource(
+                join=inner_join,
+                query=query.Query(
+                    selects={
+                        "id": "id",
+                        "claimid": "claimid",
+                        "minor_contact_ind": "minor_contact_ind",
+                        "record_begin_timestamp": "record_begin_timestamp",
+                        "record_end_timestamp": "record_end_timestamp",
+                    },
+                    time_column="ts",
+                ),
+            )
+        ],
+        keys=["claimid"],
+        row_id_column="id",
+        valid_from_column="record_begin_timestamp",
+        valid_to_column="record_end_timestamp",
+        aggregations=[
+            scd2.Aggregation(input_column="minor_contact_ind", operation=scd2.Operation.SUM),
+        ],
+    )
+
+    assert gb.sources[0].joinSource.join.metaData.name == inner_join.metaData.name
+    selects = gb.sources[0].joinSource.query.selects
+    assert selects["__chronon_scd2_row_id"] == "cast(id as string)"
+    assert "'minor_contact_ind', minor_contact_ind" in selects["__chronon_scd2_row"]
 
 
 def test_scd2_aggregation_validation():

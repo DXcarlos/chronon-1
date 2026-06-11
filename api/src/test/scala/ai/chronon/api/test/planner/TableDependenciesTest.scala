@@ -498,4 +498,15 @@ class TableDependenciesTest extends AnyFlatSpec with Matchers {
       Some(PartitionRange("2024-01-01", "2024-01-03"))
     )
   }
+
+  it should "return None when endCutOff precedes the requested range" in {
+    val queryRange = PartitionRange("2026-05-14", "2026-05-15")
+    val dep = tableDepOf(
+      startOffset = WindowUtils.zero(),
+      endOffset = WindowUtils.zero(),
+      endCutOff = "2026-05-13"
+    )
+
+    DependencyResolver.computeInputRange(queryRange, dep) should equal(None)
+  }
 }

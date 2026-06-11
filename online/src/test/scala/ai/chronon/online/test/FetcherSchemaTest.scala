@@ -87,12 +87,17 @@ class FetcherSchemaTest extends AnyFlatSpec with Matchers {
     val kvStore = InMemoryKvStore.build(s"FetcherSchemaTest_offline_${System.nanoTime()}")
     kvStore.create(Constants.MetadataDataset)
 
-    val groupBy = GroupByDerivationsTest.makeGroupBy()
-    groupBy.metaData.setOnline(false)
-    putString(kvStore, groupBy.keyNameForKvStore, ThriftJsonCodec.toJsonStr(groupBy), Constants.MetadataDataset)
+    // online status is read from the batch serving info (which embeds the conf), not from CHRONON_METADATA.
+    val servingInfo = GroupByDerivationsTest.makeTestGroupByServingInfoParsed().groupByServingInfo
+    servingInfo.groupBy.metaData.setOnline(false)
+    val groupByName = servingInfo.groupBy.metaData.name
+    val batchDataset = new GroupByOps(servingInfo.groupBy).batchDataset
+    kvStore.create(batchDataset)
+
+    putString(kvStore, Constants.GroupByServingInfoKey, ThriftJsonCodec.toJsonStr(servingInfo), batchDataset)
 
     val fetcher = new Fetcher(kvStore, Constants.MetadataDataset)
-    val failure = fetcher.fetchGroupBySchema(groupBy.metaData.name).failed.get
+    val failure = fetcher.fetchGroupBySchema(groupByName).failed.get
 
     failure shouldBe a[IllegalArgumentException]
     failure.getMessage should include("Iceberg catalog schema via eval")

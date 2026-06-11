@@ -551,45 +551,46 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 
     inputTableDependencies
       .filterNot(_._2.forall(td => td.isSetIsSoftNodeDependency && td.isSoftNodeDependency))
-      .map { case (table, deps) =>
-        val inputPartitionSpec = deps.head.tableInfo.partitionSpec(tableUtils.partitionSpec)
-
-        val firstPartition =
-          tableUtils.firstAvailablePartition(table, partitionSpec = inputPartitionSpec)
-        val lastPartition = tableUtils.lastAvailablePartition(table, tablePartitionSpec = Some(inputPartitionSpec))
-
-        // Compute the maximum required end across all dependencies for this table
-        val requiredEnd = deps
+      .flatMap { case (table, deps) =>
+        val requiredEnds = deps
           .flatMap { td =>
             DependencyResolver
               .computeInputRange(range, td)
-              .map(_.translate(tableUtils.partitionSpec))
-              .map(_.end)
+              .map(_.translate(tableUtils.partitionSpec).end)
           }
           .toSeq
           .sorted
-          .lastOption
-          .getOrElse(range.end)
 
-        val ready = lastPartition.exists(_ >= requiredEnd)
-
-        // Collect semanticHash values from all dependencies for this table
-        val semanticHashes = deps.flatMap { td =>
-          if (td.isSetSemanticHash && td.semanticHash.nonEmpty) {
-            Some(td.semanticHash)
-          } else {
-            None
-          }
-        }.toSet
-
-        val semanticHash = if (semanticHashes.size > 1) {
-          logger.error(s"Table $table has inconsistent semanticHash values across dependencies: $semanticHashes")
+        if (requiredEnds.isEmpty) {
           None
         } else {
-          semanticHashes.headOption
-        }
+          val inputPartitionSpec = deps.head.tableInfo.partitionSpec(tableUtils.partitionSpec)
 
-        TablePartitionStatus(table, firstPartition, lastPartition, ready, requiredEnd, semanticHash)
+          val firstPartition =
+            tableUtils.firstAvailablePartition(table, partitionSpec = inputPartitionSpec)
+          val lastPartition = tableUtils.lastAvailablePartition(table, tablePartitionSpec = Some(inputPartitionSpec))
+          val requiredEnd = requiredEnds.last
+
+          val ready = lastPartition.exists(_ >= requiredEnd)
+
+          // Collect semanticHash values from all dependencies for this table
+          val semanticHashes = deps.flatMap { td =>
+            if (td.isSetSemanticHash && td.semanticHash.nonEmpty) {
+              Some(td.semanticHash)
+            } else {
+              None
+            }
+          }.toSet
+
+          val semanticHash = if (semanticHashes.size > 1) {
+            logger.error(s"Table $table has inconsistent semanticHash values across dependencies: $semanticHashes")
+            None
+          } else {
+            semanticHashes.headOption
+          }
+
+          Some(TablePartitionStatus(table, firstPartition, lastPartition, ready, requiredEnd, semanticHash))
+        }
       }
   }
 

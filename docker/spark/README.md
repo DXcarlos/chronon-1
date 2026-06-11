@@ -8,6 +8,18 @@ These Docker images extend the official Apache Spark images with cloud-specific 
 
 ## Available Images
 
+### Cross-cloud K8sSubmitter (Dockerfile)
+
+Based on `apache/spark:3.5.8-java17`, this image runs Chronon Spark jobs on Kubernetes (EKS / GKE / AKS) via the platform `K8sSubmitter`. Single image serves all clouds; no chronon assembly baked — the per-cloud assembly is downloaded from object storage at submit time.
+
+**Key dependencies:**
+- Hadoop 3.4.2 overlay (hadoop-aws, hadoop-azure, gcs-connector)
+- AWS SDK v1 1.12.681 + v2 2.35.5 bundles
+- Unity Catalog jars (custom zipline-ai fork, on system classpath)
+- BigQuery Spark connector 0.41.1
+- Guava 33, Gson 2.11
+- `spark-defaults.conf` mapping `fs.s3.impl` / `fs.gs.impl` / `fs.abfss.impl` so UC + Iceberg metadata paths resolve regardless of cloud
+
 ### Azure (azure.Dockerfile)
 
 Based on `apache/spark:3.5.3-java17`, this image includes:
@@ -24,6 +36,16 @@ Based on `apache/spark:3.5.3-java17`, this image includes:
 - `postgresql-42.7.3.jar` - JDBC driver for Iceberg JDBC catalogs
 
 ## Building Images
+
+### Cross-cloud K8sSubmitter
+```bash
+cd docker/spark
+docker buildx build \
+  --platform linux/amd64 \
+  -f Dockerfile \
+  -t ziplineai/spark:latest \
+  .
+```
 
 ### Azure
 ```bash

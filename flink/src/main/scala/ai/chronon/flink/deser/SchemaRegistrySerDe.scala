@@ -2,7 +2,15 @@ package ai.chronon.flink.deser
 
 import ai.chronon.api.StructType
 import ai.chronon.online.TopicInfo
-import ai.chronon.online.serde.{AvroConversions, AvroSerDe, Mutation, ProtobufSerDe, SerDe}
+import ai.chronon.online.serde.{
+  AvroConversions,
+  AvroSerDe,
+  DebeziumAvroSerDe,
+  DebeziumMutationMapper,
+  Mutation,
+  ProtobufSerDe,
+  SerDe
+}
 import io.confluent.kafka.schemaregistry.avro.AvroSchema
 import io.confluent.kafka.schemaregistry.client.{CachedSchemaRegistryClient, SchemaRegistryClient}
 import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientException
@@ -37,6 +45,9 @@ class SchemaRegistrySerDe(topicInfo: TopicInfo) extends SerDe {
 
   private val schemaRegistryWireFormat: Boolean =
     topicInfo.params.getOrElse(SchemaRegistryWireFormat, "true").toBoolean
+
+  private val isDebezium: Boolean =
+    topicInfo.params.getOrElse(DebeziumMutationMapper.DebeziumKey, "false").toBoolean
 
   private val proto3DefaultAsNull: Boolean =
     topicInfo.params.getOrElse(Proto3DefaultAsNullKey, "false").toBoolean
@@ -75,8 +86,10 @@ class SchemaRegistrySerDe(topicInfo: TopicInfo) extends SerDe {
     parsedSchema.schemaType() match {
       case AvroSchema.TYPE =>
         val avroSchema = parsedSchema.asInstanceOf[AvroSchema].rawSchema()
-        new AvroSerDe(avroSchema)
+        if (isDebezium) new DebeziumAvroSerDe(avroSchema) else new AvroSerDe(avroSchema)
       case ProtobufSchema.TYPE =>
+        if (isDebezium)
+          throw new IllegalArgumentException("debezium is not supported with Protobuf schemas. Use Avro / Json.")
         val protobufSchema = parsedSchema.asInstanceOf[ProtobufSchema]
         val descriptor = protobufSchema.toDescriptor()
         new ProtobufSerDe(descriptor, proto3DefaultAsNull)
@@ -94,6 +107,12 @@ class SchemaRegistrySerDe(topicInfo: TopicInfo) extends SerDe {
       val writerSchemaId = ByteBuffer.wrap(message, 1, 4).getInt
       val messageBytes = message.drop(5)
       delegate match {
+        case debeziumAvroSerDe: DebeziumAvroSerDe =>
+          val writerAvroSchema = schemaRegistryClient
+            .getSchemaById(writerSchemaId)
+            .asInstanceOf[AvroSchema]
+            .rawSchema()
+          debeziumAvroSerDe.fromBytes(messageBytes, writerAvroSchema)
         case avroSerDe: AvroSerDe =>
           val writerAvroSchema = schemaRegistryClient
             .getSchemaById(writerSchemaId)

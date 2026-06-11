@@ -68,7 +68,8 @@ def normalize_source(source: ANY_SOURCE_TYPE, output_namespace: str = None) -> a
     elif isinstance(source, api.EntitySource):
         return api.Source(entities=source)
     elif isinstance(source, api.JoinSource):
-        __set_name(source.join, api.Join, "joins")
+        if not source.join.metaData.name:
+            __set_name(source.join, api.Join, "joins")
         if output_namespace and not source.join.metaData.outputNamespace:
             source.join.metaData.outputNamespace = output_namespace
         return api.Source(joinSource=source)

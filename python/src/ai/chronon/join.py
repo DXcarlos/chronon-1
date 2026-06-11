@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Union
 import ai.chronon.utils as utils
 import gen_thrift.api.ttypes as api
 import gen_thrift.common.ttypes as common
+from ai.chronon.cli.compile.config_origin import mark_factory_created_config
 from ai.chronon.data_types import DataType, FieldsType
 
 logging.basicConfig(level=logging.INFO)
@@ -521,4 +522,4 @@ def Join(
     # Add the table property that calls the private function
     join.__class__.table = property(lambda self: _get_output_table_name(self, full_name=True))
 
-    return join
+    return mark_factory_created_config(join)

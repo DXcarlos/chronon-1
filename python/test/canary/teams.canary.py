@@ -182,4 +182,14 @@ from teams import aws_databricks, azure, quickstart, aws
 aws_databricks_env: EnvironmentVariables = aws_databricks.env
 aws_databricks_env.common['DATABRICKS_EXTRA'] = "DATABRICKS_EXTRA_1"
 
+# crucible-aws (in-cluster K8sSubmitter) is the consumer of compiled_canary/. Override
+# bucket prefixes + frontend URLs here so teams.py (PROD) can keep pointing at the
+# canary EMR Serverless deployment while crucible diverges. spark.sql.warehouse.dir
+# mirrors WAREHOUSE_PREFIX.
+aws_databricks_env.common['ARTIFACT_PREFIX'] = "s3://zipline-artifacts-aws"
+aws_databricks_env.common['WAREHOUSE_PREFIX'] = "s3://zipline-warehouse-aws"
+aws_databricks_env.common['FRONTEND_URL'] = "https://crucible-aws.zipline.ai"
+aws_databricks_env.common['HUB_URL'] = "https://crucible-orch-aws.zipline.ai"
+aws_databricks.conf.common['spark.sql.warehouse.dir'] = "s3://zipline-warehouse-aws/data/uc-poc/warehouse/"
+
 aws.env.common['ARTIFACT_PREFIX'] = "s3://zipline-artifacts-canary-aws"

@@ -33,11 +33,8 @@ class ConfigInfo:
 
 # Canonical enumeration of chronon conf types. Drives compile discovery,
 # output layout, and validator wiring. Keep this as a module-level constant
-# so tests and tooling can derive folder names from the same source of truth.
-# With the id()-based dedup in `parse_configs`,
-# this guarantees that a config imported from another file is recorded at
-# its canonical location (the file that defines it) rather than at the
-# first importer the scanner happens to visit.
+# so tests, tooling, and parse-time import filtering can derive authoring
+# folder names from the same source of truth.
 CONFIG_INFOS: List[ConfigInfo] = [
     ConfigInfo(
         folder_name="staging_queries",
@@ -88,11 +85,8 @@ class CompileContext:
         self.config_infos: List[ConfigInfo] = CONFIG_INFOS
 
         # Identity dedup across the whole compile run. `parse_configs.from_file`
-        # adds an object's id() the first time it's encountered and skips any
-        # later sightings, so a config imported from another module gets
-        # compiled exactly once at its canonical location instead of being
-        # re-compiled (and reported as a duplicate) in every file that imports
-        # it.
+        # first filters imported configs, then adds an object's id() the first
+        # time it is locally claimed and skips later aliases.
         self.seen_obj_ids: set = set()
 
         self.compile_status = CompileStatus(use_live=False, format=format)

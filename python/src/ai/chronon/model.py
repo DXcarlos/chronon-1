@@ -6,6 +6,7 @@ import gen_thrift.api.ttypes as ttypes
 import gen_thrift.common.ttypes as common
 from ai.chronon import utils
 from ai.chronon import windows as window_utils
+from ai.chronon.cli.compile.config_origin import mark_factory_created_config
 from ai.chronon.data_types import DataType, FieldsType
 from ai.chronon.utils import ANY_SOURCE_TYPE, normalize_source, normalize_sources
 
@@ -241,7 +242,7 @@ def Model(
         deploymentConf=deployment_conf.to_thrift() if deployment_conf else None,
     )
 
-    return model
+    return mark_factory_created_config(model)
 
 
 def _get_model_transforms_output_table_name(
@@ -326,4 +327,4 @@ def ModelTransforms(
         lambda self: _get_model_transforms_output_table_name(self, full_name=True)
     )
 
-    return model_transforms
+    return mark_factory_created_config(model_transforms)

@@ -509,22 +509,34 @@ jobs:
         shell: bash
         run: |
           set -eo pipefail
-          aws s3 cp ${{ needs.build_and_push.outputs.wheel_name }} s3://zipline-artifacts-canary/release/passing-candidate/wheels/ --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-          aws s3 cp flink_assembly_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/flink_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-          aws s3 cp cloud_aws_lib_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/cloud_aws_lib_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-          aws s3 cp service_assembly_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/service_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-          aws s3 cp connectors_kinesis_deploy.jar s3://zipline-artifacts-canary/release/passing-candidate/jars/connectors_kinesis_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          METADATA="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          # zipline-artifacts-aws is the crucible-aws (in-cluster K8sSubmitter) deployment's
+          # artifact bucket; zipline-artifacts-canary serves the canary EMR Serverless
+          # deployment. Both consume the same chronon jars.
+          for BUCKET in zipline-artifacts-canary zipline-artifacts-aws; do
+            aws s3 cp ${{ needs.build_and_push.outputs.wheel_name }} s3://$BUCKET/release/passing-candidate/wheels/ --metadata="$METADATA"
+            aws s3 cp flink_assembly_deploy.jar s3://$BUCKET/release/passing-candidate/jars/flink_assembly_deploy.jar --metadata="$METADATA"
+            aws s3 cp cloud_aws_lib_deploy.jar s3://$BUCKET/release/passing-candidate/jars/cloud_aws_lib_deploy.jar --metadata="$METADATA"
+            aws s3 cp service_assembly_deploy.jar s3://$BUCKET/release/passing-candidate/jars/service_assembly_deploy.jar --metadata="$METADATA"
+            aws s3 cp connectors_kinesis_deploy.jar s3://$BUCKET/release/passing-candidate/jars/connectors_kinesis_deploy.jar --metadata="$METADATA"
+          done
 
       - name: Push Jars to s3 Bucket (latest)
         if: ${{ needs.run_aws_integration_tests.result == 'success' && needs.run_gcp_integration_tests.result == 'success' && needs.run_fetcher_integration_tests.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         shell: bash
         run: |
           set -eo pipefail
-          aws s3 cp ${{ needs.build_and_push.outputs.wheel_name }} s3://zipline-artifacts-canary/release/latest/wheels/ --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-          aws s3 cp flink_assembly_deploy.jar s3://zipline-artifacts-canary/release/latest/jars/flink_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-          aws s3 cp cloud_aws_lib_deploy.jar s3://zipline-artifacts-canary/release/latest/jars/cloud_aws_lib_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-          aws s3 cp service_assembly_deploy.jar s3://zipline-artifacts-canary/release/latest/jars/service_assembly_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
-          aws s3 cp connectors_kinesis_deploy.jar s3://zipline-artifacts-canary/release/latest/jars/connectors_kinesis_deploy.jar --metadata="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          METADATA="updated_date=$(date),commit=$(git rev-parse HEAD),branch=$(git rev-parse --abbrev-ref HEAD)"
+          # zipline-artifacts-aws is the crucible-aws (in-cluster K8sSubmitter) deployment's
+          # artifact bucket; zipline-artifacts-canary serves the canary EMR Serverless
+          # deployment. Both consume the same chronon jars.
+          for BUCKET in zipline-artifacts-canary zipline-artifacts-aws; do
+            aws s3 cp ${{ needs.build_and_push.outputs.wheel_name }} s3://$BUCKET/release/latest/wheels/ --metadata="$METADATA"
+            aws s3 cp flink_assembly_deploy.jar s3://$BUCKET/release/latest/jars/flink_assembly_deploy.jar --metadata="$METADATA"
+            aws s3 cp cloud_aws_lib_deploy.jar s3://$BUCKET/release/latest/jars/cloud_aws_lib_deploy.jar --metadata="$METADATA"
+            aws s3 cp service_assembly_deploy.jar s3://$BUCKET/release/latest/jars/service_assembly_deploy.jar --metadata="$METADATA"
+            aws s3 cp connectors_kinesis_deploy.jar s3://$BUCKET/release/latest/jars/connectors_kinesis_deploy.jar --metadata="$METADATA"
+          done
 
 
   push_to_gcp_passing:

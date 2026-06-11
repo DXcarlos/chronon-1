@@ -23,6 +23,7 @@ import ai.chronon.utils as utils
 import ai.chronon.windows as window_utils
 import gen_thrift.api.ttypes as ttypes
 import gen_thrift.common.ttypes as common
+from ai.chronon.cli.compile.config_origin import mark_factory_created_config
 
 OperationType = int  # type(zthrift.Operation.FIRST)
 OperationWithArgs = Tuple[ttypes.Operation, Dict[str, str]]
@@ -750,4 +751,4 @@ def GroupBy(
     # Add the table property that calls the private function
     group_by.__class__.table = property(lambda self: _get_output_table_name(self, full_name=True))
 
-    return group_by
+    return mark_factory_created_config(group_by)
