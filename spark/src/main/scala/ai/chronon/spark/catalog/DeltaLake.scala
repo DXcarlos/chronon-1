@@ -15,6 +15,7 @@ import org.apache.spark.sql.functions.{
   max,
   to_date,
   to_timestamp,
+  unix_timestamp,
   when
 }
 import org.apache.spark.sql.types.{DataType, DateType, MapType, StringType, StructField, StructType, TimestampType}
@@ -112,7 +113,10 @@ case object DeltaLake extends Format {
           count(lit(1)).as("fileCount"),
           count(when(col("min_value").isNull || col("max_value").isNull, lit(1))).as("missingCount"),
           date_format(min(statsBoundary("min_value", columnType, partitionSpec)), partitionSpec.format).as("start"),
-          date_format(max(statsBoundary("max_value", columnType, partitionSpec)), partitionSpec.format).as("end")
+          date_format(max(statsBoundary("max_value", columnType, partitionSpec)), partitionSpec.format).as("end"),
+          (unix_timestamp(max(statsBoundary("max_value", columnType, partitionSpec)).cast("timestamp")) * 1000)
+            .cast("long")
+            .as("maxTimestampMillis")
         )
         .collect()
         .headOption
@@ -124,6 +128,10 @@ case object DeltaLake extends Format {
         val end = row.getAs[String]("end")
 
         if (fileCount > 0 && missingCount == 0 && start != null && end != null) {
+          val maxTimestampMillisIdx = row.fieldIndex("maxTimestampMillis")
+          if (!row.isNullAt(maxTimestampMillisIdx)) {
+            warnIfMaxTimestampMillisIsFuture(tableName, columnName, row.getLong(maxTimestampMillisIdx))
+          }
           Some(StatsDateRange(start = start, end = end))
         } else {
           None

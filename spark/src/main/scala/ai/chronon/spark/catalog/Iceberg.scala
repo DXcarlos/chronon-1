@@ -126,7 +126,7 @@ case object Iceberg extends Format {
       val fieldType = field.`type`()
       val extractor = new IcebergPartitionStatsExtractor(sparkSession)
 
-      currentDataFilesDateRange(table, fieldId, fieldType, partitionSpec, extractor)
+      currentDataFilesDateRange(table, tableName, columnName, fieldId, fieldType, partitionSpec, extractor)
     } match {
       case Success(result) =>
         if (result.isDefined) {
@@ -176,6 +176,8 @@ case object Iceberg extends Format {
     }
 
   private def currentDataFilesDateRange(table: org.apache.iceberg.Table,
+                                        tableName: String,
+                                        columnName: String,
                                         fieldId: java.lang.Integer,
                                         fieldType: org.apache.iceberg.types.Type,
                                         partitionSpec: PartitionSpec,
@@ -195,6 +197,7 @@ case object Iceberg extends Format {
         }
 
         range.flatten.map { case (minMillis, maxMillis) =>
+          warnIfMaxTimestampMillisIsFuture(tableName, columnName, maxMillis)
           StatsDateRange(
             start = partitionSpec.at(minMillis),
             end = partitionSpec.at(maxMillis)

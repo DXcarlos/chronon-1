@@ -5,10 +5,11 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.functions.{col, date_format, date_sub, min, max}
+import org.apache.spark.sql.functions.{col, date_format, date_sub, min, max, unix_timestamp}
 import org.apache.spark.sql.types.{DateType, StringType, StructType}
 import org.slf4j.{Logger, LoggerFactory}
 
+import java.time.Instant
 import scala.util.{Failure, Success, Try}
 
 trait Format {
@@ -140,6 +141,15 @@ trait Format {
       sparkSession: SparkSession): Option[String] =
     metadataPartitions(tableName, partitionColumn).flatMap(Format.pickMaxPartition)
 
+  protected def warnIfMaxTimestampMillisIsFuture(tableName: String, timestampColumn: String, maxMillis: Long): Unit = {
+    val nowMillis = System.currentTimeMillis()
+    if (maxMillis > nowMillis) {
+      logger.warn(
+        s"Max timestamp for time-partitioned table $tableName column $timestampColumn is ${Instant.ofEpochMilli(maxMillis)}, " +
+          s"which is after current time ${Instant.ofEpochMilli(nowMillis)}. The table data is likely in a bad state; continuing without failing.")
+    }
+  }
+
   protected def scanLastAvailablePartition(tableName: String, partitionColumn: String, partitionSpec: PartitionSpec)(
       implicit sparkSession: SparkSession): Option[String] = {
     import sparkSession.implicits._
@@ -154,12 +164,20 @@ trait Format {
             .headOption
             .flatMap(v => Option(v))
         case _ =>
-          df.select(date_format(date_sub(max(col(partitionColumn)).cast(DateType), 1), partitionSpec.format)
-            .as("last_partition"))
-            .as[String]
-            .collect()
+          df.select(
+            (unix_timestamp(max(col(partitionColumn)).cast("timestamp")) * 1000)
+              .cast("long")
+              .as("max_timestamp_millis"),
+            date_format(date_sub(max(col(partitionColumn)).cast(DateType), 1), partitionSpec.format)
+              .as("last_partition")
+          ).collect()
             .headOption
-            .flatMap(v => Option(v))
+            .flatMap { row =>
+              if (!row.isNullAt(0)) {
+                warnIfMaxTimestampMillisIsFuture(tableName, partitionColumn, row.getLong(0))
+              }
+              if (row.isNullAt(1)) None else Option(row.getString(1))
+            }
       }
     } match {
       case Success(result) => result
@@ -224,14 +242,21 @@ trait Format {
   @deprecated("Use lastAvailablePartition instead", "0.1.0")
   def maxTimestampDate(tableName: String, timestampColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] = {
-    import sparkSession.implicits._
     Try {
       val df = sparkSession.read.table(tableName)
-      df.select(date_format(max(col(timestampColumn)).cast(DateType), partitionSpec.format).as("max_date"))
-        .as[String]
-        .collect()
+      df.select(
+        (unix_timestamp(max(col(timestampColumn)).cast("timestamp")) * 1000)
+          .cast("long")
+          .as("max_timestamp_millis"),
+        date_format(max(col(timestampColumn)).cast(DateType), partitionSpec.format).as("max_date")
+      ).collect()
         .headOption
-        .flatMap(v => Option(v))
+        .flatMap { row =>
+          if (!row.isNullAt(0)) {
+            warnIfMaxTimestampMillisIsFuture(tableName, timestampColumn, row.getLong(0))
+          }
+          if (row.isNullAt(1)) None else Option(row.getString(1))
+        }
     } match {
       case Success(result) => result
       case Failure(e) =>

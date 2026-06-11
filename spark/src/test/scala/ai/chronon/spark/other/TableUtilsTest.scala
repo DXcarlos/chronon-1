@@ -29,6 +29,7 @@ import org.apache.spark.sql.{Row, _}
 import org.junit.Assert.{assertEquals, assertFalse, assertNull, assertTrue}
 import org.scalatest.flatspec.AnyFlatSpec
 
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 case class TestRecord(ds: String, id: String)
@@ -669,6 +670,45 @@ class TableUtilsTest extends AnyFlatSpec {
 
     spark.sql(s"DROP TABLE IF EXISTS $tableName")
     spark.sql(s"DROP DATABASE IF EXISTS $dbName")
+  }
+
+  it should "warn without failing when time-partitioned max timestamp is in the future" in {
+    val dbName = s"db_${System.nanoTime()}"
+    val tableName = s"$dbName.future_time_partitioned"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+    spark.sql(s"CREATE TABLE $tableName (user_id STRING, created_at TIMESTAMP)")
+    spark.sql(
+      s"""INSERT INTO $tableName VALUES
+         |('user1', TIMESTAMP '2999-01-02 12:00:00')
+         |""".stripMargin)
+
+    val underlying = org.slf4j.LoggerFactory
+      .getLogger(Hive.getClass.getName)
+      .asInstanceOf[ch.qos.logback.classic.Logger]
+    val appender = new ch.qos.logback.core.read.ListAppender[ch.qos.logback.classic.spi.ILoggingEvent]()
+    appender.start()
+    underlying.addAppender(appender)
+    try {
+      val lastPartition = tableUtils.lastAvailablePartition(
+        tableName,
+        tablePartitionSpec = Some(PartitionSpec("created_at", "yyyy-MM-dd", 24 * 60 * 60 * 1000))
+      )
+
+      assertEquals(Some("2999-01-01"), lastPartition)
+      val messages = appender.list.asScala.map(_.getFormattedMessage)
+      assertTrue(
+        s"Expected future max timestamp warning, got: $messages",
+        messages.exists(message =>
+          message.contains(s"Max timestamp for time-partitioned table $tableName column created_at") &&
+            message.contains("likely in a bad state") &&
+            message.contains("continuing without failing"))
+      )
+    } finally {
+      underlying.detachAppender(appender)
+      appender.stop()
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+      spark.sql(s"DROP DATABASE IF EXISTS $dbName")
+    }
   }
 
   it should "return empty list for virtual partitions on empty table" in {
