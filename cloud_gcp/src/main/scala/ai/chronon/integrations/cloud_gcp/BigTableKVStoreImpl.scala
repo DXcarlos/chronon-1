@@ -547,7 +547,8 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
       // Location must match the reservation region; defaults to us-central1 where the BQ→BT reservation lives.
       val bqLocation = conf.getOrElse("GCP_LOCATION", "us-central1")
       val jobId =
-        JobId.newBuilder()
+        JobId
+          .newBuilder()
           .setProject(adminClient.getProjectId)
           .setLocation(bqLocation)
           .setJob(s"export_${sourceOfflineTable.sanitize}_to_bigtable_${partition}_$startTs")
