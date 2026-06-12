@@ -168,6 +168,25 @@ object Extensions {
   implicit class MetadataOps(metaData: MetaData) {
     def cleanName: String = metaData.name.sanitize
 
+    /** The output partition grid is a data-layout property (a regrid relabels the output table),
+      * so unlike the rest of executionInfo it participates in semantic hashing — via a conditional
+      * token so that daily/unset grids contribute nothing and existing hashes stay byte-stable.
+      * The schedule, and hence the derived processing delay, never participates. Canonicalized to
+      * millis so Window(1, DAYS) == Window(24, HOURS) == unset.
+      */
+    def outputGridToken: Option[String] =
+      for {
+        executionInfo <- Option(metaData.executionInfo)
+        tableInfo <- Option(executionInfo.outputTableInfo)
+        interval <- Option(tableInfo.partitionInterval)
+        intervalMs = interval.millis
+        offsetMs = Option(tableInfo.partitionOffset).map(_.millis).getOrElse(0L)
+        if intervalMs != WindowUtils.Day.millis || offsetMs != 0L
+      } yield s"grid:interval_ms=$intervalMs,offset_ms=$offsetMs"
+
+    def mixGridToken(baseHash: String): String =
+      outputGridToken.map(token => HashUtils.md5Base64(s"$baseHash|$token")).getOrElse(baseHash)
+
     // TODO: we no longer use __v{version} - it is just __{version}, deprecate this method
     def cleanNameWithoutVersion: String = {
       val clean = metaData.name.sanitize
@@ -577,7 +596,8 @@ object Extensions {
     def semanticHash: String = {
       val newGroupBy = groupBy.deepCopy()
       newGroupBy.unsetMetaData()
-      ThriftJsonCodec.md5Digest(newGroupBy)
+      val base = ThriftJsonCodec.md5Digest(newGroupBy)
+      Option(groupBy.metaData).map(_.mixGridToken(base)).getOrElse(base)
     }
 
     def dataModel: DataModel = {
@@ -997,7 +1017,10 @@ object Extensions {
      * changes and determine whether any intermediate/final tables of the join need to be recomputed.
      */
     def semanticHash: Map[String, String] = {
-      val leftHash = ThriftJsonCodec.md5Digest(join.left)
+      // the join's own output grid rides on the left hash: a regrid relabels every
+      // intermediate/final table computed off the left, so it must read as a left change
+      val baseLeftHash = ThriftJsonCodec.md5Digest(join.left)
+      val leftHash = Option(join.metaData).map(_.mixGridToken(baseLeftHash)).getOrElse(baseLeftHash)
       logger.info(s"Join Left Hash: $leftHash")
       logger.info(s"Join Left Object: ${ThriftJsonCodec.toJsonStr(join.left)}")
       val partHashes = join.joinParts.toScala.map { jp => partOutputTable(jp) -> jp.groupBy.semanticHash }.toMap
@@ -1234,9 +1257,20 @@ object Extensions {
     def partitionSpec(defaultSpec: PartitionSpec): PartitionSpec = {
       val column = Option(ti).flatMap((q) => Option(q.partitionColumn)).getOrElse(defaultSpec.column)
       val format = Option(ti).flatMap((q) => Option(q.partitionFormat)).getOrElse(defaultSpec.format)
-      val interval = Option(ti).flatMap((q) => Option(q.partitionInterval)).getOrElse(WindowUtils.Day)
-      val offset =
-        Option(ti).flatMap((q) => Option(q.partitionOffset)).map(_.millis).getOrElse(defaultSpec.offsetMillis)
+      val declaredInterval = Option(ti).flatMap((q) => Option(q.partitionInterval))
+      val timePartitioned = Option(ti).exists(t => t.isSetTimePartitioned && t.timePartitioned)
+      // a time-partitioned table has no physical grid - its column is a real timestamp, so it
+      // is sensed and quantized on the CONSUMER's grid: inherit the default spec's full
+      // span+offset instead of assuming daily (which would quantize an intraday requirement
+      // up to a whole day and stall sub-daily readiness until the day closes)
+      val interval = declaredInterval.getOrElse(
+        if (timePartitioned) WindowUtils.fromMillis(defaultSpec.spanMillis) else WindowUtils.Day)
+      // a conf that declares its own interval gets offset 0 unless it also declares one - the
+      // default spec's anchor must not leak into an explicitly-intervaled table
+      val offset = Option(ti)
+        .flatMap((q) => Option(q.partitionOffset))
+        .map(_.millis)
+        .getOrElse(if (declaredInterval.isDefined) 0L else defaultSpec.offsetMillis)
       PartitionSpec(column, format, interval.millis, offset)
     }
 
@@ -1271,9 +1305,18 @@ object Extensions {
     def partitionSpec(defaultSpec: PartitionSpec): PartitionSpec = {
       val column = Option(query).flatMap(q => Option(q.partitionColumn)).getOrElse(defaultSpec.column)
       val format = Option(query).flatMap(q => Option(q.partitionFormat)).getOrElse(defaultSpec.format)
-      val interval = Option(query).flatMap(q => Option(q.partitionInterval)).getOrElse(WindowUtils.Day)
-      val offset =
-        Option(query).flatMap(q => Option(q.partitionOffset)).map(_.millis).getOrElse(defaultSpec.offsetMillis)
+      val declaredInterval = Option(query).flatMap(q => Option(q.partitionInterval))
+      val timePartitioned = Option(query).exists(q => q.isSetTimePartitioned && q.timePartitioned)
+      // a time-partitioned source has no physical grid - its column is a real timestamp, so it
+      // is sensed and quantized on the CONSUMER's grid (see TableInfoOps.partitionSpec)
+      val interval = declaredInterval.getOrElse(
+        if (timePartitioned) WindowUtils.fromMillis(defaultSpec.spanMillis) else WindowUtils.Day)
+      // a conf that declares its own interval gets offset 0 unless it also declares one - the
+      // default spec's anchor must not leak into an explicitly-intervaled source
+      val offset = Option(query)
+        .flatMap(q => Option(q.partitionOffset))
+        .map(_.millis)
+        .getOrElse(if (declaredInterval.isDefined) 0L else defaultSpec.offsetMillis)
       PartitionSpec(column, format, interval.millis, offset)
     }
   }

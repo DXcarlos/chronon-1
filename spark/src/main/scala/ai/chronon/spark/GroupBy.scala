@@ -866,9 +866,13 @@ object GroupBy {
          |""".stripMargin)
     metaColumns ++= timeMapping
 
-    val partitionConditions = tableUtils.whereClauses(
+    // typed predicates: against a real timestamp/date column (time_partitioned sources),
+    // label literals cast to NULL and silently empty the scan - epoch bounds are emitted instead
+    val scanTable = if (mutations) source.getEntities.mutationTable.cleanSpec else source.table
+    val partitionConditions = tableUtils.rangeWheresFor(
       intersectedRange,
-      partitionColumn = Option(source.query.partitionColumn)
+      scanTable,
+      Option(source.query.partitionColumn).getOrElse(tableUtils.partitionColumn)
     )
 
     logger.info(s"""
@@ -898,7 +902,7 @@ object GroupBy {
     tableUtils
       .scanDfBase(
         selects,
-        if (mutations) source.getEntities.mutationTable.cleanSpec else source.table,
+        scanTable,
         Option(source.query.wheres).map(_.toScala).getOrElse(Seq.empty[String]),
         partitionConditions,
         Some(metaColumns ++ keys.map(_ -> null))

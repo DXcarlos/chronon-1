@@ -25,7 +25,7 @@ import org.apache.avro.Schema
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{LongType, StructType}
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.util.sketch.BloomFilter
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -81,8 +81,14 @@ object Extensions {
     def apply(dataFrame: DataFrame)(implicit partitionSpec: PartitionSpec): DfWithStats = {
       val pCol = partitionSpec.column
       val pFormat = partitionSpec.format
+      // string labels are already in the spec's format: date_format would route them through
+      // an implicit string->timestamp cast, which nulls any label Spark can't natively cast
+      // (e.g. dash-separated sub-daily formats) and would key every count under null
+      val labelCol =
+        if (dataFrame.schema(pCol).dataType == StringType) col(pCol)
+        else date_format(col(pCol), pFormat)
       val partitionCounts = dataFrame
-        .groupBy(date_format(col(pCol), pFormat))
+        .groupBy(labelCol)
         .count()
         .collect()
         .map(row => row.getString(0) -> row.getLong(1))

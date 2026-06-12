@@ -109,11 +109,13 @@ object StepRunner {
     val requiredCoverageEnd = requestedRange.coverageEnd
     watermark match {
       case Some(w) if w > requiredCoverageEnd =>
-        logger.info(s"Output table $tableName covers requested range " +
-          s"(watermark: ${TsUtils.toStr(w)} > coverage end: ${TsUtils.toStr(requiredCoverageEnd)})")
+        logger.info(
+          s"Output table $tableName covers requested range " +
+            s"(watermark: ${TsUtils.toStr(w)} > coverage end: ${TsUtils.toStr(requiredCoverageEnd)})")
       case Some(w) =>
-        logger.error(s"Output table $tableName watermark ${TsUtils.toStr(w)} <= " +
-          s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
+        logger.error(
+          s"Output table $tableName watermark ${TsUtils.toStr(w)} <= " +
+            s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
       case None =>
         logger.error(s"Output table $tableName has no partitions after run")
     }

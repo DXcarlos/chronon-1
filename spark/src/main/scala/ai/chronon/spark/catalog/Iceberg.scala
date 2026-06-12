@@ -73,15 +73,15 @@ case object Iceberg extends Format {
       .distinct
   }
 
-  /** Returns the partition column names from the Iceberg partition spec. Empty if unpartitioned.
-    * todo(tchow): Find a more permanent home for this as we always write Iceberg and this doesn't make much sense
-    * for other formats.
+  /** Partition column names from the Iceberg partition spec (via the .partitions metadata
+    * table, which the spark catalog's listColumns can't see). Empty if unpartitioned.
     */
-  def partitionColumnNames(tableName: String)(implicit sparkSession: SparkSession): Array[String] = {
-    val partitionsDf = sparkSession.table(s"${Format.resolveTableName(tableName).quoted}.partitions")
-    val index = partitionsDf.schema.fieldIndex("partition")
-    partitionsDf.schema(index).dataType.asInstanceOf[StructType].fieldNames
-  }
+  override def partitionColumnNames(tableName: String)(implicit sparkSession: SparkSession): Seq[String] =
+    Try {
+      val partitionsDf = sparkSession.table(s"${Format.resolveTableName(tableName).quoted}.partitions")
+      val index = partitionsDf.schema.fieldIndex("partition")
+      partitionsDf.schema(index).dataType.asInstanceOf[StructType].fieldNames.toSeq
+    }.getOrElse(Seq.empty)
 
   override def virtualPartitions(tableName: String, timestampColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): List[String] =

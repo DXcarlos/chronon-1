@@ -49,7 +49,7 @@ def test_query_partition_interval_defaults_to_subdaily_format():
     q = query.Query(partition_column="ds", partition_interval="15m")
 
     assert q.partitionColumn == "ds"
-    assert q.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert q.partitionFormat == "yyyy-MM-dd-HH-mm"
     assert q.partitionInterval == common.Window(length=15, timeUnit=common.TimeUnit.MINUTES)
 
 
@@ -87,7 +87,7 @@ def test_staging_query_partition_interval_sets_output_table_info():
 
     table_info = sq.metaData.executionInfo.outputTableInfo
     assert table_info.partitionColumn == "ds"
-    assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert table_info.partitionFormat == "yyyy-MM-dd-HH-mm"
     assert table_info.partitionInterval == _hours(3)
 
 
@@ -102,7 +102,7 @@ def test_staging_query_infers_interval_but_never_offset_from_schedule():
 
     table_info = sq.metaData.executionInfo.outputTableInfo
     assert table_info.partitionColumn == "ds"
-    assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert table_info.partitionFormat == "yyyy-MM-dd-HH-mm"
     assert table_info.partitionInterval == _hours(3)
     assert table_info.partitionOffset is None
 

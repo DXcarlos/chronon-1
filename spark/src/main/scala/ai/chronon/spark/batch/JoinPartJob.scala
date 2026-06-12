@@ -12,6 +12,7 @@ import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.{GroupBy, JoinUtils}
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, date_format}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.sketch.BloomFilter
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -236,8 +237,11 @@ class JoinPartJob(node: JoinPartNode,
       if (alignOutput && partSnapshotSpec.hasSameGrid(tableUtils.partitionSpec)) unfilledPartitionRange
       else JoinUtils.snapshotLookbackRange(unfilledPartitionRange, partSnapshotSpec)
 
+    // normalize non-string (date/timestamp-typed) partition columns into formatted labels.
+    // String labels pass through untouched: date_format's implicit string->timestamp cast
+    // nulls labels Spark can't natively cast (e.g. dash-separated sub-daily formats).
     val renamedLeftDf = renamedLeftRawDf.select(renamedLeftRawDf.columns.map {
-      case c if c == tableUtils.partitionColumn =>
+      case c if c == tableUtils.partitionColumn && renamedLeftRawDf.schema(c).dataType != StringType =>
         date_format(renamedLeftRawDf.col(c), tableUtils.partitionFormat).as(c)
       case c => renamedLeftRawDf.col(c)
     }.toList: _*)

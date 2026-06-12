@@ -128,6 +128,11 @@ trait Format {
   def partitions(tableName: String, partitionFilters: String)(implicit
       sparkSession: SparkSession): List[Map[String, String]]
 
+  /** The table's partition columns, coarsest-first as declared in the table definition. */
+  def partitionColumnNames(tableName: String)(implicit sparkSession: SparkSession): Seq[String] =
+    Try(sparkSession.catalog.listColumns(tableName).collect().filter(_.isPartition).map(_.name).toSeq)
+      .getOrElse(Seq.empty)
+
   // Does this format support sub partitions filters
   def supportSubPartitionsFilter: Boolean
 
@@ -245,17 +250,16 @@ trait Format {
     }
   }
 
-  // Unified last available partition: handles both string partition columns and timestamp/date columns.
-  // For string columns that are catalog partitions (Hive/Iceberg/Delta), uses metadata-only lookup.
-  // For non-string columns, falls back to a scan and returns the last complete partition interval.
+  // Unified last available partition: metadata-only lookup for catalog-partitioned string columns,
+  // value scan (last complete partition interval) for timestamp/date/clustered columns.
+  // Formats with richer metadata (Iceberg manifests, Delta log stats) override to insert a
+  // stats tier between the two.
   def lastAvailablePartition(tableName: String, partitionColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] =
     metadataLastAvailablePartition(tableName, partitionColumn)
       .orElse(scanLastAvailablePartition(tableName, partitionColumn, partitionSpec))
 
   // Unified first available partition: handles both string partition columns and timestamp/date columns.
-  // For string columns that are catalog partitions, uses metadata-only lookup.
-  // For timestamp/date columns, falls back to a scan.
   def firstAvailablePartition(tableName: String, partitionColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] =
     metadataFirstAvailablePartition(tableName, partitionColumn)
@@ -301,8 +305,7 @@ trait Format {
           // the partition containing max is still in flight: enumerate complete partitions only
           case (Some(minMillis), Some(maxMillis)) =>
             Some(
-              partitionSpec.expandRange(partitionSpec.at(minMillis),
-                                        partitionSpec.before(partitionSpec.at(maxMillis))))
+              partitionSpec.expandRange(partitionSpec.at(minMillis), partitionSpec.before(partitionSpec.at(maxMillis))))
           case _ => None
         }
         .getOrElse(List.empty)
@@ -335,6 +338,26 @@ case class ResolvedTableName(catalog: String, namespace: String, table: String) 
 object Format {
 
   private val stringOrdering: Ordering[String] = Ordering.String
+
+  /** Composition-mismatch canary: a table whose listing is nonempty but parses to ZERO labels
+    * under the consumer's spec reads as permanently empty downstream - sensors never fire,
+    * silently. One label parsing is enough to clear the canary; per-label mismatches surface
+    * later as loud ParseExceptions in range arithmetic. Sampled so huge listings stay cheap.
+    */
+  def zeroParsedLabelsWarning(tableName: String, labels: Seq[String], spec: PartitionSpec): Option[String] = {
+    if (labels.isEmpty) None
+    else {
+      val sample = labels.take(100)
+      if (sample.exists(label => Try(spec.epochMillis(label)).isSuccess)) None
+      else
+        Some(
+          s"Table $tableName listed ${labels.size} partitions but none of the first ${sample.size} parse under " +
+            s"partition format '${spec.format}' (sample label: '${sample.head}'). Downstream readiness will treat " +
+            "this table as permanently empty and sensors will never fire. Common causes: a compact (dash-less) " +
+            "or stale partition format on the dependency's table info."
+        )
+    }
+  }
 
   def sanitizePartitionValues(partitions: Iterable[String]): List[String] = partitions.iterator
     .flatMap(Option(_))

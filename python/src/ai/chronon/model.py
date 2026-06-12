@@ -216,7 +216,7 @@ def Model(
     :type environments: List[str]
     :param partition_interval:
         Output partition grain for model training/deploy nodes. Examples: "1d", "3h", "15m".
-        When set below daily, Chronon uses "yyyy-MM-dd HH:mm" labels.
+        When set below daily, Chronon uses "yyyy-MM-dd-HH-mm" labels.
     :type partition_interval: Optional[Union[common.Window, str]]
     :param partition_offset:
         Offset from UTC midnight/epoch for the output partition grid.
@@ -236,6 +236,10 @@ def Model(
 
     assert isinstance(version, str), f"Version must be a string, but found {type(version).__name__}"
 
+    # output_table_info handles the no-grid case itself (returns None, and rejects a lone
+    # partition_offset loudly instead of silently dropping it)
+    output_info = window_utils.output_table_info(partition_interval, partition_offset=partition_offset)
+
     # Create metadata
     meta_data = ttypes.MetaData(
         outputNamespace=output_namespace,
@@ -244,12 +248,8 @@ def Model(
         tableProperties=table_properties,
         version=version,
         environments=environments,
-        executionInfo=common.ExecutionInfo(
-            outputTableInfo=window_utils.output_table_info(
-                partition_interval, partition_offset=partition_offset
-            )
-        )
-        if partition_interval is not None
+        executionInfo=common.ExecutionInfo(outputTableInfo=output_info)
+        if output_info is not None
         else None,
     )
 
@@ -263,6 +263,19 @@ def Model(
         trainingConf=training_conf.to_thrift() if training_conf else None,
         deploymentConf=deployment_conf.to_thrift() if deployment_conf else None,
     )
+
+    if (
+        output_info is not None
+        and window_utils.window_millis(output_info.partitionInterval) < window_utils.DAY_MILLIS
+        and model.trainingConf is not None
+    ):
+        source = model.trainingConf.trainingDataSource
+        if source is not None:
+            inner = source.events or source.entities or source.joinSource
+            source_table = getattr(inner, "table", None) or getattr(inner, "snapshotTable", None)
+            window_utils.validate_coverage_edge(
+                "This Model", window_utils.source_query(source), f"training source {source_table}"
+            )
 
     return mark_factory_created_config(model)
 

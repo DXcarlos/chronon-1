@@ -20,7 +20,7 @@ import ai.chronon.api.{Constants, PartitionRange, PartitionSpec, Query, QueryUti
 import ai.chronon.api.ColorPrinter.ColorString
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Project}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -159,6 +159,7 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
           logger.info(
             s"Found ${nonNullPartitions.size}, between (${nonNullPartitions.min}, ${nonNullPartitions.max}) partitions for table: $tableName")
         }
+        Format.zeroParsedLabelsWarning(tableName, nonNullPartitions, effectiveSpec).foreach(logger.error)
         nonNullPartitions
       }
       .getOrElse(List.empty)
@@ -532,7 +533,7 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
         subPartitionFilters = inputTableToSubPartitionFiltersMap.getOrElse(table, Map.empty);
         // the listing filter must be expressed in the INPUT table's spec: a sub-daily output
         // range's labels would otherwise exclude the coarser input partitions that cover it
-        // (e.g. ds >= '2024-01-04 22:00' excludes daily '2024-01-04')
+        // (e.g. ds >= '2024-01-04-22-00' excludes daily '2024-01-04')
         listed = partitions(table,
                             subPartitionFilters,
                             Option(outputPartitionRange.coveringRange(inputPartitionSpec)),
@@ -788,11 +789,34 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
 
     // TODO: this is a temporary fix to handle the case where the partition column is not a string.
     //  This is the case for partitioned BigQuery native tables.
-    (if (df.schema.fieldNames.contains(partitionColumn)) {
-       df.withColumn(partitionColumn, date_format(df.col(partitionColumn), partitionFormat))
+    // String labels must pass through untouched: date_format would round-trip them through an
+    // implicit string->timestamp cast, which nulls any label Spark can't natively cast (e.g.
+    // the dash-separated sub-daily formats; the legacy space/colon format only survived the
+    // round trip because it coincides with Spark's native timestamp literal shape).
+    (if (df.schema.fieldNames.contains(partitionColumn) && df.schema(partitionColumn).dataType != StringType) {
+       df.withColumn(partitionColumn,
+                     gridLabelColumn(df.col(partitionColumn), df.schema(partitionColumn).dataType, partitionSpec))
      } else {
        df
      }).coalesce(coalesceFactor * parallelism)
+  }
+
+  /** Label of the grid partition containing each value of a time-space column: floored to the
+    * spec's span+offset before formatting. Plain date_format only truncates to the format's
+    * granularity, so a 3h grid with a minute-bearing format would emit per-minute labels
+    * (…-13-47) instead of grid labels (…-12-00). Grids are minute-aligned, so seconds-domain
+    * arithmetic is exact. Numeric columns hold epoch MILLIS by convention - casting them
+    * through TimestampType would reinterpret millis as seconds.
+    */
+  private def gridLabelColumn(c: Column, dataType: DataType, spec: PartitionSpec): Column = {
+    val seconds: Column = dataType match {
+      case _: NumericType => (c.cast(LongType) / 1000).cast(LongType)
+      case _              => c.cast(TimestampType).cast(LongType)
+    }
+    val spanSeconds = spec.spanMillis / 1000
+    val offsetSeconds = Math.floorMod(spec.offsetMillis, spec.spanMillis) / 1000
+    val floored = seconds - pmod(seconds - lit(offsetSeconds), lit(spanSeconds))
+    from_unixtime(floored, spec.format)
   }
 
   def whereClauses(
@@ -808,6 +832,40 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
     (startClause ++ endClause).toSeq
   }
 
+  /** Range predicates typed to the column. Label literals only compare correctly against
+    * STRING columns: against TIMESTAMP/DATE columns Spark casts the literal, and sub-daily
+    * dash labels (yyyy-MM-dd-HH-mm) cast to NULL - the filter then drops every row and the
+    * scan is silently empty. Time-space columns get epoch bounds computed Scala-side instead;
+    * the end bound is the range's exclusive coverage end (rerun-deterministic: a job for
+    * [13:00, 16:00) never reads rows that landed after 16:00). Numeric columns hold epoch
+    * MILLIS by convention - never cast them through TimestampType (seconds, 1000x off).
+    */
+  def typedWhereClauses(range: PartitionRange, columnName: String, columnType: DataType): Seq[String] =
+    columnType match {
+      case StringType => whereClauses(range, Some(columnName))
+      case _: NumericType =>
+        val startClause = Option(range.start).map(s => s"$columnName >= ${range.partitionSpec.partitionStartMillis(s)}L")
+        val endClause = Option(range.end).map(e => s"$columnName < ${range.partitionSpec.partitionEndMillis(e)}L")
+        (startClause ++ endClause).toSeq
+      case _ =>
+        val startClause =
+          Option(range.start).map(s => s"$columnName >= timestamp_millis(${range.partitionSpec.partitionStartMillis(s)}L)")
+        val endClause =
+          Option(range.end).map(e => s"$columnName < timestamp_millis(${range.partitionSpec.partitionEndMillis(e)}L)")
+        (startClause ++ endClause).toSeq
+    }
+
+  /** Column type of `columnName` in `table` (StringType when absent); metadata-only, no scan. */
+  def partitionColumnType(table: String, columnName: String): DataType =
+    Try(loadTable(table).schema).toOption
+      .flatMap(schema => schema.fields.find(_.name == columnName))
+      .map(_.dataType)
+      .getOrElse(StringType)
+
+  /** Like whereClauses but resolves the column's actual type from the table schema first. */
+  def rangeWheresFor(range: PartitionRange, table: String, columnName: String): Seq[String] =
+    typedWhereClauses(range, columnName, partitionColumnType(table, columnName))
+
   def scanDf(query: Query,
              table: String,
              fallbackSelects: Option[Map[String, String]] = None,
@@ -818,7 +876,7 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
     val queryPartitionColumn = maybeQuery.flatMap(q => Option(q.partitionColumn)).getOrElse(partitionColumn)
 
     val rangeWheres = range
-      .map(r => whereClauses(r, partitionColumn = Some(queryPartitionColumn)))
+      .map(r => rangeWheresFor(r, table, queryPartitionColumn))
       .getOrElse(Seq.empty)
 
     val queryWheres = maybeQuery.flatMap(q => Option(q.wheres)).map(_.toScala).getOrElse(Seq.empty)
@@ -829,10 +887,10 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
 
     if (queryPartitionColumn != partitionColumn) {
       val renamed = scanDf.withColumnRenamed(queryPartitionColumn, partitionColumn)
-      // If the partition column is not a string (e.g. timestamp/date), convert to formatted date string
+      // If the partition column is not a string (e.g. timestamp/date), convert to grid labels
       val colType = renamed.schema(partitionColumn).dataType
       if (colType != StringType) {
-        renamed.withColumn(partitionColumn, date_format(col(partitionColumn).cast(TimestampType), partitionFormat))
+        renamed.withColumn(partitionColumn, gridLabelColumn(col(partitionColumn), colType, partitionSpec))
       } else {
         renamed
       }

@@ -232,7 +232,7 @@ def StagingQuery(
     :type offline_schedule: str
     :param partition_interval:
         Output partition grain for this StagingQuery. Examples: "1d", "3h", "15m".
-        When set below daily and no partition format is supplied, Chronon uses "yyyy-MM-dd HH:mm".
+        When set below daily and no partition format is supplied, Chronon uses "yyyy-MM-dd-HH-mm".
     :type partition_interval: Optional[Union[common.Window, str]]
     :param partition_offset:
         Offset from UTC midnight/epoch for the output partition grid. Defaults to zero

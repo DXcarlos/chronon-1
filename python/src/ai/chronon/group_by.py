@@ -429,24 +429,26 @@ Keys {unselected_keys}, are unselected in source
                         "example required: {'k': '128', 'percentiles': '[0.4,0.5,0.95]'},"
                         f" received: {agg.argMap}\n"
                     )
-            if agg.windows:
-                assert not (
-                    # Snapshot accuracy.
-                    (group_by.accuracy and group_by.accuracy == Accuracy.SNAPSHOT)
-                    and
-                    # Sub-daily aggregation.
-                    any(
-                        [
-                            window.timeUnit in (TimeUnit.MINUTES, TimeUnit.HOURS)
-                            for window in agg.windows
-                        ]
-                    )
-                ), (
-                    "Detected a snapshot accuracy group by with a sub-daily aggregation window. "
-                    "Resolution with snapshot accuracy is not fine enough to allow minute or hourly group bys. "
-                    "Consider adjusting the aggregation window. "
-                    f"input_column: {agg.inputColumn}, windows: {agg.windows}"
+            if agg.windows and group_by.accuracy == Accuracy.SNAPSHOT:
+                # snapshot accuracy resolves windows on the partition grid: every window must
+                # be a multiple of the declared partition interval. A sub-daily grid makes
+                # sub-daily windows legal (e.g. a 6h window on a 3h grid); on the daily
+                # default, sub-daily windows stay rejected as before.
+                meta = group_by.metaData
+                exec_info = meta.executionInfo if meta else None
+                output_info = exec_info.outputTableInfo if exec_info else None
+                grid = output_info.partitionInterval if output_info else None
+                grid_ms = (
+                    window_utils.window_millis(grid) if grid else window_utils.DAY_MILLIS
                 )
+                for window in agg.windows:
+                    assert window_utils.window_millis(window) % grid_ms == 0, (
+                        "Detected a snapshot accuracy group by with a window that is not a "
+                        "multiple of its partition interval; grid-aligned snapshots cannot "
+                        "resolve it. Adjust the window or declare a finer partition_interval. "
+                        f"input_column: {agg.inputColumn}, windows: {agg.windows}, "
+                        f"partition interval: {grid_ms}ms"
+                    )
 
 
 def _get_op_suffix(operation, argmap):
@@ -614,7 +616,7 @@ def GroupBy(
     :type online_schedule: Optional[str]
     :param partition_interval:
         Output partition grain for this GroupBy. Examples: "1d", "3h", "15m".
-        When set below daily, Chronon uses "yyyy-MM-dd HH:mm" labels.
+        When set below daily, Chronon uses "yyyy-MM-dd-HH-mm" labels.
     :type partition_interval: Optional[Union[common.Window, str]]
     :param partition_offset:
         Offset from UTC midnight/epoch for the output partition grid. Defaults to zero
@@ -764,6 +766,18 @@ def GroupBy(
             if hasattr(agg, "tags") and agg.tags:
                 for output_col in get_output_col_names(agg):
                     column_tags[output_col] = agg.tags
+
+    output_info = exec_info.outputTableInfo
+    if (
+        output_info is not None
+        and window_utils.window_millis(output_info.partitionInterval) < window_utils.DAY_MILLIS
+    ):
+        for source in sources:
+            inner = source.events or source.entities or source.joinSource
+            source_table = getattr(inner, "table", None) or getattr(inner, "snapshotTable", None)
+            window_utils.validate_coverage_edge(
+                "This GroupBy", window_utils.source_query(source), f"source {source_table}"
+            )
 
     metadata = ttypes.MetaData(
         online=online,

@@ -91,7 +91,7 @@ def Query(
     :type partition_format: str, optional
     :param partition_interval:
         Partition grain for the source table. Examples: "1d", "3h", "15m".
-        Sub-daily partition labels use "yyyy-MM-dd HH:mm" unless partition_format is explicitly set.
+        Sub-daily partition labels use "yyyy-MM-dd-HH-mm" unless partition_format is explicitly set.
     :type partition_interval: Union[common.Window, str], optional
     :param partition_offset:
         Offset from UTC midnight/epoch for the source partition grid. Examples: "1h" for

@@ -24,15 +24,11 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
     }
     Option(groupBy.sources).foreach { sources =>
       sources.asScala.foreach { source =>
-        for {
-          query <- Option(source.query)
-          partitionInterval <- Option(query.partitionInterval)
-        } {
-          val sourcePartitionSpec = query.partitionSpec(confOutputPartitionSpec)
-          MetaDataUtils.validateEdgeGrids(
+        Option(source.query).foreach { query =>
+          MetaDataUtils.validateCoverageEdge(
             groupBy.metaData.name,
             confOutputPartitionSpec,
-            sourcePartitionSpec,
+            query,
             s"source ${source.rawTable}",
             MetaDataUtils.EdgeShape.of(source.dataModel)
           )

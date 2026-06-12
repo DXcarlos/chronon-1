@@ -35,6 +35,25 @@ def event_source(table):
     )
 
 
+def subdaily_event_source(table):
+    """Left source declaring a 3h grid - sub-daily joins need a left whose grain covers the
+    join grid (the left is a coverage edge)."""
+    return api.Source(
+        events=api.EventSource(
+            table=table,
+            query=api.Query(
+                startPartition="2020-04-09",
+                selects={
+                    "subject": "subject_sql",
+                    "event_id": "event_sql",
+                },
+                timeColumn="CAST(ts AS DOUBLE)",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+            ),
+        ),
+    )
+
+
 def right_part(source):
     """
     Sample Agg
@@ -160,9 +179,9 @@ def test_online_schedule_validation():
     assert j.metaData.executionInfo.onlineSchedule is None
 
 
-def _online_join(**kwargs):
+def _online_join(left=None, **kwargs):
     return join.Join(
-        left=event_source("table"),
+        left=left if left is not None else event_source("table"),
         right_parts=[right_part(event_source("table"))],
         version=1,
         row_ids=["id"],
@@ -179,7 +198,7 @@ def test_online_schedule_keeps_daily_default_for_custom_daily_offline():
 
 
 def test_online_schedule_inherits_subdaily_offline():
-    j = _online_join(offline_schedule="0 */3 * * *")
+    j = _online_join(left=subdaily_event_source("table"), offline_schedule="0 */3 * * *")
     assert j.metaData.executionInfo.onlineSchedule == "0 */3 * * *"
 
 
@@ -195,7 +214,7 @@ def test_online_schedule_mismatch_rejected_for_inferred_subdaily():
 
 def test_partition_interval_sets_output_table_info():
     j = join.Join(
-        left=event_source("table"),
+        left=subdaily_event_source("table"),
         right_parts=[right_part(event_source("table"))],
         version=1,
         row_ids=["id"],
@@ -204,6 +223,31 @@ def test_partition_interval_sets_output_table_info():
 
     table_info = j.metaData.executionInfo.outputTableInfo
     assert table_info.partitionColumn == "ds"
-    assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert table_info.partitionFormat == "yyyy-MM-dd-HH-mm"
     assert table_info.partitionInterval.length == 3
     assert table_info.partitionInterval.timeUnit == common.TimeUnit.HOURS
+
+
+def test_subdaily_join_rejects_undeclared_left():
+    # an undeclared left is implicitly daily: a sub-daily join over it lands a day late
+    with pytest.raises(ValueError, match="time_partitioned"):
+        join.Join(
+            left=event_source("table"),
+            right_parts=[right_part(event_source("table"))],
+            version=1,
+            row_ids=["id"],
+            partition_interval="3h",
+        )
+
+
+def test_subdaily_join_right_parts_stay_unvalidated():
+    # right parts bind per left-row as-of time on their own grid: a daily-cadence part under
+    # a sub-daily join is the product (mixed hourly/daily/realtime features), never an error
+    j = join.Join(
+        left=subdaily_event_source("table"),
+        right_parts=[right_part(event_source("table"))],
+        version=1,
+        row_ids=["id"],
+        partition_interval="3h",
+    )
+    assert j is not None

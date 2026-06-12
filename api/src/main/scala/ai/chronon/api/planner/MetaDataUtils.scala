@@ -1,5 +1,5 @@
 package ai.chronon.api.planner
-import ai.chronon.api.{DataModel, ExecutionInfo, MetaData, PartitionSpec, TableDependency, TableInfo}
+import ai.chronon.api.{DataModel, ExecutionInfo, MetaData, PartitionSpec, Query, TableDependency, TableInfo}
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions.{JListOps, ListOps}
 
@@ -66,12 +66,20 @@ object MetaDataUtils {
       outputTableInfo <- Option(executionInfo.outputTableInfo)
     } yield outputTableInfo.partitionSpec(defaultSpec)).getOrElse(defaultSpec)
 
-  def applyPartitionSpec(tableInfo: TableInfo, partitionSpec: PartitionSpec): TableInfo =
+  /** Stamps a table's partition spec; the offset is emitted only when nonzero so existing
+    * daily confs serialize byte-identically (absent offset means midnight-anchored).
+    */
+  def applyPartitionSpec(tableInfo: TableInfo, partitionSpec: PartitionSpec): TableInfo = {
     tableInfo
       .setPartitionColumn(partitionSpec.column)
       .setPartitionFormat(partitionSpec.format)
       .setPartitionInterval(WindowUtils.fromMillis(partitionSpec.spanMillis))
-      .setPartitionOffset(WindowUtils.fromMillis(partitionSpec.offsetMillis))
+    if (partitionSpec.offsetMillis != 0)
+      tableInfo.setPartitionOffset(WindowUtils.fromMillis(partitionSpec.offsetMillis))
+    else
+      tableInfo.unsetPartitionOffset()
+    tableInfo
+  }
 
   def tableInfo(table: String, partitionSpec: PartitionSpec): TableInfo =
     applyPartitionSpec(new TableInfo().setTable(table), partitionSpec)
@@ -147,6 +155,37 @@ object MetaDataUtils {
     }
   }
 
+  /** Coverage edges (groupBy/model sources and the join LEFT) need the output partition's time
+    * range actually covered by input data, so the source grid must be validated even when the
+    * source declares nothing: an undeclared source is implicitly daily, and a sub-daily consumer
+    * over it would block every intraday run on the full day's partition and then run the whole
+    * backlog after midnight - permanently a day stale, silently. The escape hatch is
+    * `time_partitioned`: data lands continuously and intraday readiness is sensed from
+    * timestamps instead of partition boundaries.
+    *
+    * Join RIGHT parts are NOT coverage edges - they bind per left-row as-of time on their own
+    * declared grid (mixed hourly/daily/realtime cadence is the product) and must never be
+    * validated through this.
+    */
+  def validateCoverageEdge(nodeName: String,
+                           consumerSpec: PartitionSpec,
+                           query: Query,
+                           sourceDescription: String,
+                           shape: EdgeShape): Unit = {
+    if (Option(query.partitionInterval).isDefined) {
+      validateEdgeGrids(nodeName, consumerSpec, query.partitionSpec(consumerSpec), sourceDescription, shape)
+    } else if (
+      consumerSpec.spanMillis < WindowUtils.Day.millis && !(query.isSetTimePartitioned && query.timePartitioned)
+    ) {
+      throw new IllegalArgumentException(
+        s"$nodeName has a sub-daily output grid (${gridString(consumerSpec)}) over $sourceDescription " +
+          "with no declared partition_interval - implicitly daily. Every intraday run would wait for the " +
+          "full day's partition and land a day late. Declare the source's partition_interval, or mark it " +
+          "time_partitioned if data lands continuously and readiness can be sensed from timestamps."
+      )
+    }
+  }
+
   private def requireCongruent(nodeName: String,
                                consumerSpec: PartitionSpec,
                                producerSpec: PartitionSpec,
@@ -197,7 +236,29 @@ object MetaDataUtils {
         copy.executionInfo.outputTableInfo.setTable(copy.outputTable)
       }
 
-    applyPartitionSpec(tableInfo, effectivePartitionSpec)
+    // respect author-declared output partition fields (e.g. a sub-daily output spec set from
+    // python); only fill the gaps from the effective spec. The offset is emitted only when
+    // nonzero so existing compiled daily confs serialize byte-identically.
+    if (!tableInfo.isSetPartitionColumn) tableInfo.setPartitionColumn(effectivePartitionSpec.column)
+    if (!tableInfo.isSetPartitionFormat) tableInfo.setPartitionFormat(effectivePartitionSpec.format)
+    if (!tableInfo.isSetPartitionInterval)
+      tableInfo.setPartitionInterval(WindowUtils.fromMillis(effectivePartitionSpec.spanMillis))
+    if (!tableInfo.isSetPartitionOffset && effectivePartitionSpec.offsetMillis != 0)
+      tableInfo.setPartitionOffset(WindowUtils.fromMillis(effectivePartitionSpec.offsetMillis))
+
+    // time-partitioned dependencies have no physical grid - their column is a real timestamp -
+    // so stamp the consumer's grid onto them: range math, sensing, and orchestration then
+    // quantize intraday requirements on the node's own grain instead of assuming daily (which
+    // would stall sub-daily readiness until the upstream day closes)
+    tableDependencies.foreach { dep =>
+      Option(dep.tableInfo).filter(ti => ti.isSetTimePartitioned && ti.timePartitioned).foreach { ti =>
+        if (!ti.isSetPartitionInterval)
+          ti.setPartitionInterval(WindowUtils.fromMillis(effectivePartitionSpec.spanMillis))
+        if (!ti.isSetPartitionOffset && effectivePartitionSpec.offsetMillis != 0)
+          ti.setPartitionOffset(WindowUtils.fromMillis(effectivePartitionSpec.offsetMillis))
+        if (!ti.isSetPartitionFormat) ti.setPartitionFormat(effectivePartitionSpec.format)
+      }
+    }
 
     // set table dependencies
     copy.executionInfo.setTableDependencies(tableDependencies.toJava)

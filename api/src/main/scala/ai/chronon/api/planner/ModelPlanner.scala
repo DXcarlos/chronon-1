@@ -18,13 +18,11 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
       trainingConf <- Option(model.trainingConf)
       trainingDataSource <- Option(trainingConf.trainingDataSource)
       query <- Option(trainingDataSource.query)
-      _ <- Option(query.partitionInterval)
     } {
-      val sourcePartitionSpec = query.partitionSpec(confOutputPartitionSpec)
-      MetaDataUtils.validateEdgeGrids(
+      MetaDataUtils.validateCoverageEdge(
         model.metaData.name,
         confOutputPartitionSpec,
-        sourcePartitionSpec,
+        query,
         s"training source ${trainingDataSource.rawTable}",
         MetaDataUtils.EdgeShape.of(trainingDataSource.dataModel)
       )

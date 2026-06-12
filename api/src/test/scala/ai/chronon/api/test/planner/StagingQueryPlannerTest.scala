@@ -15,7 +15,7 @@ import scala.jdk.CollectionConverters._
 class StagingQueryPlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec = PartitionSpec.daily
-  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
 
   it should "staging query planner plans valid confs without exceptions" in {
 

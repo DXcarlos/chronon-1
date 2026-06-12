@@ -178,9 +178,22 @@ def test_validator_ok():
     )
 
 
+def subdaily_event_source(table):
+    """Source declaring a 3h grid - sub-daily groupBys need sources whose grain covers the
+    output grid (coverage edges)."""
+    return ttypes.EventSource(
+        table=table,
+        query=query.Query(
+            selects={"subject": "subject_sql", "event_id": "event_sql"},
+            time_column="ts",
+            partition_interval="3h",
+        ),
+    )
+
+
 def test_partition_interval_sets_output_table_info():
     gb = group_by.GroupBy(
-        sources=event_source("table"),
+        sources=subdaily_event_source("table"),
         keys=["subject"],
         aggregations=group_by.Aggregations(
             cnt=ttypes.Aggregation(operation=ttypes.Operation.COUNT),
@@ -191,7 +204,7 @@ def test_partition_interval_sets_output_table_info():
 
     table_info = gb.metaData.executionInfo.outputTableInfo
     assert table_info.partitionColumn == "ds"
-    assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert table_info.partitionFormat == "yyyy-MM-dd-HH-mm"
     assert table_info.partitionInterval.length == 3
     assert table_info.partitionInterval.timeUnit == common.TimeUnit.HOURS
 
@@ -277,6 +290,104 @@ def test_snapshot_with_hour_aggregation():
             accuracy=group_by.Accuracy.SNAPSHOT,
             version=0,
         )
+
+
+def _subdaily_entity_source():
+    # source declares the same 3h grid as the groupBy so grain validation stays satisfied
+    return ttypes.EntitySource(
+        snapshotTable="entity_table1",
+        query=query.Query(
+            selects={"key1": "key1_sql", "event_id": "event_sql"},
+            time_column="ts",
+            partition_interval="3h",
+        ),
+    )
+
+
+def test_snapshot_subdaily_window_allowed_on_subdaily_grid():
+    # mirrors the scala parity fixture (SNAPSHOT accuracy, 6h window, 3h grid): snapshot
+    # accuracy on a sub-daily grid IS fine enough for windows that are multiples of the grid
+    gb = group_by.GroupBy(
+        sources=[_subdaily_entity_source()],
+        keys=["key1"],
+        aggregations=group_by.Aggregations(
+            random=ttypes.Aggregation(
+                inputColumn="event_id",
+                operation=ttypes.Operation.SUM,
+                windows=[
+                    common.Window(6, common.TimeUnit.HOURS),
+                    common.Window(1, common.TimeUnit.DAYS),
+                ],
+            ),
+        ),
+        accuracy=group_by.Accuracy.SNAPSHOT,
+        partition_interval="3h",
+        offline_schedule="0 */3 * * *",
+        version=0,
+    )
+    assert gb is not None
+
+
+def test_snapshot_window_must_be_multiple_of_grid():
+    # a 4h window on a 3h grid cannot be resolved by grid-aligned snapshots
+    with pytest.raises(AssertionError, match="multiple"):
+        group_by.GroupBy(
+            sources=[_subdaily_entity_source()],
+            keys=["key1"],
+            aggregations=group_by.Aggregations(
+                random=ttypes.Aggregation(
+                    inputColumn="event_id",
+                    operation=ttypes.Operation.SUM,
+                    windows=[
+                        common.Window(4, common.TimeUnit.HOURS),
+                    ],
+                ),
+            ),
+            accuracy=group_by.Accuracy.SNAPSHOT,
+            partition_interval="3h",
+            offline_schedule="0 */3 * * *",
+            version=0,
+        )
+
+
+def test_subdaily_group_by_rejects_undeclared_sources():
+    # an undeclared source is implicitly daily: a sub-daily groupBy over it would land a day
+    # late, permanently - the grain-inversion trap, caught at authoring time
+    with pytest.raises(ValueError, match="time_partitioned"):
+        group_by.GroupBy(
+            sources=[event_source("table")],
+            keys=["subject"],
+            aggregations=group_by.Aggregations(
+                random=ttypes.Aggregation(
+                    inputColumn="event_id", operation=ttypes.Operation.SUM
+                ),
+            ),
+            partition_interval="3h",
+            offline_schedule="0 */3 * * *",
+            version=0,
+        )
+
+
+def test_subdaily_group_by_allows_time_partitioned_source():
+    src = ttypes.EventSource(
+        table="table",
+        query=query.Query(
+            selects={"subject": "subject_sql", "event_id": "event_sql"},
+            time_column="ts",
+            time_partitioned=True,
+        ),
+    )
+    gb = group_by.GroupBy(
+        sources=[src],
+        keys=["subject"],
+        aggregations=group_by.Aggregations(
+            random=ttypes.Aggregation(inputColumn="event_id", operation=ttypes.Operation.SUM),
+        ),
+        partition_interval="3h",
+        offline_schedule="0 */3 * * *",
+        version=0,
+    )
+    assert gb is not None
 
 
 def test_additional_metadata():
@@ -545,9 +656,9 @@ def test_online_schedule_validation():
     assert gb.metaData.executionInfo.onlineSchedule is None
 
 
-def _online_group_by(**kwargs):
+def _online_group_by(sources=None, **kwargs):
     return group_by.GroupBy(
-        sources=event_source("table"),
+        sources=sources if sources is not None else event_source("table"),
         keys=["subject"],
         aggregations=group_by.Aggregations(
             count=group_by.Aggregation(
@@ -569,7 +680,7 @@ def test_online_schedule_keeps_daily_default_for_custom_daily_offline():
 
 
 def test_online_schedule_inherits_subdaily_offline():
-    gb = _online_group_by(offline_schedule="0 */3 * * *")
+    gb = _online_group_by(sources=subdaily_event_source("table"), offline_schedule="0 */3 * * *")
     assert gb.metaData.executionInfo.onlineSchedule == "0 */3 * * *"
 
 

@@ -687,20 +687,76 @@ class TableUtilsTest extends AnyFlatSpec {
     """)
 
     val threeHourSpec =
-      PartitionSpec("created_at", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+      PartitionSpec("created_at", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
     val partitions = tableUtils.partitions(tableName, timePartitioned = true, tablePartitionSpec = Some(threeHourSpec))
 
     // floor(09:17) = 09:00; last complete interval before floor(14:05) = 12:00 is 09:00
-    assertEquals(List("2024-01-01 09:00"), partitions)
+    assertEquals(List("2024-01-01-09-00"), partitions)
 
     val offsetSpec =
-      PartitionSpec("created_at", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
+      PartitionSpec("created_at", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
     val offsetPartitions =
       tableUtils.partitions(tableName, timePartitioned = true, tablePartitionSpec = Some(offsetSpec))
 
     // grid is 01:00, 04:00, 07:00, 10:00, 13:00, ...: floor(09:17) = 07:00 and the last
     // complete interval before floor(14:05) = 13:00 is 10:00
-    assertEquals(List("2024-01-01 07:00", "2024-01-01 10:00"), offsetPartitions)
+    assertEquals(List("2024-01-01-07-00", "2024-01-01-10-00"), offsetPartitions)
+
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    spark.sql(s"DROP DATABASE IF EXISTS $dbName")
+  }
+
+  it should "preserve string sub-daily partition labels through scanDf" in {
+    val dbName = s"db_${System.nanoTime()}"
+    val tableName = s"$dbName.scan_subdaily_string_ds"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+
+    val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+    val subDailyTableUtils = TableUtils(spark, threeHourSpec)
+
+    spark.sql(s"CREATE TABLE $tableName (user_id STRING, ds STRING) PARTITIONED BY (ds)")
+    spark.sql(s"INSERT INTO $tableName VALUES ('user1', '2024-01-01-09-00'), ('user2', '2024-01-01-12-00')")
+
+    val range = PartitionRange("2024-01-01-09-00", "2024-01-01-12-00")(threeHourSpec)
+    val result = subDailyTableUtils.scanDf(null, tableName, range = Some(range))
+
+    // regression: scanDfBase used to date_format string labels through an implicit
+    // string->timestamp cast, which nulled any label Spark can't natively cast (the dash
+    // sub-daily formats; the legacy space/colon format survived only by coincidence)
+    val dsValues = result.select("ds").collect().map(_.getString(0)).sorted.toList
+    assertEquals(List("2024-01-01-09-00", "2024-01-01-12-00"), dsValues)
+
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    spark.sql(s"DROP DATABASE IF EXISTS $dbName")
+  }
+
+  it should "scan timestamp partition columns with epoch-typed bounds and grid labels" in {
+    val dbName = s"db_${System.nanoTime()}"
+    val tableName = s"$dbName.scan_subdaily_ts_ds"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+
+    val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+    val subDailyTableUtils = TableUtils(spark, threeHourSpec)
+
+    // a time_partitioned table: ds is a real timestamp, no physical grid
+    spark.sql(s"CREATE TABLE $tableName (user_id STRING, ds TIMESTAMP)")
+    spark.sql(s"""
+      INSERT INTO $tableName VALUES
+        ('below', TIMESTAMP '2024-01-01 08:59:00'),
+        ('in1',   TIMESTAMP '2024-01-01 09:17:00'),
+        ('in2',   TIMESTAMP '2024-01-01 12:05:00'),
+        ('above', TIMESTAMP '2024-01-01 15:01:00')
+    """)
+
+    // [09:00, 12:00] labels on a 3h grid = coverage [09:00, 15:00). Regression: label
+    // literals like '2024-01-01-09-00' cast to NULL against a timestamp column, so the scan
+    // was silently empty; epoch-typed bounds make it correct and rerun-deterministic.
+    val range = PartitionRange("2024-01-01-09-00", "2024-01-01-12-00")(threeHourSpec)
+    val result = subDailyTableUtils.scanDf(null, tableName, range = Some(range))
+
+    val rows = result.select("user_id", "ds").collect().map(r => (r.getString(0), r.getString(1))).sortBy(_._1)
+    // off-grid timestamps render as grid labels, not per-minute ones
+    assertEquals(List(("in1", "2024-01-01-09-00"), ("in2", "2024-01-01-12-00")), rows.toList)
 
     spark.sql(s"DROP TABLE IF EXISTS $tableName")
     spark.sql(s"DROP DATABASE IF EXISTS $dbName")

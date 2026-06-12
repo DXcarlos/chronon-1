@@ -97,6 +97,9 @@ object TableDependencies {
       .setPartitionFormat(source.query.getPartitionFormat)
       .setPartitionInterval(source.query.getPartitionInterval)
       .setPartitionOffset(source.query.getPartitionOffset)
+    // only stamped when true so existing compiled confs serialize byte-identically
+    if (source.query.isSetTimePartitioned && source.query.timePartitioned)
+      tableInfo.setTimePartitioned(true)
 
     val tableDep = new TableDependency()
       .setTableInfo(tableInfo)
@@ -129,6 +132,9 @@ object TableDependencies {
       .setPartitionFormat(query.getPartitionFormat)
       .setPartitionInterval(query.getPartitionInterval)
       .setPartitionOffset(query.getPartitionOffset)
+    // only stamped when true so existing compiled confs serialize byte-identically
+    if (query.isSetTimePartitioned && query.timePartitioned)
+      tableInfo.setTimePartitioned(true)
 
     new TableDependency()
       .setTableInfo(tableInfo)

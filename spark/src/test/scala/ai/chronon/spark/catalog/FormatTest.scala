@@ -242,4 +242,23 @@ class FormatTest extends SparkTestBase {
     Format.parseIdentifier("`c`.`s`.`t`") shouldBe Seq("c", "s", "t")
   }
 
+  // --- zero-parsed-labels canary ---
+
+  it should "warn when a nonempty listing parses zero labels under the spec" in {
+    val threeHourly = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+    // compact labels, or labels missing their minute level: nothing parses, the table reads as
+    // permanently empty
+    Format.zeroParsedLabelsWarning("db.t", List("20260603-04", "20260603-05"), threeHourly) shouldBe defined
+    Format.zeroParsedLabelsWarning("db.t", List("2026-06-03-03"), threeHourly) shouldBe defined
+  }
+
+  it should "stay quiet for empty listings or when any label parses" in {
+    val threeHourly = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+    Format.zeroParsedLabelsWarning("db.t", List.empty, threeHourly) shouldBe empty
+    Format.zeroParsedLabelsWarning("db.t", List("2026-06-03-03-00"), threeHourly) shouldBe empty
+    // one parseable label among garbage means the table is usable; per-label failures
+    // surface later as loud ParseExceptions instead
+    Format.zeroParsedLabelsWarning("db.t", List("garbage", "2026-06-03-03-00"), threeHourly) shouldBe empty
+  }
+
 }

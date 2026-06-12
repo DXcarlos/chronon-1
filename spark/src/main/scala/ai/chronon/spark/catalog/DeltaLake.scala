@@ -4,7 +4,18 @@ import ai.chronon.api.PartitionSpec
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.delta.DeltaLog
-import org.apache.spark.sql.functions.{coalesce, col, count, from_json, lit, min, max, timestamp_millis, to_timestamp, when}
+import org.apache.spark.sql.functions.{
+  coalesce,
+  col,
+  count,
+  from_json,
+  lit,
+  min,
+  max,
+  timestamp_millis,
+  to_timestamp,
+  when
+}
 import org.apache.spark.sql.types.{
   DataType,
   DateType,
@@ -49,6 +60,13 @@ case object DeltaLake extends Format {
     partitions.toList.distinct
 
   }
+
+  // the spark catalog's listColumns doesn't expose partitioning for delta tables; the delta
+  // log's own metadata is the ordered source of truth
+  override def partitionColumnNames(tableName: String)(implicit sparkSession: SparkSession): Seq[String] =
+    Try {
+      sparkSession.sql(s"DESCRIBE DETAIL $tableName").select("partitionColumns").head().getSeq[String](0).toList
+    }.getOrElse(Seq.empty)
 
   override def virtualPartitions(tableName: String, timestampColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): List[String] = {

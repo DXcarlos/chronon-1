@@ -11,8 +11,8 @@ import java.util.TimeZone
 
 class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
 
-  private val hourlyPartitionSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", WindowUtils.Hour.millis)
-  private val threeHourPartitionSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * WindowUtils.Hour.millis)
+  private val hourlyPartitionSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", WindowUtils.Hour.millis)
+  private val threeHourPartitionSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * WindowUtils.Hour.millis)
   private val dailyPartitionSpec = PartitionSpec.daily
   private val sixHourWindow = new Window(6, TimeUnit.HOURS)
   TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
@@ -22,7 +22,7 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     val joinConf = generateMixedCadenceData(namespace, spark)
 
     FetcherTestUtil.compareTemporalFetch(joinConf,
-                                         "2023-08-14 12:00",
+                                         "2023-08-14-12-00",
                                          namespace,
                                          consistencyCheck = false,
                                          dropDsOnWrite = true,
@@ -35,7 +35,7 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     val joinConf = generateMixedSnapshotCadenceData(namespace, spark)
 
     FetcherTestUtil.compareTemporalFetch(joinConf,
-                                         "2023-08-14 12:00",
+                                         "2023-08-14-12-00",
                                          namespace,
                                          consistencyCheck = false,
                                          dropDsOnWrite = true,
@@ -67,8 +67,8 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
       .toSet
 
     actual shouldEqual Set(
-      ("user1", ts("2023-08-14 12:00"), "2023-08-14 12:00", 7L, 30L, 100L),
-      ("user2", ts("2023-08-14 12:00"), "2023-08-14 12:00", 4L, 7L, 200L)
+      ("user1", ts("2023-08-14 12:00"), "2023-08-14-12-00", 7L, 30L, 100L),
+      ("user2", ts("2023-08-14 12:00"), "2023-08-14-12-00", 4L, 7L, 200L)
     )
   }
 
@@ -96,9 +96,9 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
       .toSet
 
     actual shouldEqual Set(
-      ("user1", ts("2023-08-14 12:00"), "2023-08-14 12:00", 30L, 100L, 30L),
-      ("user1", ts("2023-08-14 12:07"), "2023-08-14 12:00", 30L, 100L, 30L),
-      ("user2", ts("2023-08-14 12:00"), "2023-08-14 12:00", 7L, 200L, 7L)
+      ("user1", ts("2023-08-14 12:00"), "2023-08-14-12-00", 30L, 100L, 30L),
+      ("user1", ts("2023-08-14 12:07"), "2023-08-14-12-00", 30L, 100L, 30L),
+      ("user2", ts("2023-08-14 12:00"), "2023-08-14-12-00", 7L, 200L, 7L)
     )
   }
 
@@ -109,8 +109,8 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("user1", ts("2023-08-14 12:00"), "2023-08-14 12:00"),
-          ("user2", ts("2023-08-14 12:00"), "2023-08-14 12:00")
+          ("user1", ts("2023-08-14 12:00"), "2023-08-14-12-00"),
+          ("user2", ts("2023-08-14 12:00"), "2023-08-14-12-00")
         ))
       .toDF("user_id", "ts", "ds")
       .save(leftTable)
@@ -119,9 +119,9 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("user1", 7L, ts("2023-08-14 11:40"), "2023-08-14 11:00"),
-          ("user1", 5L, ts("2023-08-14 12:10"), "2023-08-14 12:00"),
-          ("user2", 4L, ts("2023-08-14 11:50"), "2023-08-14 11:00")
+          ("user1", 7L, ts("2023-08-14 11:40"), "2023-08-14-11-00"),
+          ("user1", 5L, ts("2023-08-14 12:10"), "2023-08-14-12-00"),
+          ("user2", 4L, ts("2023-08-14 11:50"), "2023-08-14-11-00")
         ))
       .toDF("user_id", "realtime_value", "ts", "ds")
       .save(realtimeTable)
@@ -130,10 +130,10 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("user1", 10L, ts("2023-08-14 09:15"), "2023-08-14 09:00"),
-          ("user1", 20L, ts("2023-08-14 11:30"), "2023-08-14 11:00"),
-          ("user2", 3L, ts("2023-08-14 10:00"), "2023-08-14 10:00"),
-          ("user2", 4L, ts("2023-08-14 11:15"), "2023-08-14 11:00")
+          ("user1", 10L, ts("2023-08-14 09:15"), "2023-08-14-09-00"),
+          ("user1", 20L, ts("2023-08-14 11:30"), "2023-08-14-11-00"),
+          ("user2", 3L, ts("2023-08-14 10:00"), "2023-08-14-10-00"),
+          ("user2", 4L, ts("2023-08-14 11:15"), "2023-08-14-11-00")
         ))
       .toDF("user_id", "hourly_value", "ts", "ds")
       .save(hourlyTable)
@@ -195,7 +195,7 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     Builders.Join(
       left = Builders.Source.events(
         query = withPartition(
-          Builders.Query(selects = Builders.Selects("user_id", "ts"), startPartition = "2023-08-14 12:00"),
+          Builders.Query(selects = Builders.Selects("user_id", "ts"), startPartition = "2023-08-14-12-00"),
           hourlyPartitionSpec
         ),
         table = leftTable
@@ -220,11 +220,11 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("user1", ts("2023-08-14 12:00"), "2023-08-14 12:00"),
+          ("user1", ts("2023-08-14 12:00"), "2023-08-14-12-00"),
           // off-grid event time: ds_of_ts must floor to the hourly grid (12:00), otherwise
           // the snapshot equality join silently produces nulls for this row
-          ("user1", ts("2023-08-14 12:07"), "2023-08-14 12:00"),
-          ("user2", ts("2023-08-14 12:00"), "2023-08-14 12:00")
+          ("user1", ts("2023-08-14 12:07"), "2023-08-14-12-00"),
+          ("user2", ts("2023-08-14 12:00"), "2023-08-14-12-00")
         ))
       .toDF("user_id", "ts", "ds")
       .save(leftTable)
@@ -233,10 +233,10 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("user1", 10L, ts("2023-08-14 09:15"), "2023-08-14 09:00"),
-          ("user1", 20L, ts("2023-08-14 11:30"), "2023-08-14 11:00"),
-          ("user2", 3L, ts("2023-08-14 10:00"), "2023-08-14 10:00"),
-          ("user2", 4L, ts("2023-08-14 11:15"), "2023-08-14 11:00")
+          ("user1", 10L, ts("2023-08-14 09:15"), "2023-08-14-09-00"),
+          ("user1", 20L, ts("2023-08-14 11:30"), "2023-08-14-11-00"),
+          ("user2", 3L, ts("2023-08-14 10:00"), "2023-08-14-10-00"),
+          ("user2", 4L, ts("2023-08-14 11:15"), "2023-08-14-11-00")
         ))
       .toDF("user_id", "temporal_value", "ts", "ds")
       .save(temporalTable)
@@ -256,11 +256,11 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("user1", 10L, ts("2023-08-14 07:15"), "2023-08-14 06:00"),
-          ("user1", 20L, ts("2023-08-14 10:30"), "2023-08-14 09:00"),
-          ("user1", 999L, ts("2023-08-14 12:30"), "2023-08-14 12:00"),
-          ("user2", 3L, ts("2023-08-14 08:00"), "2023-08-14 06:00"),
-          ("user2", 4L, ts("2023-08-14 11:15"), "2023-08-14 09:00")
+          ("user1", 10L, ts("2023-08-14 07:15"), "2023-08-14-06-00"),
+          ("user1", 20L, ts("2023-08-14 10:30"), "2023-08-14-09-00"),
+          ("user1", 999L, ts("2023-08-14 12:30"), "2023-08-14-12-00"),
+          ("user2", 3L, ts("2023-08-14 08:00"), "2023-08-14-06-00"),
+          ("user2", 4L, ts("2023-08-14 11:15"), "2023-08-14-09-00")
         ))
       .toDF("user_id", "three_hour_snapshot_value", "ts", "ds")
       .save(threeHourSnapshotTable)
@@ -313,7 +313,7 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
     Builders.Join(
       left = Builders.Source.events(
         query = withPartition(
-          Builders.Query(selects = Builders.Selects("user_id", "ts"), startPartition = "2023-08-14 12:00"),
+          Builders.Query(selects = Builders.Selects("user_id", "ts"), startPartition = "2023-08-14-12-00"),
           hourlyPartitionSpec
         ),
         table = leftTable

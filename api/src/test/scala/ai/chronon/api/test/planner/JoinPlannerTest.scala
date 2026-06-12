@@ -13,7 +13,7 @@ import scala.collection.JavaConverters._
 class JoinPlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec: PartitionSpec = PartitionSpec.daily
-  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
 
   private def outputTableInfo(table: String, spec: PartitionSpec): TableInfo =
     new TableInfo()
@@ -24,6 +24,15 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
 
   private def executionInfoFor(table: String, spec: PartitionSpec): ExecutionInfo =
     new ExecutionInfo().setOutputTableInfo(outputTableInfo(table, spec))
+
+  // the left is a coverage edge: sub-daily joins need a left whose grain covers the join grid,
+  // so sub-daily fixtures declare the left's partition interval explicitly
+  private def leftEventsWithSpec(spec: PartitionSpec): ai.chronon.api.Source = {
+    val query = Builders.Query(partitionColumn = spec.column)
+    query.setPartitionFormat(spec.format)
+    query.setPartitionInterval(WindowUtils.fromMillis(spec.spanMillis))
+    Builders.Source.events(query, table = "test.left_events")
+  }
 
   private def groupByWithOutputSpec(name: String,
                                     spec: PartitionSpec,
@@ -132,12 +141,59 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
         namespace = "test_namespace",
         executionInfo = executionInfoFor("test_namespace.three_hour_join", threeHourSpec)
       ),
-      left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
+      left = leftEventsWithSpec(threeHourSpec),
       joinParts =
         Seq(Builders.JoinPart(groupBy = dailySnapshotGroupBy), Builders.JoinPart(groupBy = dailyTemporalGroupBy))
     )
 
     noException should be thrownBy new JoinPlanner(subDailyJoin).buildPlan
+  }
+
+  it should "reject a sub-daily join over a left source with no declared partition interval" in {
+    // unlike right parts, the left is a coverage edge: an undeclared (implicitly daily) left
+    // under a sub-daily join is the silent intraday-staleness trap
+    val subDailyJoin = Join(
+      metaData = MetaData(
+        name = "undeclared_left_join",
+        namespace = "test_namespace",
+        executionInfo = executionInfoFor("test_namespace.undeclared_left_join", threeHourSpec)
+      ),
+      left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
+      joinParts = Seq(Builders.JoinPart(groupBy = groupByWithOutputSpec("any_gb", threeHourSpec)))
+    )
+
+    val error = the[IllegalArgumentException] thrownBy new JoinPlanner(subDailyJoin).buildPlan
+    error.getMessage should include("time_partitioned")
+  }
+
+  it should "allow a sub-daily join over an undeclared left marked time_partitioned" in {
+    val left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events")
+    left.getEvents.query.setTimePartitioned(true)
+    val subDailyJoin = Join(
+      metaData = MetaData(
+        name = "tp_left_join",
+        namespace = "test_namespace",
+        executionInfo = executionInfoFor("test_namespace.tp_left_join", threeHourSpec)
+      ),
+      left = left,
+      joinParts = Seq(Builders.JoinPart(groupBy = groupByWithOutputSpec("tp_any_gb", threeHourSpec)))
+    )
+
+    noException should be thrownBy new JoinPlanner(subDailyJoin).buildPlan
+  }
+
+  it should "reject a sub-daily join over a left that declares a coarser grid" in {
+    val subDailyJoin = Join(
+      metaData = MetaData(
+        name = "coarse_left_join",
+        namespace = "test_namespace",
+        executionInfo = executionInfoFor("test_namespace.coarse_left_join", threeHourSpec)
+      ),
+      left = leftEventsWithSpec(PartitionSpec.daily),
+      joinParts = Seq(Builders.JoinPart(groupBy = groupByWithOutputSpec("coarse_any_gb", threeHourSpec)))
+    )
+
+    an[IllegalArgumentException] should be thrownBy new JoinPlanner(subDailyJoin).buildPlan
   }
 
   it should "shift snapshot part merge dependencies by one join span instead of one day" in {
@@ -150,7 +206,7 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
           namespace = "test_namespace",
           executionInfo = executionInfoFor(s"test_namespace.merge_shift_join_${joinSpec.spanMillis}", joinSpec)
         ),
-        left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
+        left = leftEventsWithSpec(joinSpec),
         joinParts = Seq(Builders.JoinPart(groupBy = snapshotGroupBy))
       )
       val plan = new JoinPlanner(join).buildPlan

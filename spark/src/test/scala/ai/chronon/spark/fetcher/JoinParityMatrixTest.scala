@@ -70,7 +70,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
 
   // 3h span, 1h offset: grid points 01:00, 04:00, 07:00, ..., 22:00 (UTC)
   private val subDailySpec =
-    PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * WindowUtils.Hour.millis, WindowUtils.Hour.millis)
+    PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * WindowUtils.Hour.millis, WindowUtils.Hour.millis)
   private val dailySpec = PartitionSpec.daily
 
   private val sixHours = new Window(6, TimeUnit.HOURS)
@@ -103,7 +103,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     Golden(
       "u1",
       T_U1_OFF_GRID,
-      "2023-08-14 10:00",
+      "2023-08-14-10-00",
       Map(
         // temporal events, SUM(txn_amount) over a 1d sawtooth window ending at 12:07:
         //   5 @ 08:15 + 11 @ 11:30 = 16. The 1000 @ 2023-08-13 11:00 fell out of the 1d window
@@ -139,7 +139,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     Golden(
       "u2",
       T_U2_POST_STREAM,
-      "2023-08-14 10:00",
+      "2023-08-14-10-00",
       Map(
         // 7 @ 09:40 (batch side) + 13 @ 12:20 (post-batch-end, streamed) = 20
         "tmp_user_id_txn_amount_sum_1d" -> 20L,
@@ -163,7 +163,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     Golden(
       "u1",
       T_U1_ON_GRID,
-      "2023-08-14 13:00",
+      "2023-08-14-13-00",
       Map(
         // 1d window ending 13:00: 5 @ 08:15 + 11 @ 11:30 = 16 (nothing for u1 in (12:07, 13:00])
         "tmp_user_id_txn_amount_sum_1d" -> 16L,
@@ -189,10 +189,10 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     Golden(
       "u3",
       T_U3_POST_MIDNIGHT,
-      "2023-08-13 22:00",
+      "2023-08-13-22-00",
       Map(
         // 1d window ending 00:30: 9 @ 08-13 21:00 + 17 @ 08-14 00:10 = 26 (the 00:10 event lives
-        // in source partition "2023-08-13 22:00", which straddles midnight)
+        // in source partition "2023-08-13-22-00", which straddles midnight)
         "tmp_user_id_txn_amount_sum_1d" -> 26L,
         // u3's only events in 14d -> 26
         "tmp_user_id_txn_amount_sum_14d" -> 26L,
@@ -213,13 +213,13 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         "entd_user_id_balance_d" -> 302L
       )
     ),
-    // u3 @ 23:30, the PRE-midnight row of the SAME left partition "2023-08-13 22:00": the
+    // u3 @ 23:30, the PRE-midnight row of the SAME left partition "2023-08-13-22-00": the
     // daily cells must bind the OLD day's snapshots — one left partition, two daily binds.
     // Offline-golden-only: a pinned batch upload cannot represent a query before its batch-end.
     Golden(
       "u3",
       T_U3_PRE_MIDNIGHT,
-      "2023-08-13 22:00",
+      "2023-08-13-22-00",
       Map(
         // 1d window ending 08-13 23:30: only 9 @ 21:00 (the 17 @ 08-14 00:10 is in the future)
         "tmp_user_id_txn_amount_sum_1d" -> 9L,
@@ -243,7 +243,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     Golden(
       "u2",
       T_U2_PRE_MUTATION,
-      "2023-08-14 07:00",
+      "2023-08-14-07-00",
       Map(
         // no u2 txn events before 09:00 (7 @ 09:40 is later) -> null
         "tmp_user_id_txn_amount_sum_1d" -> null,
@@ -270,23 +270,23 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
 
     // Offline backfill over the full left partition range (22:00 of 08-13 through 13:00 of 08-14;
     // the in-between grid partitions have no left rows and are skipped by the source job).
-    val dateRange = new DateRange().setStartDate("2023-08-13 22:00").setEndDate("2023-08-14 13:00")
+    val dateRange = new DateRange().setStartDate("2023-08-13-22-00").setEndDate("2023-08-14-13-00")
     ModularMonolith.run(joinConf, dateRange)
 
     val offlineRows = assertOfflineMatchesGoldens(joinConf, goldens)
 
     // Online phase 0: batch-end pinned at the 07:00 boundary; the only servable golden row is
     // u2 @ 09:00 (inside [07:00, 10:00)) - the pre-mutation assertion.
-    val phase0Rows = goldens.filter(g => g.leftDs == "2023-08-14 07:00")
-    serveAndAssertOnline(joinConf, "2023-08-14 07:00", subDailySpec, namespace, "p0", phase0Rows, offlineRows)
+    val phase0Rows = goldens.filter(g => g.leftDs == "2023-08-14-07-00")
+    serveAndAssertOnline(joinConf, "2023-08-14-07-00", subDailySpec, namespace, "p0", phase0Rows, offlineRows)
 
     // Online phase 1: pin batch-end at the 10:00 grid boundary (endDs partition
-    // "2023-08-14 10:00"; each groupBy uploads its own grid floor of that boundary: the 3h+1h
+    // "2023-08-14-10-00"; each groupBy uploads its own grid floor of that boundary: the 3h+1h
     // groupBys batch-end at 10:00, the daily groupBys at 2023-08-14 00:00). Events at/after
     // each groupBy's batch-end reach the temporal cells only through the streaming path. Only
     // left rows inside [10:00, 13:00) are servable from this upload.
-    val phase1Rows = goldens.filter(g => g.leftDs == "2023-08-14 10:00")
-    serveAndAssertOnline(joinConf, "2023-08-14 10:00", subDailySpec, namespace, "p1", phase1Rows, offlineRows)
+    val phase1Rows = goldens.filter(g => g.leftDs == "2023-08-14-10-00")
+    serveAndAssertOnline(joinConf, "2023-08-14-10-00", subDailySpec, namespace, "p1", phase1Rows, offlineRows)
 
     // Online phase 2: re-serve with batch-end pinned at 13:00 (fresh KV store and re-uploaded
     // batch data) and fetch the row that sits exactly on the 13:00 grid boundary. A query at
@@ -295,8 +295,8 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     // The u3 rows are offline-golden-only: a single pinned batch upload cannot represent a
     // query time before its batch-end (the temporal path rejects queryTs < batchEnd, and
     // snapshot serving cannot time-travel), so there is no meaningful online assertion there.
-    val phase2Rows = goldens.filter(g => g.leftDs == "2023-08-14 13:00")
-    serveAndAssertOnline(joinConf, "2023-08-14 13:00", subDailySpec, namespace, "p2", phase2Rows, offlineRows)
+    val phase2Rows = goldens.filter(g => g.leftDs == "2023-08-14-13-00")
+    serveAndAssertOnline(joinConf, "2023-08-14-13-00", subDailySpec, namespace, "p2", phase2Rows, offlineRows)
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -406,12 +406,12 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("u1", T_U1_OFF_GRID, "2023-08-14 10:00"),
-          ("u2", T_U2_POST_STREAM, "2023-08-14 10:00"),
-          ("u1", T_U1_ON_GRID, "2023-08-14 13:00"),
-          ("u3", T_U3_POST_MIDNIGHT, "2023-08-13 22:00"),
-          ("u3", T_U3_PRE_MIDNIGHT, "2023-08-13 22:00"), // same partition, pre-midnight
-          ("u2", T_U2_PRE_MUTATION, "2023-08-14 07:00")
+          ("u1", T_U1_OFF_GRID, "2023-08-14-10-00"),
+          ("u2", T_U2_POST_STREAM, "2023-08-14-10-00"),
+          ("u1", T_U1_ON_GRID, "2023-08-14-13-00"),
+          ("u3", T_U3_POST_MIDNIGHT, "2023-08-13-22-00"),
+          ("u3", T_U3_PRE_MIDNIGHT, "2023-08-13-22-00"), // same partition, pre-midnight
+          ("u2", T_U2_PRE_MUTATION, "2023-08-14-07-00")
         ))
       .toDF("user_id", "ts", "ds")
       .save(leftTable)
@@ -425,16 +425,16 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("u1", 10000L, ts("2023-07-31 04:00"), "2023-07-31 04:00"), // hop-gap event (see above)
-          ("u1", 1000L, ts("2023-08-13 11:00"), "2023-08-13 10:00"), // outside every 1d query window
-          ("u3", 9L, ts("2023-08-13 21:00"), "2023-08-13 19:00"),
-          ("u3", 17L, ts("2023-08-14 00:10"), "2023-08-13 22:00"), // partition label straddles midnight
-          ("u1", 5L, ts("2023-08-14 08:15"), "2023-08-14 07:00"),
-          ("u2", 7L, ts("2023-08-14 09:40"), "2023-08-14 07:00"),
-          ("u1", 11L, ts("2023-08-14 11:30"), "2023-08-14 10:00"), // post-batch-end: streaming only
-          ("u2", 13L, ts("2023-08-14 12:20"), "2023-08-14 10:00"), // post-batch-end: streaming only
+          ("u1", 10000L, ts("2023-07-31 04:00"), "2023-07-31-04-00"), // hop-gap event (see above)
+          ("u1", 1000L, ts("2023-08-13 11:00"), "2023-08-13-10-00"), // outside every 1d query window
+          ("u3", 9L, ts("2023-08-13 21:00"), "2023-08-13-19-00"),
+          ("u3", 17L, ts("2023-08-14 00:10"), "2023-08-13-22-00"), // partition label straddles midnight
+          ("u1", 5L, ts("2023-08-14 08:15"), "2023-08-14-07-00"),
+          ("u2", 7L, ts("2023-08-14 09:40"), "2023-08-14-07-00"),
+          ("u1", 11L, ts("2023-08-14 11:30"), "2023-08-14-10-00"), // post-batch-end: streaming only
+          ("u2", 13L, ts("2023-08-14 12:20"), "2023-08-14-10-00"), // post-batch-end: streaming only
           // u9 is never queried; it keeps the phase-2 streaming injection (ds >= 13:00) non-empty
-          ("u9", 999L, ts("2023-08-14 13:40"), "2023-08-14 13:00")
+          ("u9", 999L, ts("2023-08-14 13:40"), "2023-08-14-13-00")
         ))
       .toDF("user_id", "txn_amount", "ts", "ds")
       .save(txnTable)
@@ -463,15 +463,15 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("u3", 3L, ts("2023-08-13 19:30"), "2023-08-13 19:00"),
-          ("u1", 15L, ts("2023-08-13 23:40"), "2023-08-13 22:00"),
-          ("u3", 40L, ts("2023-08-13 23:00"), "2023-08-13 22:00"), // after u3's 22:00 bound
-          ("u1", 20L, ts("2023-08-14 02:30"), "2023-08-14 01:00"),
-          ("u1", 35L, ts("2023-08-14 05:30"), "2023-08-14 04:00"),
-          ("u2", 7L, ts("2023-08-14 06:10"), "2023-08-14 04:00"),
-          ("u1", 100L, ts("2023-08-14 08:30"), "2023-08-14 07:00"),
-          ("u2", 70L, ts("2023-08-14 09:00"), "2023-08-14 07:00"),
-          ("u1", 1000L, ts("2023-08-14 11:30"), "2023-08-14 10:00") // visible only to the 13:00 row
+          ("u3", 3L, ts("2023-08-13 19:30"), "2023-08-13-19-00"),
+          ("u1", 15L, ts("2023-08-13 23:40"), "2023-08-13-22-00"),
+          ("u3", 40L, ts("2023-08-13 23:00"), "2023-08-13-22-00"), // after u3's 22:00 bound
+          ("u1", 20L, ts("2023-08-14 02:30"), "2023-08-14-01-00"),
+          ("u1", 35L, ts("2023-08-14 05:30"), "2023-08-14-04-00"),
+          ("u2", 7L, ts("2023-08-14 06:10"), "2023-08-14-04-00"),
+          ("u1", 100L, ts("2023-08-14 08:30"), "2023-08-14-07-00"),
+          ("u2", 70L, ts("2023-08-14 09:00"), "2023-08-14-07-00"),
+          ("u1", 1000L, ts("2023-08-14 11:30"), "2023-08-14-10-00") // visible only to the 13:00 row
         ))
       .toDF("user_id", "amount_3h", "ts", "ds")
       .save(offsetEventsTable)
@@ -483,24 +483,24 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     spark
       .createDataFrame(
         Seq(
-          ("u1", 11L, "2023-08-13 19:00"),
-          ("u2", 21L, "2023-08-13 19:00"),
-          ("u3", 31L, "2023-08-13 19:00"),
-          ("u1", 12L, "2023-08-13 22:00"),
-          ("u2", 22L, "2023-08-13 22:00"),
-          ("u3", 32L, "2023-08-13 22:00"),
-          ("u1", 13L, "2023-08-14 01:00"),
-          ("u2", 23L, "2023-08-14 01:00"),
-          ("u3", 33L, "2023-08-14 01:00"),
-          ("u1", 14L, "2023-08-14 04:00"),
-          ("u2", 24L, "2023-08-14 04:00"),
-          ("u3", 34L, "2023-08-14 04:00"),
-          ("u1", 15L, "2023-08-14 07:00"),
-          ("u2", 25L, "2023-08-14 07:00"),
-          ("u3", 35L, "2023-08-14 07:00"),
-          ("u1", 16L, "2023-08-14 10:00"),
-          ("u2", 26L, "2023-08-14 10:00"),
-          ("u3", 36L, "2023-08-14 10:00")
+          ("u1", 11L, "2023-08-13-19-00"),
+          ("u2", 21L, "2023-08-13-19-00"),
+          ("u3", 31L, "2023-08-13-19-00"),
+          ("u1", 12L, "2023-08-13-22-00"),
+          ("u2", 22L, "2023-08-13-22-00"),
+          ("u3", 32L, "2023-08-13-22-00"),
+          ("u1", 13L, "2023-08-14-01-00"),
+          ("u2", 23L, "2023-08-14-01-00"),
+          ("u3", 33L, "2023-08-14-01-00"),
+          ("u1", 14L, "2023-08-14-04-00"),
+          ("u2", 24L, "2023-08-14-04-00"),
+          ("u3", 34L, "2023-08-14-04-00"),
+          ("u1", 15L, "2023-08-14-07-00"),
+          ("u2", 25L, "2023-08-14-07-00"),
+          ("u3", 35L, "2023-08-14-07-00"),
+          ("u1", 16L, "2023-08-14-10-00"),
+          ("u2", 26L, "2023-08-14-10-00"),
+          ("u3", 36L, "2023-08-14-10-00")
         ))
       .toDF("user_id", "balance_3h", "ds")
       .save(offsetBalanceTable)
@@ -562,7 +562,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
           query = withPartition(
             Builders.Query(selects = Builders.Selects("user_id", "txn_amount"),
                            timeColumn = "ts",
-                           startPartition = "2023-07-31 04:00"),
+                           startPartition = "2023-07-31-04-00"),
             subDailySpec
           ),
           table = txnTable,
@@ -605,7 +605,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
           query = withPartition(
             Builders.Query(selects = Builders.Selects("user_id", "amount_3h"),
                            timeColumn = "ts",
-                           startPartition = "2023-08-13 19:00"),
+                           startPartition = "2023-08-13-19-00"),
             subDailySpec
           ),
           table = offsetEventsTable
@@ -625,7 +625,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
       sources = Seq(
         Builders.Source.entities(
           query = withPartition(
-            Builders.Query(selects = Builders.Selects("user_id", "balance_3h"), startPartition = "2023-08-13 19:00"),
+            Builders.Query(selects = Builders.Selects("user_id", "balance_3h"), startPartition = "2023-08-13-19-00"),
             subDailySpec
           ),
           snapshotTable = offsetBalanceTable
@@ -678,7 +678,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     Builders.Join(
       left = Builders.Source.events(
         query = withPartition(
-          Builders.Query(selects = Builders.Selects("user_id", "ts"), startPartition = "2023-08-13 22:00"),
+          Builders.Query(selects = Builders.Selects("user_id", "ts"), startPartition = "2023-08-13-22-00"),
           subDailySpec
         ),
         table = leftTable

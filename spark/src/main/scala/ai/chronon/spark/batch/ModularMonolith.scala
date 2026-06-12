@@ -65,7 +65,7 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
     // spec. Dependency input ranges carry the dependency's own partition spec (format,
     // interval and offset may all differ from the output grid); unioning raw labels across
     // specs mixes partition-string domains and breaks parsing/ordering downstream (e.g. a
-    // daily "2023-08-12" start fed into a sub-daily "yyyy-MM-dd HH:mm" StepRunner). Convert
+    // daily "2023-08-12" start fed into a sub-daily "yyyy-MM-dd-HH-mm" StepRunner). Convert
     // through the half-open time interval instead of translating strings directly.
     val outputSpec = queryRange.partitionSpec
     val inputRanges = tableDeps.flatMap { dep =>

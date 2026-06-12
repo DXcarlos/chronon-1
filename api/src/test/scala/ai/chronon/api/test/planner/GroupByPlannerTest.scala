@@ -14,10 +14,12 @@ import scala.jdk.CollectionConverters._
 class GroupByPlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec: PartitionSpec = PartitionSpec.daily
-  private val oneHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 60 * 60 * 1000)
-  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
-  private val fiveHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 5 * 60 * 60 * 1000)
-  private val sixHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 6 * 60 * 60 * 1000)
+  private val oneHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 60 * 60 * 1000)
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+  // divides the day (unlike 5h, which PartitionSpec now rejects at construction) but is not a
+  // multiple of the 3h source grid, so it still exercises the widening-rule rejection
+  private val fourHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 4 * 60 * 60 * 1000)
+  private val sixHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 6 * 60 * 60 * 1000)
 
   private def outputTableInfo(table: String, spec: PartitionSpec): TableInfo = {
     val tableInfo = new TableInfo()
@@ -148,14 +150,49 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
   }
 
   it should "reject groupBy output intervals that are narrower or not multiples of the source partition interval" in {
-    Seq(oneHourSpec, fiveHourSpec).foreach { groupBySpec =>
+    Seq(oneHourSpec, fourHourSpec).foreach { groupBySpec =>
       val gb = withOutputSpec(withEventSourceSpec(buildGroupBy(), threeHourSpec), groupBySpec)
       an[IllegalArgumentException] should be thrownBy GroupByPlanner(gb).buildPlan
     }
   }
 
+  it should "reject a sub-daily groupBy over a source with no declared partition interval" in {
+    // an undeclared source is implicitly daily: every intraday run would block on the full
+    // day's partition and the whole pipeline lands a day late - permanently, silently
+    val gb = withOutputSpec(buildGroupBy(), threeHourSpec)
+    val error = the[IllegalArgumentException] thrownBy GroupByPlanner(gb).buildPlan
+    error.getMessage should include("time_partitioned")
+  }
+
+  it should "allow a sub-daily groupBy over an undeclared source marked time_partitioned" in {
+    // time_partitioned sources land continuously; intraday readiness is sensed from timestamps
+    val gb = withOutputSpec(buildGroupBy(), threeHourSpec)
+    gb.sources.asScala.foreach(_.getEvents.query.setTimePartitioned(true))
+    noException should be thrownBy GroupByPlanner(gb).buildPlan
+  }
+
+  it should "keep allowing daily groupBys over undeclared sources" in {
+    noException should be thrownBy GroupByPlanner(buildGroupBy()).buildPlan
+  }
+
+  it should "stamp the consumer grid onto time_partitioned dependencies" in {
+    // a time-partitioned source has no physical grid (its column is a real timestamp), so the
+    // dependency must carry the consumer's grid: sensing and range math then quantize intraday
+    // requirements on the node's grain instead of stalling on a daily boundary
+    val gb = withOutputSpec(buildGroupBy(), threeHourSpec)
+    gb.sources.asScala.foreach(_.getEvents.query.setTimePartitioned(true))
+
+    val plan = GroupByPlanner(gb).buildPlan
+    val backfill = plan.nodes.asScala.find(_.content.isSetGroupByBackfill).get
+    val dep = backfill.metaData.executionInfo.tableDependencies.asScala.head
+
+    dep.tableInfo.timePartitioned shouldBe true
+    dep.tableInfo.partitionInterval should equal(WindowUtils.fromMillis(threeHourSpec.spanMillis))
+    dep.tableInfo.partitionFormat should equal(threeHourSpec.format)
+  }
+
   it should "reject groupBy output grids that are not congruent with the source grid" in {
-    val offsetSourceSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
+    val offsetSourceSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
     val gb = withOutputSpec(withEventSourceSpec(buildGroupBy(), offsetSourceSpec), sixHourSpec)
 
     val error = the[IllegalArgumentException] thrownBy GroupByPlanner(gb).buildPlan
@@ -165,12 +202,12 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
   }
 
   it should "allow groupBy output grids congruent with an offset source grid" in {
-    val offsetSourceSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
+    val offsetSourceSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
     // offsets differing by a whole number of producer intervals are congruent: 1h and 4h grids
     // over a 3h producer interval both line up with the 1h-phased source grid
-    val oneHourOffsetSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 6 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
+    val oneHourOffsetSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 6 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
     val fourHourOffsetSpec =
-      PartitionSpec("ds", "yyyy-MM-dd HH:mm", 6 * 60 * 60 * 1000, offsetMillis = 4 * 60 * 60 * 1000)
+      PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 6 * 60 * 60 * 1000, offsetMillis = 4 * 60 * 60 * 1000)
 
     Seq(oneHourOffsetSpec, fourHourOffsetSpec).foreach { groupBySpec =>
       val gb = withOutputSpec(withEventSourceSpec(buildGroupBy(), offsetSourceSpec), groupBySpec)

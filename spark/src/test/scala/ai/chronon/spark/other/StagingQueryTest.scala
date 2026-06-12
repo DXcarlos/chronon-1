@@ -364,7 +364,7 @@ class StagingQueryTest extends SparkTestBase {
     assertEquals(expectedPartitionCols.toSet, partitionColumnNames.toSet)
   }
 
-  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
 
   it should "render inclusive sub-daily macro labels with an exclusive end via offset" in {
     val subDailyTableUtils = TableUtils(spark, threeHourSpec)
@@ -372,21 +372,27 @@ class StagingQueryTest extends SparkTestBase {
     val rendered = StagingQuery.substitute(
       subDailyTableUtils,
       "SELECT {{ start_date }} AS s, {{ end_date }} AS e, {{ end_date(offset=1) }} AS x",
-      start = "2024-01-01 06:00",
-      end = "2024-01-01 06:00",
-      latest = "2024-01-01 06:00"
+      start = "2024-01-01-06-00",
+      end = "2024-01-01-06-00",
+      latest = "2024-01-01-06-00"
     )
 
     // start_date and end_date are inclusive output-domain labels; offset=1 renders the
     // exclusive interval end
     assertEquals(
-      "SELECT '2024-01-01 06:00' AS s, '2024-01-01 06:00' AS e, '2024-01-01 09:00' AS x",
+      "SELECT '2024-01-01-06-00' AS s, '2024-01-01-06-00' AS e, '2024-01-01-09-00' AS x",
       rendered
     )
   }
 
-  it should "write distinct sub-daily partitions per fire and replay idempotently" in {
-    val subDailyTableUtils = TableUtils(spark, threeHourSpec)
+  // Space/colon formats are NOT the default (labels become object-store directory names,
+  // where spaces and colons URL-escape — Hive percent-escapes colons), but they remain
+  // expressible when declared explicitly. This test deliberately declares the legacy
+  // space/colon format to lock the explicit-format capability.
+  private val spaceColonSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+
+  it should "write and replay sub-daily partitions with an explicit space/colon format" in {
+    val subDailyTableUtils = TableUtils(spark, spaceColonSpec)
     val inputTable = s"$namespace.subdaily_staging_input"
     spark.sql(s"DROP TABLE IF EXISTS $inputTable")
     spark.sql(s"""CREATE TABLE $inputTable (
@@ -411,11 +417,11 @@ class StagingQueryTest extends SparkTestBase {
     val stagingQuery = new StagingQuery(stagingQueryConf, "2024-01-01 06:00", subDailyTableUtils)
 
     def fire(partition: String): Unit =
-      stagingQuery.compute(PartitionRange(partition, partition)(threeHourSpec), Seq.empty, Some(true))
+      stagingQuery.compute(PartitionRange(partition, partition)(spaceColonSpec), Seq.empty, Some(true))
 
     // distinct schedule fires write distinct formatted partitions
     fire("2024-01-01 03:00")
-    // sub-daily partition values (spaces and colons) must round-trip through the catalog
+    // explicitly-declared space/colon partition values must round-trip through the catalog
     assertEquals(List("2024-01-01 03:00"), subDailyTableUtils.partitions(outputTable).sorted)
 
     fire("2024-01-01 06:00")

@@ -496,11 +496,13 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     // Validate output covers the requested range
     watermark match {
       case Some(w) if w > requiredCoverageEnd =>
-        logger.info(s"Output table $outputTable covers requested range " +
-          s"(watermark: ${TsUtils.toStr(w)} > coverage end: ${TsUtils.toStr(requiredCoverageEnd)})")
+        logger.info(
+          s"Output table $outputTable covers requested range " +
+            s"(watermark: ${TsUtils.toStr(w)} > coverage end: ${TsUtils.toStr(requiredCoverageEnd)})")
       case Some(w) =>
-        logger.error(s"After job completion, output table $outputTable watermark ${TsUtils.toStr(w)} <= " +
-          s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
+        logger.error(
+          s"After job completion, output table $outputTable watermark ${TsUtils.toStr(w)} <= " +
+            s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
       case None =>
         logger.error(s"After job completion, output table $outputTable has no partitions")
     }

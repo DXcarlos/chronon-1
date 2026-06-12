@@ -15,8 +15,25 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
   private val confOutputPartitionSpec: PartitionSpec =
     MetaDataUtils.outputPartitionSpec(join.metaData, outputPartitionSpec)
 
-  private def validatePartitionIntervals(): Unit =
+  private def validatePartitionIntervals(): Unit = {
+    // the left is a coverage edge: join output partitions are computed from left rows in the
+    // same time range, so a coarser/undeclared left grain under a sub-daily join is the
+    // silent-staleness trap. Right parts bind per-row as-of time and are validated (loosely,
+    // by design) in validateJoinPartGrids.
+    for {
+      left <- Option(join.left)
+      query <- Option(left.query)
+    } {
+      MetaDataUtils.validateCoverageEdge(
+        join.metaData.name,
+        confOutputPartitionSpec,
+        query,
+        s"left source ${left.rawTable}",
+        MetaDataUtils.EdgeShape.of(left.dataModel)
+      )
+    }
     JoinPlanner.validateJoinPartGrids(join, confOutputPartitionSpec)
+  }
 
   // will mutate the join in place - use on deepCopy-ied objects only
   private def joinWithoutMetadata(join: Join): Unit = {

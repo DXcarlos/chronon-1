@@ -1,4 +1,3 @@
-import datetime
 from typing import Optional, Union
 
 import gen_thrift.common.ttypes as common
@@ -90,7 +89,10 @@ DAY_MILLIS = 24 * 60 * 60 * 1000
 HOUR_MILLIS = 60 * 60 * 1000
 MINUTE_MILLIS = 60 * 1000
 DAILY_PARTITION_FORMAT = "yyyy-MM-dd"
-SUB_DAILY_PARTITION_FORMAT = "yyyy-MM-dd HH:mm"
+# dash-separated: partition values become object-store directory names, where spaces and
+# colons get URL-escaped (Hive percent-escapes colons). Space/colon formats remain
+# expressible by setting an explicit partition format.
+SUB_DAILY_PARTITION_FORMAT = "yyyy-MM-dd-HH-mm"
 
 
 def from_millis(millis: int) -> common.Window:
@@ -122,15 +124,36 @@ def default_partition_format(partition_interval: Union[common.Window, str]) -> s
     )
 
 
+def _is_unrestricted(field_values, full_range) -> bool:
+    """True when an expanded cron day-field doesn't restrict which days the cron fires."""
+    if field_values == ["*"]:
+        return True
+    try:
+        values = {int(v) for v in field_values}
+    except (TypeError, ValueError):
+        return False
+    # croniter accepts 7 as an alias for Sunday (0) in the weekday field
+    return {v % 7 for v in values} >= full_range if full_range == set(range(7)) else values >= full_range
+
+
 def regular_subdaily_schedule(schedule_expression: str, partition_offset_ms: int = 0) -> Optional[int]:
     """Validate a cron expression and return its data interval in millis for regular sub-daily
     schedules, or None for daily-or-coarser (or absent) schedules.
 
-    Grids are declared, never inferred from the cron: the partition grid is midnight-aligned
-    unless an explicit ``partition_offset`` shifts it. The cron fire phase only contributes a
-    derived processing delay relative to that declared grid, which must be constant across a
-    7 day UTC horizon and strictly less than the partition interval. Day-restricted or
-    irregular crons are rejected.
+    The rule is structural (pure cron-field inspection, no probing — fixed probe windows can
+    be defeated by month/day-of-month crons aligned with the window):
+
+    - fires at most once per day → daily interval: day-of-month / month / weekday
+      restrictions are fine (weekly or monthly reports over daily partitions).
+    - fires more than once per day → the day fields must all be unrestricted and the
+      minute/hour pattern must be evenly spaced, including across the midnight wrap-around
+      (which forces the interval to divide a UTC day exactly).
+
+    Grids are declared, never inferred from the cron fire phase: the phase only contributes
+    a derived processing delay relative to the declared grid. For a structurally regular
+    cron that delay is constant and strictly less than the interval by construction, so no
+    separate phase validation is needed; ``partition_offset_ms`` is kept for callers that
+    want to log or surface the derived delay.
     """
     from croniter import croniter
 
@@ -149,73 +172,65 @@ def regular_subdaily_schedule(schedule_expression: str, partition_offset_ms: int
             "Only @daily and @never aliases are supported; use a 5-field cron expression otherwise."
         )
 
-    test_start = datetime.datetime(2024, 1, 1, 0, 0)
-    horizon_end = test_start + datetime.timedelta(days=7)
-    cron = croniter(schedule_expression, test_start - datetime.timedelta(seconds=1))
-    runs = []
-    for _ in range(2000):
-        next_run = cron.get_next(datetime.datetime)
-        if next_run >= horizon_end:
-            break
-        runs.append(next_run)
+    minutes, hours, dom, month, dow = croniter.expand(schedule_expression)[0][:5]
+    minute_values = list(range(60)) if minutes == ["*"] else sorted({int(m) for m in minutes})
+    hour_values = list(range(24)) if hours == ["*"] else sorted({int(h) for h in hours})
 
-    if len(runs) < 2:
+    fires = sorted(h * 60 + m for h in hour_values for m in minute_values)
+    if len(fires) <= 1:
+        # at most once per day: the 24h interval ceiling applies and skipped days are just
+        # normal "this job doesn't run every day" (weekly/monthly schedules)
         return None
 
-    max_executions_in_day = 0
-    for day_offset in range(7):
-        day_start = test_start + datetime.timedelta(days=day_offset)
-        day_end = day_start + datetime.timedelta(days=1)
-        executions_in_day = sum(day_start <= run < day_end for run in runs)
-        max_executions_in_day = max(max_executions_in_day, executions_in_day)
-
-    if max_executions_in_day <= 1:
-        return None
-
-    deltas = [int((runs[i] - runs[i - 1]).total_seconds() * 1000) for i in range(1, len(runs))]
-    interval_ms = deltas[0]
-    if any(delta != interval_ms for delta in deltas):
+    day_unrestricted = (
+        _is_unrestricted(dom, set(range(1, 32)))
+        and _is_unrestricted(month, set(range(1, 13)))
+        and _is_unrestricted(dow, set(range(7)))
+    )
+    if not day_unrestricted:
         raise ValueError(
-            "Sub-daily schedules must have a constant interval across a 7 day UTC horizon."
+            "Sub-daily schedules must fire every day: day-restricted sub-daily crons are not "
+            f"supported (day-of-month, month, and weekday fields must be '*'), got '{schedule_expression}'. "
+            "A grid inferred from a day-restricted cron would have most of its partitions never computed."
         )
-    if interval_ms <= 0 or interval_ms > DAY_MILLIS:
-        raise ValueError("Sub-daily schedule interval must be between 1 minute and 1 day.")
-    if interval_ms % MINUTE_MILLIS != 0:
-        raise ValueError("Sub-daily schedule interval must be minute-aligned.")
-    if DAY_MILLIS % interval_ms != 0:
-        raise ValueError("Sub-daily schedule interval must divide a UTC day evenly.")
 
-    validate_cron_delay(runs, interval_ms, partition_offset_ms)
+    deltas = {fires[i + 1] - fires[i] for i in range(len(fires) - 1)}
+    deltas.add(fires[0] + 24 * 60 - fires[-1])  # midnight wrap-around closes the day boundary gap
+    if len(deltas) != 1:
+        raise ValueError(
+            "Sub-daily schedules must be regular: fire times must be evenly spaced across the "
+            f"whole UTC day including the midnight wrap-around, got '{schedule_expression}'."
+        )
+    interval_ms = deltas.pop() * MINUTE_MILLIS
+    # constant spacing that wraps the day always tiles 24h exactly; assert the invariant
+    assert DAY_MILLIS % interval_ms == 0, f"regular cron interval {interval_ms}ms must divide a day"
     return interval_ms
 
 
-def validate_cron_delay(
-    runs, partition_interval_ms: int, partition_offset_ms: int = 0
-) -> int:
-    """Validate that all cron fire times sit at a constant delay over the declared partition
-    grid (``partition_interval_ms`` phased by ``partition_offset_ms``) and return that delay.
+def validate_coverage_edge(conf_desc: str, query, source_desc: str) -> None:
+    """Coverage edges (groupBy/model sources and the join LEFT) need the output partition's
+    time range actually covered by input data. Call only when the conf's output grid is
+    sub-daily: the source must declare a partition_interval (covering/congruence is validated
+    at plan time) or be marked time_partitioned (data lands continuously and intraday
+    readiness is sensed from timestamps). Join RIGHT parts are point-in-time edges - they
+    bind per left-row as-of time on their own grid, mixed cadence is the product - and must
+    never be validated through this. Mirrors MetaDataUtils.validateCoverageEdge in scala."""
+    if query is None or query.partitionInterval is not None or query.timePartitioned:
+        return
+    raise ValueError(
+        f"{conf_desc} has a sub-daily output grid over {source_desc} with no declared "
+        "partition_interval - implicitly daily. Every intraday run would wait for the full "
+        "day's partition and land a day late. Declare the source's partition_interval, or "
+        "mark the source time_partitioned if data lands continuously."
+    )
 
-    The delay is execution-domain only — it never moves the grid. A fire at 09:20 over a
-    midnight-aligned 3h grid is the 09:00 boundary plus a 20 minute delay.
-    """
-    epoch = datetime.datetime(1970, 1, 1, 0, 0)
-    delays = {
-        (int((run - epoch).total_seconds() * 1000) - partition_offset_ms) % partition_interval_ms
-        for run in runs
-    }
-    if len(delays) != 1:
-        raise ValueError(
-            "Sub-daily schedule fire times must sit at a constant delay over the declared "
-            f"partition grid (interval {partition_interval_ms}ms, offset {partition_offset_ms}ms); "
-            "declare a matching partition_offset or use a regular cron."
-        )
-    delay_ms = delays.pop()
-    if delay_ms >= partition_interval_ms:
-        raise ValueError(
-            "Derived cron delay must be strictly less than the partition interval, found "
-            f"{delay_ms}ms >= {partition_interval_ms}ms."
-        )
-    return delay_ms
+
+def source_query(source):
+    """The inner query of a thrift Source union (events / entities / joinSource)."""
+    if source is None:
+        return None
+    inner = source.events or source.entities or source.joinSource
+    return inner.query if inner is not None else None
 
 
 def is_subdaily(
@@ -254,20 +269,49 @@ def output_table_info(
         else from_millis(cron_interval_ms)
     )
     interval_ms = window_millis(interval)
+    # day-denominated reasoning relies on partitions tiling the UTC day; week/month-sized
+    # partitions are deliberately unrepresentable (weekly/monthly cadences are schedules over
+    # daily partitions, not partition spans)
+    if interval_ms != DAY_MILLIS and (interval_ms > DAY_MILLIS or DAY_MILLIS % interval_ms != 0):
+        raise ValueError(
+            f"partition_interval ({interval_ms}ms) must divide a UTC day evenly or equal one day. "
+            "Weekly/monthly cadences are expressed as schedules over daily partitions."
+        )
     if cron_interval_ms is not None and cron_interval_ms % interval_ms != 0:
         raise ValueError(
             f"partition_interval ({interval_ms}ms) must evenly divide the cron data interval "
             f"({cron_interval_ms}ms) of schedule '{schedule}'."
         )
-    if offset_ms >= interval_ms:
-        raise ValueError(
-            f"partition_offset ({offset_ms}ms) must be strictly less than the partition "
-            f"interval ({interval_ms}ms)."
+    # validate on computed millis so the Window object path hits the same checks as strings
+    if offset_ms != 0:
+        if interval_ms >= DAY_MILLIS:
+            raise ValueError(
+                "Daily partitions stay midnight-anchored: partition_offset is only supported "
+                "on sub-daily grids."
+            )
+        if offset_ms < 0 or offset_ms >= interval_ms:
+            raise ValueError(
+                f"partition_offset ({offset_ms}ms) must be non-negative and strictly less than "
+                f"the partition interval ({interval_ms}ms)."
+            )
+    # zero offset serializes identically to no offset: the planner convention is
+    # offset-only-when-nonzero, and divergent bytes would churn semantic hashes
+    offset = normalize_window(partition_offset) if offset_ms != 0 else None
+    default_format = default_partition_format(interval)
+    if partition_format is not None and partition_format != default_format:
+        import warnings
+
+        warnings.warn(
+            f"Custom output partition_format '{partition_format}' (default for this interval is "
+            f"'{default_format}'). Custom output formats are discouraged: compact or composed "
+            "formats can silently mismatch downstream consumers. "
+            "Prefer the default; input tables can keep declaring their actual format.",
+            UserWarning,
+            stacklevel=2,
         )
-    offset = normalize_window(partition_offset) if partition_offset is not None else None
     return common.TableInfo(
         partitionColumn=partition_column,
-        partitionFormat=partition_format or default_partition_format(interval),
+        partitionFormat=partition_format or default_format,
         partitionInterval=interval,
         partitionOffset=offset,
     )

@@ -11,7 +11,6 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import java.time.ZoneOffset
 import scala.util.{Failure, Success, Try}
 
-
 case object BigQueryNative extends Format {
 
   private val bqFormat = classOf[Spark35BigQueryTableProvider].getName
@@ -200,10 +199,7 @@ case object BigQueryNative extends Format {
   // the generic scan fallback reads via sparkSession.read.table, which BigQueryNative forbids;
   // push the boundary aggregation down to BigQuery instead. This is what makes coverage checks
   // work for clustered-but-not-partitioned tables (no entry in is_partitioning_column).
-  private def scanBoundary(tableName: String,
-                           partitionColumn: String,
-                           agg: String,
-                           toLabel: Long => String)(implicit
+  private def scanBoundary(tableName: String, partitionColumn: String, agg: String, toLabel: Long => String)(implicit
       sparkSession: SparkSession): scala.Option[String] = {
     import org.apache.spark.sql.types.{LongType, StringType, TimestampType}
     import sparkSession.implicits._
@@ -225,7 +221,7 @@ case object BigQueryNative extends Format {
 
       df.schema("boundary").dataType match {
         case StringType => df.as[String].collect().headOption.flatMap(scala.Option(_))
-        case _ =>
+        case _          =>
           // raw epoch millis, label math in the partition spec: a DATE cast would floor to
           // midnight and lose sub-daily boundaries (session timezone is UTC by convention)
           df.select((col("boundary").cast(TimestampType).cast(LongType) * 1000).as("boundary_millis"))
