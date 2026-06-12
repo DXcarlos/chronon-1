@@ -25,12 +25,14 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
   private def executionInfoFor(table: String, spec: PartitionSpec): ExecutionInfo =
     new ExecutionInfo().setOutputTableInfo(outputTableInfo(table, spec))
 
-  private def groupByWithOutputSpec(name: String, spec: PartitionSpec): ai.chronon.api.GroupBy =
+  private def groupByWithOutputSpec(name: String,
+                                    spec: PartitionSpec,
+                                    accuracy: Accuracy = Accuracy.TEMPORAL): ai.chronon.api.GroupBy =
     Builders.GroupBy(
       sources = Seq(Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = s"test.$name")),
       keyColumns = Seq("listing_id"),
       aggregations = Seq(Builders.Aggregation(Operation.COUNT, "event_count", Seq(WindowUtils.Unbounded))),
-      accuracy = Accuracy.TEMPORAL,
+      accuracy = accuracy,
       metaData = Builders.MetaData(
         namespace = "test_namespace",
         name = name,
@@ -118,19 +120,51 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
     backfillNode.metaData.executionInfo.outputTableInfo.partitionFormat should equal(PartitionSpec.daily.format)
   }
 
-  it should "reject sub-daily joins over daily groupBy outputs" in {
-    val dailyGroupBy = groupByWithOutputSpec("daily_gb", PartitionSpec.daily)
-    val hourlyJoin = Join(
+  it should "allow sub-daily joins over coarser groupBy outputs - parts bind by left row time" in {
+    // snapshot parts are bound as-of the left row time (floor to grid + one-span shift) and
+    // temporal parts recompute from raw events, so a finer join over a coarser groupBy output
+    // grid is staleness, not missing data
+    val dailySnapshotGroupBy = groupByWithOutputSpec("daily_snapshot_gb", PartitionSpec.daily, Accuracy.SNAPSHOT)
+    val dailyTemporalGroupBy = groupByWithOutputSpec("daily_temporal_gb", PartitionSpec.daily)
+    val subDailyJoin = Join(
       metaData = MetaData(
-        name = "hourly_join",
+        name = "three_hour_join",
         namespace = "test_namespace",
-        executionInfo = executionInfoFor("test_namespace.hourly_join", threeHourSpec)
+        executionInfo = executionInfoFor("test_namespace.three_hour_join", threeHourSpec)
       ),
       left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
-      joinParts = Seq(Builders.JoinPart(groupBy = dailyGroupBy))
+      joinParts =
+        Seq(Builders.JoinPart(groupBy = dailySnapshotGroupBy), Builders.JoinPart(groupBy = dailyTemporalGroupBy))
     )
 
-    an[IllegalArgumentException] should be thrownBy new JoinPlanner(hourlyJoin).buildPlan
+    noException should be thrownBy new JoinPlanner(subDailyJoin).buildPlan
+  }
+
+  it should "shift snapshot part merge dependencies by one join span instead of one day" in {
+    def mergeSnapshotDepOffset(joinSpec: PartitionSpec): ai.chronon.api.Window = {
+      val snapshotGroupBy =
+        groupByWithOutputSpec(s"snapshot_gb_${joinSpec.spanMillis}", joinSpec, Accuracy.SNAPSHOT)
+      val join = Join(
+        metaData = MetaData(
+          name = s"merge_shift_join_${joinSpec.spanMillis}",
+          namespace = "test_namespace",
+          executionInfo = executionInfoFor(s"test_namespace.merge_shift_join_${joinSpec.spanMillis}", joinSpec)
+        ),
+        left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
+        joinParts = Seq(Builders.JoinPart(groupBy = snapshotGroupBy))
+      )
+      val plan = new JoinPlanner(join).buildPlan
+      val mergeNode = plan.nodes.asScala.find(_.content.isSetJoinMerge).get
+      val partDep = mergeNode.metaData.executionInfo.tableDependencies.asScala
+        .find(_.tableInfo.table.contains("snapshot_gb"))
+        .get
+      partDep.startOffset
+    }
+
+    // the engine (MergeJob) shifts snapshot part reads back one join output interval, so the
+    // sensor-facing dependency must require the same span - daily behavior stays one day
+    mergeSnapshotDepOffset(PartitionSpec.daily).millis should equal(WindowUtils.Day.millis)
+    mergeSnapshotDepOffset(threeHourSpec).millis should equal(threeHourSpec.spanMillis)
   }
 
   it should "partition modular join part intermediates in the join output domain" in {

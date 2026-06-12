@@ -1289,6 +1289,193 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     noException should be thrownBy runner.run(metadata, nodeContent, Option(range))
   }
 
+  // ---------- sub-daily sensor coverage ----------
+
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+
+  private def subDailyQuery(partitionColumn: String = "ds"): Query =
+    new Query()
+      .setPartitionColumn(partitionColumn)
+      .setPartitionFormat(threeHourSpec.format)
+      .setPartitionInterval(new Window(3, TimeUnit.HOURS))
+
+  private def sensorFor(tableDependency: TableDependency): ExternalSourceSensorNode =
+    new ExternalSourceSensorNode()
+      .setSourceTableDependency(tableDependency)
+      .setRetryCount(0L)
+      .setRetryIntervalMin(0L)
+
+  private def defaultRunner(): BatchNodeRunner = {
+    val configPath = createTestConfigFile(twoDaysAgo, yesterday)
+    val node = ThriftJsonCodec.fromJsonFile[Node](configPath, check = true)
+    new BatchNodeRunner(node, tableUtils, mockApi)
+  }
+
+  private def createSubDailyPartsTable(): Unit = {
+    spark.sql("DROP TABLE IF EXISTS test_db.subdaily_parts")
+    spark.sql(
+      """CREATE TABLE test_db.subdaily_parts (
+        |  id INT,
+        |  ds STRING
+        |)
+        |PARTITIONED BY (ds)""".stripMargin)
+    spark.sql(
+      """INSERT INTO test_db.subdaily_parts VALUES
+        |(1, '2024-01-01 00:00'),
+        |(2, '2024-01-01 03:00'),
+        |(3, '2024-01-01 06:00')
+        |""".stripMargin)
+  }
+
+  "BatchNodeRunnerArgs" should "accept formatted sub-daily start and end ds values" in {
+    val args = new BatchNodeRunnerArgs(
+      Array(
+        "--conf-path",
+        "some_conf.json",
+        "--start-ds",
+        "2024-01-01 06:00",
+        "--end-ds",
+        "2024-01-01 09:00",
+        "--online-class",
+        "ai.chronon.SomeApi"
+      ))
+
+    args.startDs() shouldBe "2024-01-01 06:00"
+    args.endDs() shouldBe "2024-01-01 09:00"
+  }
+
+  "Sub-daily partitioned sensors" should "distinguish two fires on the same day" in {
+    createSubDailyPartsTable()
+    val dep = TableDependencies.fromTable("test_db.subdaily_parts", subDailyQuery())
+    val runner = defaultRunner()
+
+    val sixOClockFire = PartitionRange("2024-01-01 06:00", "2024-01-01 06:00")(threeHourSpec)
+    runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
+      case Success(_) => // 06:00 partition exists
+      case Failure(e) => fail(s"06:00 fire should be ready: ${e.getMessage}")
+    }
+
+    val nineOClockFire = PartitionRange("2024-01-01 09:00", "2024-01-01 09:00")(threeHourSpec)
+    runner.checkPartitions(sensorFor(dep), nineOClockFire) match {
+      case Success(_) => fail("09:00 fire should not be satisfied by the 06:00 partition")
+      case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
+    }
+  }
+
+  it should "use the dependency input range end for readiness" in {
+    createSubDailyPartsTable()
+    // one-interval partition lag: the 09:00 fire only requires the 06:00 input partition
+    val laggedQuery = subDailyQuery().setPartitionLag(new Window(3, TimeUnit.HOURS))
+    val laggedDep = TableDependencies.fromTable("test_db.subdaily_parts", laggedQuery)
+    val unlaggedDep = TableDependencies.fromTable("test_db.subdaily_parts", subDailyQuery())
+    val runner = defaultRunner()
+
+    val nineOClockFire = PartitionRange("2024-01-01 09:00", "2024-01-01 09:00")(threeHourSpec)
+
+    runner.checkPartitions(sensorFor(laggedDep), nineOClockFire) match {
+      case Success(_) => // input range end is 06:00, which exists
+      case Failure(e) => fail(s"lagged dependency should be ready: ${e.getMessage}")
+    }
+
+    runner.checkPartitions(sensorFor(unlaggedDep), nineOClockFire) match {
+      case Success(_) => fail("unlagged dependency requires the missing 09:00 partition")
+      case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
+    }
+  }
+
+  "Sub-daily timestamp watermark sensors" should "require the dependency input interval end timestamp" in {
+    spark.sql("DROP TABLE IF EXISTS test_db.subdaily_watermark")
+    spark.sql(
+      """CREATE TABLE test_db.subdaily_watermark (
+        |  id INT,
+        |  created_at TIMESTAMP
+        |)""".stripMargin)
+    // watermark just below the 06:00 partition's interval end (09:00)
+    spark.sql(
+      """INSERT INTO test_db.subdaily_watermark VALUES
+        |(1, TIMESTAMP '2024-01-01 05:10:00'),
+        |(2, TIMESTAMP '2024-01-01 08:59:00')
+        |""".stripMargin)
+
+    val dep = TableDependencies.fromTable("test_db.subdaily_watermark", subDailyQuery("created_at"))
+    val runner = defaultRunner()
+    val sixOClockFire = PartitionRange("2024-01-01 06:00", "2024-01-01 06:00")(threeHourSpec)
+
+    runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
+      case Success(_) => fail("watermark below the interval end timestamp must not be ready")
+      case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
+    }
+
+    // watermark reaching the interval end timestamp makes the partition complete
+    spark.sql("INSERT INTO test_db.subdaily_watermark VALUES (3, TIMESTAMP '2024-01-01 09:00:00')")
+
+    runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
+      case Success(_) => // ready
+      case Failure(e) => fail(s"watermark at the interval end timestamp should be ready: ${e.getMessage}")
+    }
+  }
+
+  "Trigger expression sensors" should "preserve the daily contract" in {
+    spark.sql("DROP TABLE IF EXISTS test_db.trigger_daily")
+    spark.sql(
+      """CREATE TABLE test_db.trigger_daily (
+        |  id INT,
+        |  created_at TIMESTAMP
+        |)""".stripMargin)
+    spark.sql(s"INSERT INTO test_db.trigger_daily VALUES (1, TIMESTAMP '$today 04:00:00')")
+
+    val tableInfo = new TableInfo()
+      .setTable("test_db.trigger_daily")
+      .setTriggerExpr("DATE(MAX(created_at))")
+    val dep = new TableDependency().setTableInfo(tableInfo)
+    val sensor = sensorFor(dep).setEngineType(EngineType.SPARK)
+    val runner = defaultRunner()
+
+    // DATE(MAX(ts)) = today > yesterday: triggered
+    runner.checkPartitions(sensor, PartitionRange(yesterday, yesterday)(tableUtils.partitionSpec)) match {
+      case Success(_) => // triggered
+      case Failure(e) => fail(s"daily trigger should fire for yesterday: ${e.getMessage}")
+    }
+
+    // DATE(MAX(ts)) = today is not strictly greater than today: not triggered
+    runner.checkPartitions(sensor, PartitionRange(today, today)(tableUtils.partitionSpec)) match {
+      case Success(_) => fail("daily trigger should not fire for today")
+      case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
+    }
+  }
+
+  it should "support sub-daily timestamp-shaped trigger labels" in {
+    spark.sql("DROP TABLE IF EXISTS test_db.trigger_subdaily")
+    spark.sql(
+      """CREATE TABLE test_db.trigger_subdaily (
+        |  id INT,
+        |  created_at TIMESTAMP
+        |)""".stripMargin)
+    spark.sql("INSERT INTO test_db.trigger_subdaily VALUES (1, TIMESTAMP '2024-01-01 08:59:00')")
+
+    // the dependency must declare its sub-daily grid so the input range end stays in the
+    // sub-daily domain (without it the interval falls back to daily)
+    val tableInfo = new TableInfo()
+      .setTable("test_db.trigger_subdaily")
+      .setTriggerExpr("date_format(MAX(created_at), 'yyyy-MM-dd HH:mm')")
+      .setPartitionFormat(threeHourSpec.format)
+      .setPartitionInterval(new Window(3, TimeUnit.HOURS))
+    val dep = new TableDependency().setTableInfo(tableInfo)
+    val sensor = sensorFor(dep).setEngineType(EngineType.SPARK)
+    val runner = defaultRunner()
+
+    // '2024-01-01 08:59' > '2024-01-01 06:00': timestamp-shaped labels stay string-ordered
+    runner.checkPartitions(sensor, PartitionRange("2024-01-01 06:00", "2024-01-01 06:00")(threeHourSpec)) match {
+      case Success(_) => // triggered
+      case Failure(e) => fail(s"sub-daily trigger should fire for the 06:00 partition: ${e.getMessage}")
+    }
+
+    runner.checkPartitions(sensor, PartitionRange("2024-01-01 09:00", "2024-01-01 09:00")(threeHourSpec)) match {
+      case Success(_) => fail("sub-daily trigger should not fire for the 09:00 partition")
+      case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
+    }
+  }
+
   override def afterAll(): Unit = {
     spark.sql("DROP DATABASE IF EXISTS test_db CASCADE")
     spark.stop()

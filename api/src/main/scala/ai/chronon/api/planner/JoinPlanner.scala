@@ -15,19 +15,8 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
   private val confOutputPartitionSpec: PartitionSpec =
     MetaDataUtils.outputPartitionSpec(join.metaData, outputPartitionSpec)
 
-  private def validatePartitionIntervals(): Unit = {
-    Option(join.joinParts).foreach { joinParts =>
-      joinParts.asScala.foreach { joinPart =>
-        val groupBySpec = MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, confOutputPartitionSpec)
-        MetaDataUtils.validateWideningOrEqualConsumer(
-          join.metaData.name,
-          confOutputPartitionSpec,
-          groupBySpec,
-          s"groupBy ${joinPart.groupBy.metaData.name}"
-        )
-      }
-    }
-  }
+  private def validatePartitionIntervals(): Unit =
+    JoinPlanner.validateJoinPartGrids(join, confOutputPartitionSpec)
 
   // will mutate the join in place - use on deepCopy-ied objects only
   private def joinWithoutMetadata(join: Join): Unit = {
@@ -146,15 +135,14 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     val result = new JoinMergeNode()
       .setJoin(join)
 
-    // TODO: we might need to shift back 1 day for snapshot events case while partition sensing
-    //
-    // currently it works out fine, because we shift forward and back in the engine cancelling out the
-    // date ranges that need to be scheduled
     val deps = joinPartNodes.map { jpNode =>
       val shouldShift = join.left.dataModel == DataModel.EVENTS &&
         jpNode.content.getJoinPart.joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT
 
-      val shiftAmount = if (shouldShift) Some(WindowUtils.Day) else None
+      // The engine (MergeJob) shifts snapshot-part reads back by one join output interval
+      // (dayStep.shift(-1) in the join spec), so sensors must require the same span-based
+      // shift - a hardcoded daily shift under-requires for sub-daily joins.
+      val shiftAmount = if (shouldShift) Some(confOutputPartitionSpec.intervalWindow) else None
       TableDependencies.fromTableInfo(jpNode.metaData.executionInfo.outputTableInfo, shift = shiftAmount)
     } :+
       TableDependencies.fromTableInfo(
@@ -376,6 +364,31 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
 }
 
 object JoinPlanner {
+
+  // Join parts are bound by left row time, not by partition-label covering:
+  //   - snapshot parts: MergeJob floors the left ts to the join grid and shifts the RHS back
+  //     one join span — as-of binding, so a finer join over a coarser snapshot groupBy is
+  //     staleness rather than missing data and is allowed (validated through the snapshot
+  //     as-of seam so future policy changes stay localized),
+  //   - temporal parts: the engine recomputes from raw events with temporal accuracy, so the
+  //     groupBy output grid does not constrain the join grid at all.
+  def validateJoinPartGrids(join: Join, joinSpec: PartitionSpec): Unit = {
+    Option(join.joinParts).foreach { joinParts =>
+      joinParts.asScala.foreach { joinPart =>
+        if (joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
+          val groupBySpec = MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, joinSpec)
+          MetaDataUtils.validateEdgeGrids(
+            join.metaData.name,
+            joinSpec,
+            groupBySpec,
+            s"groupBy ${joinPart.groupBy.metaData.name}",
+            MetaDataUtils.EdgeShape.Snapshot,
+            snapshotAsOf = true
+          )
+        }
+      }
+    }
+  }
 
   // will mutate the join in place - use on deepCopy-ied objects only
   private def unsetNestedMetadata(join: Join): Unit = {

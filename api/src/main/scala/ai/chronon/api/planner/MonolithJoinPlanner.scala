@@ -15,19 +15,8 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
   private val confOutputPartitionSpec: PartitionSpec =
     MetaDataUtils.outputPartitionSpec(join.metaData, outputPartitionSpec)
 
-  private def validatePartitionIntervals(): Unit = {
-    Option(join.joinParts).foreach { joinParts =>
-      joinParts.asScala.foreach { joinPart =>
-        val groupBySpec = MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, confOutputPartitionSpec)
-        MetaDataUtils.validateWideningOrEqualConsumer(
-          join.metaData.name,
-          confOutputPartitionSpec,
-          groupBySpec,
-          s"groupBy ${joinPart.groupBy.metaData.name}"
-        )
-      }
-    }
-  }
+  private def validatePartitionIntervals(): Unit =
+    JoinPlanner.validateJoinPartGrids(join, confOutputPartitionSpec)
 
   private def semanticMonolithJoin(join: Join): Join = {
     val semanticJoin = join.deepCopy()

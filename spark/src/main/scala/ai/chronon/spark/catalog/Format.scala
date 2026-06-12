@@ -299,6 +299,9 @@ private[catalog] case class StatsDateRange(start: String, end: String) {
 
 case class ResolvedTableName(catalog: String, namespace: String, table: String) {
   def toIdentifier: Identifier = Identifier.of(Array(namespace), table)
+
+  private[catalog] def quoted: String =
+    s"${QuotingUtils.quoteIdentifier(catalog)}.${QuotingUtils.quoteIdentifier(namespace)}.${QuotingUtils.quoteIdentifier(table)}"
 }
 
 object Format {

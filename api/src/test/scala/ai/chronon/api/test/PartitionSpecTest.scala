@@ -195,4 +195,34 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
 
     translated should be(PartitionRange("2024-01-02", "2024-01-03")(dailySpec))
   }
+
+  it should "convert a sub-daily range to daily without underflowing" in {
+    // [21:00, 24:00) is contained in 2024-01-02: the daily end must come from the partition
+    // containing (endMillis - 1ms), not from subtracting a full daily interval (which would
+    // underflow to 2024-01-01)
+    val lastInterval = PartitionRange("2024-01-02 21:00", "2024-01-02 21:00")(threeHourSpec)
+    lastInterval.translate(dailySpec) should be(PartitionRange("2024-01-02", "2024-01-02")(dailySpec))
+
+    val firstInterval = PartitionRange("2024-01-02 00:00", "2024-01-02 00:00")(threeHourSpec)
+    firstInterval.translate(dailySpec) should be(PartitionRange("2024-01-02", "2024-01-02")(dailySpec))
+  }
+
+  it should "convert between specs with different offsets by time-interval coverage" in {
+    val sixHourOffsetSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 6 * 60 * 60 * 1000, 60 * 60 * 1000)
+
+    // congruent grids (offsets differ by a whole number of producer intervals): the 6h@1h
+    // consumer partition [01:00, 07:00) is covered exactly by the 3h@1h producer partitions
+    val consumer = PartitionRange("2024-01-02 01:00", "2024-01-02 01:00")(sixHourOffsetSpec)
+    consumer.translate(unalignedThreeHourSpec).partitions should contain theSameElementsInOrderAs Seq(
+      "2024-01-02 01:00",
+      "2024-01-02 04:00"
+    )
+
+    // incongruent grids over-cover: every midnight-aligned 3h partition overlapping [01:00, 07:00)
+    consumer.translate(threeHourSpec).partitions should contain theSameElementsInOrderAs Seq(
+      "2024-01-02 00:00",
+      "2024-01-02 03:00",
+      "2024-01-02 06:00"
+    )
+  }
 }

@@ -21,11 +21,12 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
       _ <- Option(query.partitionInterval)
     } {
       val sourcePartitionSpec = query.partitionSpec(confOutputPartitionSpec)
-      MetaDataUtils.validateWideningOrEqualConsumer(
+      MetaDataUtils.validateEdgeGrids(
         model.metaData.name,
         confOutputPartitionSpec,
         sourcePartitionSpec,
-        s"training source ${trainingDataSource.rawTable}"
+        s"training source ${trainingDataSource.rawTable}",
+        MetaDataUtils.EdgeShape.of(trainingDataSource.dataModel)
       )
     }
   }

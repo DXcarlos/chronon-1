@@ -71,7 +71,7 @@ class Eval(implicit tableUtils: TableUtils) {
           .lastAvailablePartition(source.table, tablePartitionSpec = Option(sourceSpec))
           .map(sourceSpec.partitionStartMillis)
       }
-      .reduceOption(Ordering[Long].max)
+      .reduceOption((left, right) => math.max(left, right))
       .map { latestMillis =>
         val latestPartition = partitionSpec.at(latestMillis)
         PartitionRange(latestPartition, latestPartition)

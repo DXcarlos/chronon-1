@@ -4,18 +4,7 @@ import ai.chronon.api.PartitionSpec
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.delta.DeltaLog
-import org.apache.spark.sql.functions.{
-  coalesce,
-  col,
-  count,
-  from_json,
-  lit,
-  min,
-  max,
-  to_date,
-  to_timestamp,
-  when
-}
+import org.apache.spark.sql.functions.{coalesce, col, count, from_json, lit, min, max, to_date, to_timestamp, when}
 import org.apache.spark.sql.types.{DataType, DateType, MapType, StringType, StructField, StructType, TimestampType}
 
 import scala.util.{Failure, Success, Try}

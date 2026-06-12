@@ -26,11 +26,12 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
           partitionInterval <- Option(query.partitionInterval)
         } {
           val sourcePartitionSpec = query.partitionSpec(confOutputPartitionSpec)
-          MetaDataUtils.validateWideningOrEqualConsumer(
+          MetaDataUtils.validateEdgeGrids(
             groupBy.metaData.name,
             confOutputPartitionSpec,
             sourcePartitionSpec,
-            s"source ${source.rawTable}"
+            s"source ${source.rawTable}",
+            MetaDataUtils.EdgeShape.of(source.dataModel)
           )
         }
       }

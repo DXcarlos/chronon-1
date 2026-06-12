@@ -1,5 +1,5 @@
 package ai.chronon.api.planner
-import ai.chronon.api.{ExecutionInfo, MetaData, PartitionSpec, TableDependency, TableInfo}
+import ai.chronon.api.{DataModel, ExecutionInfo, MetaData, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions.JListOps
 
@@ -24,19 +24,84 @@ object MetaDataUtils {
   def tableInfo(table: String, partitionSpec: PartitionSpec): TableInfo =
     applyPartitionSpec(new TableInfo().setTable(table), partitionSpec)
 
-  def validateWideningOrEqualConsumer(nodeName: String,
-                                      consumerPartitionSpec: PartitionSpec,
-                                      producerPartitionSpec: PartitionSpec,
-                                      producerDescription: String): Unit = {
-    val consumerMillis = consumerPartitionSpec.spanMillis
-    val producerMillis = producerPartitionSpec.spanMillis
-    require(
-      consumerMillis >= producerMillis && consumerMillis % producerMillis == 0,
-      s"Invalid partition interval for $nodeName: consumer interval ${WindowUtils.millisToString(consumerMillis)} " +
-        s"must be equal to or a multiple of producer interval ${WindowUtils.millisToString(producerMillis)} " +
-        s"($producerDescription)."
-    )
+  /** Shape of the producer side of a partition-grid edge. The narrowing-rejection policy is
+    * event-shaped: a finer consumer over a coarser event producer is missing data. Snapshot
+    * producers (entity snapshots, and later model versions) admit valid narrowing semantics —
+    * binding the latest producer partition at or before the consumer boundary yields staleness,
+    * not missing data — so their policy lives on a separate path that the as-of follow-up can
+    * relax without touching the event policy.
+    */
+  sealed trait EdgeShape
+  object EdgeShape {
+    case object Events extends EdgeShape
+    case object Snapshot extends EdgeShape
+
+    def of(dataModel: DataModel): EdgeShape = dataModel match {
+      case DataModel.EVENTS   => Events
+      case DataModel.ENTITIES => Snapshot
+    }
   }
+
+  private def gridString(spec: PartitionSpec): String =
+    s"interval ${WindowUtils.millisToString(spec.spanMillis)} @ offset ${WindowUtils.millisToString(spec.offsetMillis)}"
+
+  /** Validates that a consumer can cleanly cover its producer's partition grid: the consumer
+    * interval must be an equal-or-coarser multiple of the producer interval AND the two grids
+    * must be congruent (offsets differ by a whole number of producer intervals).
+    *
+    * @param snapshotAsOf snapshot-shaped edges where the engine binds the producer as-of the
+    *                     consumer boundary (e.g. join snapshot parts recomputed per left row
+    *                     time). Narrowing and grid misalignment are legal there — staleness,
+    *                     not missing data — so covering validation is skipped for them.
+    */
+  def validateEdgeGrids(nodeName: String,
+                        consumerSpec: PartitionSpec,
+                        producerSpec: PartitionSpec,
+                        producerDescription: String,
+                        shape: EdgeShape,
+                        snapshotAsOf: Boolean = false): Unit = {
+    val consumerMillis = consumerSpec.spanMillis
+    val producerMillis = producerSpec.spanMillis
+    val covering = consumerMillis >= producerMillis && consumerMillis % producerMillis == 0
+    val congruent = Math.floorMod(consumerSpec.offsetMillis - producerSpec.offsetMillis, producerMillis) == 0L
+
+    shape match {
+      case EdgeShape.Snapshot if snapshotAsOf =>
+      // as-of binding: alignment is irrelevant, nothing to validate
+
+      case EdgeShape.Snapshot =>
+        // First-cut seam: snapshot edges keep the covering rejection here until as-of binding
+        // is supported on this edge. Relaxing this branch later is additive.
+        require(
+          covering,
+          s"Invalid partition interval for $nodeName: consumer interval ${WindowUtils.millisToString(consumerMillis)} " +
+            s"must be equal to or a multiple of snapshot producer interval ${WindowUtils.millisToString(producerMillis)} " +
+            s"($producerDescription); as-of consumption of finer snapshot grids is not supported on this edge yet."
+        )
+        requireCongruent(nodeName, consumerSpec, producerSpec, producerDescription, congruent)
+
+      case EdgeShape.Events =>
+        require(
+          covering,
+          s"Invalid partition interval for $nodeName: consumer interval ${WindowUtils.millisToString(consumerMillis)} " +
+            s"must be equal to or a multiple of event producer interval ${WindowUtils.millisToString(producerMillis)} " +
+            s"($producerDescription)."
+        )
+        requireCongruent(nodeName, consumerSpec, producerSpec, producerDescription, congruent)
+    }
+  }
+
+  private def requireCongruent(nodeName: String,
+                               consumerSpec: PartitionSpec,
+                               producerSpec: PartitionSpec,
+                               producerDescription: String,
+                               congruent: Boolean): Unit =
+    require(
+      congruent,
+      s"Incompatible partition grids for $nodeName: consumer grid (${gridString(consumerSpec)}) is not congruent " +
+        s"with producer grid (${gridString(producerSpec)}) ($producerDescription); " +
+        "grid offsets must differ by a whole number of producer intervals."
+    )
 
   def layer(baseMetadata: MetaData,
             modeName: String,
