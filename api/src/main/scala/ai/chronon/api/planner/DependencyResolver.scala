@@ -9,6 +9,8 @@ object DependencyResolver {
   private def minus(partition: String, offset: Window)(implicit partitionSpec: PartitionSpec): String = {
     if (partition == null) return null
     if (offset == null) return null
+    // defense in depth: unbounded offsets mean "no bound", not BCE-era label arithmetic
+    if (offset.isUnboundedSentinel) return null
     partitionSpec.minus(partition, offset)
   }
 
@@ -57,7 +59,7 @@ object DependencyResolver {
     val inputEndMillis = queryRange.endMillis - Option(tableDep.getEndOffset).map(_.millis).getOrElse(0L)
 
     val offsetStart = Option(tableDep.getStartOffset)
-      .filterNot(_.length == Int.MaxValue)
+      .filterNot(_.isUnboundedSentinel)
       .map(offset => inputPartitionSpec.at(queryRange.startMillis - offset.millis))
       .orNull
     val offsetEnd = inputPartitionSpec.at(inputEndMillis - 1)
@@ -92,7 +94,7 @@ object DependencyResolver {
     val missingPartitions = requiredPartitions.filterNot(existingPartitions.contains)
     val missingPartitionRanges = PartitionRange.collapseToRange(missingPartitions)(requiredPartitionRange.partitionSpec)
 
-    val missingSteps = missingPartitionRanges.flatMap(_.steps(stepDays))
+    val missingSteps = missingPartitionRanges.flatMap(_.stepsByDays(stepDays))
     missingSteps
   }
 }

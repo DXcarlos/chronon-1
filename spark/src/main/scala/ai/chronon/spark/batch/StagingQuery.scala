@@ -58,7 +58,7 @@ class StagingQuery(stagingQueryConf: api.StagingQuery, endPartition: String, tab
     val exceptions = mutable.Buffer.empty[String]
     rangeToRun.foreach { stagingQueryUnfilledRange =>
       try {
-        val stepRanges = stepDays.map(stagingQueryUnfilledRange.steps).getOrElse(Seq(stagingQueryUnfilledRange))
+        val stepRanges = stepDays.map(stagingQueryUnfilledRange.stepsByDays).getOrElse(Seq(stagingQueryUnfilledRange))
         logger.info(s"Staging query ranges to compute: ${stepRanges.map { _.toString }.pretty}")
         stepRanges.zipWithIndex.foreach { case (range, index) =>
           val progress = s"| [${index + 1}/${stepRanges.size}]"

@@ -1,11 +1,63 @@
 package ai.chronon.api.planner
 import ai.chronon.api.{DataModel, ExecutionInfo, MetaData, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.api.Extensions._
-import ai.chronon.api.ScalaJavaConversions.JListOps
+import ai.chronon.api.ScalaJavaConversions.{JListOps, ListOps}
 
 import java.util
 
 object MetaDataUtils {
+
+  private val logger = org.slf4j.LoggerFactory.getLogger(getClass)
+
+  /** Sub-daily entity snapshots are supported but storage-expensive: every snapshot partition
+    * is a FULL copy of dimensional state, so an N-per-day grid multiplies storage and the
+    * partitions scanned by windowed aggregations by N - mostly for features that did not
+    * change between snapshots. If intraday entity state matters, prefer declaring mutations
+    * and TEMPORAL accuracy, which gives row-granularity freshness without re-materializing
+    * the dimension table N times a day.
+    */
+  def warnSubDailyEntitySnapshot(nodeName: String, spec: PartitionSpec): Unit =
+    if (!spec.isDaily) {
+      val perDay = spec.grid.partitionsPerDay
+      logger.warn(
+        s"$nodeName: sub-daily ENTITIES snapshots (${WindowUtils.millisToString(spec.spanMillis)} grid) " +
+          s"re-materialize the full dimensional state ${perDay}x per day, multiplying storage and " +
+          s"windowed-aggregation scan cost ${perDay}x. If intraday entity state matters, consider " +
+          "declaring a mutation stream and TEMPORAL accuracy instead, which tracks entity state at " +
+          "row granularity without re-materializing snapshots."
+      )
+    }
+
+  /** The snapshot grid a snapshot-accuracy join part lives on: the RHS groupBy's declared
+    * output grid (partition_interval/partition_offset), falling back to the coarsest grid the
+    * groupBy's sources declare (planner nodes strip executionInfo from embedded groupBys, and
+    * an entity source's table grid IS its snapshot grain), then to the join's grid when
+    * nothing is declared anywhere. Declaring the join's own grid is a no-op, so daily-RHS-
+    * under-daily-join reproduces the historical behavior exactly. Part tables are always
+    * partitioned by the join's partition column; only the RHS span/offset/format carry over.
+    */
+  def partSnapshotSpec(joinPart: ai.chronon.api.JoinPart, joinSpec: PartitionSpec): PartitionSpec = {
+    val declaredOutput = for {
+      md <- Option(joinPart.groupBy.metaData)
+      ei <- Option(md.executionInfo)
+      oti <- Option(ei.outputTableInfo)
+      _ <- Option(oti.partitionInterval) // only an explicit declaration counts
+    } yield oti.partitionSpec(joinSpec)
+
+    lazy val declaredSource = Option(joinPart.groupBy.sources)
+      .map(_.toScala.toSeq)
+      .getOrElse(Seq.empty)
+      .flatMap { s =>
+        Option(s.query)
+          .flatMap(q => Option(q.partitionInterval))
+          .map(_ => s.query.partitionSpec(joinSpec))
+      }
+      .sortBy(-_.spanMillis)
+      .headOption
+
+    val declared = declaredOutput.orElse(declaredSource).getOrElse(joinSpec)
+    if (declared.hasSameGrid(joinSpec)) joinSpec else declared.copy(column = joinSpec.column)
+  }
 
   def outputPartitionSpec(baseMetadata: MetaData, defaultSpec: PartitionSpec): PartitionSpec =
     (for {
@@ -49,10 +101,13 @@ object MetaDataUtils {
     * interval must be an equal-or-coarser multiple of the producer interval AND the two grids
     * must be congruent (offsets differ by a whole number of producer intervals).
     *
-    * @param snapshotAsOf snapshot-shaped edges where the engine binds the producer as-of the
-    *                     consumer boundary (e.g. join snapshot parts recomputed per left row
-    *                     time). Narrowing and grid misalignment are legal there — staleness,
-    *                     not missing data — so covering validation is skipped for them.
+    * @param snapshotAsOf snapshot-shaped edges where the engine binds the producer per row,
+    *                     as-of the row's time on the producer's declared grid (join snapshot
+    *                     parts: each left row binds the latest RHS snapshot with as-of
+    *                     boundary <= row ts). Binding is grid-independent there - snapshot-
+    *                     shaped narrowing AND widening are both fine, yielding bounded
+    *                     staleness rather than missing data - so neither covering nor
+    *                     congruence is validated for them.
     */
   def validateEdgeGrids(nodeName: String,
                         consumerSpec: PartitionSpec,
@@ -67,11 +122,12 @@ object MetaDataUtils {
 
     shape match {
       case EdgeShape.Snapshot if snapshotAsOf =>
-      // as-of binding: alignment is irrelevant, nothing to validate
+      // per-row as-of binding on the producer's declared grid: alignment is irrelevant,
+      // nothing to validate
 
       case EdgeShape.Snapshot =>
-        // First-cut seam: snapshot edges keep the covering rejection here until as-of binding
-        // is supported on this edge. Relaxing this branch later is additive.
+        // Non-as-of snapshot edges (e.g. a groupBy reading an entity snapshot source passes
+        // the producer's partitions through unchanged) keep the covering rejection.
         require(
           covering,
           s"Invalid partition interval for $nodeName: consumer interval ${WindowUtils.millisToString(consumerMillis)} " +

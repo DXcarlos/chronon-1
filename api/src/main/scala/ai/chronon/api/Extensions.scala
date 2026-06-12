@@ -70,6 +70,10 @@ object Extensions {
   }
 
   implicit class WindowOps(window: Window) {
+    // distinct from the display notion of `unbounded` below: a zero-length window is a valid
+    // no-op OFFSET, but Int.MaxValue means "no bound" and must never enter label arithmetic
+    def isUnboundedSentinel: Boolean = window.length == Int.MaxValue
+
     private def unbounded: Boolean = window.length == Int.MaxValue || window.length <= 0
 
     def str: String =

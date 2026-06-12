@@ -1,6 +1,6 @@
 package ai.chronon.api.planner
 
-import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, SourceOps, StringOps, WindowUtils}
+import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, SourceOps, StringOps, TableInfoOps, WindowUtils}
 import ai.chronon.api.ScalaJavaConversions.{IterableOps, IteratorOps}
 import ai.chronon.api._
 import ai.chronon.planner
@@ -118,10 +118,16 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       )(confOutputPartitionSpec)
       .setOutputNamespace(join.metaData.outputNamespace)
 
-    // Join part tables are join intermediates and must be partitioned in the join/left domain.
-    // The groupBy output spec still controls materialization and upload nodes, but merge reads these
-    // intermediates by the join partition range.
-    MetaDataUtils.applyPartitionSpec(metaData.executionInfo.outputTableInfo, confOutputPartitionSpec)
+    // Join part tables are join intermediates partitioned by the join's partition column, but
+    // snapshot-accuracy parts under an EVENTS left live at the RHS groupBy's declared snapshot
+    // grid (per-row as-of binding) - declare the true physical grid so coverage checks,
+    // watermarks and sensors read the table correctly. Everything else stays in the join/left
+    // domain.
+    val partTableSpec =
+      if (join.left.dataModel == DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT)
+        MetaDataUtils.partSnapshotSpec(joinPart, confOutputPartitionSpec)
+      else confOutputPartitionSpec
+    MetaDataUtils.applyPartitionSpec(metaData.executionInfo.outputTableInfo, partTableSpec)
 
     val copy = result.deepCopy()
     copy.joinPart.groupBy.unsetMetaData()
@@ -139,10 +145,17 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       val shouldShift = join.left.dataModel == DataModel.EVENTS &&
         jpNode.content.getJoinPart.joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT
 
-      // The engine (MergeJob) shifts snapshot-part reads back by one join output interval
-      // (dayStep.shift(-1) in the join spec), so sensors must require the same span-based
-      // shift - a hardcoded daily shift under-requires for sub-daily joins.
-      val shiftAmount = if (shouldShift) Some(confOutputPartitionSpec.intervalWindow) else None
+      // The engine (MergeJob) reads snapshot-part tables one RHS snapshot span back
+      // (JoinUtils.snapshotLookbackRange), so sensors must require the same span-based
+      // shift - a hardcoded daily shift would mis-require for sub-daily grids. The part
+      // node's outputTableInfo carries the RHS snapshot grid for snapshot parts.
+      val shiftAmount =
+        if (shouldShift)
+          Some(
+            jpNode.metaData.executionInfo.outputTableInfo
+              .partitionSpec(confOutputPartitionSpec)
+              .intervalWindow)
+        else None
       TableDependencies.fromTableInfo(jpNode.metaData.executionInfo.outputTableInfo, shift = shiftAmount)
     } :+
       TableDependencies.fromTableInfo(
@@ -366,10 +379,11 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
 object JoinPlanner {
 
   // Join parts are bound by left row time, not by partition-label covering:
-  //   - snapshot parts: MergeJob floors the left ts to the join grid and shifts the RHS back
-  //     one join span — as-of binding, so a finer join over a coarser snapshot groupBy is
-  //     staleness rather than missing data and is allowed (validated through the snapshot
-  //     as-of seam so future policy changes stay localized),
+  //   - snapshot parts: MergeJob binds each left row to the latest RHS snapshot whose as-of
+  //     boundary is <= the row's ts, ON THE RHS GROUPBY'S DECLARED GRID — binding is
+  //     grid-independent, so snapshot-shaped narrowing and widening are both legal (bounded
+  //     staleness rather than missing data); validated through the snapshot as-of seam so
+  //     future policy changes stay localized,
   //   - temporal parts: the engine recomputes from raw events with temporal accuracy, so the
   //     groupBy output grid does not constrain the join grid at all.
   def validateJoinPartGrids(join: Join, joinSpec: PartitionSpec): Unit = {
@@ -377,6 +391,11 @@ object JoinPlanner {
       joinParts.asScala.foreach { joinPart =>
         if (joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
           val groupBySpec = MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, joinSpec)
+          if (joinPart.groupBy.dataModel == DataModel.ENTITIES) {
+            MetaDataUtils.warnSubDailyEntitySnapshot(
+              s"join ${join.metaData.name}, part ${joinPart.groupBy.metaData.name}",
+              groupBySpec)
+          }
           MetaDataUtils.validateEdgeGrids(
             join.metaData.name,
             joinSpec,

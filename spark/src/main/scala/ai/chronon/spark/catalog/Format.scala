@@ -5,8 +5,8 @@ import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.functions.{col, from_unixtime, lit, min, max, pmod, unix_timestamp}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.functions.{col, lit, min, max}
+import org.apache.spark.sql.types.{DataType, LongType, NumericType, StringType, StructType, TimestampType}
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Success, Try}
@@ -19,23 +19,15 @@ trait Format {
 
   def tableTypeString: String = ""
 
-  // Epoch millis of the timestamp floored to the spec's partition grid (span + offset).
-  // Plain `date_format` truncation would yield off-grid labels for sub-daily specs
-  // (min ts 09:17 on a 3h grid must label as "09:00", not "09:17") and ignores offsetMillis.
-  private def gridFloorMillis(timestampColumn: Column, spec: PartitionSpec): Column = {
-    val millis = unix_timestamp(timestampColumn.cast("timestamp")) * lit(1000L)
-    val gridOffset = lit(Math.floorMod(spec.offsetMillis, spec.spanMillis))
-    millis - pmod(millis - gridOffset, lit(spec.spanMillis))
-  }
-
-  // label of the partition (grid interval) containing the timestamp
-  protected def partitionLabel(timestampColumn: Column, partitionSpec: PartitionSpec): Column =
-    from_unixtime(gridFloorMillis(timestampColumn, partitionSpec) / lit(1000L), partitionSpec.format)
-
-  // label of the last grid interval that completed at or before the timestamp
-  protected def lastCompleteLabel(timestampColumn: Column, partitionSpec: PartitionSpec): Column =
-    from_unixtime((gridFloorMillis(timestampColumn, partitionSpec) - lit(partitionSpec.spanMillis)) / lit(1000L),
-                  partitionSpec.format)
+  // Raw epoch millis of a (possibly aggregated) time column; label math happens Scala-side via
+  // PartitionSpec so grid flooring (span + offset) has exactly one implementation. Chronon's
+  // convention: numeric time columns hold epoch MILLIS already - casting a numeric through
+  // TimestampType would interpret it as seconds and scramble units by 1000x.
+  protected def epochMillisCol(c: Column, dt: DataType): Column =
+    dt match {
+      case _: NumericType => c.cast(LongType)
+      case _              => c.cast(TimestampType).cast(LongType) * lit(1000L)
+    }
 
   def createTable(tableName: String,
                   schema: StructType,
@@ -139,6 +131,34 @@ trait Format {
   // Does this format support sub partitions filters
   def supportSubPartitionsFilter: Boolean
 
+  /** Logical partitions for tables with no catalog partitions (e.g. clustered tables over a
+    * string ds column): the distinct values of the partition column. Compute planning
+    * (unfilledRanges, step runners) needs the SET of partitions, not just boundaries - an
+    * empty catalog listing would otherwise read as "everything missing" and force full
+    * recomputes of join-part/output tables that are fully populated. This is a single
+    * distinct aggregation and only runs on the empty-catalog path; string columns only,
+    * since timestamp-backed tables go through the timePartitioned/virtualPartitions path.
+    */
+  def scanDistinctPartitions(tableName: String, partitionColumn: String, partitionFilters: String)(implicit
+      sparkSession: SparkSession): List[String] = {
+    import sparkSession.implicits._
+    Try {
+      val df = sparkSession.read.table(tableName)
+      df.schema(partitionColumn).dataType match {
+        case StringType =>
+          val filtered = if (partitionFilters.isEmpty) df else df.where(partitionFilters)
+          filtered.select(col(partitionColumn)).distinct().as[String].collect().toList
+        case _ => List.empty
+      }
+    } match {
+      case Success(result) => result
+      case Failure(e) =>
+        logger.warn(
+          s"Failed to scan distinct partition values for $tableName.$partitionColumn: ${Option(e.getMessage).getOrElse("(no message)")}")
+        List.empty
+    }
+  }
+
   protected def metadataPartitions(tableName: String, partitionColumn: String)(implicit
       sparkSession: SparkSession): Option[List[String]] =
     Try(primaryPartitions(tableName, partitionColumn, "")(sparkSession)) match {
@@ -171,12 +191,15 @@ trait Format {
             .collect()
             .headOption
             .flatMap(v => Option(v))
-        case _ =>
-          df.select(lastCompleteLabel(max(col(partitionColumn)), partitionSpec).as("last_partition"))
-            .as[String]
+        case dt =>
+          // last COMPLETE partition: the one before the partition containing the max timestamp -
+          // identical to DATE(MAX) - 1 day for daily, but grid-correct (span + offset) for
+          // sub-daily and offset-anchored specs
+          df.select(epochMillisCol(max(col(partitionColumn)), dt).as("max_millis"))
             .collect()
             .headOption
-            .flatMap(v => Option(v))
+            .filterNot(_.isNullAt(0))
+            .map(row => partitionSpec.before(partitionSpec.at(row.getLong(0))))
       }
     } match {
       case Success(result) => result
@@ -203,12 +226,12 @@ trait Format {
             .collect()
             .headOption
             .flatMap(v => Option(v))
-        case _ =>
-          df.select(partitionLabel(min(col(partitionColumn)), partitionSpec).as("first_partition"))
-            .as[String]
+        case dt =>
+          df.select(epochMillisCol(min(col(partitionColumn)), dt).as("min_millis"))
             .collect()
             .headOption
-            .flatMap(v => Option(v))
+            .filterNot(_.isNullAt(0))
+            .map(row => partitionSpec.at(row.getLong(0)))
       }
     } match {
       case Success(result) => result
@@ -241,14 +264,14 @@ trait Format {
   @deprecated("Use lastAvailablePartition instead", "0.1.0")
   def maxTimestampDate(tableName: String, timestampColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] = {
-    import sparkSession.implicits._
     Try {
       val df = sparkSession.read.table(tableName)
-      df.select(partitionLabel(max(col(timestampColumn)), partitionSpec).as("max_date"))
-        .as[String]
+      val colType = df.schema(timestampColumn).dataType
+      df.select(epochMillisCol(max(col(timestampColumn)), colType).as("max_millis"))
         .collect()
         .headOption
-        .flatMap(v => Option(v))
+        .filterNot(_.isNullAt(0))
+        .map(row => partitionSpec.at(row.getLong(0)))
     } match {
       case Success(result) => result
       case Failure(e) =>
@@ -263,19 +286,24 @@ trait Format {
     import sparkSession.implicits._
     Try {
       val df = sparkSession.read.table(tableName)
+      val colType = df.schema(timestampColumn).dataType
       val result = df
         .select(
-          partitionLabel(min(col(timestampColumn)), partitionSpec).as("min_date"),
-          lastCompleteLabel(max(col(timestampColumn)), partitionSpec).as("max_date")
+          epochMillisCol(min(col(timestampColumn)), colType).as("min_millis"),
+          epochMillisCol(max(col(timestampColumn)), colType).as("max_millis")
         )
-        .as[(String, String)]
+        .as[(Option[Long], Option[Long])]
         .collect()
         .headOption
 
       result
-        .flatMap { case (minDate, maxDate) =>
-          if (minDate == null || maxDate == null) None
-          else Some(partitionSpec.expandRange(minDate, maxDate))
+        .flatMap {
+          // the partition containing max is still in flight: enumerate complete partitions only
+          case (Some(minMillis), Some(maxMillis)) =>
+            Some(
+              partitionSpec.expandRange(partitionSpec.at(minMillis),
+                                        partitionSpec.before(partitionSpec.at(maxMillis))))
+          case _ => None
         }
         .getOrElse(List.empty)
     } match {

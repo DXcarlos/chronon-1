@@ -197,7 +197,8 @@ class Join(joinConf: api.Join,
       val partTable = joinConfCloned.partOutputTable(joinPart)
       val effectiveRange =
         if (joinConfCloned.left.dataModel != ENTITIES && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
-          leftRange.shiftPartitions(-1)
+          // part tables live at the RHS groupBy's declared snapshot grid
+          JoinUtils.snapshotLookbackRange(leftRange, JoinUtils.partSnapshotSpec(joinPart))
         } else {
           leftRange
         }

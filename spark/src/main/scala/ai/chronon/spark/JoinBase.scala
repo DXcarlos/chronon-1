@@ -95,18 +95,21 @@ abstract class JoinBase(val joinConfCloned: api.Join,
     }
     val keyRenamedRightDf = prefixedRightDf.select(newColumns: _*)
 
-    // adjust join keys
+    // adjust join keys: snapshot binding is per row ON THE RHS GROUPBY'S DECLARED GRID - a row
+    // at time T binds the latest RHS snapshot whose as-of boundary is <= T, independent of the
+    // join's own grid. Daily RHS under a daily join degenerates to the historical behavior.
+    lazy val partSpec = JoinUtils.partSnapshotSpec(joinPart)
     val joinableRightDf = if (additionalKeys.contains(Constants.TimePartitionColumn)) {
-      // increment one day to align with left side ts_ds
-      // because one day was decremented from the partition range for snapshot accuracy
+      // snapshot partition p holds the aggregate as-of epoch(p) + one RHS span; relabel to
+      // the as-of boundary so it matches the left rows' RHS-grid floor
       keyRenamedRightDf
         .withColumn(
           Constants.TimePartitionColumn,
           date_format(
             from_unixtime(
-              unix_timestamp(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
-                tableUtils.partitionSpec.spanMillis / 1000),
-            tableUtils.partitionSpec.format
+              unix_timestamp(col(tableUtils.partitionColumn), partSpec.format) +
+                partSpec.spanMillis / 1000),
+            partSpec.format
           )
         )
         .drop(tableUtils.partitionColumn)
@@ -114,13 +117,20 @@ abstract class JoinBase(val joinConfCloned: api.Join,
       keyRenamedRightDf
     }
 
+    // per-joinPart left binding key: floor(left.ts, RHS grid)
+    val joinableLeftDf = if (additionalKeys.contains(Constants.TimePartitionColumn)) {
+      leftDf.withTimeBasedColumn(Constants.TimePartitionColumn, spec = partSpec)
+    } else {
+      leftDf
+    }
+
     logger.info(s"""
                |Join keys for ${joinPart.groupBy.metaData.name}: ${keys.mkString(", ")}
                |Left Schema:
-               |${leftDf.schema.pretty}
+               |${joinableLeftDf.schema.pretty}
                |Right Schema:
                |${joinableRightDf.schema.pretty}""".stripMargin)
-    val joinedDf = coalescedJoin(leftDf, joinableRightDf, keys)
+    val joinedDf = coalescedJoin(joinableLeftDf, joinableRightDf, keys)
     logger.info(s"""Final Schema:
                |${joinedDf.schema.pretty}
                |""".stripMargin)

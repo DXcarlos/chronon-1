@@ -773,16 +773,35 @@ object GroupBy {
       case ENTITIES => SourceDataProfile(queryStart, sourceStartPartition, effectiveEnd)
       case EVENTS =>
         if (Option(source.getEvents.isCumulative).getOrElse(false)) {
+          // lastAvailablePartition normalizes grid-matching labels to the global format;
+          // translate back so all labels in this method stay in the source's spec
           lazy val latestAvailable: Option[String] =
-            tableUtils.lastAvailablePartition(source.table,
-                                              subPartitionFilters = source.subPartitionFilters,
-                                              tablePartitionSpec = Option(sourcePartitionSpec))
+            tableUtils
+              .lastAvailablePartition(source.table,
+                                      subPartitionFilters = source.subPartitionFilters,
+                                      tablePartitionSpec = Option(sourcePartitionSpec))
+              .map { p =>
+                if (sourcePartitionSpec.hasSameGrid(tableUtils.partitionSpec) && sourcePartitionSpec != tableUtils.partitionSpec)
+                  tableUtils.partitionSpec.translate(p, sourcePartitionSpec)
+                else p
+              }
           val latestValid: String = Option(sourceEndPartition).getOrElse(latestAvailable.orNull)
           SourceDataProfile(latestValid, latestValid, latestValid)
         } else {
           val minQuery = sourcePartitionSpec.before(queryStart)
+          // sawtooth windows round their start down to the tail hop grid (e.g. daily hops for
+          // a 14d window), so the scan must cover the hop-aligned tail - not just the raw
+          // minQuery - window instant. A no-op for daily grids, where minQuery - window is
+          // already day-aligned; under sub-daily grids it extends the scan back by at most
+          // one tail hop.
           val windowStart: String =
-            window.filterNot(_.length == Int.MaxValue).map(sourcePartitionSpec.minus(minQuery, _)).orNull
+            window
+              .filterNot(_.isUnboundedSentinel)
+              .map { w =>
+                val raw = sourcePartitionSpec.partitionStartMillis(minQuery) - w.millis
+                sourcePartitionSpec.at(TsUtils.round(raw, FiveMinuteResolution.calculateTailHop(w)))
+              }
+              .orNull
           lazy val sourceStart = Option(sourceStartPartition).orNull
           SourceDataProfile(windowStart, sourceStart, effectiveEnd)
         }

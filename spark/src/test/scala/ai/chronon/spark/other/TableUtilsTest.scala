@@ -758,4 +758,63 @@ class TableUtilsTest extends AnyFlatSpec {
     spark.sql(s"DROP DATABASE IF EXISTS $dbName")
   }
 
+  it should "derive coverage from a value scan for unpartitioned (clustered-style) tables" in {
+    // an unpartitioned table with a string ds column: no catalog partitions exist, so coverage
+    // must come from the MAX(ds) scan fallback - this is the join-part reuse path for
+    // clustered warehouse tables
+    import spark.implicits._
+    val tableName = "db.unpartitioned_coverage_table"
+    spark.sql("CREATE DATABASE IF NOT EXISTS db")
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    Seq(("2024-01-01", "a"), ("2024-01-02", "b"), ("2024-01-03", "c"))
+      .toDF("ds", "id")
+      .write
+      .saveAsTable(tableName)
+
+    // logical partitions come from the distinct values of the ds column, so compute
+    // planning (unfilledRanges, step runners) sees coverage instead of recomputing
+    assertEquals(List("2024-01-01", "2024-01-02", "2024-01-03"), tableUtils.partitions(tableName).sorted)
+
+    val watermark = tableUtils.dataWatermarkMillis(tableName)
+    assertTrue(watermark.isDefined)
+    // last partition 2024-01-03 covers through 2024-01-04 00:00
+    assertEquals(PartitionSpec.daily.epochMillis("2024-01-04"), watermark.get)
+
+    assertTrue(tableUtils.tableCoversRange(tableName, PartitionRange("2024-01-02", "2024-01-03")))
+    assertFalse(tableUtils.tableCoversRange(tableName, PartitionRange("2024-01-02", "2024-01-04")))
+
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+  }
+
+  it should "compute watermarks in time space for sub-daily partition specs" in {
+    // dash-separated format: the Hive catalog percent-escapes colons in partition values
+    // ('04:00' lists as '04%3A00'), which is exactly the format-hygiene warning on
+    // PartitionSpec construction
+    val subDailySpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000L, 60 * 60 * 1000L)
+    import spark.implicits._
+    val tableName = "db.sub_daily_coverage_table"
+    spark.sql("CREATE DATABASE IF NOT EXISTS db")
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    Seq(("2024-01-05-01-00", "a"), ("2024-01-05-04-00", "b"))
+      .toDF("ds", "id")
+      .write
+      .partitionBy("ds")
+      .saveAsTable(tableName)
+
+    val watermark = tableUtils.dataWatermarkMillis(tableName, Some(subDailySpec))
+    // last partition 04:00 covers through 07:00
+    assertEquals(subDailySpec.epochMillis("2024-01-05-07-00"), watermark.get)
+
+    assertTrue(
+      tableUtils.tableCoversRange(tableName,
+                                  PartitionRange("2024-01-05-04-00", "2024-01-05-04-00")(subDailySpec),
+                                  Some(subDailySpec)))
+    assertFalse(
+      tableUtils.tableCoversRange(tableName,
+                                  PartitionRange("2024-01-05-07-00", "2024-01-05-07-00")(subDailySpec),
+                                  Some(subDailySpec)))
+
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+  }
+
 }

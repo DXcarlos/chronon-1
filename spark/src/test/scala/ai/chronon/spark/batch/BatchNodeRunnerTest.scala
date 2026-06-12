@@ -385,10 +385,12 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     statuses.foreach { tps =>
       assertTrue("Should be ready", tps.ready)
       assertTrue("Should have last available partition", tps.lastAvailablePartition.isDefined)
-      // Input table status is reported in the dependency table's partition domain.
+      // Same-grain input labels keep the historical global-format presentation in diagnostics,
+      // and readiness is expressed in time space: coverage of the required yyyyMMdd partition
+      // ends at the next midnight.
       val lastPart = tps.lastAvailablePartition.get
-      assertEquals(yesterdayAlt, lastPart)
-      assertEquals(yesterdayAlt, tps.requiredEnd)
+      assertEquals(yesterday, lastPart)
+      assertEquals(PartitionSpec.daily.epochMillis(today) - 1, tps.requiredCoverageEnd)
     }
   }
 

@@ -76,6 +76,11 @@ object TableDependencies {
       // we go by the amount of data that is available in the source.
       case (DataModel.EVENTS, None, _) => null
 
+      // an unbounded aggregation window means the same thing as no max window: every available
+      // partition matters. It must NOT enter label arithmetic - Int.MaxValue days lands in BCE
+      // territory whose year-of-era labels sort BEFORE real dates and poison range minimums.
+      case (DataModel.EVENTS, Some(aggregationWindow), _) if aggregationWindow.isUnboundedSentinel => null
+
       case (DataModel.EVENTS, Some(aggregationWindow), _) =>
         lagOpt match {
           case Some(lag) => WindowUtils.plus(aggregationWindow, lag)

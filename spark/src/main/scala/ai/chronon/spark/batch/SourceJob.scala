@@ -48,7 +48,7 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
       .getOrElse(source)
 
     // This job benefits from a step day of 1 to avoid needing to shuffle on writing output (single partition)
-    dateRange.steps(partitionCount = 1).foreach { dayStep =>
+    dateRange.stepsByDays(1).foreach { dayStep =>
       val df = tableUtils.scanDf(skewFilteredSource.query,
                                  skewFilteredSource.table,
                                  Some((Map(tableUtils.partitionColumn -> null) ++ timeProjection).toMap),

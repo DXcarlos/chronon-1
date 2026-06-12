@@ -16,7 +16,7 @@
 
 package ai.chronon.spark.catalog
 
-import ai.chronon.api.{Constants, PartitionRange, PartitionSpec, Query, QueryUtils}
+import ai.chronon.api.{Constants, PartitionRange, PartitionSpec, Query, QueryUtils, TsUtils}
 import ai.chronon.api.ColorPrinter.ColorString
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions._
@@ -141,7 +141,14 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
         } else {
           logger.info(
             s"Getting partitions for ${tableName} with partitionColumnName ${effectivePartColumn} and subpartitions: ${subPartitionsFilter}")
-          format.primaryPartitions(tableName, effectivePartColumn, rangeWheres, subPartitionsFilter)(sparkSession)
+          val catalogPartitions =
+            format.primaryPartitions(tableName, effectivePartColumn, rangeWheres, subPartitionsFilter)(sparkSession)
+          // clustered tables have no catalog partitions but real logical ones: fall back to
+          // the distinct values of the partition column so compute planning sees coverage
+          // instead of recomputing fully-populated tables (sub-partition filters can't be
+          // honored on this path, so it only fires without them)
+          if (catalogPartitions.nonEmpty || subPartitionsFilter.nonEmpty) catalogPartitions
+          else format.scanDistinctPartitions(tableName, effectivePartColumn, rangeWheres)(sparkSession)
         }
       })
       .map { partitions =>
@@ -156,8 +163,22 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
       }
       .getOrElse(List.empty)
 
-    partitions
+    if (!timePartitioned) {
+      tablePartitionSpec
+        .map(ps => partitions.map(toGlobalLabel(_, ps)))
+        .getOrElse(partitions)
+    } else {
+      partitions
+    }
   }
+
+  /** Listed labels are normalized to the global spec's format only when the grids match (the
+    * legacy yyyyMMdd-table-under-yyyy-MM-dd-global case, which long-standing callers expect);
+    * labels on a different grid stay in their own spec - translating them into a coarser
+    * global spec would floor them and collapse distinct partitions into one.
+    */
+  private def toGlobalLabel(label: String, tableSpec: PartitionSpec): String =
+    if (tableSpec.hasSameGrid(partitionSpec)) tableSpec.translate(label, partitionSpec) else label
 
   def maxTimestampDate(tableName: String,
                        timestampColumn: String,
@@ -168,14 +189,36 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
       .flatMap(_.maxTimestampDate(tableName, timestampColumn, effectiveSpec)(sparkSession))
   }
 
-  def tableCoversRange(table: String, range: PartitionRange): Boolean = {
+  /** The table's last partition label (in its own spec - no translation shim) and the
+    * exclusive epoch upper bound of the time its data covers. Coverage questions are answered
+    * in time space - spec-free - rather than by comparing labels across specs.
+    *
+    * Cost contract: readiness checks must stay metadata-fast. This is ONE catalog-metadata
+    * read; the value scan inside Format.lastAvailablePartition only fires for tables with no
+    * catalog partitions at all (clustered / timestamp-backed), where a query is the only
+    * possible signal. The millis arithmetic is local.
+    */
+  def dataWatermark(tableName: String, tableSpec: Option[PartitionSpec] = None): Option[(String, Long)] = {
+    val spec = tableSpec.getOrElse(partitionSpec)
+    tableFormatProvider
+      .readFormat(tableName)
+      .flatMap(_.lastAvailablePartition(tableName, spec.column, spec)(sparkSession))
+      .map(label => (label, spec.partitionEndMillis(label)))
+  }
+
+  def dataWatermarkMillis(tableName: String, tableSpec: Option[PartitionSpec] = None): Option[Long] =
+    dataWatermark(tableName, tableSpec).map(_._2)
+
+  def tableCoversRange(table: String, range: PartitionRange, tableSpec: Option[PartitionSpec] = None): Boolean = {
     try {
-      lastAvailablePartition(table) match {
-        case Some(maxPartition) =>
-          val covers = maxPartition >= range.end
+      dataWatermarkMillis(table, tableSpec) match {
+        case Some(watermark) =>
+          // coverageEnd is inclusive-millis; the watermark is exclusive
+          val covers = watermark > range.coverageEnd
           if (!covers) {
             logger.info(
-              s"Table $table does not cover range: last available partition $maxPartition < required end ${range.end}")
+              s"Table $table does not cover range: data watermark ${TsUtils.toStr(watermark)} <= " +
+                s"required coverage end ${TsUtils.toStr(range.coverageEnd)}")
           }
           covers
         case None =>
@@ -220,10 +263,10 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
       Format.pickMaxPartition(
         partitions(tableName, subPartitionFilters, partitionRange, tablePartitionSpec = tablePartitionSpec))
     } else {
-      val result = tableFormatProvider
+      tableFormatProvider
         .readFormat(tableName)
         .flatMap(_.lastAvailablePartition(tableName, effectivePartColumn, effectiveSpec)(sparkSession))
-      result
+        .map(toGlobalLabel(_, effectiveSpec))
     }
   }
 
@@ -242,10 +285,10 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
         ))
     } else {
       val effectivePartColumn = partitionSpec.column
-      val result = tableFormatProvider
+      tableFormatProvider
         .readFormat(tableName)
         .flatMap(_.firstAvailablePartition(tableName, effectivePartColumn, partitionSpec)(sparkSession))
-      result
+        .map(toGlobalLabel(_, partitionSpec))
     }
   }
 
@@ -393,13 +436,13 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
     }
   }
 
-  def chunk(partitions: Set[String]): Seq[PartitionRange] = {
+  def chunk(partitions: Set[String], spec: PartitionSpec = partitionSpec): Seq[PartitionRange] = {
     val sortedDates = partitions.toSeq.sorted
     sortedDates.foldLeft(Seq[PartitionRange]()) { (ranges, nextDate) =>
-      if (ranges.isEmpty || partitionSpec.after(ranges.last.end) != nextDate) {
-        ranges :+ PartitionRange(nextDate, nextDate)(partitionSpec)
+      if (ranges.isEmpty || spec.after(ranges.last.end) != nextDate) {
+        ranges :+ PartitionRange(nextDate, nextDate)(spec)
       } else {
-        val newRange = PartitionRange(ranges.last.start, nextDate)(partitionSpec)
+        val newRange = PartitionRange(ranges.last.start, nextDate)(spec)
         ranges.dropRight(1) :+ newRange
       }
     }
@@ -432,8 +475,13 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
            |""".stripMargin
       )
 
-      val rangeSpec = outputPartitionRange.partitionSpec
-      PartitionRange(rangeSpec.shiftPartitions(inputStart.get, inputToOutputShift), outputPartitionRange.end)(rangeSpec)
+      // firstAvailablePartition normalizes grid-matching labels to the global format, so the
+      // shift must use the spec the label actually arrives in
+      val autoSpec =
+        if (outputPartitionRange.partitionSpec.hasSameGrid(partitionSpec)) partitionSpec
+        else outputPartitionRange.partitionSpec
+      PartitionRange(autoSpec.shiftPartitions(inputStart.get, inputToOutputShift),
+                     autoSpec.normalize(outputPartitionRange.end, outputPartitionRange.partitionSpec))(autoSpec)
     } else {
 
       outputPartitionRange
@@ -443,11 +491,21 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
     // spec (e.g. yyyyMMdd) while outputExisting is read in the default spec (yyyy-MM-dd).
     // Without canonicalizing first, the set-diffs below see zero overlap and silently
     // collapse the join's compute range to nothing.
+    // Ranges on a different grid are NOT canonicalized: translating into a coarser global
+    // spec would floor their labels and collapse distinct partitions - they stay in their
+    // own spec.
     val canonicalRange =
       if (validPartitionRange.partitionSpec == partitionSpec) validPartitionRange
-      else validPartitionRange.coveringRange(partitionSpec)
+      else if (validPartitionRange.partitionSpec.hasSameGrid(partitionSpec))
+        validPartitionRange.coveringRange(partitionSpec)
+      else validPartitionRange
 
-    val outputExisting = partitions(outputTable)
+    // all label math below happens in this spec
+    val workingSpec = canonicalRange.partitionSpec
+
+    val outputExisting =
+      if (workingSpec.hasSameGrid(partitionSpec)) partitions(outputTable)
+      else partitions(outputTable, tablePartitionSpec = Some(workingSpec))
     // To avoid recomputing partitions removed by retention mechanisms we will not fill holes in the very beginning of the range
     // If a user fills a new partition in the newer end of the range, then we will never fill any partitions before that range.
     // We instead log a message saying why we won't fill the earliest hole.
@@ -472,14 +530,21 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
         inputPartitionSpec <- inputPartitionSpecs;
         table <- inputTables;
         subPartitionFilters = inputTableToSubPartitionFiltersMap.getOrElse(table, Map.empty);
-        inputRange = outputPartitionRange.coveringRange(inputPartitionSpec);
-        partitionStr <- partitions(table,
-                                   subPartitionFilters,
-                                   Option(inputRange),
-                                   tablePartitionSpec = Some(inputPartitionSpec))
+        // the listing filter must be expressed in the INPUT table's spec: a sub-daily output
+        // range's labels would otherwise exclude the coarser input partitions that cover it
+        // (e.g. ds >= '2024-01-04 22:00' excludes daily '2024-01-04')
+        listed = partitions(table,
+                            subPartitionFilters,
+                            Option(outputPartitionRange.coveringRange(inputPartitionSpec)),
+                            tablePartitionSpec = Some(inputPartitionSpec));
+        // partitions(..., tablePartitionSpec = Some(...)) returns values in the TableUtils
+        // default spec when the input grid matches it, and raw input-spec labels otherwise
+        listedSpec = if (inputPartitionSpec.hasSameGrid(partitionSpec)) partitionSpec else inputPartitionSpec;
+        // honest cross-grain coverage: a coarser input label covers the finer outputs inside
+        // it; finer inputs cover a coarser output only when ALL covering labels exist
+        covered <- PartitionRange.coveredPartitions(listed, listedSpec, workingSpec)
       ) yield {
-        val shifted = inputPartitionSpec.shiftPartitions(partitionStr, inputToOutputShift)
-        inputPartitionSpec.translate(shifted, partitionSpec)
+        workingSpec.shiftPartitions(covered, inputToOutputShift)
       }
 
     val inputMissing = inputTables
@@ -487,7 +552,7 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
       .getOrElse(Set.empty)
 
     val missingPartitions = outputMissing -- inputMissing
-    val missingChunks = chunk(missingPartitions)
+    val missingChunks = chunk(missingPartitions, workingSpec)
 
     logger.info(s"""
                |Unfilled range computation:

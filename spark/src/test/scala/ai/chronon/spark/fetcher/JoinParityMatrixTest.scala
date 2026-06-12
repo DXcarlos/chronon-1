@@ -22,51 +22,47 @@ import scala.concurrent.{Await, ExecutionContext}
 
 /** Online/offline join-parity matrix with hand-computed golden values.
   *
-  * The matrix is accuracy/cadence x data model — six cells, spread over two joins with EVENTS
-  * left sources:
+  * The matrix is accuracy/cadence x data model — six cells, ALL hosted by a single join whose
+  * left/output partition grid is 3h with a 1h offset (partitions ..., 22:00, 01:00, 04:00, ...,
+  * labels = interval starts):
   *
   * {{{
   *                          EVENTS                            ENTITIES
   *   TEMPORAL               sawtooth windows over events      mutations-based as-of state
-  *   SNAPSHOT daily         previous-day snapshot binding     previous-day snapshot binding
+  *   SNAPSHOT daily         per-row daily PIT binding         per-row daily PIT binding
   *   SNAPSHOT 3h offset 1h  as-of binding by left row time    as-of binding by left row time
   * }}}
   *
-  * Cells 1 (temporal events), 2 (snapshot daily events), 5 (snapshot 3h events) and
-  * 6 (snapshot 3h entities) ride on a sub-daily join whose left/output partition grid is
-  * 3h with a 1h offset (partitions ..., 22:00, 01:00, 04:00, ..., labels = interval starts).
-  * Cells 3 (temporal entities / mutations) and 4 (snapshot daily entities) ride on a classic
-  * daily join: the engine's MergeJob binds snapshot/mutation entity partitions through a
-  * single-join-span shift, so daily entity tables can only be bound by a daily-grid join
-  * (see "engine binding convention" below); the daily join is the engine-supported home for
-  * those two cells, and the sub-daily join carries a 3h+1h-partitioned entity table instead.
+  * ==Engine snapshot binding convention (read from MergeJob / JoinPartJob / JoinUtils)==
   *
-  * ==Engine snapshot binding convention (read from MergeJob / SourceJob / Extensions)==
+  * For an EVENTS left and a SNAPSHOT-accuracy join part, binding is per row ON THE RHS
+  * GROUPBY'S DECLARED GRID (its partition_interval/partition_offset; the join's grid when
+  * nothing is declared):
+  *  - JoinPartJob materializes the join part table at RHS-grid partition labels p, where
+  *    partition p holds the aggregate/state as-of epoch(p) + one RHS span
+  *    (JoinUtils.snapshotLookbackRange).
+  *  - MergeJob stamps each left row with TimePartitionColumn = floor(left.ts, RHS grid) and
+  *    relabels right ds + one RHS span before the equality join.
   *
-  * For an EVENTS left and a SNAPSHOT-accuracy join part:
-  *  - SourceJob/Extensions.withTimeBasedColumn stamps each left row with
-  *    TimePartitionColumn = floor(left.ts to the JOIN's partition grid, including the grid
-  *    offset) — e.g. ts 12:07 on the 3h+1h grid floors to "2023-08-14 10:00".
-  *  - JoinPartJob materializes the join part table at JOIN-grid partition labels p, where
-  *    partition p holds the aggregate as-of epoch(p) + joinSpan (snapshotEvents shifts end
-  *    times by one span; snapshotEntities passes entity partitions through unchanged).
-  *  - MergeJob scans the part table one join span back (dayStep.shift(-1)) and relabels
-  *    right ds + joinSpan as TimePartitionColumn before the equality join.
-  *
-  * Net effect: a left row binds the snapshot value as-of floor(left.ts, joinGrid) — e.g.
-  * left ts 12:07 -> grid floor 10:00 -> bound part-table partition 07:00 (one span back) ->
-  * value = aggregate over events with ts < 10:00. For RHS sources that are *coarser* than
-  * the join grid (the daily-events cell under the 3h+1h join), as-of correctness relies on
-  * the source declaring no timeColumn: the engine then synthesizes ts = partition end - 1ms,
-  * so the binding becomes "latest source partition COMPLETE at the join-grid floor", which
-  * is exactly what online serving (whole-partition batch uploads) can reproduce. A coarse
-  * snapshot source with a real timeColumn would diverge from online (offline would see
-  * intra-partition events past the upload boundary) — that is why the daily events fixture
-  * deliberately has no ts column.
+  * Net effect: a left row at time T binds the latest RHS snapshot whose as-of boundary is
+  * <= T — never a future snapshot, staleness bounded by one RHS span — INDEPENDENT of the
+  * join's own grid. The daily cells under this 3h+1h join bind per row on the DAILY grid:
+  * pre-midnight rows of a midnight-straddling left partition see the old daily snapshot and
+  * post-midnight rows the new one (see the u3 rows below). For RHS sources that are coarser
+  * than the join grid (the daily events cell), as-of correctness additionally relies on the
+  * source declaring no timeColumn: the engine synthesizes ts = partition end - 1ms, so the
+  * binding becomes "latest source partition COMPLETE at the row's RHS-grid floor" — exactly
+  * what online whole-partition batch uploads reproduce.
   *
   * Online semantics being mirrored: SNAPSHOT parts serve the batch-upload value as-of the
   * upload's batch-end (epoch of the groupBy-grid floor of endDs); TEMPORAL parts serve
   * batch IR as-of batch-end merged with streaming rows in [batchEnd, queryTs).
+  *
+  * The 14d temporal window additionally locks the SawtoothMutationAggregator tail fix: its
+  * daily tail hops must retain events between the hop-aligned tail (floor(batchEnd - 14d to
+  * the day grid)) and the raw batchEnd - 14d instant for the NON-midnight batch ends used
+  * here (10:00/13:00). The 10000 txn @ 2023-07-31 04:00 sits exactly in that gap — a
+  * pre-fix upload would drop it from the batch IR while the offline sawtooth keeps it.
   */
 class JoinParityMatrixTest extends SparkTestBase with Matchers {
 
@@ -79,28 +75,31 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
 
   private val sixHours = new Window(6, TimeUnit.HOURS)
   private val oneDay = new Window(1, TimeUnit.DAYS)
+  private val fourteenDays = new Window(14, TimeUnit.DAYS)
 
   // All timestamps UTC. ts("2023-08-14 12:07") => epoch millis.
   private def ts(arg: String): Long = TsUtils.datetimeToTs(s"$arg:00")
 
   // ---------------------------------------------------------------------------------------------
-  // Sub-daily join: query timestamps (left rows). Left partitions are on the 3h+1h grid.
+  // Query timestamps (left rows). Left partitions are on the 3h+1h grid.
   // ---------------------------------------------------------------------------------------------
   private val T_U1_OFF_GRID = ts("2023-08-14 12:07") // off-grid: floors to 10:00
   private val T_U2_POST_STREAM = ts("2023-08-14 12:30") // after the 12:20 streaming event
   private val T_U1_ON_GRID = ts("2023-08-14 13:00") // exactly on a 3h+1h grid boundary
   private val T_U3_POST_MIDNIGHT = ts("2023-08-14 00:30") // floors across midnight to 2023-08-13 22:00
+  private val T_U3_PRE_MIDNIGHT = ts("2023-08-13 23:30") // SAME left partition as above, pre-midnight
+  private val T_U2_PRE_MUTATION = ts("2023-08-14 09:00") // before u2's 10:00 mutation; phase-0 online
 
   case class Golden(user: String, tsMillis: Long, leftDs: String, features: Map[String, Any])
 
   // ---------------------------------------------------------------------------------------------
-  // Sub-daily join goldens. Derivations reference the fixture tables created in
-  // generateSubDailyJoin below. Engine convention: snapshot cells bind as-of
-  // floor(left.ts, 3h+1h grid); temporal cell is sawtooth-accurate at left.ts.
+  // Goldens. Derivations reference the fixture tables created in generateJoin below.
+  // Engine convention: snapshot cells bind per row as-of floor(left.ts, RHS grid) — the
+  // 3h+1h grid for the snap3/ent3 cells, the DAILY grid for the snapd/entd/mut cells.
+  // The temporal events cell is sawtooth-accurate at left.ts.
   // ---------------------------------------------------------------------------------------------
-  private val subDailyGoldens = Seq(
-    // u1 @ 12:07 (off-grid) -> 3h+1h grid floor = 10:00 -> snapshot part partition = 07:00 (one
-    // span back) -> snapshot values as-of 10:00.
+  private val goldens = Seq(
+    // u1 @ 12:07 (off-grid) -> 3h+1h grid floor = 10:00, daily grid floor = 2023-08-14.
     Golden(
       "u1",
       T_U1_OFF_GRID,
@@ -110,9 +109,14 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         //   5 @ 08:15 + 11 @ 11:30 = 16. The 1000 @ 2023-08-13 11:00 fell out of the 1d window
         //   (~1h before the window tail), and 13 @ 12:20 belongs to u2.
         "tmp_user_id_txn_amount_sum_1d" -> 16L,
-        // daily-events snapshot (no timeColumn => engine ts = partition end - 1ms): daily
-        // partitions complete by 10:00 are ds <= 2023-08-13 -> SUM = 4. The 50 in ds=2023-08-14
-        // (completes at 08-15 00:00) is excluded even though it is scanned by the join part job.
+        // 14d window with DAILY hops: tail = floor(12:07 - 14d, 1d) = 2023-07-31 00:00, so the
+        // 10000 @ 2023-07-31 04:00 hop-gap event IS in the window (the aggregator-fix lock):
+        //   10000 + 1000 @ 08-13 11:00 + 5 @ 08:15 + 11 @ 11:30 = 11016.
+        "tmp_user_id_txn_amount_sum_14d" -> 11016L,
+        // daily-events snapshot, PER-ROW DAILY binding (no timeColumn => engine ts = partition
+        // end - 1ms): daily floor(12:07) = 2023-08-14 -> binds snapshot as-of 08-14 00:00 ->
+        // partitions complete by then are ds <= 2023-08-13 -> SUM = 4. The 50 in ds=2023-08-14
+        // (completes at 08-15 00:00) is excluded.
         "snapd_user_id_amount_d_sum" -> 4L,
         // 3h+1h events snapshot as-of 10:00 (real ts): 15 @ 08-13 23:40 + 20 @ 02:30 +
         // 35 @ 05:30 + 100 @ 08:30 = 170; 1000 @ 11:30 is after the 10:00 bound.
@@ -120,12 +124,18 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         // 6h window as-of 10:00 => events with ts in [04:00, 10:00): 35 @ 05:30 + 100 @ 08:30 = 135.
         "snap3_user_id_amount_3h_sum_6h" -> 135L,
         // 3h+1h entity snapshot: binds entity partition 07:00 = state as-of 10:00 -> u1 balance 15.
-        "ent3_user_id_balance_3h" -> 15L
+        "ent3_user_id_balance_3h" -> 15L,
+        // temporal entities (daily mutations): batch state as-of 08-14 00:00 = snapshot ds 08-13
+        // (u1: 4 + 3 = 7), then 08-14 mutations with mutation_ts <= 12:07: insert 2 @ 06:00,
+        // update 2 -> 9 @ 11:00 => 7 + 2 - 2 + 9 = 16.
+        "mut_user_id_rating_sum" -> 16L,
+        // daily entity snapshot, PER-ROW DAILY binding: daily floor(12:07) = 08-14 -> binds
+        // entity partition 2023-08-13 -> u1 balance 102 (101 of 08-12 / 103 of 08-14 NOT bound).
+        "entd_user_id_balance_d" -> 102L
       )
     ),
-    // u2 @ 12:30 -> same 10:00 grid floor; temporal cell additionally sees the 12:20 event that
-    // only the streaming path can deliver online (proves TEMPORAL is actually temporal: no
-    // snapshot bound at 10:00 or 13:00 contains a 12:20 event for a 12:30 query).
+    // u2 @ 12:30 -> same 10:00 grid floor; temporal cells additionally see post-batch-end
+    // changes that only the streaming path can deliver online.
     Golden(
       "u2",
       T_U2_POST_STREAM,
@@ -133,19 +143,23 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
       Map(
         // 7 @ 09:40 (batch side) + 13 @ 12:20 (post-batch-end, streamed) = 20
         "tmp_user_id_txn_amount_sum_1d" -> 20L,
-        // daily partitions complete by 10:00: ds <= 2023-08-13 -> 9 (90 @ ds=2023-08-14 excluded)
+        // u2's only events in 14d: 7 @ 09:40 + 13 @ 12:20 = 20
+        "tmp_user_id_txn_amount_sum_14d" -> 20L,
+        // daily floor(12:30) = 08-14 -> as-of 08-14 00:00 -> ds <= 2023-08-13 -> 9
         "snapd_user_id_amount_d_sum" -> 9L,
         // as-of 10:00: 7 @ 06:10 + 70 @ 09:00 = 77
         "snap3_user_id_amount_3h_sum" -> 77L,
         // 6h window [04:00, 10:00): both events inside -> 77
         "snap3_user_id_amount_3h_sum_6h" -> 77L,
         // entity partition 07:00 -> u2 balance 25
-        "ent3_user_id_balance_3h" -> 25L
+        "ent3_user_id_balance_3h" -> 25L,
+        // batch state 5 + insert(1) @ 10:00 <= 12:30 => 6
+        "mut_user_id_rating_sum" -> 6L,
+        // daily binding -> entity partition 08-13 -> 202
+        "entd_user_id_balance_d" -> 202L
       )
     ),
-    // u1 @ exactly 13:00 (on-grid) -> floor(13:00) = 13:00 -> bound part partition = 10:00 ->
-    // snapshot values as-of 13:00: the [10:00, 13:00) partition IS visible at exactly 13:00
-    // (boundary is inclusive of the partition that just completed, exclusive of events at >= 13:00).
+    // u1 @ exactly 13:00 (on-grid) -> floor(13:00, 3h+1h) = 13:00; daily floor = 08-14.
     Golden(
       "u1",
       T_U1_ON_GRID,
@@ -153,19 +167,25 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
       Map(
         // 1d window ending 13:00: 5 @ 08:15 + 11 @ 11:30 = 16 (nothing for u1 in (12:07, 13:00])
         "tmp_user_id_txn_amount_sum_1d" -> 16L,
-        // daily partitions complete by 13:00: still only ds <= 2023-08-13 -> 4 (proves the daily
-        // cell binds a different (coarser) partition than the 3h cell for the same left row)
+        // same 14d events as the 12:07 row (daily-hop tail still 2023-07-31 00:00) -> 11016
+        "tmp_user_id_txn_amount_sum_14d" -> 11016L,
+        // daily binding is unchanged at 13:00: as-of 08-14 00:00 -> 4 (proves the daily cell
+        // binds a different (coarser) partition than the 3h cell for the same left row)
         "snapd_user_id_amount_d_sum" -> 4L,
         // as-of 13:00: 170 + 1000 @ 11:30 = 1170 (the 11:30 event flips in vs. the 12:07 row)
         "snap3_user_id_amount_3h_sum" -> 1170L,
         // 6h window [07:00, 13:00): 100 @ 08:30 + 1000 @ 11:30 = 1100
         "snap3_user_id_amount_3h_sum_6h" -> 1100L,
         // entity partition 10:00 -> u1 balance 16 (differs from the 12:07 row's 15: different bind)
-        "ent3_user_id_balance_3h" -> 16L
+        "ent3_user_id_balance_3h" -> 16L,
+        // mutations <= 13:00 are the same as <= 12:07 => 16
+        "mut_user_id_rating_sum" -> 16L,
+        "entd_user_id_balance_d" -> 102L
       )
     ),
     // u3 @ 00:30 just after midnight -> 3h+1h grid floor crosses the day boundary to
-    // 2023-08-13 22:00 -> snapshot part partition = 2023-08-13 19:00 -> values as-of 22:00 (08-13).
+    // 2023-08-13 22:00, but the DAILY grid floor is 2023-08-14: the daily cells bind the
+    // NEW day's snapshots while the 3h cells stay as-of 22:00 of 08-13.
     Golden(
       "u3",
       T_U3_POST_MIDNIGHT,
@@ -174,70 +194,78 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         // 1d window ending 00:30: 9 @ 08-13 21:00 + 17 @ 08-14 00:10 = 26 (the 00:10 event lives
         // in source partition "2023-08-13 22:00", which straddles midnight)
         "tmp_user_id_txn_amount_sum_1d" -> 26L,
-        // daily partitions complete by 2023-08-13 22:00: only ds <= 2023-08-12 -> 6. The 60 in
-        // ds=2023-08-13 is excluded because that partition only completes at 08-14 00:00 > 22:00.
-        "snapd_user_id_amount_d_sum" -> 6L,
+        // u3's only events in 14d -> 26
+        "tmp_user_id_txn_amount_sum_14d" -> 26L,
+        // PER-ROW DAILY binding: daily floor(08-14 00:30) = 2023-08-14 -> as-of 08-14 00:00 ->
+        // ds <= 2023-08-13 -> 6 + 60 = 66. (Under the old join-grid flooring this row bound
+        // as-of 22:00 and saw only 6 — the daily partition 08-13 was not complete yet. The
+        // per-row daily binding is what online serving with a daily upload reproduces.)
+        "snapd_user_id_amount_d_sum" -> 66L,
         // as-of 2023-08-13 22:00: 3 @ 19:30; 40 @ 23:00 is after the bound
         "snap3_user_id_amount_3h_sum" -> 3L,
         // 6h window [16:00, 22:00) on 08-13: 3 @ 19:30
         "snap3_user_id_amount_3h_sum_6h" -> 3L,
         // entity partition 2023-08-13 19:00 -> u3 balance 31
-        "ent3_user_id_balance_3h" -> 31L
+        "ent3_user_id_balance_3h" -> 31L,
+        // batch state as-of 08-14 00:00 = snapshot ds 08-13 -> u3 rating 8; no u3 mutations
+        "mut_user_id_rating_sum" -> 8L,
+        // daily binding -> entity partition 08-13 -> u3 balance 302 (the NEW daily snapshot)
+        "entd_user_id_balance_d" -> 302L
+      )
+    ),
+    // u3 @ 23:30, the PRE-midnight row of the SAME left partition "2023-08-13 22:00": the
+    // daily cells must bind the OLD day's snapshots — one left partition, two daily binds.
+    // Offline-golden-only: a pinned batch upload cannot represent a query before its batch-end.
+    Golden(
+      "u3",
+      T_U3_PRE_MIDNIGHT,
+      "2023-08-13 22:00",
+      Map(
+        // 1d window ending 08-13 23:30: only 9 @ 21:00 (the 17 @ 08-14 00:10 is in the future)
+        "tmp_user_id_txn_amount_sum_1d" -> 9L,
+        "tmp_user_id_txn_amount_sum_14d" -> 9L,
+        // daily floor(08-13 23:30) = 2023-08-13 -> as-of 08-13 00:00 -> ds <= 2023-08-12 -> 6.
+        // The post-midnight row of this same left partition sees 66: per-row split.
+        "snapd_user_id_amount_d_sum" -> 6L,
+        // floor(23:30, 3h+1h) = 22:00 -> same as-of bound as the 00:30 row -> 3
+        "snap3_user_id_amount_3h_sum" -> 3L,
+        "snap3_user_id_amount_3h_sum_6h" -> 3L,
+        "ent3_user_id_balance_3h" -> 31L,
+        // ds_of_ts = 08-13 needs the 08-12 snapshot partition, which does not exist -> null
+        "mut_user_id_rating_sum" -> null,
+        // daily binding -> entity partition 08-12 -> u3 balance 301 (the OLD daily snapshot;
+        // the 00:30 row of the same left partition binds 302)
+        "entd_user_id_balance_d" -> 301L
+      )
+    ),
+    // u2 @ 09:00, before u2's 10:00 mutation: pre-mutation state online via the phase-0 serve
+    // (batch end 07:00).
+    Golden(
+      "u2",
+      T_U2_PRE_MUTATION,
+      "2023-08-14 07:00",
+      Map(
+        // no u2 txn events before 09:00 (7 @ 09:40 is later) -> null
+        "tmp_user_id_txn_amount_sum_1d" -> null,
+        "tmp_user_id_txn_amount_sum_14d" -> null,
+        // daily floor(09:00) = 08-14 -> as-of 00:00 -> 9
+        "snapd_user_id_amount_d_sum" -> 9L,
+        // as-of floor(09:00, 3h+1h) = 07:00: 7 @ 06:10 (70 @ 09:00 is at the bound, excluded)
+        "snap3_user_id_amount_3h_sum" -> 7L,
+        // 6h window [01:00, 07:00): 7 @ 06:10
+        "snap3_user_id_amount_3h_sum_6h" -> 7L,
+        // entity partition 04:00 -> u2 balance 24
+        "ent3_user_id_balance_3h" -> 24L,
+        // u2's insert happens at 10:00 > 09:00 -> still batch state 5
+        "mut_user_id_rating_sum" -> 5L,
+        "entd_user_id_balance_d" -> 202L
       )
     )
   )
 
-  // ---------------------------------------------------------------------------------------------
-  // Daily join: query timestamps and goldens.
-  // ---------------------------------------------------------------------------------------------
-  private val T_B_U1_POST_MIDNIGHT = ts("2023-08-14 00:30")
-  private val T_B_U1_MIDDAY = ts("2023-08-14 12:07")
-  private val T_B_U2_PRE_MUTATION = ts("2023-08-14 09:00")
-  private val T_B_U2_POST_MUTATION = ts("2023-08-14 12:30")
-
-  private val dailyGoldens = Seq(
-    // Temporal entities batch state as-of 2023-08-14 00:00 (snapshot partition 2023-08-13):
-    //   u1: rating 4 (ts 08-12 10:00) + rating 3 (ts 08-13 09:00) = 7;  u2: rating 5 = 5.
-    // 08-14 mutations: u1 insert rating 2 @ 06:00; u1 update 2 -> 9 @ 11:00; u2 insert 1 @ 10:00.
-    // Daily entity snapshot: previous-day binding -> partition 2023-08-13 regardless of intra-day
-    // ts -> u1 balance 102, u2 balance 202 (101/201 of 08-12 and 103/203 of 08-14 are NOT bound).
-    Golden("u1",
-           T_B_U1_POST_MIDNIGHT,
-           "2023-08-14",
-           Map(
-             // no mutation_ts <= 00:30 yet -> batch state only
-             "mut_user_id_rating_sum" -> 7L,
-             "entd_user_id_balance_d" -> 102L
-           )),
-    Golden("u1",
-           T_B_U1_MIDDAY,
-           "2023-08-14",
-           Map(
-             // 7 + insert(2) @ 06:00, then update @ 11:00 reverses 2 and lands 9: 7 + 2 - 2 + 9 = 16
-             "mut_user_id_rating_sum" -> 16L,
-             "entd_user_id_balance_d" -> 102L
-           )),
-    Golden("u2",
-           T_B_U2_PRE_MUTATION,
-           "2023-08-14",
-           Map(
-             // u2's insert happens at 10:00 > 09:00 -> still batch state 5
-             "mut_user_id_rating_sum" -> 5L,
-             "entd_user_id_balance_d" -> 202L
-           )),
-    Golden("u2",
-           T_B_U2_POST_MUTATION,
-           "2023-08-14",
-           Map(
-             // 5 + insert(1) @ 10:00 = 6
-             "mut_user_id_rating_sum" -> 6L,
-             "entd_user_id_balance_d" -> 202L
-           ))
-  )
-
-  it should "match goldens offline and online for the sub-daily matrix cells" in {
-    val namespace = "join_parity_matrix_subdaily"
-    val joinConf = generateSubDailyJoin(namespace, spark)
+  it should "match goldens offline and online for all six matrix cells on one sub-daily join" in {
+    val namespace = "join_parity_matrix"
+    val joinConf = generateJoin(namespace, spark)
     implicit val tableUtils: TableUtils = TableUtils(spark, subDailySpec)
 
     // Offline backfill over the full left partition range (22:00 of 08-13 through 13:00 of 08-14;
@@ -245,41 +273,30 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     val dateRange = new DateRange().setStartDate("2023-08-13 22:00").setEndDate("2023-08-14 13:00")
     ModularMonolith.run(joinConf, dateRange)
 
-    val offlineRows = assertOfflineMatchesGoldens(joinConf, subDailyGoldens)
+    val offlineRows = assertOfflineMatchesGoldens(joinConf, goldens)
+
+    // Online phase 0: batch-end pinned at the 07:00 boundary; the only servable golden row is
+    // u2 @ 09:00 (inside [07:00, 10:00)) - the pre-mutation assertion.
+    val phase0Rows = goldens.filter(g => g.leftDs == "2023-08-14 07:00")
+    serveAndAssertOnline(joinConf, "2023-08-14 07:00", subDailySpec, namespace, "p0", phase0Rows, offlineRows)
 
     // Online phase 1: pin batch-end at the 10:00 grid boundary (endDs partition
-    // "2023-08-14 10:00"; each groupBy uploads its grid floor of that boundary: the 3h+1h
-    // groupBys batch-end at 10:00, the daily groupBy at 2023-08-14 00:00). Events at/after
-    // 10:00 reach the temporal cell only through the streaming injection path. Only left
-    // rows inside [10:00, 13:00) are servable from this upload.
-    val phase1Rows = subDailyGoldens.filter(g => g.leftDs == "2023-08-14 10:00")
-    serveAndAssertOnline(joinConf, "2023-08-14 10:00", subDailySpec, namespace, "subdaily_p1", phase1Rows, offlineRows)
+    // "2023-08-14 10:00"; each groupBy uploads its own grid floor of that boundary: the 3h+1h
+    // groupBys batch-end at 10:00, the daily groupBys at 2023-08-14 00:00). Events at/after
+    // each groupBy's batch-end reach the temporal cells only through the streaming path. Only
+    // left rows inside [10:00, 13:00) are servable from this upload.
+    val phase1Rows = goldens.filter(g => g.leftDs == "2023-08-14 10:00")
+    serveAndAssertOnline(joinConf, "2023-08-14 10:00", subDailySpec, namespace, "p1", phase1Rows, offlineRows)
 
     // Online phase 2: re-serve with batch-end pinned at 13:00 (fresh KV store and re-uploaded
     // batch data) and fetch the row that sits exactly on the 13:00 grid boundary. A query at
     // exactly batch-end is legal (batchEndTs > queryTs is the rejection condition) and must see
     // the [10:00, 13:00) snapshot partition.
-    // The u3 @ 00:30 row is offline-golden-only: a single pinned batch upload cannot represent a
-    // query time before its batch-end (the temporal path rejects queryTs < batchEnd, and snapshot
-    // serving cannot time-travel), so there is no meaningful online assertion for it.
-    val phase2Rows = subDailyGoldens.filter(g => g.leftDs == "2023-08-14 13:00")
-    serveAndAssertOnline(joinConf, "2023-08-14 13:00", subDailySpec, namespace, "subdaily_p2", phase2Rows, offlineRows)
-  }
-
-  it should "match goldens offline and online for the daily matrix cells" in {
-    val namespace = "join_parity_matrix_daily"
-    val joinConf = generateDailyJoin(namespace, spark)
-    implicit val tableUtils: TableUtils = TableUtils(spark, dailySpec)
-
-    val dateRange = new DateRange().setStartDate("2023-08-14").setEndDate("2023-08-14")
-    ModularMonolith.run(joinConf, dateRange)
-
-    val offlineRows = assertOfflineMatchesGoldens(joinConf, dailyGoldens)
-
-    // Online: batch-end pinned at 2023-08-14 00:00 (upload of the 2023-08-13 snapshot
-    // partitions); the 08-14 mutations are injected through the streaming path. All four query
-    // timestamps are inside the [08-14 00:00, 08-15 00:00) serving window, so all are fetchable.
-    serveAndAssertOnline(joinConf, "2023-08-14", dailySpec, namespace, "daily_p1", dailyGoldens, offlineRows)
+    // The u3 rows are offline-golden-only: a single pinned batch upload cannot represent a
+    // query time before its batch-end (the temporal path rejects queryTs < batchEnd, and
+    // snapshot serving cannot time-travel), so there is no meaningful online assertion there.
+    val phase2Rows = goldens.filter(g => g.leftDs == "2023-08-14 13:00")
+    serveAndAssertOnline(joinConf, "2023-08-14 13:00", subDailySpec, namespace, "p2", phase2Rows, offlineRows)
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -346,7 +363,13 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
       // every partition of that table, so stale uploads must be dropped before re-serving.
       spark.sql(s"DROP TABLE IF EXISTS ${jp.groupBy.metaData.uploadTable}")
       val groupByTableUtils = TableUtils(spark, groupBySpec)
-      OnlineUtils.serve(groupByTableUtils, inMemoryKvStore, kvStoreFunc, namespace, groupByEndDs, jp.groupBy, dropDsOnWrite = true)
+      OnlineUtils.serve(groupByTableUtils,
+                        inMemoryKvStore,
+                        kvStoreFunc,
+                        namespace,
+                        groupByEndDs,
+                        jp.groupBy,
+                        dropDsOnWrite = true)
     }
 
     inMemoryKvStore.create(MetadataDataset)
@@ -372,9 +395,9 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Sub-daily join fixture
+  // Join fixture: one sub-daily join hosting all six matrix cells
   // ---------------------------------------------------------------------------------------------
-  private def generateSubDailyJoin(namespace: String, spark: SparkSession): Join = {
+  private def generateJoin(namespace: String, spark: SparkSession): Join = {
     SparkTestBase.createDatabase(spark, namespace)
 
     // Left events: deliberately awkward timestamps (see goldens above for the binding each
@@ -386,17 +409,23 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
           ("u1", T_U1_OFF_GRID, "2023-08-14 10:00"),
           ("u2", T_U2_POST_STREAM, "2023-08-14 10:00"),
           ("u1", T_U1_ON_GRID, "2023-08-14 13:00"),
-          ("u3", T_U3_POST_MIDNIGHT, "2023-08-13 22:00")
+          ("u3", T_U3_POST_MIDNIGHT, "2023-08-13 22:00"),
+          ("u3", T_U3_PRE_MIDNIGHT, "2023-08-13 22:00"), // same partition, pre-midnight
+          ("u2", T_U2_PRE_MUTATION, "2023-08-14 07:00")
         ))
       .toDF("user_id", "ts", "ds")
       .save(leftTable)
 
     // TEMPORAL/EVENTS cell source, partitioned on the 3h+1h grid. The 11:30/12:20/13:40 events
     // sit at/after the phase-1 batch-end (10:00) and reach the fetcher via streaming injection.
+    // The 10000 @ 2023-07-31 04:00 event is the aggregator-fix lock: for a 10:00/13:00 batch
+    // end its 14d daily-hop tail is 2023-07-31 00:00 while the raw batchEnd - 14d tail is
+    // 10:00/13:00 of 07-31 - a pre-fix tailTs dropped events in that gap from the batch IR.
     val txnTable = s"$namespace.txn_events"
     spark
       .createDataFrame(
         Seq(
+          ("u1", 10000L, ts("2023-07-31 04:00"), "2023-07-31 04:00"), // hop-gap event (see above)
           ("u1", 1000L, ts("2023-08-13 11:00"), "2023-08-13 10:00"), // outside every 1d query window
           ("u3", 9L, ts("2023-08-13 21:00"), "2023-08-13 19:00"),
           ("u3", 17L, ts("2023-08-14 00:10"), "2023-08-13 22:00"), // partition label straddles midnight
@@ -412,7 +441,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
 
     // SNAPSHOT-daily/EVENTS cell source: a classic daily event table WITHOUT a ts column. The
     // engine synthesizes ts = partition end - 1ms, which makes the offline binding "latest daily
-    // partition complete at the left row's grid floor" — identical to online whole-partition
+    // partition complete at the left row's DAILY floor" — identical to online whole-partition
     // batch serving (see class doc).
     val dailyEventsTable = s"$namespace.daily_events"
     spark
@@ -421,9 +450,9 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
           ("u3", 6L, "2023-08-12"),
           ("u1", 4L, "2023-08-13"),
           ("u2", 9L, "2023-08-13"),
-          ("u3", 60L, "2023-08-13"), // excluded for u3 @ 00:30: 08-13 only completes at 08-14 00:00
-          ("u1", 50L, "2023-08-14"), // proves daily vs 3h cells bind different partitions: the 3h
-          ("u2", 90L, "2023-08-14") //  cell sees 08-14-morning data at 10:00, the daily cell can't
+          ("u3", 60L, "2023-08-13"), // included for u3 @ 00:30 (daily floor 08-14), not @ 23:30
+          ("u1", 50L, "2023-08-14"), // never bound: would require a row at/after 08-15 00:00
+          ("u2", 90L, "2023-08-14")
         ))
       .toDF("user_id", "amount_d", "ds")
       .save(dailyEventsTable)
@@ -476,6 +505,55 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
       .toDF("user_id", "balance_3h", "ds")
       .save(offsetBalanceTable)
 
+    // TEMPORAL/ENTITIES cell: snapshot partition ds holds the state as of end-of-ds; the 08-13
+    // partition is the batch state at 08-14 00:00 (u1: 4 + 3 = 7, u2: 5, u3: 8).
+    val ratingsSnapshotTable = s"$namespace.ratings_snapshot"
+    spark
+      .createDataFrame(
+        Seq(
+          ("u1", ts("2023-08-12 10:00"), 4L, "2023-08-13"),
+          ("u1", ts("2023-08-13 09:00"), 3L, "2023-08-13"),
+          ("u2", ts("2023-08-13 11:00"), 5L, "2023-08-13"),
+          ("u3", ts("2023-08-13 08:00"), 8L, "2023-08-13")
+        ))
+      .toDF("user_id", "ts", "rating", "ds")
+      .save(ratingsSnapshotTable)
+
+    // Mutations of 2023-08-14 (partitioned by mutation day):
+    //  - u1 inserts rating 2 at 06:00 (single is_before=false row),
+    //  - u1 updates that rating 2 -> 9 at 11:00 (is_before=true reversal + is_before=false new),
+    //  - u2 inserts rating 1 at 10:00.
+    val ratingsMutationsTable = s"$namespace.ratings_mutations"
+    spark
+      .createDataFrame(
+        Seq(
+          ("u1", ts("2023-08-14 06:00"), 2L, "2023-08-14", ts("2023-08-14 06:00"), false),
+          ("u1", ts("2023-08-14 06:00"), 2L, "2023-08-14", ts("2023-08-14 11:00"), true),
+          ("u1", ts("2023-08-14 06:00"), 9L, "2023-08-14", ts("2023-08-14 11:00"), false),
+          ("u2", ts("2023-08-14 10:00"), 1L, "2023-08-14", ts("2023-08-14 10:00"), false)
+        ))
+      .toDF("user_id", "ts", "rating", "ds", "mutation_ts", "is_before")
+      .save(ratingsMutationsTable)
+
+    // SNAPSHOT-daily/ENTITIES cell: balances encode the partition (u1: 10x, u2: 20x, u3: 30x).
+    // Per-row daily binding: a row at time T binds the partition of day(T) - 1.
+    val dailyBalanceTable = s"$namespace.daily_balance"
+    spark
+      .createDataFrame(
+        Seq(
+          ("u1", 101L, "2023-08-12"),
+          ("u2", 201L, "2023-08-12"),
+          ("u3", 301L, "2023-08-12"), // bound by u3 @ 08-13 23:30 (daily floor 08-13)
+          ("u1", 102L, "2023-08-13"),
+          ("u2", 202L, "2023-08-13"),
+          ("u3", 302L, "2023-08-13"), // bound by u3 @ 08-14 00:30 (daily floor 08-14)
+          ("u1", 103L, "2023-08-14"),
+          ("u2", 203L, "2023-08-14"),
+          ("u3", 303L, "2023-08-14")
+        ))
+      .toDF("user_id", "balance_d", "ds")
+      .save(dailyBalanceTable)
+
     val temporalEventsGroupBy = Builders.GroupBy(
       metaData =
         Builders.MetaData(namespace = namespace, name = "parity_txn_sum", executionInfo = executionInfo(subDailySpec)),
@@ -484,15 +562,16 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
           query = withPartition(
             Builders.Query(selects = Builders.Selects("user_id", "txn_amount"),
                            timeColumn = "ts",
-                           startPartition = "2023-08-13 10:00"),
+                           startPartition = "2023-07-31 04:00"),
             subDailySpec
           ),
           table = txnTable,
           topic = "parity_txn_topic"
         )),
       keyColumns = Seq("user_id"),
-      aggregations =
-        Seq(Builders.Aggregation(operation = Operation.SUM, inputColumn = "txn_amount", windows = Seq(oneDay))),
+      aggregations = Seq(
+        Builders
+          .Aggregation(operation = Operation.SUM, inputColumn = "txn_amount", windows = Seq(oneDay, fourteenDays))),
       accuracy = Accuracy.TEMPORAL
     )
 
@@ -555,101 +634,20 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
       // no aggregations: pass-through latest state per partition (inferred SNAPSHOT accuracy)
     )
 
-    Builders.Join(
-      left = Builders.Source.events(
-        query = withPartition(
-          Builders.Query(selects = Builders.Selects("user_id", "ts"), startPartition = "2023-08-13 22:00"),
-          subDailySpec
-        ),
-        table = leftTable
-      ),
-      joinParts = Seq(
-        Builders.JoinPart(groupBy = temporalEventsGroupBy, prefix = "tmp").setUseLongNames(false),
-        Builders.JoinPart(groupBy = dailySnapshotEventsGroupBy, prefix = "snapd").setUseLongNames(false),
-        Builders.JoinPart(groupBy = offsetSnapshotEventsGroupBy, prefix = "snap3").setUseLongNames(false),
-        Builders.JoinPart(groupBy = offsetSnapshotEntitiesGroupBy, prefix = "ent3").setUseLongNames(false)
-      ),
-      metaData = Builders.MetaData(namespace = namespace,
-                                   name = "parity_matrix_subdaily_join",
-                                   team = "chronon",
-                                   executionInfo = executionInfo(subDailySpec))
-    )
-  }
-
-  // ---------------------------------------------------------------------------------------------
-  // Daily join fixture (temporal entities via mutations + daily entity snapshot)
-  // ---------------------------------------------------------------------------------------------
-  private def generateDailyJoin(namespace: String, spark: SparkSession): Join = {
-    SparkTestBase.createDatabase(spark, namespace)
-
-    val leftTable = s"$namespace.left_events_daily"
-    spark
-      .createDataFrame(
-        Seq(
-          ("u1", T_B_U1_POST_MIDNIGHT, "2023-08-14"),
-          ("u1", T_B_U1_MIDDAY, "2023-08-14"),
-          ("u2", T_B_U2_PRE_MUTATION, "2023-08-14"),
-          ("u2", T_B_U2_POST_MUTATION, "2023-08-14")
-        ))
-      .toDF("user_id", "ts", "ds")
-      .save(leftTable)
-
-    // TEMPORAL/ENTITIES cell: snapshot partition ds holds the state as of end-of-ds; the 08-13
-    // partition is the batch state at 08-14 00:00 (u1: 4 + 3 = 7, u2: 5).
-    val ratingsSnapshotTable = s"$namespace.ratings_snapshot"
-    spark
-      .createDataFrame(
-        Seq(
-          ("u1", ts("2023-08-12 10:00"), 4L, "2023-08-13"),
-          ("u1", ts("2023-08-13 09:00"), 3L, "2023-08-13"),
-          ("u2", ts("2023-08-13 11:00"), 5L, "2023-08-13")
-        ))
-      .toDF("user_id", "ts", "rating", "ds")
-      .save(ratingsSnapshotTable)
-
-    // Mutations of 2023-08-14 (partitioned by mutation day):
-    //  - u1 inserts rating 2 at 06:00 (single is_before=false row),
-    //  - u1 updates that rating 2 -> 9 at 11:00 (is_before=true reversal + is_before=false new),
-    //  - u2 inserts rating 1 at 10:00.
-    val ratingsMutationsTable = s"$namespace.ratings_mutations"
-    spark
-      .createDataFrame(
-        Seq(
-          ("u1", ts("2023-08-14 06:00"), 2L, "2023-08-14", ts("2023-08-14 06:00"), false),
-          ("u1", ts("2023-08-14 06:00"), 2L, "2023-08-14", ts("2023-08-14 11:00"), true),
-          ("u1", ts("2023-08-14 06:00"), 9L, "2023-08-14", ts("2023-08-14 11:00"), false),
-          ("u2", ts("2023-08-14 10:00"), 1L, "2023-08-14", ts("2023-08-14 10:00"), false)
-        ))
-      .toDF("user_id", "ts", "rating", "ds", "mutation_ts", "is_before")
-      .save(ratingsMutationsTable)
-
-    // SNAPSHOT-daily/ENTITIES cell: balances encode the partition; only the previous-day
-    // partition (2023-08-13 -> 102/202) may be bound for 08-14 left rows.
-    val dailyBalanceTable = s"$namespace.daily_balance"
-    spark
-      .createDataFrame(
-        Seq(
-          ("u1", 101L, "2023-08-12"),
-          ("u2", 201L, "2023-08-12"),
-          ("u1", 102L, "2023-08-13"),
-          ("u2", 202L, "2023-08-13"),
-          ("u1", 103L, "2023-08-14"),
-          ("u2", 203L, "2023-08-14")
-        ))
-      .toDF("user_id", "balance_d", "ds")
-      .save(dailyBalanceTable)
-
     val mutationsGroupBy = Builders.GroupBy(
       metaData = Builders.MetaData(namespace = namespace,
                                    name = "parity_ratings_sum",
                                    executionInfo = executionInfo(dailySpec)),
       sources = Seq(
         Builders.Source.entities(
-          query = Builders.Query(
-            selects = Map("user_id" -> "user_id", "ts" -> "ts", "rating" -> "rating"),
-            startPartition = "2023-08-12",
-            mutationTimeColumn = "mutation_ts",
-            reversalColumn = "is_before"
+          query = withPartition(
+            Builders.Query(
+              selects = Map("user_id" -> "user_id", "ts" -> "ts", "rating" -> "rating"),
+              startPartition = "2023-08-12",
+              mutationTimeColumn = "mutation_ts",
+              reversalColumn = "is_before"
+            ),
+            dailySpec
           ),
           snapshotTable = ratingsSnapshotTable,
           mutationTable = ratingsMutationsTable,
@@ -667,7 +665,10 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
                                    executionInfo = executionInfo(dailySpec)),
       sources = Seq(
         Builders.Source.entities(
-          query = Builders.Query(selects = Builders.Selects("user_id", "balance_d"), startPartition = "2023-08-12"),
+          query = withPartition(
+            Builders.Query(selects = Builders.Selects("user_id", "balance_d"), startPartition = "2023-08-12"),
+            dailySpec
+          ),
           snapshotTable = dailyBalanceTable
         )),
       keyColumns = Seq("user_id")
@@ -676,17 +677,24 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
 
     Builders.Join(
       left = Builders.Source.events(
-        query = Builders.Query(selects = Builders.Selects("user_id", "ts"), startPartition = "2023-08-14"),
+        query = withPartition(
+          Builders.Query(selects = Builders.Selects("user_id", "ts"), startPartition = "2023-08-13 22:00"),
+          subDailySpec
+        ),
         table = leftTable
       ),
       joinParts = Seq(
+        Builders.JoinPart(groupBy = temporalEventsGroupBy, prefix = "tmp").setUseLongNames(false),
+        Builders.JoinPart(groupBy = dailySnapshotEventsGroupBy, prefix = "snapd").setUseLongNames(false),
+        Builders.JoinPart(groupBy = offsetSnapshotEventsGroupBy, prefix = "snap3").setUseLongNames(false),
+        Builders.JoinPart(groupBy = offsetSnapshotEntitiesGroupBy, prefix = "ent3").setUseLongNames(false),
         Builders.JoinPart(groupBy = mutationsGroupBy, prefix = "mut").setUseLongNames(false),
         Builders.JoinPart(groupBy = dailySnapshotEntitiesGroupBy, prefix = "entd").setUseLongNames(false)
       ),
       metaData = Builders.MetaData(namespace = namespace,
-                                   name = "parity_matrix_daily_join",
+                                   name = "parity_matrix_join",
                                    team = "chronon",
-                                   executionInfo = executionInfo(dailySpec))
+                                   executionInfo = executionInfo(subDailySpec))
     )
   }
 

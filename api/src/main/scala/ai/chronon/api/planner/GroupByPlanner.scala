@@ -19,6 +19,9 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
     MetaDataUtils.outputPartitionSpec(groupBy.metaData, outputPartitionSpec)
 
   private def validatePartitionIntervals(): Unit = {
+    if (groupBy.dataModel == DataModel.ENTITIES && groupBy.inferredAccuracy == ai.chronon.api.Accuracy.SNAPSHOT) {
+      MetaDataUtils.warnSubDailyEntitySnapshot(s"groupBy ${groupBy.metaData.name}", confOutputPartitionSpec)
+    }
     Option(groupBy.sources).foreach { sources =>
       sources.asScala.foreach { source =>
         for {
