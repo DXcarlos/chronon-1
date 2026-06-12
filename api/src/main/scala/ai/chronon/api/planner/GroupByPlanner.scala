@@ -1,7 +1,7 @@
 package ai.chronon.api.planner
 
 import ai.chronon.api.{DataModel, GroupBy, PartitionSpec, TableDependency, TableInfo}
-import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, WindowUtils}
+import ai.chronon.api.Extensions._
 import ai.chronon.planner.{
   ConfPlan,
   GroupByBackfillNode,
@@ -14,6 +14,28 @@ import scala.collection.JavaConverters._
 
 case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: PartitionSpec)
     extends ConfPlanner[GroupBy](groupBy)(outputPartitionSpec) {
+
+  private val confOutputPartitionSpec: PartitionSpec =
+    MetaDataUtils.outputPartitionSpec(groupBy.metaData, outputPartitionSpec)
+
+  private def validatePartitionIntervals(): Unit = {
+    Option(groupBy.sources).foreach { sources =>
+      sources.asScala.foreach { source =>
+        for {
+          query <- Option(source.query)
+          partitionInterval <- Option(query.partitionInterval)
+        } {
+          val sourcePartitionSpec = query.partitionSpec(confOutputPartitionSpec)
+          MetaDataUtils.validateWideningOrEqualConsumer(
+            groupBy.metaData.name,
+            confOutputPartitionSpec,
+            sourcePartitionSpec,
+            s"source ${source.rawTable}"
+          )
+        }
+      }
+    }
+  }
 
   // execInfo can be heavy - and we don't want to duplicate it
   private def eraseExecutionInfo: GroupBy = {
@@ -34,7 +56,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
                                        groupBy.metaData.name + "__group_by",
                                        groupByTableDeps,
                                        Option(effectiveStepDays),
-                                       Some(groupBy.metaData.outputTable))
+                                       Some(groupBy.metaData.outputTable))(confOutputPartitionSpec)
 
     val node = new GroupByBackfillNode().setGroupBy(eraseExecutionInfo)
 
@@ -62,7 +84,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
                           "upload",
                           groupBy.metaData.name + "__upload",
                           groupByTableDeps,
-                          Some(stepDays))
+                          Some(stepDays))(confOutputPartitionSpec)
 
     val node = new GroupByUploadNode().setGroupBy(eraseExecutionInfo)
     toNode(metaData, _.setGroupByUpload(node), semanticGroupBy(groupBy))
@@ -73,9 +95,9 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
       .setTableInfo(
         new TableInfo()
           .setTable(uploadNode.metaData.outputTable)
-          .setPartitionColumn(outputPartitionSpec.column)
-          .setPartitionFormat(outputPartitionSpec.format)
-          .setPartitionInterval(WindowUtils.hours(outputPartitionSpec.spanMillis))
+          .setPartitionColumn(confOutputPartitionSpec.column)
+          .setPartitionFormat(confOutputPartitionSpec.format)
+          .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
       )
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())
@@ -88,7 +110,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
         groupBy.metaData.name + s"__${GroupByPlanner.UploadToKV}",
         uploadToKVTableDeps,
         None
-      )
+      )(confOutputPartitionSpec)
 
     val node = new GroupByUploadToKVNode().setGroupBy(eraseExecutionInfo)
     toNode(metaData, _.setGroupByUploadToKV(node), semanticGroupBy(groupBy))
@@ -99,9 +121,12 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
       // Streaming node has table dependency on the upload to KV
       val uploadToKVDep = new TableDependency()
         .setTableInfo(
-          new TableInfo()
-            .setTable(uploadToKVNode.metaData.outputTable)
-        )
+        new TableInfo()
+          .setTable(uploadToKVNode.metaData.outputTable)
+          .setPartitionColumn(confOutputPartitionSpec.column)
+          .setPartitionFormat(confOutputPartitionSpec.format)
+          .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
+      )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())
 
@@ -117,7 +142,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
           groupBy.metaData.name + s"__${GroupByPlanner.Streaming}",
           streamingTableDeps,
           None
-        )
+        )(confOutputPartitionSpec)
 
       val node = new GroupByStreamingNode().setGroupBy(eraseExecutionInfo)
       toNode(metaData, _.setGroupByStreaming(node), semanticGroupBy(groupBy))
@@ -125,6 +150,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
   }
 
   override def buildPlan: ConfPlan = {
+    validatePartitionIntervals()
     val backfill = backfillNode
     val sensorNodes = ExternalSourceSensorUtil
       .sensorNodes(backfill.metaData)

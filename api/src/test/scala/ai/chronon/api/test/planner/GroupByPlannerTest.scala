@@ -1,6 +1,6 @@
 package ai.chronon.api.test.planner
 
-import ai.chronon.api.{Accuracy, Aggregation, Builders, EnvironmentVariables, GroupBy, Operation, PartitionSpec}
+import ai.chronon.api.{Accuracy, Aggregation, Builders, EnvironmentVariables, GroupBy, Operation, PartitionSpec, TableInfo}
 import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, WindowUtils}
 import ai.chronon.api.planner.{GroupByPlanner, LocalRunner}
 import ai.chronon.api.test.planner.GroupByPlannerTest.buildGroupBy
@@ -14,6 +14,30 @@ import scala.jdk.CollectionConverters._
 class GroupByPlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec: PartitionSpec = PartitionSpec.daily
+  private val oneHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 60 * 60 * 1000)
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+  private val fiveHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 5 * 60 * 60 * 1000)
+  private val sixHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 6 * 60 * 60 * 1000)
+
+  private def outputTableInfo(table: String, spec: PartitionSpec): TableInfo =
+    new TableInfo()
+      .setTable(table)
+      .setPartitionColumn(spec.column)
+      .setPartitionFormat(spec.format)
+      .setPartitionInterval(WindowUtils.fromMillis(spec.spanMillis))
+
+  private def withOutputSpec(groupBy: GroupBy, spec: PartitionSpec): GroupBy = {
+    groupBy.metaData.executionInfo.setOutputTableInfo(outputTableInfo(groupBy.metaData.outputTable, spec))
+    groupBy
+  }
+
+  private def withEventSourceSpec(groupBy: GroupBy, spec: PartitionSpec): GroupBy = {
+    val query = Builders.Query(partitionColumn = spec.column)
+    query.setPartitionFormat(spec.format)
+    query.setPartitionInterval(WindowUtils.fromMillis(spec.spanMillis))
+    groupBy.setSources(Seq(Builders.Source.events(query, table = "my_user_events")).asJava)
+    groupBy
+  }
 
   private def validateGBPlan(groupBy: GroupBy, plan: ConfPlan): Unit = {
     // Should create plan successfully with expected number of nodes
@@ -109,6 +133,20 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
       validateGBPlan(planner.groupBy, plan)
       plan.terminalNodeNames.asScala(Mode.DEPLOY) should equal("user_charges__uploadToKV")
       plan.terminalNodeNames.asScala(Mode.BACKFILL) should equal("user_charges__group_by")
+    }
+  }
+
+  it should "allow groupBy output intervals that widen or match the source partition interval" in {
+    Seq(threeHourSpec, sixHourSpec, PartitionSpec.daily).foreach { groupBySpec =>
+      val gb = withOutputSpec(withEventSourceSpec(buildGroupBy(), threeHourSpec), groupBySpec)
+      noException should be thrownBy GroupByPlanner(gb).buildPlan
+    }
+  }
+
+  it should "reject groupBy output intervals that are narrower or not multiples of the source partition interval" in {
+    Seq(oneHourSpec, fiveHourSpec).foreach { groupBySpec =>
+      val gb = withOutputSpec(withEventSourceSpec(buildGroupBy(), threeHourSpec), groupBySpec)
+      an[IllegalArgumentException] should be thrownBy GroupByPlanner(gb).buildPlan
     }
   }
 

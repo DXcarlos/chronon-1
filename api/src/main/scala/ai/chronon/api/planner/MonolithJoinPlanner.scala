@@ -12,6 +12,23 @@ import scala.collection.JavaConverters._
 case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     extends ConfPlanner[Join](join)(outputPartitionSpec) {
 
+  private val confOutputPartitionSpec: PartitionSpec =
+    MetaDataUtils.outputPartitionSpec(join.metaData, outputPartitionSpec)
+
+  private def validatePartitionIntervals(): Unit = {
+    Option(join.joinParts).foreach { joinParts =>
+      joinParts.asScala.foreach { joinPart =>
+        val groupBySpec = MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, confOutputPartitionSpec)
+        MetaDataUtils.validateWideningOrEqualConsumer(
+          join.metaData.name,
+          confOutputPartitionSpec,
+          groupBySpec,
+          s"groupBy ${joinPart.groupBy.metaData.name}"
+        )
+      }
+    }
+  }
+
   private def semanticMonolithJoin(join: Join): Join = {
     val semanticJoin = join.deepCopy()
     semanticJoin.unsetMetaData()
@@ -34,7 +51,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
                           "monolith_join",
                           join.metaData.name + "__monolith_join",
                           tableDeps,
-                          outputTableOverride = Some(join.metaData.outputTable))
+                          outputTableOverride = Some(join.metaData.outputTable))(confOutputPartitionSpec)
     val node = new planner.MonolithJoinNode().setJoin(join)
     toNode(metaData, _.setMonolithJoin(node), semanticMonolithJoin(join))
   }
@@ -53,11 +70,15 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
       } else {
         groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}"
       }
+      val groupByOutputSpec = MetaDataUtils.outputPartitionSpec(groupBy.metaData, confOutputPartitionSpec)
 
       val groupByDep = new TableDependency()
         .setTableInfo(
           new TableInfo()
             .setTable(groupByTableName)
+            .setPartitionColumn(groupByOutputSpec.column)
+            .setPartitionFormat(groupByOutputSpec.format)
+            .setPartitionInterval(WindowUtils.fromMillis(groupByOutputSpec.spanMillis))
         )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())
@@ -80,7 +101,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
                           "metadata_upload",
                           join.metaData.name + "__metadata_upload",
                           metadataUploadDeps.toSeq,
-                          Some(stepDays))
+                          Some(stepDays))(confOutputPartitionSpec)
     val node = new planner.JoinMetadataUpload().setJoin(join)
     toNode(metaData, _.setJoinMetadataUpload(node), semanticMonolithJoin(join))
   }
@@ -95,11 +116,11 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     // Stats compute depends on the monolith join output
     val tableDep = new TableDependency()
       .setTableInfo(
-        new TableInfo()
-          .setTable(monolithJoinNode.metaData.outputTable)
-          .setPartitionColumn(outputPartitionSpec.column)
-          .setPartitionFormat(outputPartitionSpec.format)
-          .setPartitionInterval(WindowUtils.hours(outputPartitionSpec.spanMillis))
+          new TableInfo()
+            .setTable(monolithJoinNode.metaData.outputTable)
+            .setPartitionColumn(confOutputPartitionSpec.column)
+            .setPartitionFormat(confOutputPartitionSpec.format)
+            .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
       )
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())
@@ -109,13 +130,14 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
                           "stats_compute",
                           join.metaData.name + "__stats_compute",
                           Seq(tableDep),
-                          Some(effectiveStepDays))
+                          Some(effectiveStepDays))(confOutputPartitionSpec)
 
     val node = new planner.JoinStatsComputeNode().setJoin(join)
     toNode(metaData, _.setJoinStatsCompute(node), semanticMonolithJoin(join))
   }
 
   override def buildPlan: planner.ConfPlan = {
+    validatePartitionIntervals()
     val confPlan = new planner.ConfPlan()
 
     val backfill = monolithJoinNode

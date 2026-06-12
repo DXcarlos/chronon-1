@@ -250,6 +250,7 @@ def DefaultAggregation(keys, sources, operation=Operation.LAST, tags=None):
 
 
 class TimeUnit:
+    MINUTES = common.TimeUnit.MINUTES
     HOURS = common.TimeUnit.HOURS
     DAYS = common.TimeUnit.DAYS
 
@@ -431,11 +432,12 @@ Keys {unselected_keys}, are unselected in source
                     # Snapshot accuracy.
                     (group_by.accuracy and group_by.accuracy == Accuracy.SNAPSHOT)
                     and
-                    # Hourly aggregation.
-                    any([window.timeUnit == TimeUnit.HOURS for window in agg.windows])
+                    # Sub-daily aggregation.
+                    any([window.timeUnit in (TimeUnit.MINUTES, TimeUnit.HOURS) for window in agg.windows])
                 ), (
-                    "Detected a snapshot accuracy group by with an hourly aggregation. Resolution with snapshot "
-                    "accuracy is not fine enough to allow hourly group bys. Consider adjusting the aggregation window. "
+                    "Detected a snapshot accuracy group by with a sub-daily aggregation window. "
+                    "Resolution with snapshot accuracy is not fine enough to allow minute or hourly group bys. "
+                    "Consider adjusting the aggregation window. "
                     f"input_column: {agg.inputColumn}, windows: {agg.windows}"
                 )
 
@@ -499,6 +501,7 @@ def GroupBy(
     step_days: int = None,
     disable_historical_backfill: bool = False,
     environments: Optional[List[str]] = None,
+    partition_interval: Optional[Union[common.Window, str]] = None,
 ) -> ttypes.GroupBy:
     """
 
@@ -585,25 +588,26 @@ def GroupBy(
         This is used by airflow integration to pick an older hive partition to wait on.
     :type lag: int
     :param offline_schedule:
-        The offline schedule interval for batch jobs. Supports standard cron expressions
-        that run at most once per day. Examples::
+        The offline schedule interval for batch jobs. Supports standard cron expressions,
+        including regular sub-daily schedules. Examples::
 
             '@daily': Legacy format for midnight daily execution
             '0 2 * * *': Daily at 2:00 AM
-            '30 14 * * MON-FRI': Weekdays at 2:30 PM
-            '0 9 * * 1': Mondays at 9:00 AM
-            '15 23 * * SUN': Sundays at 11:15 PM
+            '0 */3 * * *': Every 3 hours
+            '5/15 * * * *': Every 15 minutes with a 5 minute processing offset
             '@never': Explicitly disable offline scheduling
-
-        Note: Hourly, sub-hourly, or multi-daily schedules are not supported.
 
     :type offline_schedule: str
     :param online_schedule:
         The online schedule interval for real-time serving jobs. Supports standard cron expressions
-        that run at most once per day. When online=True and online_schedule is not specified,
-        defaults to "@daily". Set to "@never" to explicitly disable online scheduling even when online=True.
+        When online=True and online_schedule is not specified, defaults to offline_schedule when present,
+        otherwise "@daily". Set to "@never" to explicitly disable online scheduling even when online=True.
         Examples follow the same format as offline_schedule.
     :type online_schedule: Optional[str]
+    :param partition_interval:
+        Output partition grain for this GroupBy. Examples: "1d", "3h", "15m".
+        When set below daily, Chronon uses "yyyy-MM-dd HH:mm" labels.
+    :type partition_interval: Optional[Union[common.Window, str]]
     :param tags:
         Additional metadata that does not directly affect feature computation, but is useful to
         track for management purposes.
@@ -706,7 +710,19 @@ def GroupBy(
         online_schedule = None
     # Set default online_schedule if online is True and online_schedule is not specified
     elif online and online_schedule is None:
-        online_schedule = "@daily"
+        online_schedule = offline_schedule if offline_schedule not in (None, "@never") else "@daily"
+    elif (
+        online
+        and partition_interval is not None
+        and window_utils.window_millis(partition_interval) < window_utils.DAY_MILLIS
+        and online_schedule is not None
+        and offline_schedule not in (None, "@never")
+        and online_schedule != offline_schedule
+    ):
+        raise ValueError(
+            "online_schedule must match offline_schedule for sub-daily partition_interval when both are set. "
+            "Leave online_schedule empty to inherit the offline schedule."
+        )
 
     exec_info = common.ExecutionInfo(
         offlineSchedule=offline_schedule,
@@ -716,6 +732,7 @@ def GroupBy(
         stepDays=step_days,
         historicalBackfill=disable_historical_backfill,
         clusterConf=cluster_conf,
+        outputTableInfo=window_utils.output_table_info(partition_interval),
     )
 
     column_tags = {}

@@ -112,7 +112,7 @@ object Extensions {
       }
     }
 
-    def hours(millis: Long): Window = new Window((millis / Hour.millis).toInt, TimeUnit.HOURS)
+    def hours(millis: Long): Window = fromMillis(millis)
 
     def millisToString(millis: Long): String = {
       if (millis % Day.millis == 0) {
@@ -148,19 +148,14 @@ object Extensions {
       if (a == null) return b
       if (b == null) return a
 
-      require(a.timeUnit == b.timeUnit, s"Cannot add windows with different time units ${a.timeUnit} vs. ${b.timeUnit}")
-
-      new Window(a.length + b.length, a.timeUnit)
+      fromMillis(a.millis + b.millis)
     }
 
     def minus(a: Window, b: Window): Window = {
       if (a == null) return null
       if (b == null) return a
 
-      require(a.timeUnit == b.timeUnit,
-              s"Cannot subtract windows with different time units ${a.timeUnit} vs. ${b.timeUnit}")
-
-      new Window(a.length - b.length, a.timeUnit)
+      fromMillis(a.millis - b.millis)
     }
 
     def zero(timeUnits: api.TimeUnit = api.TimeUnit.DAYS): Window = new Window(0, timeUnits)

@@ -8,6 +8,12 @@ import scala.collection.JavaConverters._
 
 object TableDependencies {
 
+  def fromTableInfo(tableInfo: TableInfo, shift: Option[Window] = None): TableDependency =
+    new TableDependency()
+      .setTableInfo(tableInfo.deepCopy())
+      .setStartOffset(shift.getOrElse(WindowUtils.zero()))
+      .setEndOffset(shift.getOrElse(WindowUtils.zero()))
+
   def fromStagingQuery(stagingQuery: api.StagingQuery): Seq[TableDependency] = {
     Option(stagingQuery.tableDependencies)
       .map(_.toScala.toSeq)

@@ -5,8 +5,8 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.functions.{col, date_format, date_sub, min, max}
-import org.apache.spark.sql.types.{DateType, StringType, StructType}
+import org.apache.spark.sql.functions.{col, date_format, from_unixtime, min, max, unix_timestamp}
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.util.{Failure, Success, Try}
@@ -154,7 +154,9 @@ trait Format {
             .headOption
             .flatMap(v => Option(v))
         case _ =>
-          df.select(date_format(date_sub(max(col(partitionColumn)).cast(DateType), 1), partitionSpec.format)
+          df.select(date_format(
+            from_unixtime((unix_timestamp(max(col(partitionColumn)).cast("timestamp")) * 1000 - partitionSpec.spanMillis) / 1000),
+            partitionSpec.format)
             .as("last_partition"))
             .as[String]
             .collect()
@@ -187,7 +189,7 @@ trait Format {
             .headOption
             .flatMap(v => Option(v))
         case _ =>
-          df.select(date_format(min(col(partitionColumn)).cast(DateType), partitionSpec.format).as("first_partition"))
+          df.select(date_format(min(col(partitionColumn)).cast("timestamp"), partitionSpec.format).as("first_partition"))
             .as[String]
             .collect()
             .headOption
@@ -207,7 +209,7 @@ trait Format {
 
   // Unified last available partition: handles both string partition columns and timestamp/date columns.
   // For string columns that are catalog partitions (Hive/Iceberg/Delta), uses metadata-only lookup.
-  // For non-string columns, falls back to the historical scan behavior: DATE(MAX(col)) - 1 day.
+  // For non-string columns, falls back to a scan and returns the last complete partition interval.
   def lastAvailablePartition(tableName: String, partitionColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] =
     metadataLastAvailablePartition(tableName, partitionColumn)
@@ -227,7 +229,7 @@ trait Format {
     import sparkSession.implicits._
     Try {
       val df = sparkSession.read.table(tableName)
-      df.select(date_format(max(col(timestampColumn)).cast(DateType), partitionSpec.format).as("max_date"))
+      df.select(date_format(max(col(timestampColumn)).cast("timestamp"), partitionSpec.format).as("max_date"))
         .as[String]
         .collect()
         .headOption
@@ -248,8 +250,11 @@ trait Format {
       val df = sparkSession.read.table(tableName)
       val result = df
         .select(
-          date_format(min(col(timestampColumn)).cast(DateType), partitionSpec.format).as("min_date"),
-          date_format(max(col(timestampColumn)).cast(DateType), partitionSpec.format).as("max_date")
+          date_format(min(col(timestampColumn)).cast("timestamp"), partitionSpec.format).as("min_date"),
+          date_format(
+            from_unixtime((unix_timestamp(max(col(timestampColumn)).cast("timestamp")) * 1000 - partitionSpec.spanMillis) / 1000),
+            partitionSpec.format
+          ).as("max_date")
         )
         .as[(String, String)]
         .collect()

@@ -9,6 +9,8 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
 
   private val dailySpec = PartitionSpec.daily
   private val compactSpec = PartitionSpec("ds", "yyyyMMdd", 24 * 60 * 60 * 1000)
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+  private val fifteenMinuteSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 15 * 60 * 1000)
   
   "PartitionSpec.expandRange" should "expand date range into individual dates" in {
     val result = dailySpec.expandRange("2024-01-01", "2024-01-05")
@@ -19,6 +21,11 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
   it should "handle single day range" in {
     val result = dailySpec.expandRange("2024-01-15", "2024-01-15")
     result should be(List("2024-01-15"))
+  }
+
+  it should "expand sub-daily ranges by the partition interval" in {
+    val result = threeHourSpec.expandRange("2024-01-15 00:00", "2024-01-15 09:00")
+    result should be(List("2024-01-15 00:00", "2024-01-15 03:00", "2024-01-15 06:00", "2024-01-15 09:00"))
   }
   
   it should "expand range across month boundaries" in {
@@ -46,6 +53,11 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
   "PartitionSpec.afterFast" should "return the next day" in {
     val result = dailySpec.afterFast("2024-03-15")
     result should be("2024-03-16")
+  }
+
+  it should "return the next sub-daily partition" in {
+    threeHourSpec.afterFast("2024-03-15 21:00") should be("2024-03-16 00:00")
+    fifteenMinuteSpec.afterFast("2024-03-15 00:45") should be("2024-03-15 01:00")
   }
   
   "PartitionSpec.minusFast" should "subtract days correctly" in {
@@ -87,6 +99,11 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     compactSpec.translate("20251125", dailySpec) should be("2025-11-25")
     compactSpec.translate("20250101", dailySpec) should be("2025-01-01")
     compactSpec.translate("19700101", dailySpec) should be("1970-01-01")
+  }
+
+  it should "convert between daily and sub-daily formats at interval starts" in {
+    dailySpec.translate("2025-11-25", threeHourSpec) should be("2025-11-25 00:00")
+    threeHourSpec.translate("2025-11-25 18:00", dailySpec) should be("2025-11-25")
   }
 
   it should "round-trip between formats" in {

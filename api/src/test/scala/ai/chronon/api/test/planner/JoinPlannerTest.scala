@@ -4,7 +4,7 @@ import ai.chronon.api.Builders.{Join, MetaData}
 import ai.chronon.api.Extensions.WindowUtils
 import ai.chronon.api.Extensions._
 import ai.chronon.api.planner.JoinPlanner
-import ai.chronon.api.{Accuracy, Builders, ConfigProperties, ExecutionInfo, Operation, PartitionSpec}
+import ai.chronon.api.{Accuracy, Builders, ConfigProperties, ExecutionInfo, Operation, PartitionSpec, TableInfo}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -13,6 +13,30 @@ import scala.collection.JavaConverters._
 class JoinPlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec: PartitionSpec = PartitionSpec.daily
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+
+  private def outputTableInfo(table: String, spec: PartitionSpec): TableInfo =
+    new TableInfo()
+      .setTable(table)
+      .setPartitionColumn(spec.column)
+      .setPartitionFormat(spec.format)
+      .setPartitionInterval(WindowUtils.fromMillis(spec.spanMillis))
+
+  private def executionInfoFor(table: String, spec: PartitionSpec): ExecutionInfo =
+    new ExecutionInfo().setOutputTableInfo(outputTableInfo(table, spec))
+
+  private def groupByWithOutputSpec(name: String, spec: PartitionSpec): ai.chronon.api.GroupBy =
+    Builders.GroupBy(
+      sources = Seq(Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = s"test.$name")),
+      keyColumns = Seq("listing_id"),
+      aggregations = Seq(Builders.Aggregation(Operation.COUNT, "event_count", Seq(WindowUtils.Unbounded))),
+      accuracy = Accuracy.TEMPORAL,
+      metaData = Builders.MetaData(
+        namespace = "test_namespace",
+        name = name,
+        executionInfo = executionInfoFor(s"test_namespace.$name", spec)
+      )
+    )
 
   private def modularExecutionInfo: ExecutionInfo =
     new ExecutionInfo().setConf(
@@ -71,6 +95,42 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
     sensorOutputTables should equal(
       Set("test.left_events", "test.dim_snapshot", "test.dim_mutations")
     )
+  }
+
+  it should "allow daily joins over sub-daily groupBy outputs and preserve dependency partition specs" in {
+    val hourlyGroupBy = groupByWithOutputSpec("three_hour_gb", threeHourSpec)
+    val join = Join(
+      metaData = MetaData(name = "daily_join", namespace = "test_namespace"),
+      left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
+      joinParts = Seq(Builders.JoinPart(groupBy = hourlyGroupBy))
+    )
+
+    val plan = new JoinPlanner(join).buildPlan
+
+    val metadataUploadNode = plan.nodes.asScala.find(_.content.isSetJoinMetadataUpload).get
+    val groupByDep = metadataUploadNode.metaData.executionInfo.tableDependencies.asScala
+      .find(_.tableInfo.table == hourlyGroupBy.metaData.outputTable + "__uploadToKV")
+      .get
+    groupByDep.tableInfo.partitionFormat should equal(threeHourSpec.format)
+    groupByDep.tableInfo.partitionInterval should equal(WindowUtils.fromMillis(threeHourSpec.spanMillis))
+
+    val backfillNode = plan.nodes.asScala.find(_.content.isSetUnionJoin).get
+    backfillNode.metaData.executionInfo.outputTableInfo.partitionFormat should equal(PartitionSpec.daily.format)
+  }
+
+  it should "reject sub-daily joins over daily groupBy outputs" in {
+    val dailyGroupBy = groupByWithOutputSpec("daily_gb", PartitionSpec.daily)
+    val hourlyJoin = Join(
+      metaData = MetaData(
+        name = "hourly_join",
+        namespace = "test_namespace",
+        executionInfo = executionInfoFor("test_namespace.hourly_join", threeHourSpec)
+      ),
+      left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
+      joinParts = Seq(Builders.JoinPart(groupBy = dailyGroupBy))
+    )
+
+    an[IllegalArgumentException] should be thrownBy new JoinPlanner(hourlyJoin).buildPlan
   }
 
   it should "include mutation table dependencies on the join part for the standard modular path" in {

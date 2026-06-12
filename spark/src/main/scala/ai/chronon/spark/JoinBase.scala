@@ -102,7 +102,8 @@ abstract class JoinBase(val joinConfCloned: api.Join,
       keyRenamedRightDf
         .withColumn(
           Constants.TimePartitionColumn,
-          date_format(date_add(to_date(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format), 1),
+          date_format(from_unixtime(unix_timestamp(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
+                                      tableUtils.partitionSpec.spanMillis / 1000),
                       tableUtils.partitionSpec.format)
         )
         .drop(tableUtils.partitionColumn)

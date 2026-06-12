@@ -1,7 +1,7 @@
 package ai.chronon.api.planner
 
-import ai.chronon.api.Extensions.{MetadataOps, WindowUtils}
-import ai.chronon.api.{Model, PartitionSpec, TableDependency, TableInfo}
+import ai.chronon.api.Extensions._
+import ai.chronon.api.{Model, PartitionSpec, TableDependency}
 import ai.chronon.planner
 import ai.chronon.planner.{ConfPlan, CreateModelEndpointNode, DeployModelNode, Node, TrainModelNode}
 
@@ -9,6 +9,26 @@ import scala.collection.JavaConverters._
 
 class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
     extends ConfPlanner[Model](model)(outputPartitionSpec) {
+
+  private val confOutputPartitionSpec: PartitionSpec =
+    MetaDataUtils.outputPartitionSpec(model.metaData, outputPartitionSpec)
+
+  private def validatePartitionIntervals(): Unit = {
+    for {
+      trainingConf <- Option(model.trainingConf)
+      trainingDataSource <- Option(trainingConf.trainingDataSource)
+      query <- Option(trainingDataSource.query)
+      _ <- Option(query.partitionInterval)
+    } {
+      val sourcePartitionSpec = query.partitionSpec(confOutputPartitionSpec)
+      MetaDataUtils.validateWideningOrEqualConsumer(
+        model.metaData.name,
+        confOutputPartitionSpec,
+        sourcePartitionSpec,
+        s"training source ${trainingDataSource.rawTable}"
+      )
+    }
+  }
 
   private def eraseExecutionInfo: Model = {
     val result = model.deepCopy()
@@ -36,7 +56,7 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
           model.metaData.name + "__model_training",
           Seq(tableDeps),
           None
-        )
+        )(confOutputPartitionSpec)
       val node = new TrainModelNode().setModel(eraseExecutionInfo)
       val copy = semanticModel(model)
       toNode(metaData, _.setTrainModel(node), copy)
@@ -49,8 +69,7 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
       val trainingNode = createTrainNode.get
       val tableDep = new TableDependency()
         .setTableInfo(
-          new TableInfo()
-            .setTable(trainingNode.metaData.outputTable)
+          trainingNode.metaData.executionInfo.outputTableInfo.deepCopy()
         )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())
@@ -66,7 +85,7 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
         model.metaData.name + "__model_create_endpoint",
         tableDeps,
         None
-      )
+      )(confOutputPartitionSpec)
 
     val node = new CreateModelEndpointNode().setModel(eraseExecutionInfo)
 
@@ -82,8 +101,7 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
     val createEndpoint = createEndpointNode
     val tableDep = new TableDependency()
       .setTableInfo(
-        new TableInfo()
-          .setTable(createEndpoint.metaData.outputTable)
+        createEndpoint.metaData.executionInfo.outputTableInfo.deepCopy()
       )
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())
@@ -96,7 +114,7 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
         model.metaData.name + "__model_deploy",
         tableDeps,
         Some(stepDays)
-      )
+      )(confOutputPartitionSpec)
 
     val node = new DeployModelNode().setModel(eraseExecutionInfo)
 
@@ -106,6 +124,7 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
   }
 
   override def buildPlan: ConfPlan = {
+    validatePartitionIntervals()
     val createEndpoint = createEndpointNode
     val deploy = deployModelNode
 

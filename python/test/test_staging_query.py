@@ -15,11 +15,17 @@
 import warnings
 
 import gen_thrift.common.ttypes as common
+from ai.chronon import query
 from ai.chronon.staging_query import TableDependency
+from ai.chronon.staging_query import StagingQuery
 
 
 def _days(n):
     return common.Window(length=n, timeUnit=common.TimeUnit.DAYS)
+
+
+def _hours(n):
+    return common.Window(length=n, timeUnit=common.TimeUnit.HOURS)
 
 
 def test_nothing_set_defaults_both_sides_to_zero():
@@ -35,6 +41,35 @@ def test_partition_column_without_offsets_no_longer_raises():
     td = TableDependency(table="ns.upstream", partition_column="ds").to_thrift()
     assert td.startOffset == _days(0)
     assert td.endOffset == _days(0)
+
+
+def test_query_partition_interval_defaults_to_subdaily_format():
+    q = query.Query(partition_column="ds", partition_interval="15m")
+
+    assert q.partitionColumn == "ds"
+    assert q.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert q.partitionInterval == common.Window(length=15, timeUnit=common.TimeUnit.MINUTES)
+
+
+def test_table_dependency_partition_interval_is_serialized():
+    td = TableDependency(table="ns.upstream", partition_column="ds", partition_interval="3h").to_thrift()
+
+    assert td.tableInfo.partitionColumn == "ds"
+    assert td.tableInfo.partitionFormat is None
+    assert td.tableInfo.partitionInterval == _hours(3)
+
+
+def test_staging_query_partition_interval_sets_output_table_info():
+    sq = StagingQuery(
+        query="SELECT * FROM ns.upstream",
+        dependencies=[TableDependency(table="ns.upstream", partition_interval="3h")],
+        partition_interval="3h",
+    )
+
+    table_info = sq.metaData.executionInfo.outputTableInfo
+    assert table_info.partitionColumn == "ds"
+    assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert table_info.partitionInterval == _hours(3)
 
 
 def test_start_offset_only_sets_start_and_defaults_end_to_zero():

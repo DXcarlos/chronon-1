@@ -9,6 +9,9 @@ import scala.collection.JavaConverters._
 case class StagingQueryPlanner(stagingQuery: StagingQuery)(implicit outputPartitionSpec: PartitionSpec)
     extends ConfPlanner[StagingQuery](stagingQuery)(outputPartitionSpec) {
 
+  private val confOutputPartitionSpec: PartitionSpec =
+    MetaDataUtils.outputPartitionSpec(stagingQuery.metaData, outputPartitionSpec)
+
   private def semanticStagingQuery(stagingQuery: StagingQuery): StagingQuery = {
     val semanticStagingQuery = stagingQuery.deepCopy()
     semanticStagingQuery.unsetMetaData()
@@ -24,7 +27,7 @@ case class StagingQueryPlanner(stagingQuery: StagingQuery)(implicit outputPartit
       stagingQuery.metaData.name + "__staging",
       tableDependencies,
       outputTableOverride = Some(stagingQuery.metaData.outputTable)
-    )
+    )(confOutputPartitionSpec)
 
     val node = new StagingQueryNode().setStagingQuery(stagingQuery)
     val finalNode = toNode(metaData, _.setStagingQuery(node), semanticStagingQuery(stagingQuery))

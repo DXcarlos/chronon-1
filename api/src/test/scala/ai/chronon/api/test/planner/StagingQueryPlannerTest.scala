@@ -1,6 +1,7 @@
 package ai.chronon.api.test.planner
 
 import ai.chronon.api.{EngineType, ExecutionInfo, PartitionSpec}
+import ai.chronon.api.Extensions.WindowUtils
 import ai.chronon.api.planner.{LocalRunner, StagingQueryPlanner}
 import ai.chronon.api.Builders.{MetaData, StagingQuery}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -14,6 +15,7 @@ import scala.jdk.CollectionConverters._
 class StagingQueryPlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec = PartitionSpec.daily
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
 
   it should "staging query planner plans valid confs without exceptions" in {
 
@@ -65,6 +67,28 @@ class StagingQueryPlannerTest extends AnyFlatSpec with Matchers {
         }
       }
     }
+  }
+
+  it should "staging query planner should preserve explicit sub-daily output partition specs" in {
+    val stagingQuery = StagingQuery(
+      query = "SELECT * FROM test_table WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+      metaData = MetaData(
+        name = "subDailyStagingQuery",
+        executionInfo = new ExecutionInfo().setOutputTableInfo(
+          new TableInfo()
+            .setPartitionColumn(threeHourSpec.column)
+            .setPartitionFormat(threeHourSpec.format)
+            .setPartitionInterval(WindowUtils.fromMillis(threeHourSpec.spanMillis))
+        )
+      ),
+      engineType = EngineType.SPARK
+    )
+
+    val plan = new StagingQueryPlanner(stagingQuery).buildPlan
+    val node = plan.nodes.asScala.find(_.content.isSetStagingQuery).get
+
+    node.metaData.executionInfo.outputTableInfo.partitionFormat should equal(threeHourSpec.format)
+    node.metaData.executionInfo.outputTableInfo.partitionInterval should equal(WindowUtils.fromMillis(threeHourSpec.spanMillis))
   }
 
   it should "staging query planner should avoid metadata when computing semantic hash" in {

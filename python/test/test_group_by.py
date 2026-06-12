@@ -178,6 +178,24 @@ def test_validator_ok():
     )
 
 
+def test_partition_interval_sets_output_table_info():
+    gb = group_by.GroupBy(
+        sources=event_source("table"),
+        keys=["subject"],
+        aggregations=group_by.Aggregations(
+            cnt=ttypes.Aggregation(operation=ttypes.Operation.COUNT),
+        ),
+        version=0,
+        partition_interval="3h",
+    )
+
+    table_info = gb.metaData.executionInfo.outputTableInfo
+    assert table_info.partitionColumn == "ds"
+    assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert table_info.partitionInterval.length == 3
+    assert table_info.partitionInterval.timeUnit == common.TimeUnit.HOURS
+
+
 def test_generic_collector():
     aggregation = group_by.Aggregation(
         input_column="test", operation=group_by.Operation.APPROX_PERCENTILE([0.4, 0.2])
@@ -426,6 +444,24 @@ def test_online_schedule_validation():
     )
     assert gb.metaData.executionInfo.onlineSchedule == "@daily"
 
+    # offline @never disables only offline scheduling; online=True still gets the normal default.
+    gb = group_by.GroupBy(
+        sources=event_source("table"),
+        keys=["subject"],
+        aggregations=group_by.Aggregations(
+            count=group_by.Aggregation(
+                input_column="event_id",
+                operation=group_by.Operation.COUNT
+            ),
+        ),
+        version=1,
+        online=True,
+        offline_schedule="@never",
+        online_schedule=None,
+    )
+    assert gb.metaData.executionInfo.offlineSchedule == "@never"
+    assert gb.metaData.executionInfo.onlineSchedule == "@daily"
+
     # Test that online_schedule can be explicitly set when online=True
     gb = group_by.GroupBy(
         sources=event_source("table"),
@@ -441,6 +477,40 @@ def test_online_schedule_validation():
         online_schedule="0 2 * * *"  # Custom schedule
     )
     assert gb.metaData.executionInfo.onlineSchedule == "0 2 * * *"
+
+    # Existing daily workflows may use different cron offsets for offline and online jobs.
+    gb = group_by.GroupBy(
+        sources=event_source("table"),
+        keys=["subject"],
+        aggregations=group_by.Aggregations(
+            count=group_by.Aggregation(
+                input_column="event_id",
+                operation=group_by.Operation.COUNT
+            ),
+        ),
+        version=1,
+        online=True,
+        offline_schedule="0 4 * * *",
+        online_schedule="0 3 * * *",
+    )
+    assert gb.metaData.executionInfo.onlineSchedule == "0 3 * * *"
+
+    with pytest.raises(ValueError, match="sub-daily partition_interval"):
+        group_by.GroupBy(
+            sources=event_source("table"),
+            keys=["subject"],
+            aggregations=group_by.Aggregations(
+                count=group_by.Aggregation(
+                    input_column="event_id",
+                    operation=group_by.Operation.COUNT
+                ),
+            ),
+            version=1,
+            online=True,
+            offline_schedule="0 */3 * * *",
+            online_schedule="30 */3 * * *",
+            partition_interval="3h",
+        )
 
     # Test that @never disables online scheduling even when online=True
     gb = group_by.GroupBy(

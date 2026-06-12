@@ -11,6 +11,7 @@ import ai.chronon.airflow_helpers as airflow_helpers
 import gen_thrift.api.ttypes as ttypes
 import gen_thrift.common.ttypes as common
 from ai.chronon import utils
+from ai.chronon import windows as window_utils
 from ai.chronon.airflow_helpers import AIRFLOW_DEPENDENCIES_KEY
 from ai.chronon.cli.compile.config_origin import mark_factory_created_config
 
@@ -100,6 +101,7 @@ class TableDependency:
     table: str
     partition_column: Optional[str] = None
     partition_format: Optional[str] = None
+    partition_interval: Optional[Union[common.Window, str]] = None
     additional_partitions: Optional[List[str]] = None
     offset: Optional[int] = None
     start_offset: Optional[int] = None
@@ -151,7 +153,11 @@ class TableDependency:
                 table=self.table,
                 partitionColumn=self.partition_column,
                 partitionFormat=self.partition_format,
-                partitionInterval=common.Window(1, common.TimeUnit.DAYS),
+                partitionInterval=(
+                    window_utils.normalize_window(self.partition_interval)
+                    if self.partition_interval is not None
+                    else common.Window(1, common.TimeUnit.DAYS)
+                ),
                 timePartitioned=self.time_partitioned,
             ),
             startOffset=(
@@ -183,6 +189,7 @@ def StagingQuery(
     recompute_days: Optional[int] = None,
     additional_partitions: List[str] = None,
     environments: Optional[List[str]] = None,
+    partition_interval: Optional[Union[common.Window, str]] = None,
 ) -> ttypes.StagingQuery:
     """
     Creates a StagingQuery object for executing arbitrary SQL queries with templated date parameters.
@@ -208,16 +215,18 @@ def StagingQuery(
         Additional metadata that does not directly affect computation, but is useful for management.
     :type tags: Dict[str, str]
     :param offline_schedule:
-        The offline schedule interval for batch jobs. Supports standard cron expressions
-        that run at most once per day. Examples:
+        The offline schedule interval for batch jobs. Supports standard cron expressions,
+        including regular sub-daily schedules. Examples:
         '@daily': Legacy format for midnight daily execution
         '0 2 * * *': Daily at 2:00 AM
-        '30 14 * * MON-FRI': Weekdays at 2:30 PM
-        '0 9 * * 1': Mondays at 9:00 AM
-        '15 23 * * SUN': Sundays at 11:15 PM
+        '0 */3 * * *': Every 3 hours
+        '5/15 * * * *': Every 15 minutes with a 5 minute processing offset
         '@never': Explicitly disable offline scheduling
-        Note: Hourly, sub-hourly, or multi-daily schedules are not supported.
     :type offline_schedule: str
+    :param partition_interval:
+        Output partition grain for this StagingQuery. Examples: "1d", "3h", "15m".
+        When set below daily and no partition format is supplied, Chronon uses "yyyy-MM-dd HH:mm".
+    :type partition_interval: Optional[Union[common.Window, str]]
     :param conf:
         Configuration properties for the StagingQuery.
     :type conf: common.ConfigProperties
@@ -290,6 +299,7 @@ def StagingQuery(
         env=env_vars,
         stepDays=step_days,
         clusterConf=cluster_conf,
+        outputTableInfo=window_utils.output_table_info(partition_interval),
     )
 
     airflow_dependencies = []

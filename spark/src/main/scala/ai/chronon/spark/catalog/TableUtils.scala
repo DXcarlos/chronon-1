@@ -38,18 +38,21 @@ import scala.util.{Failure, Success, Try}
   * retrieve metadata / configure it appropriately at creation time
   */
 
-class TableUtils(@transient val sparkSession: SparkSession) extends Serializable {
+class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverride: Option[PartitionSpec] = None)
+    extends Serializable {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   private val ARCHIVE_TIMESTAMP_FORMAT = "yyyyMMddHHmmss"
   @transient private lazy val archiveTimestampFormatter = DateTimeFormatter
     .ofPattern(ARCHIVE_TIMESTAMP_FORMAT)
     .withZone(ZoneId.systemDefault())
-  val partitionColumn: String =
-    sparkSession.conf.get("spark.chronon.partition.column", "ds")
-  val partitionFormat: String =
-    sparkSession.conf.get("spark.chronon.partition.format", "yyyy-MM-dd")
-  val partitionSpec: PartitionSpec = PartitionSpec(partitionColumn, partitionFormat, WindowUtils.Day.millis)
+  val partitionSpec: PartitionSpec = partitionSpecOverride.getOrElse {
+    val partitionColumn = sparkSession.conf.get("spark.chronon.partition.column", "ds")
+    val partitionFormat = sparkSession.conf.get("spark.chronon.partition.format", "yyyy-MM-dd")
+    PartitionSpec(partitionColumn, partitionFormat, WindowUtils.Day.millis)
+  }
+  val partitionColumn: String = partitionSpec.column
+  val partitionFormat: String = partitionSpec.format
 
   val smallModelEnabled: Boolean =
     sparkSession.conf.get("spark.chronon.backfill.small_mode.enabled", "true").toBoolean
@@ -153,15 +156,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       }
       .getOrElse(List.empty)
 
-    // if table is yyyyMMdd and global partitionSpec is yyyy-MM-dd, partitions will use yyyyMMdd
-    // downstream range arithmetic requires yyyy-MM-dd - so we need to translate to global
-    if (!timePartitioned) {
-      tablePartitionSpec
-        .map(ps => partitions.map(date => ps.translate(date, partitionSpec)))
-        .getOrElse(partitions)
-    } else {
-      partitions
-    }
+    partitions
   }
 
   def maxTimestampDate(tableName: String,
@@ -228,8 +223,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       val result = tableFormatProvider
         .readFormat(tableName)
         .flatMap(_.lastAvailablePartition(tableName, effectivePartColumn, effectiveSpec)(sparkSession))
-      // Translate to global partitionSpec if needed
-      result.map(date => effectiveSpec.translate(date, partitionSpec))
+      result
     }
   }
 
@@ -251,8 +245,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       val result = tableFormatProvider
         .readFormat(tableName)
         .flatMap(_.firstAvailablePartition(tableName, effectivePartColumn, partitionSpec)(sparkSession))
-      // Translate to global partitionSpec if needed
-      result.map(date => partitionSpec.translate(date, this.partitionSpec))
+      result
     }
   }
 
@@ -775,7 +768,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       // If the partition column is not a string (e.g. timestamp/date), convert to formatted date string
       val colType = renamed.schema(partitionColumn).dataType
       if (colType != StringType) {
-        renamed.withColumn(partitionColumn, date_format(col(partitionColumn).cast(DateType), partitionFormat))
+        renamed.withColumn(partitionColumn, date_format(col(partitionColumn).cast(TimestampType), partitionFormat))
       } else {
         renamed
       }
@@ -787,6 +780,8 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
 
 object TableUtils {
   def apply(sparkSession: SparkSession) = new TableUtils(sparkSession)
+  def apply(sparkSession: SparkSession, partitionSpec: PartitionSpec) =
+    new TableUtils(sparkSession, Some(partitionSpec))
 }
 
 sealed case class IncompatibleSchemaException(inconsistencies: Seq[(String, DataType, DataType)]) extends Exception {

@@ -12,6 +12,23 @@ import scala.language.{implicitConversions, reflectiveCalls}
 class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     extends ConfPlanner[Join](join)(outputPartitionSpec) {
 
+  private val confOutputPartitionSpec: PartitionSpec =
+    MetaDataUtils.outputPartitionSpec(join.metaData, outputPartitionSpec)
+
+  private def validatePartitionIntervals(): Unit = {
+    Option(join.joinParts).foreach { joinParts =>
+      joinParts.asScala.foreach { joinPart =>
+        val groupBySpec = MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, confOutputPartitionSpec)
+        MetaDataUtils.validateWideningOrEqualConsumer(
+          join.metaData.name,
+          confOutputPartitionSpec,
+          groupBySpec,
+          s"groupBy ${joinPart.groupBy.metaData.name}"
+        )
+      }
+    }
+  }
+
   // will mutate the join in place - use on deepCopy-ied objects only
   private def joinWithoutMetadata(join: Join): Unit = {
     join.unsetMetaData()
@@ -43,7 +60,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       "source",
       outputTableName,
       TableDependencies.fromSource(join.left, maxWindowOpt = Some(WindowUtils.zero())).toSeq
-    )
+    )(confOutputPartitionSpec)
 
     toNode(metaData, _.setSourceWithFilter(result), result)
   }
@@ -57,14 +74,14 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
 
     val tableDeps = bootstrapParts.toScala.map { bp =>
       TableDependencies.fromTable(bp.table, bp.query)
-    }.toSeq :+ TableDependencies.fromTable(leftSourceNode.metaData.outputTable)
+    }.toSeq :+ TableDependencies.fromTableInfo(leftSourceNode.metaData.executionInfo.outputTableInfo)
 
     val metaData = MetaDataUtils.layer(
       join.metaData,
       "bootstrap",
       bootstrapNodeName,
       tableDeps
-    )
+    )(confOutputPartitionSpec)
 
     val content = new NodeContent()
     content.setJoinBootstrap(result)
@@ -91,7 +108,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     val partTable = RelevantLeftForJoinPart.partTableName(join, joinPart)
 
     val deps = TableDependencies.fromGroupBy(joinPart.groupBy, Option(join.left.dataModel)) :+
-      TableDependencies.fromTable(leftSourceNode.metaData.outputTable)
+      TableDependencies.fromTableInfo(leftSourceNode.metaData.executionInfo.outputTableInfo)
 
     // use step days from group_by if set, otherwise default to 15d for events and 1 for entities
     val stepDays = Option(joinPart.groupBy.metaData.executionInfo)
@@ -103,6 +120,8 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       })
 
     // pull conf params from the groupBy metadata, but use the join namespace to write to.
+    val joinPartOutputPartitionSpec = MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, confOutputPartitionSpec)
+
     val metaData = MetaDataUtils
       .layer(
         joinPart.groupBy.metaData,
@@ -110,7 +129,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         partTable,
         deps,
         stepDays = Some(stepDays)
-      )
+      )(joinPartOutputPartitionSpec)
       .setOutputNamespace(join.metaData.outputNamespace)
 
     val copy = result.deepCopy()
@@ -125,11 +144,6 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     val result = new JoinMergeNode()
       .setJoin(join)
 
-    // sometimes the keys get bootstrapped. so we need to pick bootstraps if present for left side
-    val leftTable = bootstrapNodeOpt
-      .map(_.metaData.outputTable)
-      .getOrElse(leftSourceNode.metaData.outputTable)
-
     // TODO: we might need to shift back 1 day for snapshot events case while partition sensing
     //
     // currently it works out fine, because we shift forward and back in the engine cancelling out the
@@ -139,9 +153,13 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         jpNode.content.getJoinPart.joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT
 
       val shiftAmount = if (shouldShift) Some(WindowUtils.Day) else None
-      TableDependencies.fromTable(jpNode.metaData.outputTable, shift = shiftAmount)
+      TableDependencies.fromTableInfo(jpNode.metaData.executionInfo.outputTableInfo, shift = shiftAmount)
     } :+
-      TableDependencies.fromTable(leftTable)
+      TableDependencies.fromTableInfo(
+        bootstrapNodeOpt
+          .map(_.metaData.executionInfo.outputTableInfo)
+          .getOrElse(leftSourceNode.metaData.executionInfo.outputTableInfo)
+      )
 
     val mergeNodeName = join.metaData.name + "__merged"
 
@@ -152,7 +170,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         mergeNodeName,
         deps,
         outputTableOverride = Some(join.metaData.outputTable)
-      )
+      )(confOutputPartitionSpec)
 
     val copy = result.deepCopy()
     joinWithoutMetadata(copy.join)
@@ -173,9 +191,9 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         join.metaData,
         "derive",
         derivationNodeName,
-        Seq(TableDependencies.fromTable(mergeNode.metaData.outputTable)),
+        Seq(TableDependencies.fromTableInfo(mergeNode.metaData.executionInfo.outputTableInfo)),
         outputTableOverride = Some(derivationOutputTable)
-      )
+      )(confOutputPartitionSpec)
 
     val copy = result.deepCopy()
     joinWithoutMetadata(copy.join)
@@ -196,22 +214,13 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         val statsComputeNodeName = join.metaData.name + "__stats_compute"
 
         // Stats compute depends on the final output (derivation if present, otherwise merge)
-        val inputTable = derivationNodeOpt
-          .map(_.metaData.outputTable)
-          .getOrElse(mergeNode.metaData.outputTable)
+        val inputTableInfo = derivationNodeOpt
+          .map(_.metaData.executionInfo.outputTableInfo)
+          .getOrElse(mergeNode.metaData.executionInfo.outputTableInfo)
 
         val stepDays = 1 // Stats computed daily
 
-        val tableDep = new TableDependency()
-          .setTableInfo(
-            new TableInfo()
-              .setTable(inputTable)
-              .setPartitionColumn(outputPartitionSpec.column)
-              .setPartitionFormat(outputPartitionSpec.format)
-              .setPartitionInterval(WindowUtils.hours(outputPartitionSpec.spanMillis))
-          )
-          .setStartOffset(WindowUtils.zero())
-          .setEndOffset(WindowUtils.zero())
+        val tableDep = TableDependencies.fromTableInfo(inputTableInfo)
 
         val metaData = MetaDataUtils
           .layer(
@@ -220,7 +229,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
             statsComputeNodeName,
             Seq(tableDep),
             Some(stepDays)
-          )
+          )(confOutputPartitionSpec)
 
         val copy = result.deepCopy()
         joinWithoutMetadata(copy.join)
@@ -256,11 +265,15 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       } else {
         groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}"
       }
+      val groupByOutputSpec = MetaDataUtils.outputPartitionSpec(groupBy.metaData, confOutputPartitionSpec)
 
       val groupByDep = new TableDependency()
         .setTableInfo(
           new TableInfo()
             .setTable(groupByTableName)
+            .setPartitionColumn(groupByOutputSpec.column)
+            .setPartitionFormat(groupByOutputSpec.format)
+            .setPartitionInterval(WindowUtils.fromMillis(groupByOutputSpec.spanMillis))
         )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())
@@ -283,7 +296,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
                           "metadata_upload",
                           join.metaData.name + "__metadata_upload",
                           metadataUploadDeps.toSeq,
-                          Some(stepDays))
+                          Some(stepDays))(confOutputPartitionSpec)
     val node = new JoinMetadataUpload().setJoin(joinWithoutExecutionInfo)
 
     val copy = joinWithoutExecutionInfo.deepCopy()
@@ -302,7 +315,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       join.metaData.name,
       TableDependencies.fromJoin(join).toSeq,
       outputTableOverride = Some(join.metaData.outputTable)
-    )
+    )(confOutputPartitionSpec)
 
     val copy = result.deepCopy()
     joinWithoutMetadata(copy.join)
@@ -311,6 +324,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
   }
 
   override def buildPlan: ConfPlan = {
+    validatePartitionIntervals()
     // Check if this join is eligible for UnionJoin
     // Conditions: left is events, 1 join part, TEMPORAL accuracy, no bootstrap parts
     val isUnionJoinEligible = join.left.isSetEvents &&

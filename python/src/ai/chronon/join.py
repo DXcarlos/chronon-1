@@ -20,6 +20,7 @@ from collections import Counter
 from typing import Dict, List, Optional, Union
 
 import ai.chronon.utils as utils
+import ai.chronon.windows as window_utils
 import gen_thrift.api.ttypes as api
 import gen_thrift.common.ttypes as common
 from ai.chronon.cli.compile.config_origin import mark_factory_created_config
@@ -292,6 +293,7 @@ def Join(
     enable_stats_compute: bool = None,
     modular_execution: bool = False,
     environments: Optional[List[str]] = None,
+    partition_interval: Optional[Union[common.Window, str]] = None,
 ) -> api.Join:
     """
     Construct a join object. A join can pull together data from various GroupBy's both offline and online. This is also
@@ -348,15 +350,17 @@ def Join(
         users can register external sources into Api implementation. Chronon fetcher can invoke the implementation.
         This is applicable only for online fetching. Offline this will not be produce any values.
     :param offline_schedule:
-        Schedule expression for offline join compute tasks. Supports standard cron expressions
-        that run at most once per day. Examples: '@daily' (midnight), '0 2 * * *' (2am daily),
-        '30 14 * * MON-FRI' (weekdays at 2:30pm), '0 9 * * 1' (Mondays at 9am).
+        Schedule expression for offline join compute tasks. Supports standard cron expressions,
+        including regular sub-daily schedules. Examples: '@daily' (midnight), '0 2 * * *' (2am daily),
+        '0 */3 * * *' (every 3 hours), '5/15 * * * *' (every 15 minutes with a 5 minute processing offset).
         Use '@never' to explicitly disable offline scheduling.
-        Note: Hourly, sub-hourly, or multi-daily schedules are not supported.
     :param online_schedule:
         Schedule expression for online/deploy tasks. When online=True and online_schedule is not specified,
-        defaults to "@daily". Set to "@never" to explicitly disable online scheduling even when online=True.
+        defaults to offline_schedule. Set to "@never" to explicitly disable online scheduling even when online=True.
         Supports the same format as offline_schedule.
+    :param partition_interval:
+        Output partition grain for this Join. Examples: "1d", "3h", "15m".
+        When set below daily, Chronon uses "yyyy-MM-dd HH:mm" labels.
     :param row_ids:
         Columns of the left table that uniquely define a training record. Used as default keys during bootstrap.
         Optional.
@@ -472,7 +476,19 @@ def Join(
         online_schedule = None
     # Set default online_schedule if online is True and online_schedule is not specified
     elif online and online_schedule is None:
-        online_schedule = "@daily"
+        online_schedule = offline_schedule if offline_schedule not in (None, "@never") else "@daily"
+    elif (
+        online
+        and partition_interval is not None
+        and window_utils.window_millis(partition_interval) < window_utils.DAY_MILLIS
+        and online_schedule is not None
+        and offline_schedule not in (None, "@never")
+        and online_schedule != offline_schedule
+    ):
+        raise ValueError(
+            "online_schedule must match offline_schedule for sub-daily partition_interval when both are set. "
+            "Leave online_schedule empty to inherit the offline schedule."
+        )
 
     if modular_execution:
         if conf is None:
@@ -492,6 +508,7 @@ def Join(
         historicalBackfill=historical_backfill,
         clusterConf=cluster_conf,
         enableStatsCompute=enable_stats_compute,
+        outputTableInfo=window_utils.output_table_info(partition_interval),
     )
 
     metadata = api.MetaData(

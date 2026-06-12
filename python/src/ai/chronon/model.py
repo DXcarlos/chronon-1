@@ -163,6 +163,7 @@ def Model(
     table_properties: Optional[Dict[str, str]] = None,
     tags: Optional[Dict[str, str]] = None,
     environments: Optional[List[str]] = None,
+    partition_interval: Optional[Union[common.Window, str]] = None,
 ) -> ttypes.Model:
     """
     Creates a Model object for ML model inference and orchestration.
@@ -206,6 +207,10 @@ def Model(
         List of environments where this Model should be deployed/available.
         Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     :type environments: List[str]
+    :param partition_interval:
+        Output partition grain for model training/deploy nodes. Examples: "1d", "3h", "15m".
+        When set below daily, Chronon uses "yyyy-MM-dd HH:mm" labels.
+    :type partition_interval: Optional[Union[common.Window, str]]
     :return:
         A Model object
     """
@@ -229,6 +234,9 @@ def Model(
         tableProperties=table_properties,
         version=version,
         environments=environments,
+        executionInfo=common.ExecutionInfo(
+            outputTableInfo=window_utils.output_table_info(partition_interval)
+        ) if partition_interval is not None else None,
     )
 
     model = ttypes.Model(

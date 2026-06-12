@@ -115,6 +115,13 @@ object StagingQuery {
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
+  private def outputPartitionSpec(stagingQueryConf: api.StagingQuery): ai.chronon.api.PartitionSpec =
+    (for {
+      executionInfo <- Option(stagingQueryConf.metaData.executionInfo)
+      outputTableInfo <- Option(executionInfo.outputTableInfo)
+    } yield outputTableInfo.partitionSpec(ai.chronon.api.PartitionSpec.daily))
+      .getOrElse(ai.chronon.api.PartitionSpec.daily)
+
   def substitute(tu: TableUtils, query: String, start: String, end: String, latest: String): String = {
 
     val maxDateMacro = ParametricMacro(
@@ -144,7 +151,8 @@ object StagingQuery {
       stagingQueryConf,
       parsedArgs.endDate(),
       TableUtils(
-        SparkSessionBuilder.build(s"staging_query_${stagingQueryConf.metaData.name}", enforceKryoSerializer = false))
+        SparkSessionBuilder.build(s"staging_query_${stagingQueryConf.metaData.name}", enforceKryoSerializer = false),
+        outputPartitionSpec(stagingQueryConf))
     )
     stagingQueryJob.computeStagingQuery(parsedArgs.stepDays.toOption)
   }

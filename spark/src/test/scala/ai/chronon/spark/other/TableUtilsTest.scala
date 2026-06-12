@@ -650,7 +650,7 @@ class TableUtilsTest extends AnyFlatSpec {
     spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
 
     import spark.implicits._
-    // Create an unpartitioned table with a timestamp column spanning 5 days
+    // Create an unpartitioned table with a timestamp column spanning 5 calendar dates.
     // Use midday times to avoid timezone boundary issues (Spark uses UTC for date cast)
     val data = Seq(
       ("user1", java.sql.Timestamp.valueOf("2024-01-01 12:00:00")),
@@ -664,8 +664,9 @@ class TableUtilsTest extends AnyFlatSpec {
     val partitions = tableUtils.partitions(tableName, timePartitioned = true,
       tablePartitionSpec = Some(PartitionSpec("created_at", "yyyy-MM-dd", 24 * 60 * 60 * 1000)))
 
-    // Should return all dates from 2024-01-01 to 2024-01-05 (inclusive, including gap on 01-04)
-    assertEquals(List("2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"), partitions)
+    // Timestamp-derived virtual partitions expose the last complete interval.
+    // With max(created_at) inside 2024-01-05, 2024-01-04 is the last complete daily interval.
+    assertEquals(List("2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"), partitions)
 
     spark.sql(s"DROP TABLE IF EXISTS $tableName")
     spark.sql(s"DROP DATABASE IF EXISTS $dbName")

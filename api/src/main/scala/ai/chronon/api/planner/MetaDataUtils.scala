@@ -7,6 +7,34 @@ import java.util
 
 object MetaDataUtils {
 
+  def outputPartitionSpec(baseMetadata: MetaData, defaultSpec: PartitionSpec): PartitionSpec =
+    (for {
+      metadata <- Option(baseMetadata)
+      executionInfo <- Option(metadata.executionInfo)
+      outputTableInfo <- Option(executionInfo.outputTableInfo)
+    } yield outputTableInfo.partitionSpec(defaultSpec)).getOrElse(defaultSpec)
+
+  def tableInfo(table: String, partitionSpec: PartitionSpec): TableInfo =
+    new TableInfo()
+      .setTable(table)
+      .setPartitionColumn(partitionSpec.column)
+      .setPartitionFormat(partitionSpec.format)
+      .setPartitionInterval(WindowUtils.fromMillis(partitionSpec.spanMillis))
+
+  def validateWideningOrEqualConsumer(nodeName: String,
+                                      consumerPartitionSpec: PartitionSpec,
+                                      producerPartitionSpec: PartitionSpec,
+                                      producerDescription: String): Unit = {
+    val consumerMillis = consumerPartitionSpec.spanMillis
+    val producerMillis = producerPartitionSpec.spanMillis
+    require(
+      consumerMillis >= producerMillis && consumerMillis % producerMillis == 0,
+      s"Invalid partition interval for $nodeName: consumer interval ${WindowUtils.millisToString(consumerMillis)} " +
+        s"must be equal to or a multiple of producer interval ${WindowUtils.millisToString(producerMillis)} " +
+        s"($producerDescription)."
+    )
+  }
+
   def layer(baseMetadata: MetaData,
             modeName: String,
             nodeName: String,
@@ -15,6 +43,7 @@ object MetaDataUtils {
             outputTableOverride: Option[String] = None)(implicit partitionSpec: PartitionSpec): MetaData = {
 
     val copy = baseMetadata.deepCopy()
+    val effectivePartitionSpec = outputPartitionSpec(copy, partitionSpec)
     val newName = nodeName
     copy.setName(newName)
 
@@ -42,12 +71,12 @@ object MetaDataUtils {
         // if output table is not set, use the base metadata's output table
         // fully qualified: namespace + outputTable
         copy.executionInfo.outputTableInfo.setTable(copy.outputTable)
-      }
+    }
 
     tableInfo
-      .setPartitionColumn(partitionSpec.column)
-      .setPartitionFormat(partitionSpec.format)
-      .setPartitionInterval(WindowUtils.hours(partitionSpec.spanMillis))
+      .setPartitionColumn(effectivePartitionSpec.column)
+      .setPartitionFormat(effectivePartitionSpec.format)
+      .setPartitionInterval(WindowUtils.fromMillis(effectivePartitionSpec.spanMillis))
 
     // set table dependencies
     copy.executionInfo.setTableDependencies(tableDependencies.toJava)

@@ -58,8 +58,7 @@ case object DeltaLake extends Format {
       sparkSession: SparkSession): List[String] = {
     metadataPartitions(tableName, timestampColumn)
       .filter(_.nonEmpty)
-      .orElse(statsDateRange(tableName, timestampColumn, partitionSpec)
-        .map(_.virtualPartitions(partitionSpec)))
+      .orElse(statsVirtualPartitions(tableName, timestampColumn, partitionSpec))
       .getOrElse(super.virtualPartitions(tableName, timestampColumn, partitionSpec))
   }
 
@@ -81,6 +80,15 @@ case object DeltaLake extends Format {
       sparkSession.read.table(tableName).schema(columnName).dataType match {
         case TimestampType => partitionSpec.before(range.lastAvailablePartition)
         case _             => range.lastAvailablePartition
+      }
+    }
+
+  private def statsVirtualPartitions(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[List[String]] =
+    statsDateRange(tableName, columnName, partitionSpec).map { range =>
+      sparkSession.read.table(tableName).schema(columnName).dataType match {
+        case TimestampType => partitionSpec.expandRange(range.firstAvailablePartition, partitionSpec.before(range.lastAvailablePartition))
+        case _             => range.virtualPartitions(partitionSpec)
       }
     }
 

@@ -12,6 +12,7 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
+import gen_thrift.common.ttypes as common
 from gen_thrift.api import ttypes as api
 
 
@@ -87,6 +88,19 @@ def test_online_schedule_validation():
     )
     assert j.metaData.executionInfo.onlineSchedule == "@daily"
 
+    # offline @never disables only offline scheduling; online=True still gets the normal default.
+    j = join.Join(
+        left=event_source("table"),
+        right_parts=[right_part(event_source("table"))],
+        version=1,
+        row_ids=["id"],
+        online=True,
+        offline_schedule="@never",
+        online_schedule=None,
+    )
+    assert j.metaData.executionInfo.offlineSchedule == "@never"
+    assert j.metaData.executionInfo.onlineSchedule == "@daily"
+
     # Test that online_schedule can be explicitly set when online=True
     j = join.Join(
         left=event_source("table"),
@@ -94,9 +108,34 @@ def test_online_schedule_validation():
         version=1,
         row_ids=["id"],
         online=True,
+        offline_schedule="0 2 * * *",
         online_schedule="0 2 * * *"  # Custom schedule
     )
     assert j.metaData.executionInfo.onlineSchedule == "0 2 * * *"
+
+    # Existing daily workflows may use different cron offsets for offline and online jobs.
+    j = join.Join(
+        left=event_source("table"),
+        right_parts=[right_part(event_source("table"))],
+        version=1,
+        row_ids=["id"],
+        online=True,
+        offline_schedule="0 4 * * *",
+        online_schedule="0 3 * * *",
+    )
+    assert j.metaData.executionInfo.onlineSchedule == "0 3 * * *"
+
+    with pytest.raises(ValueError, match="sub-daily partition_interval"):
+        join.Join(
+            left=event_source("table"),
+            right_parts=[right_part(event_source("table"))],
+            version=1,
+            row_ids=["id"],
+            online=True,
+            offline_schedule="0 */3 * * *",
+            online_schedule="30 */3 * * *",
+            partition_interval="3h",
+        )
 
     # Test that @never disables online scheduling even when online=True
     j = join.Join(
@@ -119,3 +158,19 @@ def test_online_schedule_validation():
         online_schedule="@never"
     )
     assert j.metaData.executionInfo.onlineSchedule is None
+
+
+def test_partition_interval_sets_output_table_info():
+    j = join.Join(
+        left=event_source("table"),
+        right_parts=[right_part(event_source("table"))],
+        version=1,
+        row_ids=["id"],
+        partition_interval="3h",
+    )
+
+    table_info = j.metaData.executionInfo.outputTableInfo
+    assert table_info.partitionColumn == "ds"
+    assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert table_info.partitionInterval.length == 3
+    assert table_info.partitionInterval.timeUnit == common.TimeUnit.HOURS

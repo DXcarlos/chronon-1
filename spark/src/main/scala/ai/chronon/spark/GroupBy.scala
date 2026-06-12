@@ -809,7 +809,7 @@ object GroupBy {
         Some(Constants.TimeColumn -> source.query.timeColumn)
       } else {
         val dsBasedTimestamp = // 1 millisecond before ds + 1
-          s"(((UNIX_TIMESTAMP(${sourcePartitionSpec.column}, '${sourcePartitionSpec.format}') + 86400) * 1000) - 1)"
+          s"(((UNIX_TIMESTAMP(${sourcePartitionSpec.column}, '${sourcePartitionSpec.format}') * 1000) + ${sourcePartitionSpec.spanMillis}) - 1)"
 
         Some(Constants.TimeColumn -> Option(source.query.timeColumn).getOrElse(dsBasedTimestamp))
       }
@@ -871,9 +871,8 @@ object GroupBy {
     val tableProps = Option(groupByConf.metaData.tableProperties)
       .map(_.toScala)
       .orNull
-    // CLI dates are always in yyyy-MM-dd format; translate to the configured partition spec
     val groupByUnfilledRangesOpt = Option(
-      Seq(PartitionRange(startPartition, endPartition)(PartitionSpec.daily).coveringRange(tableUtils.partitionSpec))
+      Seq(PartitionRange(startPartition, endPartition)(tableUtils.partitionSpec))
     ) // TODO(tchow): possilbly revert if orchestrator is not yet available.
 
     if (groupByUnfilledRangesOpt.isEmpty) {

@@ -253,8 +253,11 @@ object Extensions {
     def withShiftedPartition(colName: String, days: Int = 1): DataFrame =
       df.withColumn(
         colName,
-        date_format(date_add(to_date(df.col(tableUtils.partitionColumn), tableUtils.partitionSpec.format), days),
-                    tableUtils.partitionSpec.format))
+        date_format(
+          from_unixtime(unix_timestamp(df.col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
+            (days.toLong * tableUtils.partitionSpec.spanMillis / 1000)),
+          tableUtils.partitionSpec.format
+        ))
 
     def replaceWithReadableTime(cols: Seq[String], dropOriginal: Boolean): DataFrame = {
       cols.foldLeft(df) { (dfNew, col) =>
@@ -283,7 +286,7 @@ object Extensions {
         resultDf = resultDf.withColumn(
           newSpec.column,
           date_format(
-            to_date(col(newSpec.column), existingSpec.format),
+            from_unixtime(unix_timestamp(col(newSpec.column), existingSpec.format)),
             newSpec.format
           )
         )

@@ -56,6 +56,12 @@ class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
 class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends NodeRunner {
   @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
+  private def outputPartitionSpec(metadata: MetaData): PartitionSpec =
+    (for {
+      executionInfo <- Option(metadata.executionInfo)
+      outputTableInfo <- Option(executionInfo.outputTableInfo)
+    } yield outputTableInfo.partitionSpec(tableUtils.partitionSpec)).getOrElse(tableUtils.partitionSpec)
+
   // in ad-hoc flows, the jobs downstream of external tables will simply fail (albeit, with retries)
   // in scheduled flow, the jobs downstream of external sensors will be stalled by the sensor
   def checkPartitions(conf: ExternalSourceSensorNode, range: PartitionRange): Try[Unit] = {
@@ -71,6 +77,9 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     val tableInfo = conf.sourceTableDependency.tableInfo
     val hasPartitionColumn = Option(tableInfo.partitionColumn).isDefined
     val hasTriggerExpr = Option(tableInfo.triggerExpr).isDefined
+    val requiredRange = DependencyResolver
+      .computeInputRange(range, conf.sourceTableDependency)
+      .getOrElse(range)
 
     // Case 1: triggerExpr overrides — user-defined readiness check
     if (hasTriggerExpr) {
@@ -90,7 +99,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             .getOrElse(throw new RuntimeException(s"Trigger expression query returned no results"))
             .get(0)
 
-          val maxPartition = range.end
+          val maxPartition = requiredRange.end
           val triggerValueStr = triggerValue.toString
           logger.info(s"Trigger value: ${triggerValueStr}, Max partition: ${maxPartition}")
 
@@ -132,7 +141,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             .lastAvailablePartition(tableName, tablePartitionSpec = Some(spec))
             .getOrElse(throw new RuntimeException(s"Could not determine last available partition for ${tableName}"))
 
-          val requiredEnd = range.end
+          val requiredEnd = requiredRange.end
           logger.info(s"Last available partition: ${lastPartition}, required end: ${requiredEnd}")
 
           if (lastPartition >= requiredEnd) {
@@ -489,19 +498,19 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       tableUtils.firstAvailablePartition(outputTable, partitionSpec = outputTablePartitionSpec)
     val lastOutputPartition =
       tableUtils.lastAvailablePartition(outputTable, tablePartitionSpec = Option(outputTablePartitionSpec))
-    val translatedRange = range.coveringRange(tableUtils.partitionSpec)
+    val outputRange = range.coveringRange(outputTablePartitionSpec)
 
     logger.info(
       s"Output table last available partition for '${metadata.name}': ${lastOutputPartition.getOrElse("none")}")
 
     // Validate output covers the requested range
     lastOutputPartition match {
-      case Some(lastPartition) if lastPartition >= translatedRange.end =>
+      case Some(lastPartition) if lastPartition >= outputRange.end =>
         logger.info(
-          s"Output table $outputTable covers requested range (last: $lastPartition >= end: ${translatedRange.end})")
+          s"Output table $outputTable covers requested range (last: $lastPartition >= end: ${outputRange.end})")
       case Some(lastPartition) =>
         logger.error(
-          s"After job completion, output table $outputTable last partition $lastPartition < required end ${translatedRange.end}")
+          s"After job completion, output table $outputTable last partition $lastPartition < required end ${outputRange.end}")
       case None =>
         logger.error(s"After job completion, output table $outputTable has no partitions")
     }
@@ -556,7 +565,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           .flatMap { td =>
             DependencyResolver
               .computeInputRange(range, td)
-              .map(_.coveringRange(tableUtils.partitionSpec).end)
+              .map(_.end)
           }
           .toSeq
           .sorted
@@ -605,7 +614,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   ): Int = {
     Try {
       val metadata = node.metaData
-      val range = PartitionRange(startDs, endDs)(PartitionSpec.daily)
+      val range = PartitionRange(startDs, endDs)(outputPartitionSpec(metadata))
 
       val inputTablePartitionStatuses = computeInputTablePartitionStatuses(metadata, range, tableUtils)
 
@@ -693,12 +702,19 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 
 object BatchNodeRunner {
 
+  private def outputPartitionSpec(metadata: MetaData): PartitionSpec =
+    (for {
+      executionInfo <- Option(metadata.executionInfo)
+      outputTableInfo <- Option(executionInfo.outputTableInfo)
+    } yield outputTableInfo.partitionSpec(PartitionSpec.daily)).getOrElse(PartitionSpec.daily)
+
   def main(args: Array[String]): Unit = {
     val batchArgs = new BatchNodeRunnerArgs(args)
     val resolvedEnv = SecretResolver.resolveVaultUris(sys.env.toMap)
     val driverSecrets = resolvedEnv -- sys.env.keySet
     val node = NodeConfReader.read(batchArgs.confPath())
-    val tableUtils = TableUtils(SparkSessionBuilder.build(s"batch-node-runner-${node.metaData.name}"))
+    val tableUtils = TableUtils(SparkSessionBuilder.build(s"batch-node-runner-${node.metaData.name}"),
+                                outputPartitionSpec(node.metaData))
     val api = instantiateApi(batchArgs.onlineClass(), batchArgs.apiProps ++ driverSecrets)
     val runner = new BatchNodeRunner(node, tableUtils, api)
     val exitCode =

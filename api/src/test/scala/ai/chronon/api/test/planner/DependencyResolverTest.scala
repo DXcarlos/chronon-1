@@ -1,7 +1,8 @@
 package ai.chronon.api.test.planner
 
 import ai.chronon.api.Builders.dep
-import ai.chronon.api.{PartitionRange, PartitionSpec}
+import ai.chronon.api.Extensions.WindowUtils
+import ai.chronon.api.{PartitionRange, PartitionSpec, TableInfo}
 import ai.chronon.api.planner.DependencyResolver
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -9,6 +10,7 @@ import org.scalatest.matchers.should.Matchers
 class DependencyResolverTest extends AnyFlatSpec with Matchers {
 
   implicit val partitionSpec: PartitionSpec = PartitionSpec.daily
+  private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
 
   "computeOutputRange" should "return same range when no offsets are set" in {
     val parentRange = PartitionRange("2024-01-01", "2024-01-05")
@@ -53,6 +55,31 @@ class DependencyResolverTest extends AnyFlatSpec with Matchers {
     val result = DependencyResolver.computeOutputRange(parentRange, tableDep)
 
     result shouldBe None
+  }
+
+  it should "map a daily consumer range to all required three-hour input partitions" in {
+    val queryRange = PartitionRange("2024-01-02", "2024-01-02")
+    val tableDep = dep("test.hourly_table")
+    tableDep.setTableInfo(
+      new TableInfo()
+        .setTable("test.hourly_table")
+        .setPartitionColumn(threeHourSpec.column)
+        .setPartitionFormat(threeHourSpec.format)
+        .setPartitionInterval(WindowUtils.fromMillis(threeHourSpec.spanMillis))
+    )
+
+    val result = DependencyResolver.computeInputRange(queryRange, tableDep)
+
+    result shouldBe Some(PartitionRange("2024-01-02 00:00", "2024-01-02 21:00")(threeHourSpec))
+  }
+
+  it should "map a partial three-hour producer range to the impacted daily output partition" in {
+    val parentRange = PartitionRange("2024-01-02 06:00", "2024-01-02 06:00")(threeHourSpec)
+    val tableDep = dep("test.hourly_table")
+
+    val result = DependencyResolver.computeOutputRange(parentRange, tableDep, PartitionSpec.daily)
+
+    result shouldBe Some(PartitionRange("2024-01-02", "2024-01-02"))
   }
 
 }

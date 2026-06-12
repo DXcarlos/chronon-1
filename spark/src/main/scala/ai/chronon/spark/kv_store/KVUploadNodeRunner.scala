@@ -1,7 +1,7 @@
 package ai.chronon.spark.kv_store
 
 import ai.chronon.api.Constants.MetadataDataset
-import ai.chronon.api.Extensions.MetadataOps
+import ai.chronon.api.Extensions.{MetadataOps, TableInfoOps}
 import ai.chronon.api._
 import ai.chronon.api.planner.NodeRunner
 import ai.chronon.api.secrets.SecretResolver
@@ -118,6 +118,12 @@ class KVUploadNodeRunner(api: Api) extends NodeRunner {
 
 object KVUploadNodeRunner {
 
+  private def outputPartitionSpec(metadata: MetaData): PartitionSpec =
+    (for {
+      executionInfo <- Option(metadata.executionInfo)
+      outputTableInfo <- Option(executionInfo.outputTableInfo)
+    } yield outputTableInfo.partitionSpec(PartitionSpec.daily)).getOrElse(PartitionSpec.daily)
+
   class KVUploadNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
     val confPath = opt[String](required = true, descr = "Path to node configuration file")
     val endDs = opt[String](required = true, descr = "End date string (yyyy-MM-dd format)")
@@ -170,7 +176,7 @@ object KVUploadNodeRunner {
 
       val api = instantiateApi(onlineClass, mergedProps)
 
-      implicit val partitionSpec: PartitionSpec = PartitionSpec.daily
+      implicit val partitionSpec: PartitionSpec = outputPartitionSpec(metadata)
       val range = Some(PartitionRange(null, endDs))
 
       val runner = new KVUploadNodeRunner(api)

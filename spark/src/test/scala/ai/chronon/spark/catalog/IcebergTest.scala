@@ -163,7 +163,7 @@ class IcebergTest extends SparkTestBase with Matchers {
     Iceberg.statsDateRange(tableName, "created_at", PartitionSpec.daily) shouldBe
       Some(StatsDateRange(start = "2024-04-01", end = "2024-04-03"))
     Iceberg.virtualPartitions(tableName, "created_at", PartitionSpec.daily) shouldBe
-      List("2024-04-01", "2024-04-02", "2024-04-03")
+      List("2024-04-01", "2024-04-02")
     Iceberg.firstAvailablePartition(tableName, "created_at", PartitionSpec.daily) shouldBe Some("2024-04-01")
     Iceberg.lastAvailablePartition(tableName, "created_at", PartitionSpec.daily) shouldBe Some("2024-04-02")
   }
@@ -231,7 +231,7 @@ class IcebergTest extends SparkTestBase with Matchers {
 
     Iceberg.statsDateRange(tableName, "created_at", PartitionSpec.daily) shouldBe None
     Iceberg.virtualPartitions(tableName, "created_at", PartitionSpec.daily) shouldBe
-      List("2024-05-01", "2024-05-02", "2024-05-03")
+      List("2024-05-01", "2024-05-02")
     Iceberg.firstAvailablePartition(tableName, "created_at", PartitionSpec.daily) shouldBe Some("2024-05-01")
     Iceberg.lastAvailablePartition(tableName, "created_at", PartitionSpec.daily) shouldBe Some("2024-05-02")
   }

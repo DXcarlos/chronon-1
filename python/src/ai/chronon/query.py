@@ -13,9 +13,11 @@
 #     limitations under the License.
 
 from collections import OrderedDict
-from typing import Dict, List
+from typing import Dict, List, Union
 
+import ai.chronon.windows as window_utils
 import gen_thrift.api.ttypes as api
+import gen_thrift.common.ttypes as common
 
 
 def Query(
@@ -29,6 +31,8 @@ def Query(
     reversal_column: str = None,
     partition_column: str = None,
     partition_format: str = None,
+    partition_interval: Union[common.Window, str] = None,
+    partition_lag: Union[common.Window, str] = None,
     sub_partitions_to_wait_for: List[str] = None,
     time_partitioned: bool = None,
 ) -> api.Query:
@@ -84,6 +88,13 @@ def Query(
     :param partition_format:
         Date format string to expect the partition values to be in.
     :type partition_format: str, optional
+    :param partition_interval:
+        Partition grain for the source table. Examples: "1d", "3h", "15m".
+        Sub-daily partition labels use "yyyy-MM-dd HH:mm" unless partition_format is explicitly set.
+    :type partition_interval: Union[common.Window, str], optional
+    :param partition_lag:
+        Partition lag to apply when resolving dependencies. Examples: "1d", "3h", "15m".
+    :type partition_lag: Union[common.Window, str], optional
     :param time_partitioned:
         Indicates the source table uses a timestamp or date column for time-based filtering
         instead of traditional Hive-style string partitioning. When True, partition_column
@@ -104,7 +115,16 @@ def Query(
         reversalColumn=reversal_column,
         partitionColumn=partition_column,
         subPartitionsToWaitFor=sub_partitions_to_wait_for,
-        partitionFormat=partition_format,
+        partitionFormat=(
+            partition_format
+            or (
+                window_utils.default_partition_format(partition_interval)
+                if partition_interval is not None
+                else None
+            )
+        ),
+        partitionInterval=window_utils.normalize_window(partition_interval) if partition_interval is not None else None,
+        partitionLag=window_utils.normalize_window(partition_lag) if partition_lag is not None else None,
         timePartitioned=time_partitioned,
     )
 

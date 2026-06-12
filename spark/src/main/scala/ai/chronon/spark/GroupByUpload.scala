@@ -18,7 +18,7 @@ package ai.chronon.spark
 
 import ai.chronon.aggregator.windowing._
 import ai.chronon.api
-import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, SourceOps}
+import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, SourceOps, TableInfoOps}
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
 import ai.chronon.online.Extensions.ChrononStructTypeOps
@@ -315,17 +315,22 @@ object GroupByUpload {
 
   case class UploadResult(kvDf: DataFrame, nullCounts: Map[String, Long])
 
+  private def outputPartitionSpec(groupByConf: api.GroupBy): PartitionSpec =
+    (for {
+      executionInfo <- Option(groupByConf.metaData.executionInfo)
+      outputTableInfo <- Option(executionInfo.outputTableInfo)
+    } yield outputTableInfo.partitionSpec(PartitionSpec.daily)).getOrElse(PartitionSpec.daily)
+
   // TODO - remove this if spark streaming can't reach hive tables
   private def buildServingInfo(groupByConf: api.GroupBy,
-                               session: SparkSession,
+                               tableUtils: TableUtils,
                                endDs: String): GroupByServingInfoParsed = {
     val groupByServingInfo = new GroupByServingInfo()
-    val tableUtils: TableUtils = TableUtils(session)
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
     val nextDay = tableUtils.partitionSpec.after(endDs)
 
     val groupBy = ai.chronon.spark.GroupBy
-      .from(groupByConf, PartitionRange(endDs, endDs), TableUtils(session), computeDependency = false)
+      .from(groupByConf, PartitionRange(endDs, endDs), tableUtils, computeDependency = false)
 
     groupByServingInfo.setBatchEndDate(nextDay)
     groupByServingInfo.setGroupBy(groupByConf)
@@ -459,7 +464,8 @@ object GroupByUpload {
       tableUtilsOpt.getOrElse(
         TableUtils(
           SparkSessionBuilder
-            .build(s"groupBy_${groupByConf.metaData.name}_upload")))
+            .build(s"groupBy_${groupByConf.metaData.name}_upload"),
+          outputPartitionSpec(groupByConf)))
     val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
     val startTs = System.currentTimeMillis()
     val result = generateDf(groupByConf = groupByConf,
@@ -474,7 +480,7 @@ object GroupByUpload {
       kvDf.prettyPrint()
     }
 
-    val groupByServingInfo = buildServingInfo(groupByConf, session = tableUtils.sparkSession, endDs).groupByServingInfo
+    val groupByServingInfo = buildServingInfo(groupByConf, tableUtils, endDs).groupByServingInfo
 
     val metaRows = Seq(
       Row(
@@ -505,7 +511,10 @@ object GroupByUpload {
 
     if (uploadFormat == "ion") {
       val rootPath = sparkConf.getOption(IonPathConfig.UploadLocationKey)
-      val ionDf = uploadDf.withColumn(partitionCol, to_date(col(partitionCol)))
+      val ionPartitionCol =
+        if (tableUtils.partitionSpec.spanMillis == PartitionSpec.daily.spanMillis) to_date(col(partitionCol))
+        else to_timestamp(col(partitionCol), tableUtils.partitionSpec.format)
+      val ionDf = uploadDf.withColumn(partitionCol, ionPartitionCol)
       val result = IonWriter.write(
         ionDf,
         groupByConf.metaData.uploadTable,
