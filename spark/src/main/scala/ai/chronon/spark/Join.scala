@@ -258,7 +258,7 @@ class Join(joinConf: api.Join,
 
     }
 
-    val bootStrapWithStats = bootstrapDf.withStats
+    val bootStrapWithStats = DfWithStats(bootstrapDf)(leftRange.partitionSpec)
 
     // for each join part, find the bootstrap sets that can fully "cover" the required fields. Later we will use this
     // info to filter records that need backfills vs can be waived from backfills

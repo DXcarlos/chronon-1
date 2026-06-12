@@ -106,7 +106,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
 
         // Add back ts_ds column if this is an EVENTS source and the column is missing
         if (join.left.dataModel == DataModel.EVENTS && !selectedDf.columns.contains(Constants.TimePartitionColumn)) {
-          selectedDf.withTimeBasedColumn(Constants.TimePartitionColumn)
+          selectedDf.withTimeBasedColumn(Constants.TimePartitionColumn, format = tableUtils.partitionSpec.format)
         } else {
           selectedDf
         }

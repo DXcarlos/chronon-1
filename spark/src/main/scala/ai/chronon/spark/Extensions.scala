@@ -60,7 +60,7 @@ object Extensions {
   case class DfWithStats(df: DataFrame, partitionCounts: Map[String, Long])(implicit val partitionSpec: PartitionSpec) {
     private val minPartition: String = partitionCounts.keys.min
     private val maxPartition: String = partitionCounts.keys.max
-    val partitionRange: PartitionRange = PartitionRange(minPartition, maxPartition)
+    val partitionRange: PartitionRange = PartitionRange(minPartition, maxPartition)(partitionSpec)
     val count: Long = partitionCounts.values.sum
 
     lazy val timeRange: TimeRange = df.calculateTimeRange
@@ -79,9 +79,8 @@ object Extensions {
 
   object DfWithStats {
     def apply(dataFrame: DataFrame)(implicit partitionSpec: PartitionSpec): DfWithStats = {
-      val tu = TableUtils(dataFrame.sparkSession)
-      val pCol = tu.partitionColumn
-      val pFormat = tu.partitionFormat
+      val pCol = partitionSpec.column
+      val pFormat = partitionSpec.format
       val partitionCounts = dataFrame
         .groupBy(date_format(col(pCol), pFormat))
         .count()

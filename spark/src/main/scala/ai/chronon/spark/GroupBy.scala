@@ -54,11 +54,25 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
               skewFilter: Option[String] = None,
               finalize: Boolean = true)
     extends Serializable {
+  @transient private var tableUtilsOverride: TableUtils = _
+
+  private[spark] def this(aggregations: Seq[api.Aggregation],
+                          keyColumns: Seq[String],
+                          inputDf: DataFrame,
+                          mutationDfFn: () => DataFrame,
+                          skewFilter: Option[String],
+                          finalize: Boolean,
+                          tableUtilsOverride: TableUtils) = {
+    this(aggregations, keyColumns, inputDf, mutationDfFn, skewFilter, finalize)
+    this.tableUtilsOverride = tableUtilsOverride
+  }
+
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
   protected[spark] val tsIndex: Int = inputDf.schema.fieldNames.indexOf(Constants.TimeColumn)
   protected val selectedSchema: Array[(String, api.DataType)] = SparkConversions.toChrononSchema(inputDf.schema)
-  implicit private val tableUtils: TableUtils = TableUtils(inputDf.sparkSession)
+  implicit private lazy val tableUtils: TableUtils =
+    Option(tableUtilsOverride).getOrElse(TableUtils(inputDf.sparkSession))
 
   val keySchema: StructType = StructType(keyColumns.map(inputDf.schema.apply).toArray)
   implicit val sparkSession: SparkSession = inputDf.sparkSession
@@ -184,11 +198,13 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
         }(outputEncoder)
     }
 
-  // Calculate snapshot accurate windows for ALL keys at pre-defined "endTimes"
-  // At this time, we hardcode the resolution to Daily, but it is straight forward to support
-  // hourly resolution.
-  def snapshotEvents(partitionRange: PartitionRange): DataFrame =
-    toDf(snapshotEventsBase(partitionRange), Seq((tableUtils.partitionColumn, StringType)))
+  // Calculate snapshot accurate windows for ALL keys at pre-defined "endTimes".
+  def snapshotEvents(partitionRange: PartitionRange): DataFrame = {
+    val resolution =
+      if (tableUtils.partitionSpec.spanMillis < WindowUtils.Day.millis) FiveMinuteResolution
+      else DailyResolution
+    toDf(snapshotEventsBase(partitionRange, resolution), Seq((tableUtils.partitionColumn, StringType)))
+  }
 
   /** Support for entities with mutations.
     * Three way join between:
@@ -724,11 +740,15 @@ object GroupBy {
       df
     }
 
-    new GroupBy(Option(groupByConf.getAggregations).map(_.toScala).orNull,
-                keyColumns,
-                nullFiltered,
-                mutationDfFn,
-                finalize = finalize)
+    new GroupBy(
+      Option(groupByConf.getAggregations).map(_.toScala).orNull,
+      keyColumns,
+      nullFiltered,
+      mutationDfFn,
+      skewFilter = None,
+      finalize = finalize,
+      tableUtilsOverride = tableUtils
+    )
   }
 
   private def getIntersectedRange(source: api.Source,

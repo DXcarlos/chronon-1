@@ -58,7 +58,7 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
         logger.warn(s"Query produced 0 rows in range $dayStep. Skipping this partition.")
       } else {
         val dfWithTimeCol = if (source.dataModel == EVENTS) {
-          df.withTimeBasedColumn(Constants.TimePartitionColumn)
+          df.withTimeBasedColumn(Constants.TimePartitionColumn, format = tableUtils.partitionSpec.format)
         } else {
           df
         }

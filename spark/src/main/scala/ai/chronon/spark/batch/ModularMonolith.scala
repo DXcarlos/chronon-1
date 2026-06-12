@@ -40,8 +40,7 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
     logger.info(s"Starting ModularMonolith pipeline for join: ${join.metaData.name}")
     logger.info(s"Executing ${nodes.size} nodes in topological order")
 
-    // DateRange is guaranteed to be in daily spec
-    val queryRange = PartitionRange(dateRange)
+    val queryRange = PartitionRange(dateRange.startDate, dateRange.endDate)(partitionSpec)
 
     nodes.foreach { node =>
       runNode(node, queryRange)
@@ -166,7 +165,7 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
 
   private def runUnionJoinJob(unionJoinNode: UnionJoinNode, metaData: MetaData, nodeRange: DateRange): Unit = {
     StepRunner(nodeRange, metaData) { stepRange =>
-      val range = PartitionRange(stepRange)
+      val range = PartitionRange(stepRange.startDate, stepRange.endDate)(partitionSpec)
       ai.chronon.spark.join.UnionJoin.computeJoinAndSave(unionJoinNode.join, range)(tableUtils)
     }
     logger.info(s"UnionJoin completed, output table: ${metaData.outputTable}")

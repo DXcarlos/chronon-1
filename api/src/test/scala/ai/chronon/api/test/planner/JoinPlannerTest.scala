@@ -133,6 +133,32 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
     an[IllegalArgumentException] should be thrownBy new JoinPlanner(hourlyJoin).buildPlan
   }
 
+  it should "partition modular join part intermediates in the join output domain" in {
+    val hourlyGroupBy = groupByWithOutputSpec("modular_three_hour_gb", threeHourSpec)
+    val dailyGroupBy = groupByWithOutputSpec("modular_daily_gb", PartitionSpec.daily)
+    val join = Join(
+      metaData = MetaData(
+        name = "daily_modular_join",
+        namespace = "test_namespace",
+        executionInfo = modularExecutionInfo
+      ),
+      left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
+      joinParts = Seq(Builders.JoinPart(groupBy = hourlyGroupBy), Builders.JoinPart(groupBy = dailyGroupBy))
+    )
+
+    val plan = new JoinPlanner(join).buildPlan
+
+    val hourlyJoinPartNode = plan.nodes.asScala
+      .find(node =>
+        node.content.isSetJoinPart &&
+          node.content.getJoinPart.joinPart.groupBy.metaData.name == hourlyGroupBy.metaData.name)
+      .get
+    val joinPartOutputTableInfo = hourlyJoinPartNode.metaData.executionInfo.outputTableInfo
+
+    joinPartOutputTableInfo.partitionFormat should equal(PartitionSpec.daily.format)
+    joinPartOutputTableInfo.partitionInterval should equal(WindowUtils.Day)
+  }
+
   it should "include mutation table dependencies on the join part for the standard modular path" in {
     val standardGroupBy = Builders.GroupBy(
       sources = Seq(Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.other_events")),

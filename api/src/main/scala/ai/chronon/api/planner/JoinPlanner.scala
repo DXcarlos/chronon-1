@@ -119,10 +119,6 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         case DataModel.EVENTS   => 15
       })
 
-    // pull conf params from the groupBy metadata, but use the join namespace to write to.
-    val joinPartOutputPartitionSpec =
-      MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, confOutputPartitionSpec)
-
     val metaData = MetaDataUtils
       .layer(
         joinPart.groupBy.metaData,
@@ -130,8 +126,16 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         partTable,
         deps,
         stepDays = Some(stepDays)
-      )(joinPartOutputPartitionSpec)
+      )(confOutputPartitionSpec)
       .setOutputNamespace(join.metaData.outputNamespace)
+
+    // Join part tables are join intermediates and must be partitioned in the join/left domain.
+    // The groupBy output spec still controls materialization and upload nodes, but merge reads these
+    // intermediates by the join partition range.
+    metaData.executionInfo.outputTableInfo
+      .setPartitionColumn(confOutputPartitionSpec.column)
+      .setPartitionFormat(confOutputPartitionSpec.format)
+      .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
 
     val copy = result.deepCopy()
     copy.joinPart.groupBy.unsetMetaData()

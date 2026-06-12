@@ -108,11 +108,13 @@ class TemporalNullCountAggregator(
   override def outputEncoder: Encoder[Map[String, Long]] = Encoders.kryo[Map[String, Long]]
 }
 
-class GroupByUpload(endPartition: String, groupBy: ai.chronon.spark.GroupBy) extends Serializable {
+class GroupByUpload(endPartition: String,
+                    groupBy: ai.chronon.spark.GroupBy,
+                    uploadPartitionSpec: PartitionSpec = PartitionSpec.daily)
+    extends Serializable {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
   implicit val sparkSession: SparkSession = groupBy.sparkSession
-  private val tableUtils: TableUtils = TableUtils(sparkSession)
-  implicit private val partitionSpec: PartitionSpec = tableUtils.partitionSpec
+  implicit private val partitionSpec: PartitionSpec = uploadPartitionSpec
 
   private val avroSchema = StructType(
     Seq(
@@ -214,7 +216,7 @@ class GroupByUpload(endPartition: String, groupBy: ai.chronon.spark.GroupBy) ext
   }
 
   def snapshotEvents(jsonPercent: Int = 1): (DataFrame, Map[String, Long]) = {
-    val aggregatedDf = groupBy.snapshotEvents(PartitionRange(endPartition, endPartition))
+    val aggregatedDf = groupBy.snapshotEvents(PartitionRange(endPartition, endPartition)(partitionSpec))
     val valueColumns = groupBy.postAggSchema.fieldNames.toSeq
     val nullCounts = computeNullCounts(aggregatedDf, valueColumns)
     val kvDf = toAvroDf(
@@ -230,7 +232,7 @@ class GroupByUpload(endPartition: String, groupBy: ai.chronon.spark.GroupBy) ext
 
   def temporalEvents(jsonPercent: Int = 1,
                      resolution: Resolution = FiveMinuteResolution): (DataFrame, Map[String, Long]) = {
-    val endTs = tableUtils.partitionSpec.epochMillis(endPartition)
+    val endTs = partitionSpec.epochMillis(endPartition)
     logger.info(s"TemporalEvents upload end ts: $endTs")
 
     val inputSchema = groupBy.inputDf.schema
@@ -406,7 +408,7 @@ object GroupByUpload {
                                     tableUtils,
                                     computeDependency = true,
                                     showDf = showDf)
-    lazy val groupByUpload = new GroupByUpload(endDs, groupBy)
+    lazy val groupByUpload = new GroupByUpload(endDs, groupBy, partitionSpec)
     // for temporal accuracy - we don't need to scan mutations for upload
     // when endDs = xxxx-01-02 the timestamp from airflow is more than (xxxx-01-03 00:00:00)
     // we wait for event partitions of (xxxx-01-02) which contain data until (xxxx-01-02 23:59:59.999)
@@ -416,9 +418,9 @@ object GroupByUpload {
                                     tableUtils,
                                     computeDependency = true,
                                     showDf = showDf)
-    lazy val shiftedGroupByUpload = new GroupByUpload(batchEndDate, shiftedGroupBy)
+    lazy val shiftedGroupByUpload = new GroupByUpload(batchEndDate, shiftedGroupBy, partitionSpec)
     // for mutations I need the snapshot from the previous day, but a batch end date of ds +1
-    lazy val otherGroupByUpload = new GroupByUpload(batchEndDate, groupBy)
+    lazy val otherGroupByUpload = new GroupByUpload(batchEndDate, groupBy, partitionSpec)
 
     logger.info(s"""
                    |GroupBy upload for: ${groupByConf.metaData.team}.${groupByConf.metaData.name}

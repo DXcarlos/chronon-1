@@ -65,7 +65,7 @@ class JoinPartJob(node: JoinPartNode,
 
         val runSmallMode = JoinUtils.runSmallMode(tableUtils, cachedLeftDf)
 
-        val leftWithStats = cachedLeftDf.withStats
+        val leftWithStats = DfWithStats(cachedLeftDf)(partitionSpec)
 
         val joinLevelBloomMapOpt =
           JoinUtils.genBloomFilterIfNeeded(joinPart, node.leftDataModel, dateRange, None)

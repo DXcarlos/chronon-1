@@ -138,9 +138,11 @@ object FetcherTestUtil {
                            namespace: String,
                            consistencyCheck: Boolean,
                            dropDsOnWrite: Boolean,
-                           enableTiling: Boolean = false)(implicit spark: SparkSession): Unit = {
+                           enableTiling: Boolean = false,
+                           partitionSpec: PartitionSpec = PartitionSpec.daily,
+                           offlineAssertion: DataFrame => Unit = _ => ())(implicit spark: SparkSession): Unit = {
     implicit val executionContext: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))
-    implicit val tableUtils: TableUtils = TableUtils(spark)
+    implicit val tableUtils: TableUtils = TableUtils(spark, partitionSpec)
     val kvStoreFunc = () => OnlineUtils.buildInMemoryKVStore("FetcherTest")
     val inMemoryKvStore = kvStoreFunc()
 
@@ -194,16 +196,24 @@ object FetcherTestUtil {
     joinedDf.show()
     joinedDf.save(joinTable)
     val endDsExpected = tableUtils.sql(s"SELECT * FROM $joinTable WHERE ds='$endDs'")
+    offlineAssertion(endDsExpected)
 
-    joinConf.joinParts.toScala.foreach(jp =>
-      OnlineUtils.serve(tableUtils,
+    joinConf.joinParts.toScala.foreach { jp =>
+      val groupByPartitionSpec = Option(jp.groupBy.metaData)
+        .map(metadata => RunnerUtils.outputPartitionSpec(metadata, partitionSpec))
+        .getOrElse(partitionSpec)
+      val groupByEndDs = partitionSpec.translate(endDs, groupByPartitionSpec)
+      val groupByTableUtils =
+        if (groupByPartitionSpec == partitionSpec) tableUtils else TableUtils(spark, groupByPartitionSpec)
+      OnlineUtils.serve(groupByTableUtils,
                         inMemoryKvStore,
                         kvStoreFunc,
                         namespace,
-                        endDs,
+                        groupByEndDs,
                         jp.groupBy,
                         dropDsOnWrite = dropDsOnWrite,
-                        tilingEnabled = enableTiling))
+                        tilingEnabled = enableTiling)
+    }
 
     // Extract queries for the EndDs. Filter by ds to avoid including future-dated events produced by
     // ModularMonolith (which computes the full date range), which would have no matching row in
