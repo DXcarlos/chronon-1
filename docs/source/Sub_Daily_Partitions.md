@@ -50,14 +50,17 @@ You usually don't need `partition_interval` at all — it is **inferred from the
 
 - a cron firing more than once a day implies that interval (`0 */2 * * *` → 2h grid),
 - a cron firing once a day or less implies daily — the 24h ceiling. A weekly report
-  (`0 6 * * MON`) or monthly job (`0 6 1 * *`) runs over **daily partitions**, exactly as
-  today; each fire backfills the daily partitions since the last run.
+  (`0 6 * * MON`) or monthly job (`0 6 1 * *`) runs over **daily partitions**.
+
+**Each fire materializes exactly one partition** — the latest one closed on the grid at fire
+time. A cron coarser than the grid therefore produces a **sparse output by design**: a weekly
+report writes one daily-labeled partition per week; a 3h cron over a 90m grid writes every
+other 90m partition. Downstream consumers handle sparse inputs; online freshness follows the
+cron, not the grid.
 
 Declare `partition_interval` explicitly when the grid can't be inferred: backfill-only confs
-(no schedule), or grids no single cron can express (a 90m grid driven by a 3h cron — skipped
-partitions are backfilled by the next fire; note KV uploads have no backfill, so online
-freshness follows the cron, not the grid). When both are present, the cron interval must be
-a multiple of the declared one.
+(no schedule), or grids no single cron can express (the 90m case above). When both are
+present, the cron interval must be a multiple of the declared one.
 
 **The offset is never inferred from the cron.** Fire phase is treated purely as processing
 delay; if your data's boundaries are at 01:00, say so with `partition_offset="1h"`.
@@ -147,8 +150,9 @@ jobs log a loud format-mismatch error instead of treating the table as empty.
    intraday entity state matters.
 4. Coverage edges (left, sources) need covering grain or `time_partitioned`; right parts are
    free.
-5. Over- and under-firing are safe: extra fires are idempotent no-ops, missed fires are
-   backfilled by the next run (batch; KV uploads serve at the cron's freshness).
+5. Each fire materializes exactly one partition (the latest closed on the grid). Extra fires
+   are idempotent no-ops; fires missed during downtime are recovered one-per-fire by
+   scheduler catch-up. A cron coarser than the grid yields a sparse output by design.
 6. Regrid = version bump = new output table.
 7. `BatchNodeRunner` is the supported runner for sub-daily nodes; `Driver.scala` ad-hoc
    subcommands remain daily.
