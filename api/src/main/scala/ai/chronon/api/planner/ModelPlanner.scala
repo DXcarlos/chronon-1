@@ -19,7 +19,7 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
       trainingDataSource <- Option(trainingConf.trainingDataSource)
       query <- Option(trainingDataSource.query)
     } {
-      MetaDataUtils.validateCoverageEdge(
+      PartitionSpecResolver.validateCoverageQuery(
         model.metaData.name,
         confOutputPartitionSpec,
         query,

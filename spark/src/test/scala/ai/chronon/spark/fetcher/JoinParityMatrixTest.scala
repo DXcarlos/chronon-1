@@ -3,6 +3,7 @@ package ai.chronon.spark.fetcher
 import ai.chronon.api._
 import ai.chronon.api.Constants.MetadataDataset
 import ai.chronon.api.Extensions._
+import ai.chronon.api.planner.RelevantLeftForJoinPart
 import ai.chronon.api.ScalaJavaConversions.IterableOps
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
 import ai.chronon.online.fetcher.Fetcher.Request
@@ -22,13 +23,13 @@ import scala.concurrent.{Await, ExecutionContext}
 
 /** Online/offline join-parity matrix with hand-computed golden values.
   *
-  * The matrix is accuracy/cadence x data model — six cells, ALL hosted by a single join whose
-  * left/output partition grid is 3h with a 1h offset (partitions ..., 22:00, 01:00, 04:00, ...,
-  * labels = interval starts):
+  * The matrix is accuracy/cadence x data model, hosted by a single join whose left/output partition
+  * grid is 3h with a 1h offset (partitions ..., 22:00, 01:00, 04:00, ..., labels = interval starts).
+  * It covers the six core cells plus a second TEMPORAL/ENTITIES cell on the sub-daily grid:
   *
   * {{{
   *                          EVENTS                            ENTITIES
-  *   TEMPORAL               sawtooth windows over events      mutations-based as-of state
+  *   TEMPORAL               sawtooth windows over events      daily and sub-daily mutations
   *   SNAPSHOT daily         per-row daily PIT binding         per-row daily PIT binding
   *   SNAPSHOT 3h offset 1h  as-of binding by left row time    as-of binding by left row time
   * }}}
@@ -38,11 +39,11 @@ import scala.concurrent.{Await, ExecutionContext}
   * For an EVENTS left and a SNAPSHOT-accuracy join part, binding is per row ON THE RHS
   * GROUPBY'S DECLARED GRID (its partition_interval/partition_offset; the join's grid when
   * nothing is declared):
-  *  - JoinPartJob materializes the join part table at RHS-grid partition labels p, where
-  *    partition p holds the aggregate/state as-of epoch(p) + one RHS span
-  *    (JoinUtils.snapshotLookbackRange).
-  *  - MergeJob stamps each left row with TimePartitionColumn = floor(left.ts, RHS grid) and
-  *    relabels right ds + one RHS span before the equality join.
+  *  - JoinPartJob computes snapshots on the RHS grid. Same-grid parts keep the historical
+  *    lookback partition label; cross-grid parts are densely placed on the join grid and carry
+  *    the RHS as-of boundary in `ts`.
+  *  - MergeJob stamps each left row with TimePartitionColumn = floor(left.ts, RHS grid). Same-grid
+  *    right rows are relabeled from ds + one RHS span; cross-grid right rows use their persisted ts.
   *
   * Net effect: a left row at time T binds the latest RHS snapshot whose as-of boundary is
   * <= T — never a future snapshot, staleness bounded by one RHS span — INDEPENDENT of the
@@ -95,7 +96,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
   // ---------------------------------------------------------------------------------------------
   // Goldens. Derivations reference the fixture tables created in generateJoin below.
   // Engine convention: snapshot cells bind per row as-of floor(left.ts, RHS grid) — the
-  // 3h+1h grid for the snap3/ent3 cells, the DAILY grid for the snapd/entd/mut cells.
+  // 3h+1h grid for the snap3/ent3/mut3 cells, the DAILY grid for the snapd/entd/mut cells.
   // The temporal events cell is sawtooth-accurate at left.ts.
   // ---------------------------------------------------------------------------------------------
   private val goldens = Seq(
@@ -129,6 +130,9 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         // (u1: 4 + 3 = 7), then 08-14 mutations with mutation_ts <= 12:07: insert 2 @ 06:00,
         // update 2 -> 9 @ 11:00 => 7 + 2 - 2 + 9 = 16.
         "mut_user_id_rating_sum" -> 16L,
+        // temporal entities (3h+1h mutations): snapshot state as-of 10:00 = 9, then the
+        // 10:00 bucket update 2 -> 9 at 11:00 => 9 - 2 + 9 = 16.
+        "mut3_user_id_rating_sum" -> 16L,
         // daily entity snapshot, PER-ROW DAILY binding: daily floor(12:07) = 08-14 -> binds
         // entity partition 2023-08-13 -> u1 balance 102 (101 of 08-12 / 103 of 08-14 NOT bound).
         "entd_user_id_balance_d" -> 102L
@@ -153,8 +157,10 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         "snap3_user_id_amount_3h_sum_6h" -> 77L,
         // entity partition 07:00 -> u2 balance 25
         "ent3_user_id_balance_3h" -> 25L,
-        // batch state 5 + insert(1) @ 10:00 <= 12:30 => 6
+        // daily batch state 5 + insert(1) @ 10:00 <= 12:30 => 6
         "mut_user_id_rating_sum" -> 6L,
+        // sub-daily snapshot state as-of 10:00 = 5, plus the 10:00 bucket insert(1) => 6
+        "mut3_user_id_rating_sum" -> 6L,
         // daily binding -> entity partition 08-13 -> 202
         "entd_user_id_balance_d" -> 202L
       )
@@ -178,8 +184,11 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         "snap3_user_id_amount_3h_sum_6h" -> 1100L,
         // entity partition 10:00 -> u1 balance 16 (differs from the 12:07 row's 15: different bind)
         "ent3_user_id_balance_3h" -> 16L,
-        // mutations <= 13:00 are the same as <= 12:07 => 16
+        // daily mutations <= 13:00 are the same as <= 12:07 => 16
         "mut_user_id_rating_sum" -> 16L,
+        // exact 13:00 grid boundary binds the 13:00 bucket, whose snapshot already includes
+        // the 10:00 bucket mutations => 16
+        "mut3_user_id_rating_sum" -> 16L,
         "entd_user_id_balance_d" -> 102L
       )
     ),
@@ -207,8 +216,10 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         "snap3_user_id_amount_3h_sum_6h" -> 3L,
         // entity partition 2023-08-13 19:00 -> u3 balance 31
         "ent3_user_id_balance_3h" -> 31L,
-        // batch state as-of 08-14 00:00 = snapshot ds 08-13 -> u3 rating 8; no u3 mutations
+        // daily batch state as-of 08-14 00:00 = snapshot ds 08-13 -> u3 rating 8; no u3 mutations
         "mut_user_id_rating_sum" -> 8L,
+        // sub-daily mutation grid floor 22:00 -> snapshot as-of 22:00 -> u3 rating 8
+        "mut3_user_id_rating_sum" -> 8L,
         // daily binding -> entity partition 08-13 -> u3 balance 302 (the NEW daily snapshot)
         "entd_user_id_balance_d" -> 302L
       )
@@ -231,8 +242,10 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         "snap3_user_id_amount_3h_sum" -> 3L,
         "snap3_user_id_amount_3h_sum_6h" -> 3L,
         "ent3_user_id_balance_3h" -> 31L,
-        // ds_of_ts = 08-13 needs the 08-12 snapshot partition, which does not exist -> null
+        // ds_of_ts = 08-13 needs the 08-12 daily snapshot partition, which does not exist -> null
         "mut_user_id_rating_sum" -> null,
+        // same sub-daily 22:00 bucket as the post-midnight row -> snapshot as-of 22:00 -> 8
+        "mut3_user_id_rating_sum" -> 8L,
         // daily binding -> entity partition 08-12 -> u3 balance 301 (the OLD daily snapshot;
         // the 00:30 row of the same left partition binds 302)
         "entd_user_id_balance_d" -> 301L
@@ -256,14 +269,16 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         "snap3_user_id_amount_3h_sum_6h" -> 7L,
         // entity partition 04:00 -> u2 balance 24
         "ent3_user_id_balance_3h" -> 24L,
-        // u2's insert happens at 10:00 > 09:00 -> still batch state 5
+        // u2's insert happens at 10:00 > 09:00 -> still daily batch state 5
         "mut_user_id_rating_sum" -> 5L,
+        // u2's insert happens at the 10:00 boundary, after the 07:00 bucket queried by 09:00
+        "mut3_user_id_rating_sum" -> 5L,
         "entd_user_id_balance_d" -> 202L
       )
     )
   )
 
-  it should "match goldens offline and online for all six matrix cells on one sub-daily join" in {
+  it should "match goldens offline and online for all matrix cells on one sub-daily join" in {
     val namespace = "join_parity_matrix"
     val joinConf = generateJoin(namespace, spark)
     implicit val tableUtils: TableUtils = TableUtils(spark, subDailySpec)
@@ -272,6 +287,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     // the in-between grid partitions have no left rows and are skipped by the source job).
     val dateRange = new DateRange().setStartDate("2023-08-13-22-00").setEndDate("2023-08-14-13-00")
     ModularMonolith.run(joinConf, dateRange)
+    assertDailySnapshotPartIsDenseOnJoinGrid(joinConf)
 
     val offlineRows = assertOfflineMatchesGoldens(joinConf, goldens)
 
@@ -299,9 +315,99 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     serveAndAssertOnline(joinConf, "2023-08-14-13-00", subDailySpec, namespace, "p2", phase2Rows, offlineRows)
   }
 
+  it should "keep cross-grid snapshot fan-out scoped across incremental straddling-partition runs" in {
+    val namespace = "join_parity_incremental"
+    val joinConf = generateJoin(namespace, spark)
+    implicit val tableUtils: TableUtils = TableUtils(spark, subDailySpec)
+
+    spark
+      .createDataFrame(Seq(("u3", ts("2023-08-13 21:30"), "2023-08-13-19-00")))
+      .toDF("user_id", "ts", "ds")
+      .save(s"$namespace.left_events")
+
+    def runOne(partition: String): Unit =
+      ModularMonolith.run(joinConf, new DateRange().setStartDate(partition).setEndDate(partition))
+
+    val straddlingPartition = "2023-08-13-22-00"
+    val dailySnapshotPartTable = joinPartTable(joinConf, "parity_daily_amount")
+    val dailyEntityPartTable = joinPartTable(joinConf, "parity_daily_balance")
+
+    runOne("2023-08-13-19-00")
+
+    withClue("prior partition run must not prefill the midnight-straddling daily events part: ") {
+      tableUtils.partitions(dailySnapshotPartTable).toSet should not contain straddlingPartition
+    }
+    withClue("prior partition run must not prefill the midnight-straddling daily entities part: ") {
+      tableUtils.partitions(dailyEntityPartTable).toSet should not contain straddlingPartition
+    }
+
+    runOne(straddlingPartition)
+
+    val expectedAsOfs = Set(ts("2023-08-13 00:00"), ts("2023-08-14 00:00"))
+    dailyPartAsOfs(dailySnapshotPartTable, straddlingPartition) shouldEqual expectedAsOfs
+    dailyPartAsOfs(dailyEntityPartTable, straddlingPartition) shouldEqual expectedAsOfs
+
+    val rowsByTs = tableUtils
+      .sql(s"""
+              |SELECT user_id, ts, snapd_user_id_amount_d_sum, entd_user_id_balance_d, ds
+              |FROM ${joinConf.metaData.outputTable}
+              |WHERE ds = '$straddlingPartition' AND user_id = 'u3'
+              |""".stripMargin)
+      .collect()
+      .map { row =>
+        row.getAs[Long]("ts") ->
+          (row.getAs[Any]("snapd_user_id_amount_d_sum"), row.getAs[Any]("entd_user_id_balance_d"))
+      }
+      .toMap
+
+    rowsByTs shouldEqual Map(
+      T_U3_PRE_MIDNIGHT -> (6L, 301L),
+      T_U3_POST_MIDNIGHT -> (66L, 302L)
+    )
+
+    runOne("2023-08-13-19-00")
+
+    withClue("targeted rerun of the prior partition must not overwrite the straddling partition: ") {
+      dailyPartAsOfs(dailySnapshotPartTable, straddlingPartition) shouldEqual expectedAsOfs
+      dailyPartAsOfs(dailyEntityPartTable, straddlingPartition) shouldEqual expectedAsOfs
+    }
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Assertion harness
   // ---------------------------------------------------------------------------------------------
+
+  private def joinPartTable(joinConf: Join, groupByName: String): String = {
+    val joinPart = joinConf.joinParts.toScala
+      .find(_.groupBy.metaData.name == groupByName)
+      .get
+    RelevantLeftForJoinPart.fullPartTableName(joinConf, joinPart)
+  }
+
+  private def dailyPartAsOfs(partTable: String, partition: String)(implicit tableUtils: TableUtils): Set[Long] =
+    tableUtils
+      .sql(s"SELECT ts FROM $partTable WHERE ds = '$partition' AND user_id = 'u3'")
+      .collect()
+      .map(_.getAs[Long]("ts"))
+      .toSet
+
+  private def assertDailySnapshotPartIsDenseOnJoinGrid(joinConf: Join)(implicit tableUtils: TableUtils): Unit = {
+    val partTable = joinPartTable(joinConf, "parity_daily_amount")
+    val partitions = tableUtils.partitions(partTable).toSet
+
+    Seq(
+      "2023-08-13-22-00",
+      "2023-08-14-01-00",
+      "2023-08-14-04-00",
+      "2023-08-14-07-00",
+      "2023-08-14-10-00",
+      "2023-08-14-13-00"
+    ).foreach { expectedPartition =>
+      withClue(s"daily snapshot join-part should be dense on the join grid for $expectedPartition: ") {
+        partitions should contain(expectedPartition)
+      }
+    }
+  }
 
   /** Asserts the offline join output equals the goldens row by row (exact values, exact left
     * partition labels, no extra rows) and returns the offline rows keyed by (user, ts).
@@ -312,8 +418,14 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
     outputDf.show(truncate = false)
     val featureColumns = goldens.flatMap(_.features.keys).distinct
 
-    val offlineRows: Map[(String, Long), Map[String, Any]] = outputDf
-      .collect()
+    val collectedRows = outputDf.collect()
+    val rowKeys = collectedRows.map(row => (row.getAs[String]("user_id"), row.getAs[Long]("ts")))
+    withClue(s"offline output of ${joinConf.metaData.outputTable} should not duplicate golden rows: ") {
+      collectedRows.length shouldEqual goldens.length
+      rowKeys.groupBy(identity).map { case (key, rows) => key -> rows.length } shouldEqual rowKeys.map(_ -> 1).toMap
+    }
+
+    val offlineRows: Map[(String, Long), Map[String, Any]] = collectedRows
       .map { row =>
         val key = (row.getAs[String]("user_id"), row.getAs[Long]("ts"))
         val values: Map[String, Any] =
@@ -395,7 +507,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // Join fixture: one sub-daily join hosting all six matrix cells
+  // Join fixture: one sub-daily join hosting all matrix cells
   // ---------------------------------------------------------------------------------------------
   private def generateJoin(namespace: String, spark: SparkSession): Join = {
     SparkTestBase.createDatabase(spark, namespace)
@@ -505,8 +617,8 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
       .toDF("user_id", "balance_3h", "ds")
       .save(offsetBalanceTable)
 
-    // TEMPORAL/ENTITIES cell: snapshot partition ds holds the state as of end-of-ds; the 08-13
-    // partition is the batch state at 08-14 00:00 (u1: 4 + 3 = 7, u2: 5, u3: 8).
+    // TEMPORAL/ENTITIES daily cell: snapshot partition ds holds the state as of end-of-ds; the
+    // 08-13 partition is the batch state at 08-14 00:00 (u1: 4 + 3 = 7, u2: 5, u3: 8).
     val ratingsSnapshotTable = s"$namespace.ratings_snapshot"
     spark
       .createDataFrame(
@@ -519,7 +631,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
       .toDF("user_id", "ts", "rating", "ds")
       .save(ratingsSnapshotTable)
 
-    // Mutations of 2023-08-14 (partitioned by mutation day):
+    // Daily mutations of 2023-08-14:
     //  - u1 inserts rating 2 at 06:00 (single is_before=false row),
     //  - u1 updates that rating 2 -> 9 at 11:00 (is_before=true reversal + is_before=false new),
     //  - u2 inserts rating 1 at 10:00.
@@ -534,6 +646,37 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         ))
       .toDF("user_id", "ts", "rating", "ds", "mutation_ts", "is_before")
       .save(ratingsMutationsTable)
+
+    // TEMPORAL/ENTITIES sub-daily cell: same mutations, but snapshots and mutation partitions
+    // live on the 3h+1h grid.
+    val offsetRatingsSnapshotTable = s"$namespace.ratings_snapshot_3h"
+    spark
+      .createDataFrame(
+        Seq(
+          ("u3", ts("2023-08-13 08:00"), 8L, "2023-08-13-19-00"),
+          ("u2", ts("2023-08-13 11:00"), 5L, "2023-08-14-04-00"),
+          ("u1", ts("2023-08-12 10:00"), 4L, "2023-08-14-07-00"),
+          ("u1", ts("2023-08-13 09:00"), 3L, "2023-08-14-07-00"),
+          ("u1", ts("2023-08-14 06:00"), 2L, "2023-08-14-07-00"),
+          ("u2", ts("2023-08-13 11:00"), 5L, "2023-08-14-07-00"),
+          ("u1", ts("2023-08-12 10:00"), 4L, "2023-08-14-10-00"),
+          ("u1", ts("2023-08-13 09:00"), 3L, "2023-08-14-10-00"),
+          ("u1", ts("2023-08-14 06:00"), 9L, "2023-08-14-10-00")
+        ))
+      .toDF("user_id", "ts", "rating", "ds")
+      .save(offsetRatingsSnapshotTable)
+
+    val offsetRatingsMutationsTable = s"$namespace.ratings_mutations_3h"
+    spark
+      .createDataFrame(
+        Seq(
+          ("u1", ts("2023-08-14 06:00"), 2L, "2023-08-14-04-00", ts("2023-08-14 06:00"), false),
+          ("u1", ts("2023-08-14 06:00"), 2L, "2023-08-14-10-00", ts("2023-08-14 11:00"), true),
+          ("u1", ts("2023-08-14 06:00"), 9L, "2023-08-14-10-00", ts("2023-08-14 11:00"), false),
+          ("u2", ts("2023-08-14 10:00"), 1L, "2023-08-14-10-00", ts("2023-08-14 10:00"), false)
+        ))
+      .toDF("user_id", "ts", "rating", "ds", "mutation_ts", "is_before")
+      .save(offsetRatingsMutationsTable)
 
     // SNAPSHOT-daily/ENTITIES cell: balances encode the partition (u1: 10x, u2: 20x, u3: 30x).
     // Per-row daily binding: a row at time T binds the partition of day(T) - 1.
@@ -659,6 +802,31 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
       accuracy = Accuracy.TEMPORAL
     )
 
+    val offsetMutationsGroupBy = Builders.GroupBy(
+      metaData = Builders.MetaData(namespace = namespace,
+                                   name = "parity_offset_ratings_sum",
+                                   executionInfo = executionInfo(subDailySpec)),
+      sources = Seq(
+        Builders.Source.entities(
+          query = withPartition(
+            Builders.Query(
+              selects = Map("user_id" -> "user_id", "ts" -> "ts", "rating" -> "rating"),
+              startPartition = "2023-08-13-19-00",
+              mutationTimeColumn = "mutation_ts",
+              reversalColumn = "is_before"
+            ),
+            subDailySpec
+          ),
+          snapshotTable = offsetRatingsSnapshotTable,
+          mutationTable = offsetRatingsMutationsTable,
+          mutationTopic = "parity_offset_mutations_topic"
+        )),
+      keyColumns = Seq("user_id"),
+      aggregations = Seq(
+        Builders.Aggregation(operation = Operation.SUM, inputColumn = "rating", windows = Seq(WindowUtils.Unbounded))),
+      accuracy = Accuracy.TEMPORAL
+    )
+
     val dailySnapshotEntitiesGroupBy = Builders.GroupBy(
       metaData = Builders.MetaData(namespace = namespace,
                                    name = "parity_daily_balance",
@@ -689,6 +857,7 @@ class JoinParityMatrixTest extends SparkTestBase with Matchers {
         Builders.JoinPart(groupBy = offsetSnapshotEventsGroupBy, prefix = "snap3").setUseLongNames(false),
         Builders.JoinPart(groupBy = offsetSnapshotEntitiesGroupBy, prefix = "ent3").setUseLongNames(false),
         Builders.JoinPart(groupBy = mutationsGroupBy, prefix = "mut").setUseLongNames(false),
+        Builders.JoinPart(groupBy = offsetMutationsGroupBy, prefix = "mut3").setUseLongNames(false),
         Builders.JoinPart(groupBy = dailySnapshotEntitiesGroupBy, prefix = "entd").setUseLongNames(false)
       ),
       metaData = Builders.MetaData(namespace = namespace,

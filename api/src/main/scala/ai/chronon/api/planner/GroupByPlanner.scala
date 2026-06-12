@@ -25,7 +25,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
     Option(groupBy.sources).foreach { sources =>
       sources.asScala.foreach { source =>
         Option(source.query).foreach { query =>
-          MetaDataUtils.validateCoverageEdge(
+          PartitionSpecResolver.validateCoverageQuery(
             groupBy.metaData.name,
             confOutputPartitionSpec,
             query,

@@ -19,7 +19,13 @@ case class StagingQueryPlanner(stagingQuery: StagingQuery)(implicit outputPartit
   }
 
   override def buildPlan: ConfPlan = {
-    val tableDependencies = TableDependencies.fromStagingQuery(stagingQuery)
+    val tableDependencies = PartitionSpecResolver.resolveCoverageDependencies(
+      stagingQuery.metaData.name,
+      confOutputPartitionSpec,
+      TableDependencies.fromStagingQuery(stagingQuery),
+      dep => s"table dependency ${dep.tableInfo.table}",
+      MetaDataUtils.EdgeShape.Events
+    )
 
     val metaData = MetaDataUtils.layer(
       stagingQuery.metaData,

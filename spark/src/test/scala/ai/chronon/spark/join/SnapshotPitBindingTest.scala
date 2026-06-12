@@ -1,10 +1,13 @@
 package ai.chronon.spark.join
 
 import ai.chronon.api
-import ai.chronon.api.{Accuracy, Builders, Constants, DateRange, Operation, TsUtils}
+import ai.chronon.api.Extensions.WindowUtils
+import ai.chronon.api.{Accuracy, Builders, Constants, DateRange, ExecutionInfo, Operation, PartitionSpec, TableInfo, TsUtils}
 import ai.chronon.planner.JoinMergeNode
 import ai.chronon.spark.Extensions._
+import ai.chronon.spark.Join
 import ai.chronon.spark.batch.MergeJob
+import ai.chronon.spark.catalog.TableUtils
 import org.junit.Assert._
 
 /** Snapshot-accuracy joins must be point-in-time correct ACROSS snapshot changes: a row at
@@ -99,5 +102,55 @@ class SnapshotPitBindingTest extends BaseJoinTest {
     assertEquals(100.0, byTs(boundary - 1), 0.0)
     assertEquals(200.0, byTs(boundary), 0.0)
     assertEquals(200.0, byTs(boundary + 1), 0.0)
+  }
+
+  it should "dedupe monolith cross-grid snapshot RHS fan-out without dropping duplicate left rows" in {
+    import spark.implicits._
+
+    val hourMillis = 60L * 60 * 1000
+    val subDailySpec =
+      PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * hourMillis, hourMillis)
+    val subDailyTableUtils = TableUtils(spark, subDailySpec)
+
+    val dailySnapshotInfo = new TableInfo()
+      .setPartitionColumn(PartitionSpec.daily.column)
+      .setPartitionFormat(PartitionSpec.daily.format)
+      .setPartitionInterval(WindowUtils.Day)
+
+    val viewsGroupBy = Builders.GroupBy(
+      sources = Seq(Builders.Source.events(query = Builders.Query(), table = s"$namespace.snapshot_pit_views")),
+      keyColumns = Seq("item"),
+      aggregations = Seq(Builders.Aggregation(operation = Operation.AVERAGE, inputColumn = "time_spent_ms")),
+      metaData = Builders
+        .MetaData(name = "unit_test.snapshot_pit_gb_monolith_dedupe", namespace = namespace)
+        .setExecutionInfo(new ExecutionInfo().setOutputTableInfo(dailySnapshotInfo)),
+      accuracy = Accuracy.SNAPSHOT
+    )
+    val joinPart = Builders.JoinPart(groupBy = viewsGroupBy)
+    val join = Builders.Join(
+      left = Builders.Source.events(Builders.Query(), table = s"$namespace.snapshot_pit_left"),
+      joinParts = Seq(joinPart),
+      metaData = Builders.MetaData(name = "unit_test.snapshot_pit_join_monolith_dedupe", namespace = namespace)
+    )
+    val monolithJoin = new Join(join, "2026-06-03-22-00", subDailyTableUtils)
+
+    val leftTs = TsUtils.datetimeToTs("2026-06-03 23:30:00")
+    val leftDf = Seq(
+      ("a", leftTs, "2026-06-03-22-00"),
+      ("a", leftTs, "2026-06-03-22-00")
+    ).toDF("item", "ts", "ds")
+
+    val snapshotAsOf = TsUtils.datetimeToTs("2026-06-03 00:00:00")
+    val denseFanoutRightDf = Seq(
+      ("a", 100.0, snapshotAsOf, "2026-06-03-19-00"),
+      ("a", 100.0, snapshotAsOf, "2026-06-03-22-00")
+    ).toDF("item", "time_spent_ms_average", "ts", "ds")
+
+    val joined = monolithJoin.joinWithLeft(leftDf, denseFanoutRightDf, joinPart)
+    val valueCol = joined.columns.find(_.endsWith("time_spent_ms_average")).get
+    val rows = joined.collect()
+
+    assertEquals(2, rows.length)
+    rows.foreach(row => assertEquals(100.0, row.getAs[Double](valueCol), 0.0))
   }
 }

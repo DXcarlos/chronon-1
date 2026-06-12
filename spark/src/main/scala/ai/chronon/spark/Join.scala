@@ -197,8 +197,15 @@ class Join(joinConf: api.Join,
       val partTable = joinConfCloned.partOutputTable(joinPart)
       val effectiveRange =
         if (joinConfCloned.left.dataModel != ENTITIES && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
-          // part tables live at the RHS groupBy's declared snapshot grid
-          JoinUtils.snapshotLookbackRange(leftRange, JoinUtils.partSnapshotSpec(joinPart))
+          val partSpec = JoinUtils.partSnapshotSpec(joinPart)
+          if (partSpec.hasSameGrid(tableUtils.partitionSpec)) {
+            // Same-grid snapshot parts keep the historical right-aligned physical label.
+            JoinUtils.snapshotLookbackRange(leftRange, partSpec)
+          } else {
+            // Cross-grid snapshot parts are densely placed on the physical join grid and
+            // carry the RHS as-of boundary in `ts`.
+            leftRange
+          }
         } else {
           leftRange
         }

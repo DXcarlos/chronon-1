@@ -24,7 +24,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       left <- Option(join.left)
       query <- Option(left.query)
     } {
-      MetaDataUtils.validateCoverageEdge(
+      PartitionSpecResolver.validateCoverageQuery(
         join.metaData.name,
         confOutputPartitionSpec,
         query,
@@ -32,8 +32,21 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
         MetaDataUtils.EdgeShape.of(left.dataModel)
       )
     }
+    validateBootstrapCoverage()
     JoinPlanner.validateJoinPartGrids(join, confOutputPartitionSpec)
   }
+
+  private def validateBootstrapCoverage(): Unit =
+    Option(join.bootstrapParts).foreach { bootstrapParts =>
+      val deps = bootstrapParts.asScala.map(bp => TableDependencies.fromTable(bp.table, bp.query)).toSeq
+      PartitionSpecResolver.resolveCoverageDependencies(
+        join.metaData.name,
+        confOutputPartitionSpec,
+        deps,
+        dep => s"bootstrap table ${dep.tableInfo.table}",
+        MetaDataUtils.EdgeShape.Events
+      )
+    }
 
   // will mutate the join in place - use on deepCopy-ied objects only
   private def joinWithoutMetadata(join: Join): Unit = {
@@ -98,22 +111,28 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     toNode(metaData, _.setJoinBootstrap(result), copy)
   }
 
-  private def copyAndEraseExecutionInfo(joinPart: JoinPart): JoinPart = {
+  private def copyForExecutableJoinPart(joinPart: JoinPart): JoinPart = {
     val copy = joinPart.deepCopy()
-    copy.groupBy.metaData.unsetExecutionInfo()
+    // Keep groupBy executionInfo on executable JOIN_PART nodes: snapshot parts need the
+    // declared groupBy grid as their logical as-of cadence even when the physical part table
+    // stays on the join grid for partitioned joins.
     copy
   }
 
   private def buildJoinPartNode(joinPart: JoinPart): Node = {
 
     val result = new JoinPartNode()
-      .setJoinPart(copyAndEraseExecutionInfo(joinPart))
+      .setJoinPart(copyForExecutableJoinPart(joinPart))
       .setLeftDataModel(join.left.dataModel)
       .setLeftSourceTable(leftSourceNode.metaData.outputTable)
+    PartitionSpecResolver.applyJoinPartSnapshotSpec(result.joinPart, confOutputPartitionSpec)
 
     val partTable = RelevantLeftForJoinPart.partTableName(join, joinPart)
 
-    val deps = TableDependencies.fromGroupBy(joinPart.groupBy, Option(join.left.dataModel)) :+
+    val snapshotShift =
+      PartitionSpecResolver.snapshotSourceShift(result.joinPart, Option(join.left.dataModel), confOutputPartitionSpec)
+
+    val deps = TableDependencies.fromGroupBy(result.joinPart.groupBy, Option(join.left.dataModel), snapshotShift) :+
       TableDependencies.fromTableInfo(leftSourceNode.metaData.executionInfo.outputTableInfo)
 
     // use step days from group_by if set, otherwise default to 15d for events and 1 for entities
@@ -135,16 +154,9 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       )(confOutputPartitionSpec)
       .setOutputNamespace(join.metaData.outputNamespace)
 
-    // Join part tables are join intermediates partitioned by the join's partition column, but
-    // snapshot-accuracy parts under an EVENTS left live at the RHS groupBy's declared snapshot
-    // grid (per-row as-of binding) - declare the true physical grid so coverage checks,
-    // watermarks and sensors read the table correctly. Everything else stays in the join/left
-    // domain.
-    val partTableSpec =
-      if (join.left.dataModel == DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT)
-        MetaDataUtils.partSnapshotSpec(joinPart, confOutputPartitionSpec)
-      else confOutputPartitionSpec
-    MetaDataUtils.applyPartitionSpec(metaData.executionInfo.outputTableInfo, partTableSpec)
+    // Join part tables are physical join intermediates, so their partitions stay on the
+    // join/output grid. Snapshot parts may still carry a finer logical as-of cadence in `ts`.
+    MetaDataUtils.applyPartitionSpec(metaData.executionInfo.outputTableInfo, confOutputPartitionSpec)
 
     val copy = result.deepCopy()
     copy.joinPart.groupBy.unsetMetaData()
@@ -159,20 +171,17 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       .setJoin(join)
 
     val deps = joinPartNodes.map { jpNode =>
+      val joinPart = jpNode.content.getJoinPart.joinPart
+      val snapshotSpec = MetaDataUtils.partSnapshotSpec(joinPart, confOutputPartitionSpec)
       val shouldShift = join.left.dataModel == DataModel.EVENTS &&
-        jpNode.content.getJoinPart.joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT
+        joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT &&
+        snapshotSpec.hasSameGrid(confOutputPartitionSpec)
 
-      // The engine (MergeJob) reads snapshot-part tables one RHS snapshot span back
-      // (JoinUtils.snapshotLookbackRange), so sensors must require the same span-based
-      // shift - a hardcoded daily shift would mis-require for sub-daily grids. The part
-      // node's outputTableInfo carries the RHS snapshot grid for snapshot parts.
+      // Same-grid snapshot parts keep the historical shifted physical label. Cross-grid
+      // snapshot parts are densely placed on the join grid and carry the RHS as-of boundary
+      // in `ts`, so their dependencies stay in the requested physical range.
       val shiftAmount =
-        if (shouldShift)
-          Some(
-            jpNode.metaData.executionInfo.outputTableInfo
-              .partitionSpec(confOutputPartitionSpec)
-              .intervalWindow)
-        else None
+        if (shouldShift) Some(confOutputPartitionSpec.intervalWindow) else None
       TableDependencies.fromTableInfo(jpNode.metaData.executionInfo.outputTableInfo, shift = shiftAmount)
     } :+
       TableDependencies.fromTableInfo(
@@ -285,7 +294,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       } else {
         groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}"
       }
-      val groupByOutputSpec = MetaDataUtils.outputPartitionSpec(groupBy.metaData, confOutputPartitionSpec)
+      val groupByOutputSpec = PartitionSpecResolver.producerOutputSpec(groupBy.metaData, outputPartitionSpec)
 
       val groupByDep = new TableDependency()
         .setTableInfo(
@@ -329,7 +338,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       join.metaData,
       "union_join",
       join.metaData.name,
-      TableDependencies.fromJoin(join).toSeq,
+      TableDependencies.fromJoin(join, Some(confOutputPartitionSpec)).toSeq,
       outputTableOverride = Some(join.metaData.outputTable)
     )(confOutputPartitionSpec)
 
@@ -407,7 +416,7 @@ object JoinPlanner {
     Option(join.joinParts).foreach { joinParts =>
       joinParts.asScala.foreach { joinPart =>
         if (joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
-          val groupBySpec = MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, joinSpec)
+          val groupBySpec = MetaDataUtils.partSnapshotSpec(joinPart, joinSpec)
           if (joinPart.groupBy.dataModel == DataModel.ENTITIES) {
             MetaDataUtils.warnSubDailyEntitySnapshot(
               s"join ${join.metaData.name}, part ${joinPart.groupBy.metaData.name}",
@@ -421,6 +430,20 @@ object JoinPlanner {
             MetaDataUtils.EdgeShape.Snapshot,
             snapshotAsOf = true
           )
+        } else if (joinPart.groupBy.inferredAccuracy == Accuracy.TEMPORAL) {
+          Option(joinPart.groupBy.sources).foreach { sources =>
+            sources.asScala
+              .filter(_.dataModel == DataModel.EVENTS)
+              .foreach { source =>
+                PartitionSpecResolver.validateCoverageQuery(
+                  join.metaData.name,
+                  joinSpec,
+                  source.query,
+                  s"temporal join part ${joinPart.groupBy.metaData.name} source ${source.rawTable}",
+                  MetaDataUtils.EdgeShape.Events
+                )
+              }
+          }
         }
       }
     }

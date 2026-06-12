@@ -53,8 +53,8 @@ object DependencyResolver {
     require(tableDep.tableInfo != null, "TableDependency.tableInfo cannot be null")
 
     implicit val inputPartitionSpec: PartitionSpec = tableDep.tableInfo.partitionSpec(queryRange.partitionSpec)
-    val startCutOff = inputPartitionSpec.normalize(tableDep.getStartCutOff, queryRange.partitionSpec)
-    val endCutOff = inputPartitionSpec.normalize(tableDep.getEndCutOff, queryRange.partitionSpec)
+    val startCutOff = inputPartitionSpec.normalizeStart(tableDep.getStartCutOff, queryRange.partitionSpec)
+    val endCutOff = inputPartitionSpec.normalizeEnd(tableDep.getEndCutOff, queryRange.partitionSpec)
 
     val inputEndMillis = queryRange.endMillis - Option(tableDep.getEndOffset).map(_.millis).getOrElse(0L)
 

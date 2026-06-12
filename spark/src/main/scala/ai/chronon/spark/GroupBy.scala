@@ -133,7 +133,7 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
       val localTsIndex = tsIndex
       val (preppedInputDf, hasWindows, partitionTsIndex) = if (aggregations.hasWindows) {
         val partitionTs = "ds_ts"
-        val inputWithPartitionTs = inputDf.withPartitionBasedTimestamp(partitionTs)
+        val inputWithPartitionTs = inputDf.withPartitionBasedTimestamp(partitionTs, spec = tableUtils.partitionSpec)
         (inputWithPartitionTs, true, inputWithPartitionTs.schema.fieldIndex(partitionTs))
       } else {
         (inputDf, false, -1)
@@ -219,7 +219,8 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
       // Add extra column to the queries and generate the key hash.
       val queriesDf = queriesUnfilteredDf.removeNulls(keyColumns)
       val timeBasedPartitionColumn = "ds_of_ts"
-      val queriesWithTimeBasedPartition = queriesDf.withTimeBasedColumn(timeBasedPartitionColumn)
+      val queriesWithTimeBasedPartition =
+        queriesDf.withTimeBasedColumn(timeBasedPartitionColumn, spec = tableUtils.partitionSpec)
 
       val queriesKeyHashFx = FastHashing.generateKeyBuilder(keyColumns.toArray, queriesWithTimeBasedPartition.schema)
       val timeBasedPartitionIndex = queriesWithTimeBasedPartition.schema.fieldIndex(timeBasedPartitionColumn)
@@ -256,8 +257,8 @@ class GroupBy(val aggregations: Seq[api.Aggregation],
       val shiftedColumnName = "end_of_day_ds"
       val shiftedColumnNameTs = "end_of_day_ts"
       val expandedInputDf = inputDf
-        .withShiftedPartition(shiftedColumnName)
-        .withPartitionBasedTimestamp(shiftedColumnNameTs, shiftedColumnName)
+        .withShiftedPartition(shiftedColumnName, spec = tableUtils.partitionSpec)
+        .withPartitionBasedTimestamp(shiftedColumnNameTs, shiftedColumnName, spec = tableUtils.partitionSpec)
       val shiftedColumnIndex = expandedInputDf.schema.fieldIndex(shiftedColumnName)
       val shiftedColumnIndexTs = expandedInputDf.schema.fieldIndex(shiftedColumnNameTs)
       val snapshotKeyHashFx = FastHashing.generateKeyBuilder(keyColumns.toArray, expandedInputDf.schema)

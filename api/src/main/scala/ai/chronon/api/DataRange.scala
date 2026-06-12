@@ -214,12 +214,6 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
 }
 
 object PartitionRange {
-  def apply(dateRange: DateRange): PartitionRange = {
-    val start = dateRange.startDate
-    val end = dateRange.endDate
-    new PartitionRange(start, end)(PartitionSpec.daily)
-  }
-
   def rangesToString(ranges: Iterable[PartitionRange]): String = {
     val tuples = ranges.map(r => s"(${r.start} -> ${r.end})").mkString(", ")
     s"$tuples"

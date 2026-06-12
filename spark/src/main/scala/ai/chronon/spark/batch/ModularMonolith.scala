@@ -154,9 +154,8 @@ class ModularMonolith(join: api.Join, dateRange: DateRange)(implicit tableUtils:
 
   private def runJoinPartJob(joinPartNode: JoinPartNode, metaData: MetaData, nodeRange: DateRange): Unit = {
     StepRunner(nodeRange, metaData) { stepRange =>
-      // alignOutput=false: SNAPSHOT join parts write to the shifted (D-1) partition, which MergeJob reads.
-      // Enabling alignOutput consistently requires MergeJob to also stop shifting its reads, which is a
-      // larger change tracked separately.
+      // alignOutput=false preserves historical same-grid SNAPSHOT labels. Cross-grid snapshot
+      // parts are physical join-grid partitions and carry their finer as-of buckets in ts.
       val joinPartJob = new JoinPartJob(joinPartNode, metaData, stepRange, alignOutput = false)
       joinPartJob.run(None)
     }

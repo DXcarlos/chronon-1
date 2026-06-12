@@ -22,7 +22,8 @@ import ai.chronon.spark.JoinUtils
 import ai.chronon.spark.catalog.TableUtils
 import com.google.gson.Gson
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.{col, date_format, from_unixtime, left, log, unix_timestamp}
+import org.apache.spark.sql.functions.{col, date_format, from_unixtime, left, lit, log, pmod, unix_timestamp}
+import org.apache.spark.sql.types.LongType
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.time.Instant
@@ -159,9 +160,15 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       val partTable = RelevantLeftForJoinPart.fullPartTableName(join, joinPart)
       val effectiveRange =
         if (join.left.dataModel == DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
-          // part tables live at the RHS groupBy's declared snapshot grid; look back to the
-          // covering intervals' previous snapshots
-          JoinUtils.snapshotLookbackRange(dayStep, JoinUtils.partSnapshotSpec(joinPart))
+          val partSpec = JoinUtils.partSnapshotSpec(joinPart)
+          if (partSpec.hasSameGrid(tableUtils.partitionSpec)) {
+            // Same-grid snapshot parts keep the historical right-aligned physical label.
+            JoinUtils.snapshotLookbackRange(dayStep, partSpec)
+          } else {
+            // Cross-grid snapshot parts are densely placed on the physical join grid and
+            // carry the RHS as-of boundary in `ts`.
+            dayStep
+          }
         } else {
           dayStep
         }
@@ -174,6 +181,10 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
 
   def joinWithLeft(leftDf: DataFrame, rightDf: DataFrame, joinPart: JoinPart): DataFrame = {
     val partLeftKeys = joinPart.rightToLeft.values.toArray
+    lazy val partSpec = JoinUtils.partSnapshotSpec(joinPart)
+    val leftEventsSnapshot =
+      join.left.dataModel == DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT
+    val crossGridSnapshot = leftEventsSnapshot && !partSpec.hasSameGrid(tableUtils.partitionSpec)
 
     // compute join keys, besides the groupBy keys -  like ds, ts etc.,
     val additionalKeys: Seq[String] = {
@@ -203,8 +214,12 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     // adjust join keys: snapshot binding is per row ON THE RHS GROUPBY'S DECLARED GRID - a row
     // at time T binds the latest RHS snapshot whose as-of boundary is <= T, independent of the
     // join's own grid. Daily RHS under a daily join degenerates to the historical behavior.
-    lazy val partSpec = JoinUtils.partSnapshotSpec(joinPart)
-    val joinableRightDf = if (additionalKeys.contains(Constants.TimePartitionColumn)) {
+    val joinableRightDf = if (crossGridSnapshot) {
+      keyRenamedRightDf
+        .withColumn(Constants.TimePartitionColumn, col(Constants.TimeColumn).cast(LongType))
+        .drop(tableUtils.partitionColumn, Constants.TimeColumn)
+        .dropDuplicates(keys)
+    } else if (additionalKeys.contains(Constants.TimePartitionColumn)) {
       // snapshot partition p holds the aggregate as-of epoch(p) + one RHS span; relabel to
       // the as-of boundary so it matches the left rows' RHS-grid floor
       keyRenamedRightDf
@@ -225,7 +240,12 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     // the left binding key is per-joinPart (different parts may live on different RHS grids):
     // re-stamp TimePartitionColumn = floor(left.ts, RHS grid) instead of trusting the shared
     // join-grid column stamped by SourceJob
-    val joinableLeftDf = if (additionalKeys.contains(Constants.TimePartitionColumn)) {
+    val joinableLeftDf = if (crossGridSnapshot) {
+      val ts = col(Constants.TimeColumn)
+      val gridOffset = lit(Math.floorMod(partSpec.offsetMillis, partSpec.spanMillis))
+      val snapshotTs = (ts - pmod(ts - gridOffset, lit(partSpec.spanMillis))).cast(LongType)
+      leftDf.withColumn(Constants.TimePartitionColumn, snapshotTs)
+    } else if (additionalKeys.contains(Constants.TimePartitionColumn)) {
       leftDf.withTimeBasedColumn(Constants.TimePartitionColumn, spec = partSpec)
     } else {
       leftDf

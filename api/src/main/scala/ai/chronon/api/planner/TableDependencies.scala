@@ -1,6 +1,6 @@
 package ai.chronon.api.planner
 import ai.chronon.api
-import ai.chronon.api.{Accuracy, BootstrapPart, DataModel, TableDependency, TableInfo, Window}
+import ai.chronon.api.{Accuracy, BootstrapPart, DataModel, PartitionSpec, TableDependency, TableInfo, Window}
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions.{IterableOps, IteratorOps}
 
@@ -20,9 +20,14 @@ object TableDependencies {
       .getOrElse(Seq.empty)
   }
 
-  def fromJoin(join: api.Join): Seq[TableDependency] = {
+  def fromJoin(join: api.Join, outputPartitionSpec: Option[PartitionSpec] = None): Seq[TableDependency] = {
     val joinParts = Option(join.joinParts).map(_.iterator().toScala.toArray).getOrElse(Array.empty)
-    val joinPartDeps = joinParts.flatMap((jp) => fromGroupBy(jp.groupBy, Option(join.left).map(_.dataModel)))
+    val leftDataModel = Option(join.left).map(_.dataModel)
+    val joinPartDeps = joinParts.flatMap { jp =>
+      val snapshotShift =
+        outputPartitionSpec.flatMap(PartitionSpecResolver.snapshotSourceShift(jp, leftDataModel, _))
+      fromGroupBy(jp.groupBy, leftDataModel, snapshotShift)
+    }
     val leftDep = scala.Option(join.left).map((src) => fromTable(src.table, src.query))
     val bootstrap =
       scala.Option(join.bootstrapParts).map(_.toScala.toArray[BootstrapPart]).getOrElse(Array.empty[BootstrapPart])
@@ -30,7 +35,9 @@ object TableDependencies {
     (leftDep.toSeq ++ joinPartDeps.toSeq ++ bootstrapDeps.toSeq)
   }
 
-  def fromGroupBy(groupBy: api.GroupBy, leftDataModel: Option[DataModel] = None): Seq[TableDependency] =
+  def fromGroupBy(groupBy: api.GroupBy,
+                  leftDataModel: Option[DataModel] = None,
+                  snapshotShift: Option[Window] = None): Seq[TableDependency] =
     groupBy.sources
       .iterator()
       .toScala
@@ -45,7 +52,7 @@ object TableDependencies {
           case (Some(api.DataModel.EVENTS), Accuracy.TEMPORAL, DataModel.ENTITIES) =>
             dep(shift = Some(source.partitionInterval)) ++ dep(forMutations = true)
 
-          case (Some(api.DataModel.EVENTS), Accuracy.SNAPSHOT, _) => dep()
+          case (Some(api.DataModel.EVENTS), Accuracy.SNAPSHOT, _) => dep(shift = snapshotShift)
 
           case _ => dep()
 

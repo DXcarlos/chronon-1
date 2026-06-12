@@ -1,7 +1,7 @@
 package ai.chronon.api.planner
-import ai.chronon.api.{DataModel, ExecutionInfo, MetaData, PartitionSpec, Query, TableDependency, TableInfo}
+import ai.chronon.api.{DataModel, ExecutionInfo, MetaData, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.api.Extensions._
-import ai.chronon.api.ScalaJavaConversions.{JListOps, ListOps}
+import ai.chronon.api.ScalaJavaConversions.JListOps
 
 import java.util
 
@@ -37,34 +37,11 @@ object MetaDataUtils {
     * partitioned by the join's partition column; only the RHS span/offset/format carry over.
     */
   def partSnapshotSpec(joinPart: ai.chronon.api.JoinPart, joinSpec: PartitionSpec): PartitionSpec = {
-    val declaredOutput = for {
-      md <- Option(joinPart.groupBy.metaData)
-      ei <- Option(md.executionInfo)
-      oti <- Option(ei.outputTableInfo)
-      _ <- Option(oti.partitionInterval) // only an explicit declaration counts
-    } yield oti.partitionSpec(joinSpec)
-
-    lazy val declaredSource = Option(joinPart.groupBy.sources)
-      .map(_.toScala.toSeq)
-      .getOrElse(Seq.empty)
-      .flatMap { s =>
-        Option(s.query)
-          .flatMap(q => Option(q.partitionInterval))
-          .map(_ => s.query.partitionSpec(joinSpec))
-      }
-      .sortBy(-_.spanMillis)
-      .headOption
-
-    val declared = declaredOutput.orElse(declaredSource).getOrElse(joinSpec)
-    if (declared.hasSameGrid(joinSpec)) joinSpec else declared.copy(column = joinSpec.column)
+    PartitionSpecResolver.snapshotSpec(joinPart, joinSpec)
   }
 
   def outputPartitionSpec(baseMetadata: MetaData, defaultSpec: PartitionSpec): PartitionSpec =
-    (for {
-      metadata <- Option(baseMetadata)
-      executionInfo <- Option(metadata.executionInfo)
-      outputTableInfo <- Option(executionInfo.outputTableInfo)
-    } yield outputTableInfo.partitionSpec(defaultSpec)).getOrElse(defaultSpec)
+    PartitionSpecResolver.outputSpec(baseMetadata, defaultSpec)
 
   /** Stamps a table's partition spec; the offset is emitted only when nonzero so existing
     * daily confs serialize byte-identically (absent offset means midnight-anchored).
@@ -82,7 +59,7 @@ object MetaDataUtils {
   }
 
   def tableInfo(table: String, partitionSpec: PartitionSpec): TableInfo =
-    applyPartitionSpec(new TableInfo().setTable(table), partitionSpec)
+    PartitionSpecResolver.tableInfo(table, partitionSpec)
 
   /** Shape of the producer side of a partition-grid edge. The narrowing-rejection policy is
     * event-shaped: a finer consumer over a coarser event producer is missing data. Snapshot
@@ -156,37 +133,6 @@ object MetaDataUtils {
     }
   }
 
-  /** Coverage edges (groupBy/model sources and the join LEFT) need the output partition's time
-    * range actually covered by input data, so the source grid must be validated even when the
-    * source declares nothing: an undeclared source is implicitly daily, and a sub-daily consumer
-    * over it would block every intraday run on the full day's partition and then run the whole
-    * backlog after midnight - permanently a day stale, silently. The escape hatch is
-    * `time_partitioned`: data lands continuously and intraday readiness is sensed from
-    * timestamps instead of partition boundaries.
-    *
-    * Join RIGHT parts are NOT coverage edges - they bind per left-row as-of time on their own
-    * declared grid (mixed hourly/daily/realtime cadence is the product) and must never be
-    * validated through this.
-    */
-  def validateCoverageEdge(nodeName: String,
-                           consumerSpec: PartitionSpec,
-                           query: Query,
-                           sourceDescription: String,
-                           shape: EdgeShape): Unit = {
-    if (Option(query.partitionInterval).isDefined) {
-      validateEdgeGrids(nodeName, consumerSpec, query.partitionSpec(consumerSpec), sourceDescription, shape)
-    } else if (
-      consumerSpec.spanMillis < WindowUtils.Day.millis && !(query.isSetTimePartitioned && query.timePartitioned)
-    ) {
-      throw new IllegalArgumentException(
-        s"$nodeName has a sub-daily output grid (${consumerSpec.grid.show}) over $sourceDescription " +
-          "with no declared partition_interval - implicitly daily. Every intraday run would wait for the " +
-          "full day's partition and land a day late. Declare the source's partition_interval, or mark it " +
-          "time_partitioned if data lands continuously and readiness can be sensed from timestamps."
-      )
-    }
-  }
-
   private def requireAligned(nodeName: String,
                              consumerSpec: PartitionSpec,
                              producerSpec: PartitionSpec,
@@ -229,7 +175,7 @@ object MetaDataUtils {
 
     outputTableOverride match {
       case Some(outputTable) =>
-        // Changing table identity also changes ownership of the partition metadata: restamp all
+        // Changing table identity also changes ownership of the partition metadata: rewrite all
         // partition fields so layered sensors cannot keep stale downstream grids.
         applyPartitionSpec(copy.executionInfo.outputTableInfo.setTable(outputTable), partitionSpec)
       case None =>
@@ -241,11 +187,13 @@ object MetaDataUtils {
         applyPartitionSpec(tableInfo, effectivePartitionSpec)
     }
 
+    val resolvedTableDependencies = PartitionSpecResolver.resolveDependencies(tableDependencies, effectivePartitionSpec)
+
     // time-partitioned dependencies have no physical grid - their column is a real timestamp -
-    // so stamp the consumer's grid onto them: range math, sensing, and orchestration then
+    // so apply the consumer's grid to them: range math, sensing, and orchestration then
     // quantize intraday requirements on the node's own grain instead of assuming daily (which
     // would stall sub-daily readiness until the upstream day closes)
-    tableDependencies.foreach { dep =>
+    resolvedTableDependencies.foreach { dep =>
       Option(dep.tableInfo).filter(ti => ti.isSetTimePartitioned && ti.timePartitioned).foreach { ti =>
         if (!ti.isSetPartitionInterval)
           ti.setPartitionInterval(WindowUtils.fromMillis(effectivePartitionSpec.spanMillis))
@@ -256,7 +204,7 @@ object MetaDataUtils {
     }
 
     // set table dependencies
-    copy.executionInfo.setTableDependencies(tableDependencies.toJava)
+    copy.executionInfo.setTableDependencies(resolvedTableDependencies.toJava)
 
     copy
   }

@@ -74,6 +74,23 @@ class DependencyResolverTest extends AnyFlatSpec with Matchers {
     result shouldBe Some(PartitionRange("2024-01-02-00-00", "2024-01-02-21-00")(threeHourSpec))
   }
 
+  it should "normalize end cutoffs using the end of the fallback partition" in {
+    val queryRange = PartitionRange("2024-01-05", "2024-01-05")
+    val tableDep = dep("test.hourly_table")
+    tableDep.setEndCutOff("2024-01-05")
+    tableDep.setTableInfo(
+      new TableInfo()
+        .setTable("test.hourly_table")
+        .setPartitionColumn(threeHourSpec.column)
+        .setPartitionFormat(threeHourSpec.format)
+        .setPartitionInterval(WindowUtils.fromMillis(threeHourSpec.spanMillis))
+    )
+
+    val result = DependencyResolver.computeInputRange(queryRange, tableDep)
+
+    result shouldBe Some(PartitionRange("2024-01-05-00-00", "2024-01-05-21-00")(threeHourSpec))
+  }
+
   it should "map a daily consumer range to boundary-crossing unaligned input partitions" in {
     val queryRange = PartitionRange("2024-01-02", "2024-01-02")
     val tableDep = dep("test.hourly_table")

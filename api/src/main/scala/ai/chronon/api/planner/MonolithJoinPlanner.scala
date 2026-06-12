@@ -15,8 +15,34 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
   private val confOutputPartitionSpec: PartitionSpec =
     MetaDataUtils.outputPartitionSpec(join.metaData, outputPartitionSpec)
 
-  private def validatePartitionIntervals(): Unit =
+  private def validatePartitionIntervals(): Unit = {
+    for {
+      left <- Option(join.left)
+      query <- Option(left.query)
+    } {
+      PartitionSpecResolver.validateCoverageQuery(
+        join.metaData.name,
+        confOutputPartitionSpec,
+        query,
+        s"left source ${left.rawTable}",
+        MetaDataUtils.EdgeShape.of(left.dataModel)
+      )
+    }
+    validateBootstrapCoverage()
     JoinPlanner.validateJoinPartGrids(join, confOutputPartitionSpec)
+  }
+
+  private def validateBootstrapCoverage(): Unit =
+    Option(join.bootstrapParts).foreach { bootstrapParts =>
+      val deps = bootstrapParts.asScala.map(bp => TableDependencies.fromTable(bp.table, bp.query)).toSeq
+      PartitionSpecResolver.resolveCoverageDependencies(
+        join.metaData.name,
+        confOutputPartitionSpec,
+        deps,
+        dep => s"bootstrap table ${dep.tableInfo.table}",
+        MetaDataUtils.EdgeShape.Events
+      )
+    }
 
   private def semanticMonolithJoin(join: Join): Join = {
     val semanticJoin = join.deepCopy()
@@ -33,7 +59,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
   }
 
   def monolithJoinNode: Node = {
-    val tableDeps = TableDependencies.fromJoin(join)
+    val tableDeps = TableDependencies.fromJoin(join, Some(confOutputPartitionSpec))
 
     val metaData =
       MetaDataUtils.layer(join.metaData,
@@ -59,7 +85,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
       } else {
         groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}"
       }
-      val groupByOutputSpec = MetaDataUtils.outputPartitionSpec(groupBy.metaData, confOutputPartitionSpec)
+      val groupByOutputSpec = PartitionSpecResolver.producerOutputSpec(groupBy.metaData, outputPartitionSpec)
 
       val groupByDep = new TableDependency()
         .setTableInfo(

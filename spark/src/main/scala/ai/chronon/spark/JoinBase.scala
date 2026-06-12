@@ -30,6 +30,7 @@ import com.google.gson.Gson
 import ai.chronon.api.MetaData
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.LongType
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.time.Instant
@@ -65,6 +66,10 @@ abstract class JoinBase(val joinConfCloned: api.Join,
 
   def joinWithLeft(leftDf: DataFrame, rightDf: DataFrame, joinPart: JoinPart): DataFrame = {
     val partLeftKeys = joinPart.rightToLeft.values.toArray
+    lazy val partSpec = JoinUtils.partSnapshotSpec(joinPart)
+    val leftEventsSnapshot =
+      joinConfCloned.left.dataModel == api.DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT
+    val crossGridSnapshot = leftEventsSnapshot && !partSpec.hasSameGrid(tableUtils.partitionSpec)
 
     // compute join keys, besides the groupBy keys -  like ds, ts etc.,
     val additionalKeys: Seq[String] = {
@@ -98,8 +103,12 @@ abstract class JoinBase(val joinConfCloned: api.Join,
     // adjust join keys: snapshot binding is per row ON THE RHS GROUPBY'S DECLARED GRID - a row
     // at time T binds the latest RHS snapshot whose as-of boundary is <= T, independent of the
     // join's own grid. Daily RHS under a daily join degenerates to the historical behavior.
-    lazy val partSpec = JoinUtils.partSnapshotSpec(joinPart)
-    val joinableRightDf = if (additionalKeys.contains(Constants.TimePartitionColumn)) {
+    val joinableRightDf = if (crossGridSnapshot) {
+      keyRenamedRightDf
+        .withColumn(Constants.TimePartitionColumn, col(Constants.TimeColumn).cast(LongType))
+        .drop(tableUtils.partitionColumn, Constants.TimeColumn)
+        .dropDuplicates(keys)
+    } else if (additionalKeys.contains(Constants.TimePartitionColumn)) {
       // snapshot partition p holds the aggregate as-of epoch(p) + one RHS span; relabel to
       // the as-of boundary so it matches the left rows' RHS-grid floor
       keyRenamedRightDf
@@ -118,7 +127,12 @@ abstract class JoinBase(val joinConfCloned: api.Join,
     }
 
     // per-joinPart left binding key: floor(left.ts, RHS grid)
-    val joinableLeftDf = if (additionalKeys.contains(Constants.TimePartitionColumn)) {
+    val joinableLeftDf = if (crossGridSnapshot) {
+      val ts = col(Constants.TimeColumn)
+      val gridOffset = lit(Math.floorMod(partSpec.offsetMillis, partSpec.spanMillis))
+      val snapshotTs = (ts - pmod(ts - gridOffset, lit(partSpec.spanMillis))).cast(LongType)
+      leftDf.withColumn(Constants.TimePartitionColumn, snapshotTs)
+    } else if (additionalKeys.contains(Constants.TimePartitionColumn)) {
       leftDf.withTimeBasedColumn(Constants.TimePartitionColumn, spec = partSpec)
     } else {
       leftDf

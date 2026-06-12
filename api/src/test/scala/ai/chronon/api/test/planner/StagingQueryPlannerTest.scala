@@ -91,6 +91,51 @@ class StagingQueryPlannerTest extends AnyFlatSpec with Matchers {
     node.metaData.executionInfo.outputTableInfo.partitionInterval should equal(WindowUtils.fromMillis(threeHourSpec.spanMillis))
   }
 
+  it should "staging query planner should treat undeclared dependencies as daily under sub-daily outputs" in {
+    val stagingQuery = StagingQuery(
+      query = "SELECT * FROM test_table WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+      metaData = MetaData(
+        name = "subDailyStagingQueryWithDailyDep",
+        executionInfo = new ExecutionInfo().setOutputTableInfo(
+          new TableInfo()
+            .setPartitionColumn(threeHourSpec.column)
+            .setPartitionFormat(threeHourSpec.format)
+            .setPartitionInterval(WindowUtils.fromMillis(threeHourSpec.spanMillis))
+        )
+      ),
+      engineType = EngineType.SPARK,
+      tableDependencies = Seq(new TableDependency().setTableInfo(new TableInfo().setTable("test.undeclared_dep")))
+    )
+
+    val plan = new StagingQueryPlanner(stagingQuery).buildPlan
+    val depInfo = plan.nodes.asScala.head.metaData.executionInfo.tableDependencies.asScala.head.tableInfo
+    depInfo.partitionFormat should equal(PartitionSpec.daily.format)
+    depInfo.partitionInterval should equal(WindowUtils.Day)
+  }
+
+  it should "staging query planner should reject partially declared dependencies under sub-daily outputs" in {
+    val stagingQuery = StagingQuery(
+      query = "SELECT * FROM test_table WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+      metaData = MetaData(
+        name = "subDailyStagingQueryWithPartialDep",
+        executionInfo = new ExecutionInfo().setOutputTableInfo(
+          new TableInfo()
+            .setPartitionColumn(threeHourSpec.column)
+            .setPartitionFormat(threeHourSpec.format)
+            .setPartitionInterval(WindowUtils.fromMillis(threeHourSpec.spanMillis))
+        )
+      ),
+      engineType = EngineType.SPARK,
+      tableDependencies = Seq(
+        new TableDependency().setTableInfo(new TableInfo().setTable("test.partial_dep").setPartitionColumn("event_date"))
+      )
+    )
+
+    val error = the[IllegalArgumentException] thrownBy new StagingQueryPlanner(stagingQuery).buildPlan
+    error.getMessage should include("test.partial_dep")
+    error.getMessage should include("partition_interval")
+  }
+
   it should "staging query planner should avoid metadata when computing semantic hash" in {
     val firstStagingQuery = StagingQuery(
       query = "SELECT * FROM test_table",

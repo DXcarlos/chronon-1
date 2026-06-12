@@ -116,8 +116,6 @@ object Extensions {
       }
     }
 
-    def hours(millis: Long): Window = fromMillis(millis)
-
     def millisToString(millis: Long): String = {
       if (millis % Day.millis == 0) {
         new Window((millis / Day.millis).toInt, TimeUnit.DAYS).str

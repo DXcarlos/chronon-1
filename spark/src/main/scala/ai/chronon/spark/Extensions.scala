@@ -263,17 +263,21 @@ object Extensions {
     def camelToSnake: DataFrame =
       df.columns.foldLeft(df)((renamed, col) => renamed.withColumnRenamed(col, camelToSnake(col)))
 
-    def withPartitionBasedTimestamp(colName: String, inputColumn: String = tableUtils.partitionColumn): DataFrame =
-      df.withColumn(colName, unix_timestamp(df.col(inputColumn), tableUtils.partitionSpec.format) * 1000)
+    def withPartitionBasedTimestamp(colName: String,
+                                    inputColumn: String = tableUtils.partitionColumn,
+                                    spec: PartitionSpec = tableUtils.partitionSpec): DataFrame =
+      df.withColumn(colName, unix_timestamp(df.col(inputColumn), spec.format) * 1000)
 
-    def withShiftedPartition(colName: String, days: Int = 1): DataFrame =
+    def withShiftedPartition(colName: String,
+                             days: Int = 1,
+                             spec: PartitionSpec = tableUtils.partitionSpec): DataFrame =
       df.withColumn(
         colName,
         date_format(
           from_unixtime(
-            unix_timestamp(df.col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
-              (days.toLong * tableUtils.partitionSpec.spanMillis / 1000)),
-          tableUtils.partitionSpec.format
+            unix_timestamp(df.col(tableUtils.partitionColumn), spec.format) +
+              (days.toLong * spec.spanMillis / 1000)),
+          spec.format
         )
       )
 
@@ -302,8 +306,11 @@ object Extensions {
       // translate partition values through the target spec; format equality is not enough
       // because mixed grids can share a label format but require target-grid flooring.
       if (existingSpec.format != newSpec.format || !existingSpec.hasSameGrid(newSpec)) {
-        val translatePartition = udf((value: String) => Option(value).map(existingSpec.translate(_, newSpec)).orNull)
-        resultDf = resultDf.withColumn(newSpec.column, translatePartition(col(newSpec.column)))
+        val seconds = unix_timestamp(col(newSpec.column), existingSpec.format)
+        val spanSeconds = newSpec.spanMillis / 1000
+        val offsetSeconds = Math.floorMod(newSpec.offsetMillis, newSpec.spanMillis) / 1000
+        val floored = seconds - pmod(seconds - lit(offsetSeconds), lit(spanSeconds))
+        resultDf = resultDf.withColumn(newSpec.column, from_unixtime(floored, newSpec.format))
       }
 
       resultDf

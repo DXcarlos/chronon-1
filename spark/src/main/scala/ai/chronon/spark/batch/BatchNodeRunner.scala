@@ -414,7 +414,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 
       case NodeContent._Fields.JOIN_PART =>
         logger.info(s"Running join part job for '${metadata.name}' for range: [${range.start}, ${range.end}]")
-        new JoinPartJob(conf.getJoinPart, metadata, dateRange, alignOutput = true)(tableUtils).run()
+        new JoinPartJob(conf.getJoinPart, metadata, dateRange, alignOutput = true)(jobTableUtils(range)).run()
         logger.info(s"Successfully completed join part job for '${metadata.name}'")
 
       case NodeContent._Fields.JOIN_MERGE =>
@@ -481,6 +481,13 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
         throw new UnsupportedOperationException(s"Unsupported NodeContent type: ${conf.getSetField}")
     }
   }
+
+  private def runPartitionSpec(metadata: MetaData, conf: NodeContent): PartitionSpec =
+    RunnerUtils.outputPartitionSpec(metadata, tableUtils.partitionSpec)
+
+  private def jobTableUtils(range: PartitionRange): TableUtils =
+    if (range.partitionSpec == tableUtils.partitionSpec) tableUtils
+    else TableUtils(tableUtils.sparkSession, range.partitionSpec)
 
   private def postJobActions(metadata: MetaData, range: PartitionRange, tableStatsDataset: Option[String]): Unit = {
     val outputTablePartitionSpec = RunnerUtils.outputPartitionSpec(metadata, tableUtils.partitionSpec)
@@ -616,7 +623,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   ): Int = {
     Try {
       val metadata = node.metaData
-      val spec = RunnerUtils.outputPartitionSpec(metadata, tableUtils.partitionSpec)
+      val spec = runPartitionSpec(metadata, node.content)
       // catch a daily-formatted arg handed to a sub-daily node (and vice versa) before any work runs
       Seq(startDs, endDs).foreach { ds =>
         require(
