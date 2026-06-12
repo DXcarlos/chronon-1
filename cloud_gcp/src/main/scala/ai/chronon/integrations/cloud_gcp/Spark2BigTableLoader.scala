@@ -7,6 +7,7 @@ import ai.chronon.integrations.cloud_gcp.BigTableKVStore.ColumnFamilyQualifierSt
 import ai.chronon.integrations.cloud_gcp.BigTableKVStore.ColumnFamilyString
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission.SparkSessionBuilder
+import com.google.cloud.spark.bigquery.v2.Spark35BigQueryTableProvider
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.functions.udf
 import org.rogach.scallop.ScallopConf
@@ -96,14 +97,24 @@ object Spark2BigTableLoader {
       BigTableKVStore.buildRowKey(keyBytes, dataset)
     })
 
-    val dataDf =
-      tableUtils.sql(s"""SELECT key_bytes, value_bytes, '$datasetName' as dataset
-         |FROM $tableName
-         |$partitionFilter""".stripMargin)
+    // Use the BQ Spark connector to read the table directly — Spark SQL cannot resolve
+    // fully-qualified BQ table names (project.dataset.table) without the connector catalog.
+    val bqFormat = classOf[Spark35BigQueryTableProvider].getName
+    val rawDf = spark.read
+      .format(bqFormat)
+      .option("filter", s"ds = '$endDate'")
+      .load(tableName)
+
+    val dataDf = rawDf
+      .select(
+        functions.col("key_bytes"),
+        functions.col("value_bytes"),
+        functions.lit(datasetName).as("dataset")
+      )
     val finalDataDf =
       dataDf
         .withColumn("data_rowkey", buildRowKeyUDF(functions.col("key_bytes"), functions.col("dataset")))
-        .drop("key_bytes", "dataset", "ts") // BT connector seems to not handle extra columns well
+        .drop("key_bytes", "dataset") // BT connector seems to not handle extra columns well
 
     finalDataDf.write
       .format("bigtable")

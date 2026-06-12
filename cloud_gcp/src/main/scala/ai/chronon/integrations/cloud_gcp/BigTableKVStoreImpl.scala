@@ -497,8 +497,8 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
       throw new RuntimeException("BigQuery client is needed to export data to BigTable")
     }
 
-    // we write groupby data to 1 large multi use-case table
-    val batchTable = "GROUPBY_BATCH"
+    // we write groupby data to 1 large multi use-case table; overridable for testing
+    val batchTable = conf.getOrElse("BT_BATCH_TABLE_OVERRIDE", "GROUPBY_BATCH")
 
     // we use the endDs + span to indicate the timestamp of all the cell data we upload for endDs
     // this is used in the KV store multiget calls
@@ -544,8 +544,14 @@ class BigTableKVStoreImpl(dataClient: BigtableDataClient,
 
       val startTs = System.currentTimeMillis()
       // we append the timestamp to the jobID as BigQuery doesn't allow us to re-run the same job
+      // Location must match the reservation region; defaults to us-central1 where the BQ→BT reservation lives.
+      val bqLocation = conf.getOrElse("GCP_LOCATION", "us-central1")
       val jobId =
-        JobId.of(adminClient.getProjectId, s"export_${sourceOfflineTable.sanitize}_to_bigtable_${partition}_$startTs")
+        JobId.newBuilder()
+          .setProject(adminClient.getProjectId)
+          .setLocation(bqLocation)
+          .setJob(s"export_${sourceOfflineTable.sanitize}_to_bigtable_${partition}_$startTs")
+          .build()
       val job: Job = bigQueryClient.create(JobInfo.newBuilder(queryConfig).setJobId(jobId).build())
       logger.info(s"Export job started with Id: $jobId and link: ${job.getSelfLink}")
       val retryConfig =
