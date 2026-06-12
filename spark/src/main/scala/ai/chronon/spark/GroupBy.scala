@@ -698,14 +698,16 @@ object GroupBy {
       val df: DataFrame = if (groupByConf.inferredAccuracy == api.Accuracy.TEMPORAL && mutationSources.nonEmpty) {
         val mutationDf = mutationSources
           .map(ms =>
-            sourceDf(groupByConf,
-                     ms,
-                     groupByConf.getKeyColumns.toScala,
-                     queryRange.shift(1),
-                     tableUtils,
-                     groupByConf.maxWindow,
-                     groupByConf.inferredAccuracy,
-                     mutations = true))
+            sourceDf(
+              groupByConf,
+              ms,
+              groupByConf.getKeyColumns.toScala,
+              queryRange.shiftPartitions(1),
+              tableUtils,
+              groupByConf.maxWindow,
+              groupByConf.inferredAccuracy,
+              mutations = true
+            ))
           .reduce { (df1, df2) =>
             val columns1 = df1.schema.fields.map(_.name)
             df1.union(df2.selectExpr(columns1: _*))
@@ -735,7 +737,7 @@ object GroupBy {
                                   window: Option[api.Window]): PartitionRange = {
 
     implicit val tu: TableUtils = tableUtils
-    val effectiveQueryRange = queryRange.translate(source.query.partitionSpec(tableUtils.partitionSpec))
+    val effectiveQueryRange = queryRange.coveringRange(source.query.partitionSpec(tableUtils.partitionSpec))
     implicit val sourcePartitionSpec: PartitionSpec = source.query.partitionSpec(tableUtils.partitionSpec)
 
     // from here on down - the math is based entirely on source partition spec
@@ -871,7 +873,7 @@ object GroupBy {
       .orNull
     // CLI dates are always in yyyy-MM-dd format; translate to the configured partition spec
     val groupByUnfilledRangesOpt = Option(
-      Seq(PartitionRange(startPartition, endPartition)(PartitionSpec.daily).translate(tableUtils.partitionSpec))
+      Seq(PartitionRange(startPartition, endPartition)(PartitionSpec.daily).coveringRange(tableUtils.partitionSpec))
     ) // TODO(tchow): possilbly revert if orchestrator is not yet available.
 
     if (groupByUnfilledRangesOpt.isEmpty) {

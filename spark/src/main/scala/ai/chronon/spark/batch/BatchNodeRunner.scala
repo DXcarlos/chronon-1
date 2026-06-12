@@ -489,7 +489,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       tableUtils.firstAvailablePartition(outputTable, partitionSpec = outputTablePartitionSpec)
     val lastOutputPartition =
       tableUtils.lastAvailablePartition(outputTable, tablePartitionSpec = Option(outputTablePartitionSpec))
-    val translatedRange = range.translate(tableUtils.partitionSpec)
+    val translatedRange = range.coveringRange(tableUtils.partitionSpec)
 
     logger.info(
       s"Output table last available partition for '${metadata.name}': ${lastOutputPartition.getOrElse("none")}")
@@ -556,7 +556,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
           .flatMap { td =>
             DependencyResolver
               .computeInputRange(range, td)
-              .map(_.translate(tableUtils.partitionSpec).end)
+              .map(_.coveringRange(tableUtils.partitionSpec).end)
           }
           .toSeq
           .sorted

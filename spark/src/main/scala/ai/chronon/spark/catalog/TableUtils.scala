@@ -243,7 +243,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
         partitions(
           tableName,
           subPartitionFilters,
-          partitionRange.map(_.translate(partitionSpec)),
+          partitionRange.map(_.coveringRange(partitionSpec)),
           tablePartitionSpec = Some(partitionSpec)
         ))
     } else {
@@ -439,7 +439,8 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
            |""".stripMargin
       )
 
-      outputPartitionRange.copy(start = partitionSpec.shift(inputStart.get, inputToOutputShift))(partitionSpec)
+      outputPartitionRange.copy(start = partitionSpec.shiftPartitions(inputStart.get, inputToOutputShift))(
+        partitionSpec)
     } else {
 
       outputPartitionRange
@@ -451,7 +452,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
     // collapse the join's compute range to nothing.
     val canonicalRange =
       if (validPartitionRange.partitionSpec == partitionSpec) validPartitionRange
-      else validPartitionRange.translate(partitionSpec)
+      else validPartitionRange.coveringRange(partitionSpec)
 
     val outputExisting = partitions(outputTable)
     // To avoid recomputing partitions removed by retention mechanisms we will not fill holes in the very beginning of the range
@@ -486,7 +487,7 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
         // partitions(..., tablePartitionSpec = Some(...)) already returns values in the
         // TableUtils default spec, so the shift below parses them correctly even when the
         // input table uses a non-default partition format.
-        partitionSpec.shift(partitionStr, inputToOutputShift)
+        partitionSpec.shiftPartitions(partitionStr, inputToOutputShift)
       }
 
     val inputMissing = inputTables

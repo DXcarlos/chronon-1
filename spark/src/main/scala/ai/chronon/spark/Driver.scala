@@ -453,7 +453,7 @@ object Driver {
       new Analyzer(
         tableUtils,
         args.confPath(),
-        args.startDate.getOrElse(tableUtils.partitionSpec.shiftBackFromNow(3)),
+        args.startDate.getOrElse(tableUtils.partitionSpec.shiftPartitionsBackFromNow(3)),
         args.endDate(),
         args.skewKeyCount(),
         args.sample(),

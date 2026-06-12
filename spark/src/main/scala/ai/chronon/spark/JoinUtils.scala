@@ -128,7 +128,7 @@ object JoinUtils {
 
     implicit val tu: TableUtils = tableUtils
     val effectiveLeftSpec = leftSource.query.partitionSpec(tableUtils.partitionSpec)
-    val effectiveLeftRange = range.translate(effectiveLeftSpec)
+    val effectiveLeftRange = range.coveringRange(effectiveLeftSpec)
 
     val partitionColumnOfLeft = effectiveLeftSpec.column
 
@@ -468,7 +468,7 @@ object JoinUtils {
     val rightRange = if (leftDataModel == EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
       // Disabling for now
       // val leftTimeRange = leftTimeRangeOpt.getOrElse(leftDf.get.timeRange.toPartitionRange)
-      leftRange.shift(shiftDays)
+      leftRange.shiftPartitions(shiftDays)
     } else {
       leftRange
     }

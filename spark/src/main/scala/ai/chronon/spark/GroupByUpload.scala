@@ -413,7 +413,7 @@ object GroupByUpload {
     // we wait for event partitions of (xxxx-01-02) which contain data until (xxxx-01-02 23:59:59.999)
     lazy val shiftedGroupBy =
       ai.chronon.spark.GroupBy.from(groupByConf,
-                                    PartitionRange(endDs, endDs).shift(1),
+                                    PartitionRange(endDs, endDs).shiftPartitions(1),
                                     tableUtils,
                                     computeDependency = true,
                                     showDf = showDf)

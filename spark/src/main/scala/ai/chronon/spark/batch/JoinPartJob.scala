@@ -206,7 +206,8 @@ class JoinPartJob(node: JoinPartNode,
       skewFilteredLeft.select(columns: _*)
     }
 
-    lazy val shiftedPartitionRange = if (alignOutput) unfilledPartitionRange else unfilledPartitionRange.shift(-1)
+    lazy val shiftedPartitionRange =
+      if (alignOutput) unfilledPartitionRange else unfilledPartitionRange.shiftPartitions(-1)
 
     val renamedLeftDf = renamedLeftRawDf.select(renamedLeftRawDf.columns.map {
       case c if c == tableUtils.partitionColumn =>
@@ -243,7 +244,7 @@ class JoinPartJob(node: JoinPartNode,
 
       case (EVENTS, ENTITIES, Accuracy.TEMPORAL) =>
         // Snapshots and mutations are partitioned with ds holding data between <ds 00:00> and ds <23:59>.
-        genGroupBy(unfilledPartitionRange.shift(-1)).temporalEntities(renamedLeftDf)
+        genGroupBy(unfilledPartitionRange.shiftPartitions(-1)).temporalEntities(renamedLeftDf)
     }
 
     val rightDfWithDerivations = if (joinPart.groupBy.hasDerivations) {

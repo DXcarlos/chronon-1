@@ -98,7 +98,7 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
   "PartitionSpec date arithmetic" should "work correctly with yyyyMMdd format" in {
     compactSpec.after("20251125") should be("20251126")
     compactSpec.before("20251201") should be("20251130")
-    compactSpec.shift("20251231", 1) should be("20260101")
+    compactSpec.shiftPartitions("20251231", 1) should be("20260101")
   }
 
   it should "support minus with window in yyyyMMdd format" in {
@@ -106,30 +106,30 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     compactSpec.minus("20251125", twoDays) should be("20251123")
   }
 
-  "PartitionRange.translate" should "convert CLI dates (yyyy-MM-dd) to yyyyMMdd" in {
+  "PartitionRange.coveringRange" should "convert CLI dates (yyyy-MM-dd) to yyyyMMdd" in {
     val cliRange = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
-    val translated = cliRange.translate(compactSpec)
+    val covering = cliRange.coveringRange(compactSpec)
 
-    translated.start should be("20251125")
-    translated.end should be("20251201")
-    translated.partitionSpec should be(compactSpec)
+    covering.start should be("20251125")
+    covering.end should be("20251201")
+    covering.partitionSpec should be(compactSpec)
   }
 
   it should "preserve range validity after translation" in {
     val cliRange = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
-    val translated = cliRange.translate(compactSpec)
+    val covering = cliRange.coveringRange(compactSpec)
 
-    translated.wellDefined should be(true)
-    translated.partitions.size should be(7)
-    translated.partitions.head should be("20251125")
-    translated.partitions.last should be("20251201")
+    covering.wellDefined should be(true)
+    covering.partitions.size should be(7)
+    covering.partitions.head should be("20251125")
+    covering.partitions.last should be("20251201")
   }
 
   it should "be a no-op when source and target formats match" in {
     val range = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
-    val translated = range.translate(dailySpec)
+    val covering = range.coveringRange(dailySpec)
 
-    translated.start should be("2025-11-25")
-    translated.end should be("2025-12-01")
+    covering.start should be("2025-11-25")
+    covering.end should be("2025-12-01")
   }
 }

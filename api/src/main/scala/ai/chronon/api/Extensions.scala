@@ -95,10 +95,22 @@ object Extensions {
     val Null: Window = null
 
     private val SecondMillis: Long = 1000
-    private val Minute: Long = 60 * SecondMillis
-    val FiveMinutes: Long = 5 * Minute
+    val MinuteMillis: Long = 60 * SecondMillis
+    val FiveMinutes: Long = 5 * MinuteMillis
     private val defaultPartitionSize: api.TimeUnit = api.TimeUnit.DAYS
     val onePartition: api.Window = new api.Window(1, defaultPartitionSize)
+
+    def fromMillis(millis: Long): Window = {
+      if (millis % Day.millis == 0) {
+        new Window((millis / Day.millis).toInt, TimeUnit.DAYS)
+      } else if (millis % Hour.millis == 0) {
+        new Window((millis / Hour.millis).toInt, TimeUnit.HOURS)
+      } else if (millis % MinuteMillis == 0) {
+        new Window((millis / MinuteMillis).toInt, TimeUnit.MINUTES)
+      } else {
+        throw new IllegalArgumentException(s"Window duration must be minute-aligned, found ${millis}ms")
+      }
+    }
 
     def hours(millis: Long): Window = new Window((millis / Hour.millis).toInt, TimeUnit.HOURS)
 
@@ -107,8 +119,8 @@ object Extensions {
         new Window((millis / Day.millis).toInt, TimeUnit.DAYS).str
       } else if (millis % Hour.millis == 0) {
         new Window((millis / Hour.millis).toInt, TimeUnit.HOURS).str
-      } else if (millis % Minute == 0) {
-        s"${millis / Minute} minutes"
+      } else if (millis % MinuteMillis == 0) {
+        s"${millis / MinuteMillis} minutes"
       } else if (millis % SecondMillis == 0) {
         s"${millis / SecondMillis} seconds"
       } else {

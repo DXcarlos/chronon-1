@@ -85,7 +85,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     archiveOutputTableIfRequired()
 
     // This job benefits from a step day of 1 to avoid needing to shuffle on writing output (single partition)
-    dateRange.steps(days = 1).foreach { dayStep =>
+    dateRange.steps(partitionCount = 1).foreach { dayStep =>
       // Scan left input table once to get schema and potentially reuse
       val leftInputDf = tableUtils.scanDf(query = null, table = leftInputTable, range = Some(dayStep))
 
@@ -159,7 +159,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       val partTable = RelevantLeftForJoinPart.fullPartTableName(join, joinPart)
       val effectiveRange =
         if (join.left.dataModel == DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
-          dayStep.shift(-1)
+          dayStep.shiftPartitions(-1)
         } else {
           dayStep
         }
