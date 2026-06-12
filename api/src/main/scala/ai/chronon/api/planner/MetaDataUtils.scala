@@ -102,12 +102,9 @@ object MetaDataUtils {
     }
   }
 
-  private def gridString(spec: PartitionSpec): String =
-    s"interval ${WindowUtils.millisToString(spec.spanMillis)} @ offset ${WindowUtils.millisToString(spec.offsetMillis)}"
-
   /** Validates that a consumer can cleanly cover its producer's partition grid: the consumer
-    * interval must be an equal-or-coarser multiple of the producer interval AND the two grids
-    * must be congruent (offsets differ by a whole number of producer intervals).
+    * interval must be an equal-or-coarser multiple of the producer interval AND the consumer
+    * must be aligned to the producer grid.
     *
     * @param snapshotAsOf snapshot-shaped edges where the engine binds the producer per row,
     *                     as-of the row's time on the producer's declared grid (join snapshot
@@ -123,10 +120,8 @@ object MetaDataUtils {
                         producerDescription: String,
                         shape: EdgeShape,
                         snapshotAsOf: Boolean = false): Unit = {
-    val consumerMillis = consumerSpec.spanMillis
-    val producerMillis = producerSpec.spanMillis
-    val covering = consumerMillis >= producerMillis && consumerMillis % producerMillis == 0
-    val congruent = Math.floorMod(consumerSpec.offsetMillis - producerSpec.offsetMillis, producerMillis) == 0L
+    val consumerGrid = consumerSpec.grid
+    val producerGrid = producerSpec.grid
 
     shape match {
       case EdgeShape.Snapshot if snapshotAsOf =>
@@ -137,21 +132,27 @@ object MetaDataUtils {
         // Non-as-of snapshot edges (e.g. a groupBy reading an entity snapshot source passes
         // the producer's partitions through unchanged) keep the covering rejection.
         require(
-          covering,
-          s"Invalid partition interval for $nodeName: consumer interval ${WindowUtils.millisToString(consumerMillis)} " +
-            s"must be equal to or a multiple of snapshot producer interval ${WindowUtils.millisToString(producerMillis)} " +
+          consumerGrid.isExactMultipleOf(producerGrid),
+          s"Invalid partition interval for $nodeName: ${consumerGrid.exactMultipleRequirement(producerGrid)} " +
             s"($producerDescription); as-of consumption of finer snapshot grids is not supported on this edge yet."
         )
-        requireCongruent(nodeName, consumerSpec, producerSpec, producerDescription, congruent)
+        requireAligned(nodeName,
+                       consumerSpec,
+                       producerSpec,
+                       producerDescription,
+                       consumerGrid.isAlignedTo(producerGrid))
 
       case EdgeShape.Events =>
         require(
-          covering,
-          s"Invalid partition interval for $nodeName: consumer interval ${WindowUtils.millisToString(consumerMillis)} " +
-            s"must be equal to or a multiple of event producer interval ${WindowUtils.millisToString(producerMillis)} " +
+          consumerGrid.isExactMultipleOf(producerGrid),
+          s"Invalid partition interval for $nodeName: ${consumerGrid.exactMultipleRequirement(producerGrid)} " +
             s"($producerDescription)."
         )
-        requireCongruent(nodeName, consumerSpec, producerSpec, producerDescription, congruent)
+        requireAligned(nodeName,
+                       consumerSpec,
+                       producerSpec,
+                       producerDescription,
+                       consumerGrid.isAlignedTo(producerGrid))
     }
   }
 
@@ -178,7 +179,7 @@ object MetaDataUtils {
       consumerSpec.spanMillis < WindowUtils.Day.millis && !(query.isSetTimePartitioned && query.timePartitioned)
     ) {
       throw new IllegalArgumentException(
-        s"$nodeName has a sub-daily output grid (${gridString(consumerSpec)}) over $sourceDescription " +
+        s"$nodeName has a sub-daily output grid (${consumerSpec.grid.show}) over $sourceDescription " +
           "with no declared partition_interval - implicitly daily. Every intraday run would wait for the " +
           "full day's partition and land a day late. Declare the source's partition_interval, or mark it " +
           "time_partitioned if data lands continuously and readiness can be sensed from timestamps."
@@ -186,16 +187,15 @@ object MetaDataUtils {
     }
   }
 
-  private def requireCongruent(nodeName: String,
-                               consumerSpec: PartitionSpec,
-                               producerSpec: PartitionSpec,
-                               producerDescription: String,
-                               congruent: Boolean): Unit =
+  private def requireAligned(nodeName: String,
+                             consumerSpec: PartitionSpec,
+                             producerSpec: PartitionSpec,
+                             producerDescription: String,
+                             aligned: Boolean): Unit =
     require(
-      congruent,
-      s"Incompatible partition grids for $nodeName: consumer grid (${gridString(consumerSpec)}) is not congruent " +
-        s"with producer grid (${gridString(producerSpec)}) ($producerDescription); " +
-        "grid offsets must differ by a whole number of producer intervals."
+      aligned,
+      s"Incompatible partition grids for $nodeName: ${consumerSpec.grid.alignmentRequirement(producerSpec.grid)} " +
+        s"($producerDescription)"
     )
 
   def layer(baseMetadata: MetaData,
@@ -227,24 +227,19 @@ object MetaDataUtils {
       copy.executionInfo.setOutputTableInfo(new TableInfo())
     }
 
-    val tableInfo =
-      if (outputTableOverride.isDefined) {
-        copy.executionInfo.outputTableInfo.setTable(outputTableOverride.get)
-      } else {
+    outputTableOverride match {
+      case Some(outputTable) =>
+        // Changing table identity also changes ownership of the partition metadata: restamp all
+        // partition fields so layered sensors cannot keep stale downstream grids.
+        applyPartitionSpec(copy.executionInfo.outputTableInfo.setTable(outputTable), partitionSpec)
+      case None =>
         // if output table is not set, use the base metadata's output table
         // fully qualified: namespace + outputTable
-        copy.executionInfo.outputTableInfo.setTable(copy.outputTable)
-      }
-
-    // respect author-declared output partition fields (e.g. a sub-daily output spec set from
-    // python); only fill the gaps from the effective spec. The offset is emitted only when
-    // nonzero so existing compiled daily confs serialize byte-identically.
-    if (!tableInfo.isSetPartitionColumn) tableInfo.setPartitionColumn(effectivePartitionSpec.column)
-    if (!tableInfo.isSetPartitionFormat) tableInfo.setPartitionFormat(effectivePartitionSpec.format)
-    if (!tableInfo.isSetPartitionInterval)
-      tableInfo.setPartitionInterval(WindowUtils.fromMillis(effectivePartitionSpec.spanMillis))
-    if (!tableInfo.isSetPartitionOffset && effectivePartitionSpec.offsetMillis != 0)
-      tableInfo.setPartitionOffset(WindowUtils.fromMillis(effectivePartitionSpec.offsetMillis))
+        val tableInfo = copy.executionInfo.outputTableInfo.setTable(copy.outputTable)
+        // effectivePartitionSpec already preserves author-declared output fields and fills
+        // missing fields from the default spec.
+        applyPartitionSpec(tableInfo, effectivePartitionSpec)
+    }
 
     // time-partitioned dependencies have no physical grid - their column is a real timestamp -
     // so stamp the consumer's grid onto them: range math, sensing, and orchestration then

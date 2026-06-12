@@ -179,10 +179,9 @@ object Extensions {
         executionInfo <- Option(metaData.executionInfo)
         tableInfo <- Option(executionInfo.outputTableInfo)
         interval <- Option(tableInfo.partitionInterval)
-        intervalMs = interval.millis
         offsetMs = Option(tableInfo.partitionOffset).map(_.millis).getOrElse(0L)
-        if intervalMs != WindowUtils.Day.millis || offsetMs != 0L
-      } yield s"grid:interval_ms=$intervalMs,offset_ms=$offsetMs"
+        token <- PartitionGrid(interval.millis, offsetMs).semanticToken
+      } yield token
 
     def mixGridToken(baseHash: String): String =
       outputGridToken.map(token => HashUtils.md5Base64(s"$baseHash|$token")).getOrElse(baseHash)

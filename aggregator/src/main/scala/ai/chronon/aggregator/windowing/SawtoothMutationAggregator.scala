@@ -97,7 +97,10 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
 
     var i = 0
     while (i < windowedAggregator.length) {
-      if (batchEndTs > rowTs && batchTails(i).forall(rowTs > _)) { // relevant for the window
+      // tail inclusion is INCLUSIVE (>=) to match the offline sawtooth, which buckets hops
+      // with ts >= roundedTail: an event exactly at the hop-aligned tail instant must not
+      // undercount online vs offline
+      if (batchEndTs > rowTs && batchTails(i).forall(rowTs >= _)) { // relevant for the window
         if (batchTails(i).forall(rowTs >= _ + tailBufferMillis)) { // update collapsed part
           windowedAggregator.columnAggregators(i).update(batchIr.collapsed, row)
         } else { // update tailHops part
@@ -174,11 +177,16 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
         val queryTail = TsUtils.round(queryTs - windowMillis, hopSizes(hopIndex))
         val hopIrs = batchIr.tailHops(hopIndex)
         val relevantHops = mutable.ArrayBuffer[Any](ir(i))
+        // hop-align the inclusion bound to match update()'s collapsed/hop split: with a
+        // non-hop-aligned batchEndTs the raw bound sits up to one hop above the rounded
+        // collapsed boundary, re-admitting a hop (written by a shorter sibling window) whose
+        // rows this window already holds in collapsed
+        val tailHopCutoff = TsUtils.round(batchEndTs - windowMillis, hopSizes(hopIndex)) + tailBufferMillis
         var idx: Int = 0
         while (idx < hopIrs.length) {
           val hopIr = hopIrs(idx)
           val hopStart = hopIr.last.asInstanceOf[Long]
-          if ((batchEndTs - windowMillis) + tailBufferMillis > hopStart && hopStart >= queryTail) {
+          if (tailHopCutoff > hopStart && hopStart >= queryTail) {
             relevantHops += hopIr(baseIrIndices(i))
           }
           idx += 1

@@ -1,7 +1,7 @@
 package ai.chronon.api.test
 
 import ai.chronon.api.Extensions.WindowUtils
-import ai.chronon.api.{PartitionRange, PartitionSpec, TimeUnit, Window}
+import ai.chronon.api.{PartitionGrid, PartitionRange, PartitionSpec, TimeUnit, Window}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -14,6 +14,43 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
   private val unalignedThreeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
   private val fifteenMinuteSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 15 * 60 * 1000)
+
+  "PartitionGrid" should "own grid invariants independent of label format" in {
+    an[IllegalArgumentException] should be thrownBy PartitionGrid(0)
+    an[IllegalArgumentException] should be thrownBy PartitionGrid(5 * 60 * 60 * 1000L)
+    an[IllegalArgumentException] should be thrownBy PartitionGrid(24 * 60 * 60 * 1000L, 60 * 60 * 1000L)
+    an[IllegalArgumentException] should be thrownBy PartitionGrid(3 * 60 * 60 * 1000L, -1L)
+    an[IllegalArgumentException] should be thrownBy PartitionGrid(3 * 60 * 60 * 1000L, 3 * 60 * 60 * 1000L)
+
+    noException should be thrownBy PartitionGrid(24 * 60 * 60 * 1000L)
+    noException should be thrownBy PartitionGrid(90 * 60 * 1000L)
+    noException should be thrownBy PartitionGrid(3 * 60 * 60 * 1000L, 60 * 60 * 1000L)
+  }
+
+  it should "emit a semantic token only for non-daily grids" in {
+    PartitionGrid(24 * 60 * 60 * 1000L).semanticToken should be(None)
+    PartitionGrid(3 * 60 * 60 * 1000L).semanticToken should be(Some("grid:interval_ms=10800000,offset_ms=0"))
+    PartitionGrid(3 * 60 * 60 * 1000L, 60 * 60 * 1000L).semanticToken should be(
+      Some("grid:interval_ms=10800000,offset_ms=3600000"))
+  }
+
+  it should "make producer alignment directional" in {
+    val producer = PartitionGrid(3 * 60 * 60 * 1000L, 60 * 60 * 1000L)
+    val alignedConsumer = PartitionGrid(6 * 60 * 60 * 1000L, 4 * 60 * 60 * 1000L)
+    val unalignedConsumer = PartitionGrid(6 * 60 * 60 * 1000L, 2 * 60 * 60 * 1000L)
+
+    alignedConsumer.isExactMultipleOf(producer) should be(true)
+    alignedConsumer.isAlignedTo(producer) should be(true)
+    alignedConsumer.canCover(producer) should be(true)
+
+    producer.isExactMultipleOf(alignedConsumer) should be(false)
+    producer.isAlignedTo(alignedConsumer) should be(false)
+    producer.canCover(alignedConsumer) should be(false)
+
+    unalignedConsumer.isExactMultipleOf(producer) should be(true)
+    unalignedConsumer.isAlignedTo(producer) should be(false)
+    unalignedConsumer.canCover(producer) should be(false)
+  }
 
   "PartitionSpec.expandRange" should "expand date range into individual dates" in {
     val result = dailySpec.expandRange("2024-01-01", "2024-01-05")
@@ -255,34 +292,10 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     noException should be thrownBy PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000L, 60 * 60 * 1000L)
   }
 
-  it should "require spans that divide a day evenly or equal a day" in {
-    // a span that doesn't divide 24h drifts off the day boundary and breaks every
-    // day-denominated assumption (partitionsPerDay truncation, stepsByDays, snapshot math)
+  it should "delegate grid invariant validation to PartitionGrid" in {
     an[IllegalArgumentException] should be thrownBy PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 5 * 60 * 60 * 1000L)
-    // week/month-sized partitions are unrepresentable: 7d grids silently anchor to Thursday
-    // (epoch day zero) and 30d grids drift off calendar months. Weekly/monthly SCHEDULES are
-    // still supported - they run over daily partitions.
-    an[IllegalArgumentException] should be thrownBy PartitionSpec("ds", "yyyy-MM-dd", 7 * 24 * 60 * 60 * 1000L)
-    an[IllegalArgumentException] should be thrownBy PartitionSpec("ds", "yyyy-MM-dd", 30 * 24 * 60 * 60 * 1000L)
-    an[IllegalArgumentException] should be thrownBy PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 25 * 60 * 60 * 1000L)
-
-    noException should be thrownBy PartitionSpec("ds", "yyyy-MM-dd", 24 * 60 * 60 * 1000L)
-    noException should be thrownBy PartitionSpec("ds", "yyyy-MM-dd-HH", 8 * 60 * 60 * 1000L)
-    // 90m divides the day (16/day) even though no single cron can express it
-    noException should be thrownBy PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 90 * 60 * 1000L)
-  }
-
-  it should "reject offsets on daily grids and offsets outside [0, span)" in {
-    // daily grids stay midnight-anchored: offsets only exist below a day
-    an[IllegalArgumentException] should be thrownBy
-      PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 24 * 60 * 60 * 1000L, 60 * 60 * 1000L)
-    // negative or >= span offsets must be declared canonically, not silently floorMod-normalized
-    an[IllegalArgumentException] should be thrownBy
-      PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000L, -1 * 60 * 60 * 1000L)
     an[IllegalArgumentException] should be thrownBy
       PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000L, 3 * 60 * 60 * 1000L)
-
-    noException should be thrownBy PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000L, 2 * 60 * 60 * 1000L)
   }
 
   "PartitionRange.coverageEnd" should "derive the inclusive end of coverage" in {

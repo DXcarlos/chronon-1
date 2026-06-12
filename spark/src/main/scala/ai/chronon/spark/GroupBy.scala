@@ -781,7 +781,10 @@ object GroupBy {
                                       subPartitionFilters = source.subPartitionFilters,
                                       tablePartitionSpec = Option(sourcePartitionSpec))
               .map { p =>
-                if (sourcePartitionSpec.hasSameGrid(tableUtils.partitionSpec) && sourcePartitionSpec != tableUtils.partitionSpec)
+                if (
+                  sourcePartitionSpec.hasSameGrid(tableUtils.partitionSpec) &&
+                  sourcePartitionSpec != tableUtils.partitionSpec
+                )
                   tableUtils.partitionSpec.translate(p, sourcePartitionSpec)
                 else p
               }

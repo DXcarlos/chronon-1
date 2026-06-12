@@ -296,6 +296,80 @@ class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
     tiledResult.zip(nonTiledResult).foreach { case (a, b) => a shouldBe b }
   }
 
+  // the offline sawtooth buckets hops with ts >= roundedTail, so online batch inclusion must
+  // be inclusive at the tail too: an event landing exactly on the hop-aligned batch tail
+  // instant must count identically online and offline
+  it should "include events exactly at the hop-aligned batch tail" in {
+    val queryEndTs = TsUtils.round(System.currentTimeMillis(), WindowUtils.Day.millis)
+    // yesterday 04:00 - a 3h@01:00 partition boundary, so hourly AND daily hop tails are exercised
+    val batchEndTs = queryEndTs - WindowUtils.Day.millis + 4 * WindowUtils.Hour.millis
+
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(
+        operation = Operation.COUNT,
+        inputColumn = "num",
+        // 20h -> hourly hops, 14d -> daily hops
+        windows = Seq(new Window(20, TimeUnit.HOURS), new Window(14, TimeUnit.DAYS))
+      ))
+
+    val onlineAggregator = new SawtoothOnlineAggregator(batchEndTs, aggregations, schema, FiveMinuteResolution)
+    // one event exactly AT each window's hop-aligned batch tail, plus one safely inside
+    val tailEvents = onlineAggregator.batchTailTs.flatten.map(tail => new TestRow(tail, 1L)())
+    val events = tailEvents :+ new TestRow(batchEndTs - WindowUtils.Hour.millis, 1L)()
+
+    val queries = Array(batchEndTs + 30 * 60 * 1000L, batchEndTs + 2 * WindowUtils.Hour.millis)
+    val sawtoothIrs = sawtoothAggregate(events, queries, aggregations, schema)
+
+    val batchIr = onlineAggregator.normalizeBatchIr(events.foldLeft(onlineAggregator.init)(onlineAggregator.update))
+    val denormBatchIr = onlineAggregator.denormalizeBatchIr(batchIr)
+    val onlineIrs = queries.map(onlineAggregator.lambdaAggregateIr(denormBatchIr, Iterator.empty, _))
+
+    val gson = new Gson()
+    for (i <- queries.indices) {
+      val onlineStr = gson.toJson(onlineAggregator.windowedAggregator.finalize(onlineIrs(i)))
+      val sawtoothStr = gson.toJson(onlineAggregator.windowedAggregator.finalize(sawtoothIrs(i)))
+      assertEquals(sawtoothStr, onlineStr)
+    }
+  }
+
+  it should "not double count shared tail hops across sibling daily-hop windows at a non-midnight batch end" in {
+    val midnight = PartitionSpec.daily.epochMillis("2023-08-20")
+    // 04:00 - a sub-daily upload boundary, not aligned to the daily hops of >= 12d windows
+    val batchEndTs = midnight + 4 * WindowUtils.Hour.millis
+
+    val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(
+        operation = Operation.COUNT,
+        inputColumn = "num",
+        // both windows use daily hops and share one hop array via the common baseIrIndex
+        windows = Seq(new Window(13, TimeUnit.DAYS), new Window(14, TimeUnit.DAYS))
+      ))
+
+    val onlineAggregator = new SawtoothOnlineAggregator(batchEndTs, aggregations, schema, FiveMinuteResolution)
+    // first instant of the 14d window's collapsed region; for the 13d window this is still
+    // tail territory, so update() routes the event into the shared daily hop at this hopStart
+    val collapsed14Start =
+      TsUtils.round(batchEndTs - new Window(14, TimeUnit.DAYS).millis, WindowUtils.Day.millis) +
+        onlineAggregator.tailBufferMillis
+    val events = Array(new TestRow(collapsed14Start + WindowUtils.Hour.millis, 1L)())
+
+    val queries = Array(batchEndTs + 30 * 60 * 1000L, batchEndTs + 2 * WindowUtils.Hour.millis)
+    val sawtoothIrs = sawtoothAggregate(events, queries, aggregations, schema)
+
+    val batchIr = onlineAggregator.normalizeBatchIr(events.foldLeft(onlineAggregator.init)(onlineAggregator.update))
+    val denormBatchIr = onlineAggregator.denormalizeBatchIr(batchIr)
+    val onlineIrs = queries.map(onlineAggregator.lambdaAggregateIr(denormBatchIr, Iterator.empty, _))
+
+    val gson = new Gson()
+    for (i <- queries.indices) {
+      val onlineStr = gson.toJson(onlineAggregator.windowedAggregator.finalize(onlineIrs(i)))
+      val sawtoothStr = gson.toJson(onlineAggregator.windowedAggregator.finalize(sawtoothIrs(i)))
+      assertEquals(sawtoothStr, onlineStr)
+    }
+  }
+
   it should "test updateNullCounts when collapsedIr is null and tailHops is not null" in {
     val endPartition = "2023-08-20"
     val endTs = PartitionSpec.daily.epochMillis(endPartition)

@@ -299,15 +299,11 @@ object Extensions {
         resultDf = resultDf.withColumnRenamed(existingSpec.column, newSpec.column)
       }
 
-      // replace old format with new one
-      if (existingSpec.format != newSpec.format) {
-        resultDf = resultDf.withColumn(
-          newSpec.column,
-          date_format(
-            from_unixtime(unix_timestamp(col(newSpec.column), existingSpec.format)),
-            newSpec.format
-          )
-        )
+      // translate partition values through the target spec; format equality is not enough
+      // because mixed grids can share a label format but require target-grid flooring.
+      if (existingSpec.format != newSpec.format || !existingSpec.hasSameGrid(newSpec)) {
+        val translatePartition = udf((value: String) => Option(value).map(existingSpec.translate(_, newSpec)).orNull)
+        resultDf = resultDf.withColumn(newSpec.column, translatePartition(col(newSpec.column)))
       }
 
       resultDf

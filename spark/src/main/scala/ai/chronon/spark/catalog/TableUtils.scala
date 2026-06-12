@@ -844,12 +844,14 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
     columnType match {
       case StringType => whereClauses(range, Some(columnName))
       case _: NumericType =>
-        val startClause = Option(range.start).map(s => s"$columnName >= ${range.partitionSpec.partitionStartMillis(s)}L")
+        val startClause =
+          Option(range.start).map(s => s"$columnName >= ${range.partitionSpec.partitionStartMillis(s)}L")
         val endClause = Option(range.end).map(e => s"$columnName < ${range.partitionSpec.partitionEndMillis(e)}L")
         (startClause ++ endClause).toSeq
       case _ =>
         val startClause =
-          Option(range.start).map(s => s"$columnName >= timestamp_millis(${range.partitionSpec.partitionStartMillis(s)}L)")
+          Option(range.start).map(s =>
+            s"$columnName >= timestamp_millis(${range.partitionSpec.partitionStartMillis(s)}L)")
         val endClause =
           Option(range.end).map(e => s"$columnName < timestamp_millis(${range.partitionSpec.partitionEndMillis(e)}L)")
         (startClause ++ endClause).toSeq
