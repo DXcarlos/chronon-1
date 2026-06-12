@@ -66,7 +66,15 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
   }
 
   def tailTs(batchEndTs: Long): Array[Option[Long]] =
-    windowMappings.map { mapping => Option(mapping.aggregationPart.window).map { batchEndTs - _.millis } }
+    windowMappings.zipWithIndex.map { case (mapping, i) =>
+      Option(mapping.aggregationPart.window).map { w =>
+        // align down to the hop grid: queries round their window start to hops, so a batch end
+        // that is not hop-aligned (sub-daily uploads, e.g. 04:00 with daily hops) must retain
+        // the full first hop or the earliest queries permanently undercount the tail.
+        // No-op for day-aligned batch ends, where batchEndTs - window is already on the grid.
+        TsUtils.round(batchEndTs - w.millis, hopSizes(tailHopIndices(i)))
+      }
+    }
 
   def init: BatchIr = BatchIr(Array.fill(windowedAggregator.length)(null), hopsAggregator.init())
 
@@ -174,6 +182,14 @@ class SawtoothMutationAggregator(aggregations: Seq[Aggregation],
             relevantHops += hopIr(baseIrIndices(i))
           }
           idx += 1
+        }
+        // bulkMerge reduces into its first non-null element. When ir(i) is null (no streaming
+        // rows in the window yet) that element is a SHARED batch tail hop - cached across
+        // queries in the fetcher - so clone it or the fold corrupts every subsequent read.
+        if (ir(i) == null) {
+          val firstNonNull = relevantHops.indexWhere(_ != null)
+          if (firstNonNull >= 0)
+            relevantHops(firstNonNull) = windowedAggregator(i).clone(relevantHops(firstNonNull))
         }
         val merged = windowedAggregator(i).bulkMerge(relevantHops.iterator)
         ir.update(i, merged)

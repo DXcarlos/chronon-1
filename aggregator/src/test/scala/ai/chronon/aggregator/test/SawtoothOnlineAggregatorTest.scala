@@ -16,7 +16,6 @@
 
 package ai.chronon.aggregator.test
 
-import ai.chronon.aggregator.row.RowAggregator
 import ai.chronon.aggregator.test.SawtoothAggregatorTest.sawtoothAggregate
 import ai.chronon.aggregator.windowing.{FinalBatchIr, FiveMinuteResolution, SawtoothOnlineAggregator, TiledIr}
 import ai.chronon.api.Extensions.{WindowOps, WindowUtils}
@@ -34,6 +33,9 @@ import java.util.Locale
 class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
 
 
+  // expected :<...88,["user4042","user[3592","user2348","user1551]"],["user4042","user...> but
+  // was      :<...88,["user4042","user[4042","user3592","user3592]"],["user4042","user...>
+  //
   it should "ensure consistency between sawtooth ir and online ir" in {
     val queryEndTs = TsUtils.round(System.currentTimeMillis(), WindowUtils.Day.millis)
     val batchEndTs = queryEndTs - WindowUtils.Day.millis
@@ -141,6 +143,55 @@ class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
     }
   }
 
+  // sub-daily uploads move batchEndTs to intra-day boundaries (e.g. 04:00 on a 3h@01:00 grid);
+  // the lambda split must stay consistent with the ground-truth sawtooth aggregation even when
+  // batchEndTs is not aligned to the daily hops of long windows
+  it should "ensure consistency between sawtooth ir and online ir for a non-midnight batch end" in {
+    val queryEndTs = TsUtils.round(System.currentTimeMillis(), WindowUtils.Day.millis)
+    // yesterday 04:00 - a 3h@01:00 partition boundary
+    val batchEndTs = queryEndTs - WindowUtils.Day.millis + 4 * WindowUtils.Hour.millis
+    // queries are always at or after the batch end - the fetcher never serves the batch past
+    val queries = CStream.genTimestamps(new Window(1, TimeUnit.DAYS), 1000).filter(_ >= batchEndTs)
+    val eventCount = 10000
+
+    val columns = Seq(Column("ts", LongType, 60), Column("num", LongType, 100), Column("user", StringType, 6000))
+    val RowsWithSchema(events, schema) = CStream.gen(columns, eventCount)
+
+    val aggregations: Seq[Aggregation] = Seq(
+      Builders.Aggregation(
+        operation = Operation.COUNT,
+        inputColumn = "num",
+        // 14d/6d windows use daily hops, 20h hourly hops - both must survive a 04:00 batch end
+        windows = Seq(new Window(14, TimeUnit.DAYS), new Window(20, TimeUnit.HOURS), new Window(6, TimeUnit.DAYS))
+      ),
+      Builders.Aggregation(
+        operation = Operation.AVERAGE,
+        inputColumn = "num",
+        windows = Seq(new Window(14, TimeUnit.DAYS), new Window(20, TimeUnit.HOURS))
+      ),
+      Builders.Aggregation(
+        operation = Operation.UNIQUE_COUNT,
+        inputColumn = "user",
+        windows = Seq(new Window(23, TimeUnit.HOURS), new Window(14, TimeUnit.DAYS))
+      ),
+      Builders.Aggregation(operation = Operation.SUM, inputColumn = "num", windows = null)
+    )
+
+    val sawtoothIrs = sawtoothAggregate(events, queries, aggregations, schema)
+    val onlineAggregator = new SawtoothOnlineAggregator(batchEndTs, aggregations, schema, FiveMinuteResolution)
+    val batchIr = onlineAggregator.normalizeBatchIr(events.foldLeft(onlineAggregator.init)(onlineAggregator.update))
+    val denormBatchIr = onlineAggregator.denormalizeBatchIr(batchIr)
+    val windowHeadEvents = events.filter(_.ts >= batchEndTs)
+    val onlineIrs = queries.map(onlineAggregator.lambdaAggregateIr(denormBatchIr, windowHeadEvents.iterator, _))
+
+    val gson = new Gson()
+    for (i <- queries.indices) {
+      val onlineStr = gson.toJson(onlineAggregator.windowedAggregator.finalize(onlineIrs(i)))
+      val sawtoothStr = gson.toJson(onlineAggregator.windowedAggregator.finalize(sawtoothIrs(i)))
+      assertEquals(sawtoothStr, onlineStr)
+    }
+  }
+
   // Minimal Row impl for event rows (no mutation fields needed)
   private class SimpleRow(value: Long, tsMillis: Long) extends Row {
     override def get(index: Int): Any = if (index == 0) value else throw new IndexOutOfBoundsException(index.toString)
@@ -150,7 +201,7 @@ class SawtoothOnlineAggregatorTest extends AnyFlatSpec {
     override def mutationTs: Long = tsMillis
   }
 
-  // Row impl for mutation rows — isBefore and mutationTs are set per-row
+  // Row impl for mutation rows - isBefore and mutationTs are set per-row
   private class MutationRow(value: Long, tsMillis: Long, mutationTsMillis: Long, val isBefore: Boolean) extends Row {
     override def get(index: Int): Any = if (index == 0) value else throw new IndexOutOfBoundsException(index.toString)
     override val length: Int = 1

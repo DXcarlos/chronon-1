@@ -18,7 +18,7 @@ package ai.chronon.spark
 
 import ai.chronon.aggregator.windowing._
 import ai.chronon.api
-import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, SourceOps, TableInfoOps}
+import ai.chronon.api.Extensions.{GroupByOps, MetadataOps, SourceOps, TableInfoOps, WindowUtils}
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api._
 import ai.chronon.online.Extensions.ChrononStructTypeOps
@@ -322,17 +322,27 @@ object GroupByUpload {
                                tableUtils: TableUtils,
                                endDs: String): GroupByServingInfoParsed = {
     val groupByServingInfo = new GroupByServingInfo()
+    // the upload spec: BatchNodeRunner/run construct tableUtils with the node's output spec
     implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
-    val nextDay = tableUtils.partitionSpec.after(endDs)
+    val batchEndDate = partitionSpec.after(endDs)
 
     val groupBy = ai.chronon.spark.GroupBy
       .from(groupByConf, PartitionRange(endDs, endDs), tableUtils, computeDependency = false)
 
-    groupByServingInfo.setBatchEndDate(nextDay)
+    groupByServingInfo.setBatchEndDate(batchEndDate)
+    // authoritative watermark of this upload: streaming merges events at or after this boundary
+    groupByServingInfo.setBatchEndTs(partitionSpec.epochMillis(batchEndDate))
     groupByServingInfo.setGroupBy(groupByConf)
     groupByServingInfo.setKeyAvroSchema(groupBy.keySchema.toAvroSchema("Key").toString(true))
     groupByServingInfo.setSelectedAvroSchema(groupBy.preAggSchema.toAvroSchema("Value").toString(true))
-    groupByServingInfo.setDateFormat(tableUtils.partitionFormat)
+    groupByServingInfo.setDateFormat(partitionSpec.format)
+    // thrift contract: absent interval/offset means daily-at-midnight, so emit them for
+    // anything else regardless of what the global spec happens to be
+    if (!partitionSpec.isDaily) {
+      groupByServingInfo.setPartitionInterval(WindowUtils.fromMillis(partitionSpec.spanMillis))
+      if (partitionSpec.offsetMillis != 0)
+        groupByServingInfo.setPartitionOffset(WindowUtils.fromMillis(partitionSpec.offsetMillis))
+    }
 
     val inputSources = groupByConf.streamingSource.toSeq ++ groupByConf.sources.toScala
     if (inputSources.nonEmpty) {
