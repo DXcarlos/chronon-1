@@ -312,7 +312,7 @@ object FetcherTestUtil {
       logger.info(s"Diff count: ${diff.count()}")
       logger.info("diff result rows:")
       diff
-        .withTimeBasedColumn("ts_string", "ts", "yy-MM-dd HH:mm")
+        .withTimeFormattedColumn("ts_string", "ts", "yy-MM-dd HH:mm")
         .select("ts_string", diff.schema.fieldNames: _*)
         .show()
     }
@@ -612,7 +612,7 @@ object FetcherTestUtil {
     val paymentsDf = DataFrameGen.events(spark, paymentCols, rowCount, 60)
     val tsColString = "ts_string"
 
-    paymentsDf.withTimeBasedColumn(tsColString, format = "yyyy-MM-dd HH:mm:ss").save(paymentsTable)
+    paymentsDf.withTimeFormattedColumn(tsColString, Constants.TimeColumn, "yyyy-MM-dd HH:mm:ss").save(paymentsTable)
     // temporal events
     val userPaymentsGroupBy = Builders.GroupBy(
       sources = Seq(Builders.Source.events(query = Builders.Query(), table = paymentsTable, topic = topic)),

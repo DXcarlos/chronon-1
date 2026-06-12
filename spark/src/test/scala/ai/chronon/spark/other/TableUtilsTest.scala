@@ -672,6 +672,40 @@ class TableUtilsTest extends AnyFlatSpec {
     spark.sql(s"DROP DATABASE IF EXISTS $dbName")
   }
 
+  it should "floor off-grid timestamps to the grid for sub-daily virtual partitions" in {
+    val dbName = s"db_${System.nanoTime()}"
+    val tableName = s"$dbName.subdaily_time_partitioned"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+
+    // min/max are deliberately off-grid: labels must land on the declared 3h grid.
+    // SQL timestamp literals parse in the session timezone (UTC), unlike Timestamp.valueOf.
+    spark.sql(s"CREATE TABLE $tableName (user_id STRING, created_at TIMESTAMP)")
+    spark.sql(s"""
+      INSERT INTO $tableName VALUES
+        ('user1', TIMESTAMP '2024-01-01 09:17:00'),
+        ('user2', TIMESTAMP '2024-01-01 14:05:00')
+    """)
+
+    val threeHourSpec =
+      PartitionSpec("created_at", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+    val partitions = tableUtils.partitions(tableName, timePartitioned = true, tablePartitionSpec = Some(threeHourSpec))
+
+    // floor(09:17) = 09:00; last complete interval before floor(14:05) = 12:00 is 09:00
+    assertEquals(List("2024-01-01 09:00"), partitions)
+
+    val offsetSpec =
+      PartitionSpec("created_at", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
+    val offsetPartitions =
+      tableUtils.partitions(tableName, timePartitioned = true, tablePartitionSpec = Some(offsetSpec))
+
+    // grid is 01:00, 04:00, 07:00, 10:00, 13:00, ...: floor(09:17) = 07:00 and the last
+    // complete interval before floor(14:05) = 13:00 is 10:00
+    assertEquals(List("2024-01-01 07:00", "2024-01-01 10:00"), offsetPartitions)
+
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    spark.sql(s"DROP DATABASE IF EXISTS $dbName")
+  }
+
   it should "return empty list for virtual partitions on empty table" in {
     val dbName = s"db_${System.nanoTime()}"
     val tableName = s"$dbName.empty_time_partitioned"

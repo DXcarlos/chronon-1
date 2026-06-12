@@ -774,7 +774,9 @@ object GroupBy {
       case EVENTS =>
         if (Option(source.getEvents.isCumulative).getOrElse(false)) {
           lazy val latestAvailable: Option[String] =
-            tableUtils.lastAvailablePartition(source.table, subPartitionFilters = source.subPartitionFilters)
+            tableUtils.lastAvailablePartition(source.table,
+                                              subPartitionFilters = source.subPartitionFilters,
+                                              tablePartitionSpec = Option(sourcePartitionSpec))
           val latestValid: String = Option(sourceEndPartition).getOrElse(latestAvailable.orNull)
           SourceDataProfile(latestValid, latestValid, latestValid)
         } else {

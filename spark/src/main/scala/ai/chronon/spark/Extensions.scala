@@ -224,11 +224,22 @@ object Extensions {
       df.filter(cols.map(_ + " IS NOT NULL").mkString(" AND "))
     }
 
-    // convert a millisecond timestamp to string with the specified format
+    // format a millisecond timestamp as a raw time string - no partition grid semantics
+    def withTimeFormattedColumn(columnName: String, timeColumn: String, format: String): DataFrame =
+      df.withColumn(columnName, from_unixtime(df.col(timeColumn) / 1000, format))
+
+    // label of the partition containing the timestamp: floored to the spec's grid
+    // (span + offset) before formatting. Plain format truncation would leave sub-daily
+    // timestamps off-grid (12:07 -> "... 12:07"), which silently breaks equality joins
+    // against grid-aligned partition labels.
     def withTimeBasedColumn(columnName: String,
                             timeColumn: String = Constants.TimeColumn,
-                            format: String = tableUtils.partitionSpec.format): DataFrame =
-      df.withColumn(columnName, from_unixtime(df.col(timeColumn) / 1000, format))
+                            spec: PartitionSpec = tableUtils.partitionSpec): DataFrame = {
+      val ts = df.col(timeColumn)
+      val gridOffset = lit(Math.floorMod(spec.offsetMillis, spec.spanMillis))
+      val floored = ts - pmod(ts - gridOffset, lit(spec.spanMillis))
+      df.withColumn(columnName, from_unixtime(floored / 1000, spec.format))
+    }
 
     def addTimebasedColIfExists(): DataFrame =
       if (df.schema.names.contains(Constants.TimeColumn)) {

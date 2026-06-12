@@ -1,5 +1,5 @@
 import datetime
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import gen_thrift.common.ttypes as common
 
@@ -122,8 +122,16 @@ def default_partition_format(partition_interval: Union[common.Window, str]) -> s
     )
 
 
-def regular_subdaily_schedule(schedule_expression: str) -> Optional[Tuple[int, int]]:
-    """Return (interval_ms, offset_ms) for regular sub-daily schedules."""
+def regular_subdaily_schedule(schedule_expression: str, partition_offset_ms: int = 0) -> Optional[int]:
+    """Validate a cron expression and return its data interval in millis for regular sub-daily
+    schedules, or None for daily-or-coarser (or absent) schedules.
+
+    Grids are declared, never inferred from the cron: the partition grid is midnight-aligned
+    unless an explicit ``partition_offset`` shifts it. The cron fire phase only contributes a
+    derived processing delay relative to that declared grid, which must be constant across a
+    7 day UTC horizon and strictly less than the partition interval. Day-restricted or
+    irregular crons are rejected.
+    """
     from croniter import croniter
 
     if not schedule_expression or schedule_expression.strip().lower() in (
@@ -177,13 +185,49 @@ def regular_subdaily_schedule(schedule_expression: str) -> Optional[Tuple[int, i
     if DAY_MILLIS % interval_ms != 0:
         raise ValueError("Sub-daily schedule interval must divide a UTC day evenly.")
 
+    validate_cron_delay(runs, interval_ms, partition_offset_ms)
+    return interval_ms
+
+
+def validate_cron_delay(
+    runs, partition_interval_ms: int, partition_offset_ms: int = 0
+) -> int:
+    """Validate that all cron fire times sit at a constant delay over the declared partition
+    grid (``partition_interval_ms`` phased by ``partition_offset_ms``) and return that delay.
+
+    The delay is execution-domain only — it never moves the grid. A fire at 09:20 over a
+    midnight-aligned 3h grid is the 09:00 boundary plus a 20 minute delay.
+    """
     epoch = datetime.datetime(1970, 1, 1, 0, 0)
-    offsets = {int((run - epoch).total_seconds() * 1000) % interval_ms for run in runs}
-    if len(offsets) != 1:
+    delays = {
+        (int((run - epoch).total_seconds() * 1000) - partition_offset_ms) % partition_interval_ms
+        for run in runs
+    }
+    if len(delays) != 1:
         raise ValueError(
-            "Sub-daily schedule must have a constant offset across a 7 day UTC horizon."
+            "Sub-daily schedule fire times must sit at a constant delay over the declared "
+            f"partition grid (interval {partition_interval_ms}ms, offset {partition_offset_ms}ms); "
+            "declare a matching partition_offset or use a regular cron."
         )
-    return interval_ms, offsets.pop()
+    delay_ms = delays.pop()
+    if delay_ms >= partition_interval_ms:
+        raise ValueError(
+            "Derived cron delay must be strictly less than the partition interval, found "
+            f"{delay_ms}ms >= {partition_interval_ms}ms."
+        )
+    return delay_ms
+
+
+def is_subdaily(
+    partition_interval: Union[common.Window, str] = None, schedule: str = None
+) -> bool:
+    """True when the output grain is sub-daily — either via an explicit partition interval
+    below one day or a regular sub-daily schedule it would be inferred from."""
+    if partition_interval is not None:
+        return window_millis(partition_interval) < DAY_MILLIS
+    if schedule:
+        return regular_subdaily_schedule(schedule) is not None
+    return False
 
 
 def output_table_info(
@@ -193,21 +237,34 @@ def output_table_info(
     partition_format: str = None,
     schedule: str = None,
 ) -> common.TableInfo:
-    inferred_schedule = regular_subdaily_schedule(schedule) if schedule else None
-    if partition_interval is None and inferred_schedule is None:
+    # The offset is never inferred from the cron fire phase; it defaults to zero (midnight-
+    # aligned grid) and only an explicit partition_offset moves the grid. The cron fire phase
+    # is treated as a derived processing delay relative to the declared grid.
+    offset_ms = window_millis(partition_offset) if partition_offset is not None else 0
+    cron_interval_ms = regular_subdaily_schedule(schedule, offset_ms) if schedule else None
+    if partition_interval is None and cron_interval_ms is None:
+        if partition_offset is not None:
+            raise ValueError(
+                "partition_offset requires a partition_interval or a regular sub-daily schedule."
+            )
         return None
     interval = (
         normalize_window(partition_interval)
         if partition_interval is not None
-        else from_millis(inferred_schedule[0])
+        else from_millis(cron_interval_ms)
     )
-    offset = (
-        normalize_window(partition_offset)
-        if partition_offset is not None
-        else from_millis(inferred_schedule[1])
-        if inferred_schedule is not None
-        else None
-    )
+    interval_ms = window_millis(interval)
+    if cron_interval_ms is not None and cron_interval_ms % interval_ms != 0:
+        raise ValueError(
+            f"partition_interval ({interval_ms}ms) must evenly divide the cron data interval "
+            f"({cron_interval_ms}ms) of schedule '{schedule}'."
+        )
+    if offset_ms >= interval_ms:
+        raise ValueError(
+            f"partition_offset ({offset_ms}ms) must be strictly less than the partition "
+            f"interval ({interval_ms}ms)."
+        )
+    offset = normalize_window(partition_offset) if partition_offset is not None else None
     return common.TableInfo(
         partitionColumn=partition_column,
         partitionFormat=partition_format or default_partition_format(interval),

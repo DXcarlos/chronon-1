@@ -617,8 +617,10 @@ def GroupBy(
         When set below daily, Chronon uses "yyyy-MM-dd HH:mm" labels.
     :type partition_interval: Optional[Union[common.Window, str]]
     :param partition_offset:
-        Offset from UTC midnight/epoch for the output partition grid. When omitted and
-        offline_schedule is regular sub-daily, Chronon derives the offset from the cron fire time.
+        Offset from UTC midnight/epoch for the output partition grid. Defaults to zero
+        (midnight-aligned grid) and must be declared explicitly to move the grid; the cron
+        fire phase is treated as a processing delay relative to the declared grid, never as
+        a grid offset.
     :type partition_offset: Optional[Union[common.Window, str]]
     :param tags:
         Additional metadata that does not directly affect feature computation, but is useful to
@@ -716,16 +718,22 @@ def GroupBy(
             "Either set online=True or remove the online_schedule parameter."
         )
 
+    subdaily_output = window_utils.is_subdaily(partition_interval, offline_schedule)
+
     # "@never" explicitly disables online scheduling even when online=True
     if online_schedule == "@never":
         online_schedule = None
-    # Set default online_schedule if online is True and online_schedule is not specified
+    # Set default online_schedule if online is True and online_schedule is not specified.
+    # Inherit the offline schedule only when it is sub-daily; daily confs keep the
+    # historical "@daily" default so existing semantic hashes don't churn.
     elif online and online_schedule is None:
-        online_schedule = offline_schedule if offline_schedule not in (None, "@never") else "@daily"
+        if subdaily_output and offline_schedule not in (None, "@never"):
+            online_schedule = offline_schedule
+        else:
+            online_schedule = "@daily"
     elif (
         online
-        and partition_interval is not None
-        and window_utils.window_millis(partition_interval) < window_utils.DAY_MILLIS
+        and subdaily_output
         and online_schedule is not None
         and offline_schedule not in (None, "@never")
         and online_schedule != offline_schedule

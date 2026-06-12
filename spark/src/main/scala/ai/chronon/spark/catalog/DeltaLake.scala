@@ -8,7 +8,6 @@ import org.apache.spark.sql.functions.{
   coalesce,
   col,
   count,
-  date_format,
   from_json,
   lit,
   min,
@@ -120,8 +119,8 @@ case object DeltaLake extends Format {
         .agg(
           count(lit(1)).as("fileCount"),
           count(when(col("min_value").isNull || col("max_value").isNull, lit(1))).as("missingCount"),
-          date_format(min(statsBoundary("min_value", columnType, partitionSpec)), partitionSpec.format).as("start"),
-          date_format(max(statsBoundary("max_value", columnType, partitionSpec)), partitionSpec.format).as("end")
+          partitionLabel(min(statsBoundary("min_value", columnType, partitionSpec)), partitionSpec).as("start"),
+          partitionLabel(max(statsBoundary("max_value", columnType, partitionSpec)), partitionSpec).as("end")
         )
         .collect()
         .headOption

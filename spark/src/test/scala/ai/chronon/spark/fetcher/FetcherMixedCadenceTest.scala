@@ -97,6 +97,7 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
 
     actual shouldEqual Set(
       ("user1", ts("2023-08-14 12:00"), "2023-08-14 12:00", 30L, 100L, 30L),
+      ("user1", ts("2023-08-14 12:07"), "2023-08-14 12:00", 30L, 100L, 30L),
       ("user2", ts("2023-08-14 12:00"), "2023-08-14 12:00", 7L, 200L, 7L)
     )
   }
@@ -220,6 +221,9 @@ class FetcherMixedCadenceTest extends SparkTestBase with Matchers {
       .createDataFrame(
         Seq(
           ("user1", ts("2023-08-14 12:00"), "2023-08-14 12:00"),
+          // off-grid event time: ds_of_ts must floor to the hourly grid (12:00), otherwise
+          // the snapshot equality join silently produces nulls for this row
+          ("user1", ts("2023-08-14 12:07"), "2023-08-14 12:00"),
           ("user2", ts("2023-08-14 12:00"), "2023-08-14 12:00")
         ))
       .toDF("user_id", "ts", "ds")

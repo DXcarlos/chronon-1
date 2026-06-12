@@ -5,7 +5,7 @@ import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.functions.{col, date_format, from_unixtime, min, max, unix_timestamp}
+import org.apache.spark.sql.functions.{col, from_unixtime, lit, min, max, pmod, unix_timestamp}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -19,14 +19,23 @@ trait Format {
 
   def tableTypeString: String = ""
 
-  protected def partitionLabel(timestampColumn: Column, partitionSpec: PartitionSpec): Column =
-    date_format(timestampColumn.cast("timestamp"), partitionSpec.format)
+  // Epoch millis of the timestamp floored to the spec's partition grid (span + offset).
+  // Plain `date_format` truncation would yield off-grid labels for sub-daily specs
+  // (min ts 09:17 on a 3h grid must label as "09:00", not "09:17") and ignores offsetMillis.
+  private def gridFloorMillis(timestampColumn: Column, spec: PartitionSpec): Column = {
+    val millis = unix_timestamp(timestampColumn.cast("timestamp")) * lit(1000L)
+    val gridOffset = lit(Math.floorMod(spec.offsetMillis, spec.spanMillis))
+    millis - pmod(millis - gridOffset, lit(spec.spanMillis))
+  }
 
-  protected def lastCompletePartitionLabel(timestampColumn: Column, partitionSpec: PartitionSpec): Column =
-    date_format(
-      from_unixtime((unix_timestamp(timestampColumn.cast("timestamp")) * 1000 - partitionSpec.spanMillis) / 1000),
-      partitionSpec.format
-    )
+  // label of the partition (grid interval) containing the timestamp
+  protected def partitionLabel(timestampColumn: Column, partitionSpec: PartitionSpec): Column =
+    from_unixtime(gridFloorMillis(timestampColumn, partitionSpec) / lit(1000L), partitionSpec.format)
+
+  // label of the last grid interval that completed at or before the timestamp
+  protected def lastCompleteLabel(timestampColumn: Column, partitionSpec: PartitionSpec): Column =
+    from_unixtime((gridFloorMillis(timestampColumn, partitionSpec) - lit(partitionSpec.spanMillis)) / lit(1000L),
+                  partitionSpec.format)
 
   def createTable(tableName: String,
                   schema: StructType,
@@ -163,7 +172,7 @@ trait Format {
             .headOption
             .flatMap(v => Option(v))
         case _ =>
-          df.select(lastCompletePartitionLabel(max(col(partitionColumn)), partitionSpec).as("last_partition"))
+          df.select(lastCompleteLabel(max(col(partitionColumn)), partitionSpec).as("last_partition"))
             .as[String]
             .collect()
             .headOption
@@ -257,7 +266,7 @@ trait Format {
       val result = df
         .select(
           partitionLabel(min(col(timestampColumn)), partitionSpec).as("min_date"),
-          lastCompletePartitionLabel(max(col(timestampColumn)), partitionSpec).as("max_date")
+          lastCompleteLabel(max(col(timestampColumn)), partitionSpec).as("max_date")
         )
         .as[(String, String)]
         .collect()

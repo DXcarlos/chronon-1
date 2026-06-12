@@ -14,6 +14,8 @@
 
 import warnings
 
+import pytest
+
 import gen_thrift.common.ttypes as common
 from ai.chronon import query
 from ai.chronon.staging_query import TableDependency
@@ -89,7 +91,9 @@ def test_staging_query_partition_interval_sets_output_table_info():
     assert table_info.partitionInterval == _hours(3)
 
 
-def test_staging_query_infers_partition_interval_and_offset_from_schedule():
+def test_staging_query_infers_interval_but_never_offset_from_schedule():
+    # The cron fire phase (1h) is a derived processing delay over the midnight-aligned
+    # grid — it is never inferred as a partition offset.
     sq = StagingQuery(
         query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
         dependencies=[TableDependency(table="ns.upstream", partition_interval="3h")],
@@ -100,7 +104,65 @@ def test_staging_query_infers_partition_interval_and_offset_from_schedule():
     assert table_info.partitionColumn == "ds"
     assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
     assert table_info.partitionInterval == _hours(3)
+    assert table_info.partitionOffset is None
+
+
+def test_staging_query_explicit_offset_with_aligned_cron_has_zero_delay():
+    # Declaring partition_offset="1h" makes the grid 01:00, 04:00, ... and the
+    # `0 1-22/3 * * *` fires land exactly on it (zero derived delay).
+    sq = StagingQuery(
+        query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+        dependencies=[TableDependency(table="ns.upstream", partition_interval="3h")],
+        offline_schedule="0 1-22/3 * * *",
+        partition_offset="1h",
+    )
+
+    table_info = sq.metaData.executionInfo.outputTableInfo
+    assert table_info.partitionInterval == _hours(3)
     assert table_info.partitionOffset == _hours(1)
+
+
+def test_staging_query_explicit_offset_with_misaligned_cron_is_rejected():
+    with pytest.raises(ValueError):
+        StagingQuery(
+            query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+            dependencies=[TableDependency(table="ns.upstream", partition_interval="3h")],
+            offline_schedule="0 9,17 * * *",
+            partition_offset="1h",
+        )
+
+
+def test_staging_query_partition_interval_must_divide_cron_interval():
+    with pytest.raises(ValueError, match="evenly divide"):
+        StagingQuery(
+            query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+            dependencies=[TableDependency(table="ns.upstream", partition_interval="2h")],
+            offline_schedule="0 */3 * * *",
+            partition_interval="2h",
+        )
+
+
+def test_staging_query_partition_interval_dividing_cron_interval_is_accepted():
+    sq = StagingQuery(
+        query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+        dependencies=[TableDependency(table="ns.upstream", partition_interval="1h")],
+        offline_schedule="0 */3 * * *",
+        partition_interval="1h",
+    )
+
+    table_info = sq.metaData.executionInfo.outputTableInfo
+    assert table_info.partitionInterval == _hours(1)
+    assert table_info.partitionOffset is None
+
+
+def test_staging_query_offset_must_be_smaller_than_interval():
+    with pytest.raises(ValueError, match="strictly less"):
+        StagingQuery(
+            query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+            dependencies=[TableDependency(table="ns.upstream", partition_interval="3h")],
+            offline_schedule="0 */3 * * *",
+            partition_offset="3h",
+        )
 
 
 def test_start_offset_only_sets_start_and_defaults_end_to_zero():

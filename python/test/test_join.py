@@ -160,6 +160,39 @@ def test_online_schedule_validation():
     assert j.metaData.executionInfo.onlineSchedule is None
 
 
+def _online_join(**kwargs):
+    return join.Join(
+        left=event_source("table"),
+        right_parts=[right_part(event_source("table"))],
+        version=1,
+        row_ids=["id"],
+        online=True,
+        **kwargs,
+    )
+
+
+def test_online_schedule_keeps_daily_default_for_custom_daily_offline():
+    # A custom daily offline cron must NOT be inherited by online_schedule —
+    # that would churn semantic hashes for every existing conf.
+    j = _online_join(offline_schedule="0 4 * * *")
+    assert j.metaData.executionInfo.onlineSchedule == "@daily"
+
+
+def test_online_schedule_inherits_subdaily_offline():
+    j = _online_join(offline_schedule="0 */3 * * *")
+    assert j.metaData.executionInfo.onlineSchedule == "0 */3 * * *"
+
+
+def test_online_schedule_mismatch_rejected_for_inferred_subdaily():
+    # The online-must-match-offline check fires even without an explicit
+    # partition_interval, when the sub-daily interval is inferred from the schedule.
+    with pytest.raises(ValueError, match="online_schedule must match offline_schedule"):
+        _online_join(
+            offline_schedule="0 */3 * * *",
+            online_schedule="30 */3 * * *",
+        )
+
+
 def test_partition_interval_sets_output_table_info():
     j = join.Join(
         left=event_source("table"),

@@ -43,13 +43,13 @@ class Eval(implicit tableUtils: TableUtils) {
     val sourceTable = join.left.table
 
     // Filter on the latest partition if it exists
-    val latestPartitionOpt = tableUtils.lastAvailablePartition(sourceTable,
-                                                               tablePartitionSpec =
-                                                                 Option(join.left.query.partitionSpec(partitionSpec)))
-    // Render a random string for the partition if it doesn't exist, just need to get schema
+    val leftSpec = join.left.query.partitionSpec(partitionSpec)
+    val latestPartitionOpt = tableUtils.lastAvailablePartition(sourceTable, tablePartitionSpec = Option(leftSpec))
+    // The partition string is in the source's spec (format/interval), so the range must be
+    // built with that spec - parsing e.g. a yyyyMMdd value with the default spec throws.
     val latestPartitonRange = latestPartitionOpt
       .map { partStr =>
-        PartitionRange(partStr, partStr)
+        PartitionRange(partStr, partStr)(leftSpec)
       }
       .getOrElse(twoDaysAgo)
 
@@ -61,14 +61,19 @@ class Eval(implicit tableUtils: TableUtils) {
   }
 
   private def getLastPartitonOpt(sources: Seq[api.Source]): Option[PartitionRange] = {
+    // Partition strings from different sources can be in different specs/formats, so compare
+    // them on the time axis and express the result in the ambient spec instead of sorting
+    // (and parsing) heterogeneous strings with one spec.
     sources
       .flatMap { source =>
-        tableUtils.lastAvailablePartition(source.table,
-                                          tablePartitionSpec = Option(source.query.partitionSpec(partitionSpec)))
+        val sourceSpec = source.query.partitionSpec(partitionSpec)
+        tableUtils
+          .lastAvailablePartition(source.table, tablePartitionSpec = Option(sourceSpec))
+          .map(sourceSpec.partitionStartMillis)
       }
-      .sorted(Ordering[String].reverse)
-      .headOption
-      .map { latestPartition =>
+      .reduceOption(Ordering[Long].max)
+      .map { latestMillis =>
+        val latestPartition = partitionSpec.at(latestMillis)
         PartitionRange(latestPartition, latestPartition)
       }
   }

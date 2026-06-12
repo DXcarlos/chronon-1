@@ -56,6 +56,46 @@ class DeltaLakeTest extends AnyFlatSpec with BeforeAndAfterAll {
     }
   }
 
+  it should "floor off-grid timestamps to the sub-daily grid in Delta log stats boundaries" in {
+    val dbName = s"delta_subdaily_stats_${System.nanoTime()}"
+    val tableName = s"$dbName.subdaily_time_with_stats"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+
+    val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+    val offsetSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
+
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          created_at TIMESTAMP,
+          user_id STRING
+        ) USING DELTA
+      """)
+      // min/max are deliberately off-grid; stats boundaries must land on the declared grid,
+      // otherwise expandRange seeds an entirely off-grid partition enumeration
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+          (TIMESTAMP '2024-01-01 09:17:00', 'user1'),
+          (TIMESTAMP '2024-01-01 14:05:00', 'user2')
+      """)
+
+      DeltaLake.statsDateRange(tableName, "created_at", threeHourSpec) shouldBe
+        Some(StatsDateRange(start = "2024-01-01 09:00", end = "2024-01-01 12:00"))
+      DeltaLake.virtualPartitions(tableName, "created_at", threeHourSpec) shouldBe
+        List("2024-01-01 09:00")
+      DeltaLake.lastAvailablePartition(tableName, "created_at", threeHourSpec) shouldBe Some("2024-01-01 09:00")
+
+      // grid phased by 1h: 01:00, 04:00, 07:00, 10:00, 13:00, ...
+      DeltaLake.statsDateRange(tableName, "created_at", offsetSpec) shouldBe
+        Some(StatsDateRange(start = "2024-01-01 07:00", end = "2024-01-01 13:00"))
+      DeltaLake.virtualPartitions(tableName, "created_at", offsetSpec) shouldBe
+        List("2024-01-01 07:00", "2024-01-01 10:00")
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+      spark.sql(s"DROP DATABASE IF EXISTS $dbName")
+    }
+  }
+
   it should "derive virtual partitions from Delta log stats for a clustered timestamp column" in {
     val dbName = s"delta_clustered_stats_${System.nanoTime()}"
     val tableName = s"$dbName.time_clustered_with_stats"

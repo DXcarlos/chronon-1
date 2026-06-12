@@ -235,8 +235,10 @@ def StagingQuery(
         When set below daily and no partition format is supplied, Chronon uses "yyyy-MM-dd HH:mm".
     :type partition_interval: Optional[Union[common.Window, str]]
     :param partition_offset:
-        Offset from UTC midnight/epoch for the output partition grid. When omitted and
-        offline_schedule is regular sub-daily, Chronon derives the offset from the cron fire time.
+        Offset from UTC midnight/epoch for the output partition grid. Defaults to zero
+        (midnight-aligned grid) and must be declared explicitly to move the grid; the cron
+        fire phase is treated as a processing delay relative to the declared grid, never as
+        a grid offset.
     :type partition_offset: Optional[Union[common.Window, str]]
     :param conf:
         Configuration properties for the StagingQuery.
