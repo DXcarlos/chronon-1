@@ -316,6 +316,7 @@ def Derivation(name: str, expression: str) -> ttypes.Derivation:
         Use ``from ai.chronon.types import Derivation`` instead.
     """
     import warnings
+
     warnings.warn(
         "Importing Derivation from ai.chronon.group_by is deprecated. "
         "Use 'from ai.chronon.types import Derivation' instead.",
@@ -323,6 +324,7 @@ def Derivation(name: str, expression: str) -> ttypes.Derivation:
         stacklevel=2,
     )
     from ai.chronon.derivation import Derivation as _Derivation
+
     return _Derivation(name=name, expression=expression)
 
 
@@ -433,7 +435,12 @@ Keys {unselected_keys}, are unselected in source
                     (group_by.accuracy and group_by.accuracy == Accuracy.SNAPSHOT)
                     and
                     # Sub-daily aggregation.
-                    any([window.timeUnit in (TimeUnit.MINUTES, TimeUnit.HOURS) for window in agg.windows])
+                    any(
+                        [
+                            window.timeUnit in (TimeUnit.MINUTES, TimeUnit.HOURS)
+                            for window in agg.windows
+                        ]
+                    )
                 ), (
                     "Detected a snapshot accuracy group by with a sub-daily aggregation window. "
                     "Resolution with snapshot accuracy is not fine enough to allow minute or hourly group bys. "
@@ -502,6 +509,7 @@ def GroupBy(
     disable_historical_backfill: bool = False,
     environments: Optional[List[str]] = None,
     partition_interval: Optional[Union[common.Window, str]] = None,
+    partition_offset: Optional[Union[common.Window, str]] = None,
 ) -> ttypes.GroupBy:
     """
 
@@ -608,6 +616,10 @@ def GroupBy(
         Output partition grain for this GroupBy. Examples: "1d", "3h", "15m".
         When set below daily, Chronon uses "yyyy-MM-dd HH:mm" labels.
     :type partition_interval: Optional[Union[common.Window, str]]
+    :param partition_offset:
+        Offset from UTC midnight/epoch for the output partition grid. When omitted and
+        offline_schedule is regular sub-daily, Chronon derives the offset from the cron fire time.
+    :type partition_offset: Optional[Union[common.Window, str]]
     :param tags:
         Additional metadata that does not directly affect feature computation, but is useful to
         track for management purposes.
@@ -691,8 +703,7 @@ def GroupBy(
         return source
 
     sources = [
-        _sanitize_columns(source)
-        for source in utils.normalize_sources(sources, output_namespace)
+        _sanitize_columns(source) for source in utils.normalize_sources(sources, output_namespace)
     ]
 
     # get caller's filename to assign team
@@ -732,7 +743,11 @@ def GroupBy(
         stepDays=step_days,
         historicalBackfill=disable_historical_backfill,
         clusterConf=cluster_conf,
-        outputTableInfo=window_utils.output_table_info(partition_interval),
+        outputTableInfo=window_utils.output_table_info(
+            partition_interval,
+            partition_offset=partition_offset,
+            schedule=offline_schedule,
+        ),
     )
 
     column_tags = {}

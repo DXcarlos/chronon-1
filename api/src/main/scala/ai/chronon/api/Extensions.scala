@@ -1231,7 +1231,9 @@ object Extensions {
       val column = Option(ti).flatMap((q) => Option(q.partitionColumn)).getOrElse(defaultSpec.column)
       val format = Option(ti).flatMap((q) => Option(q.partitionFormat)).getOrElse(defaultSpec.format)
       val interval = Option(ti).flatMap((q) => Option(q.partitionInterval)).getOrElse(WindowUtils.Day)
-      PartitionSpec(column, format, interval.millis)
+      val offset =
+        Option(ti).flatMap((q) => Option(q.partitionOffset)).map(_.millis).getOrElse(defaultSpec.offsetMillis)
+      PartitionSpec(column, format, interval.millis, offset)
     }
 
   }
@@ -1266,7 +1268,9 @@ object Extensions {
       val column = Option(query).flatMap(q => Option(q.partitionColumn)).getOrElse(defaultSpec.column)
       val format = Option(query).flatMap(q => Option(q.partitionFormat)).getOrElse(defaultSpec.format)
       val interval = Option(query).flatMap(q => Option(q.partitionInterval)).getOrElse(WindowUtils.Day)
-      PartitionSpec(column, format, interval.millis)
+      val offset =
+        Option(query).flatMap(q => Option(q.partitionOffset)).map(_.millis).getOrElse(defaultSpec.offsetMillis)
+      PartitionSpec(column, format, interval.millis, offset)
     }
   }
 

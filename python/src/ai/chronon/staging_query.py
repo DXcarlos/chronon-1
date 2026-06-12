@@ -102,6 +102,7 @@ class TableDependency:
     partition_column: Optional[str] = None
     partition_format: Optional[str] = None
     partition_interval: Optional[Union[common.Window, str]] = None
+    partition_offset: Optional[Union[common.Window, str]] = None
     additional_partitions: Optional[List[str]] = None
     offset: Optional[int] = None
     start_offset: Optional[int] = None
@@ -158,6 +159,11 @@ class TableDependency:
                     if self.partition_interval is not None
                     else common.Window(1, common.TimeUnit.DAYS)
                 ),
+                partitionOffset=(
+                    window_utils.normalize_window(self.partition_offset)
+                    if self.partition_offset is not None
+                    else None
+                ),
                 timePartitioned=self.time_partitioned,
             ),
             startOffset=(
@@ -190,6 +196,7 @@ def StagingQuery(
     additional_partitions: List[str] = None,
     environments: Optional[List[str]] = None,
     partition_interval: Optional[Union[common.Window, str]] = None,
+    partition_offset: Optional[Union[common.Window, str]] = None,
 ) -> ttypes.StagingQuery:
     """
     Creates a StagingQuery object for executing arbitrary SQL queries with templated date parameters.
@@ -227,6 +234,10 @@ def StagingQuery(
         Output partition grain for this StagingQuery. Examples: "1d", "3h", "15m".
         When set below daily and no partition format is supplied, Chronon uses "yyyy-MM-dd HH:mm".
     :type partition_interval: Optional[Union[common.Window, str]]
+    :param partition_offset:
+        Offset from UTC midnight/epoch for the output partition grid. When omitted and
+        offline_schedule is regular sub-daily, Chronon derives the offset from the cron fire time.
+    :type partition_offset: Optional[Union[common.Window, str]]
     :param conf:
         Configuration properties for the StagingQuery.
     :type conf: common.ConfigProperties
@@ -299,7 +310,11 @@ def StagingQuery(
         env=env_vars,
         stepDays=step_days,
         clusterConf=cluster_conf,
-        outputTableInfo=window_utils.output_table_info(partition_interval),
+        outputTableInfo=window_utils.output_table_info(
+            partition_interval,
+            partition_offset=partition_offset,
+            schedule=offline_schedule,
+        ),
     )
 
     airflow_dependencies = []

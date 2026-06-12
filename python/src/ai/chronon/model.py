@@ -68,8 +68,12 @@ class TrainingSpec:
 
     def to_thrift(self):
         return ttypes.TrainingSpec(
-            trainingDataSource=normalize_source(self.training_data_source) if self.training_data_source else None,
-            trainingDataWindow=window_utils.normalize_window(self.training_data_window) if self.training_data_window else None,
+            trainingDataSource=normalize_source(self.training_data_source)
+            if self.training_data_source
+            else None,
+            trainingDataWindow=window_utils.normalize_window(self.training_data_window)
+            if self.training_data_window
+            else None,
             schedule=self.schedule,
             image=self.image,
             pythonModule=self.python_module,
@@ -130,7 +134,9 @@ class RolloutStrategy:
             rolloutType=self.rollout_type,
             validationTrafficPercentRamps=self.validation_traffic_percent_ramps,
             validationTrafficDurationMins=self.validation_traffic_duration_mins,
-            rolloutMetricThresholds=[m.to_thrift() for m in self.rollout_metric_thresholds] if self.rollout_metric_thresholds else None,
+            rolloutMetricThresholds=[m.to_thrift() for m in self.rollout_metric_thresholds]
+            if self.rollout_metric_thresholds
+            else None,
         )
 
 
@@ -164,6 +170,7 @@ def Model(
     tags: Optional[Dict[str, str]] = None,
     environments: Optional[List[str]] = None,
     partition_interval: Optional[Union[common.Window, str]] = None,
+    partition_offset: Optional[Union[common.Window, str]] = None,
 ) -> ttypes.Model:
     """
     Creates a Model object for ML model inference and orchestration.
@@ -211,6 +218,9 @@ def Model(
         Output partition grain for model training/deploy nodes. Examples: "1d", "3h", "15m".
         When set below daily, Chronon uses "yyyy-MM-dd HH:mm" labels.
     :type partition_interval: Optional[Union[common.Window, str]]
+    :param partition_offset:
+        Offset from UTC midnight/epoch for the output partition grid.
+    :type partition_offset: Optional[Union[common.Window, str]]
     :return:
         A Model object
     """
@@ -235,8 +245,12 @@ def Model(
         version=version,
         environments=environments,
         executionInfo=common.ExecutionInfo(
-            outputTableInfo=window_utils.output_table_info(partition_interval)
-        ) if partition_interval is not None else None,
+            outputTableInfo=window_utils.output_table_info(
+                partition_interval, partition_offset=partition_offset
+            )
+        )
+        if partition_interval is not None
+        else None,
     )
 
     model = ttypes.Model(

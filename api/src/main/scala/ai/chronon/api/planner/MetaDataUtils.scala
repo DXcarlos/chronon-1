@@ -14,12 +14,15 @@ object MetaDataUtils {
       outputTableInfo <- Option(executionInfo.outputTableInfo)
     } yield outputTableInfo.partitionSpec(defaultSpec)).getOrElse(defaultSpec)
 
-  def tableInfo(table: String, partitionSpec: PartitionSpec): TableInfo =
-    new TableInfo()
-      .setTable(table)
+  def applyPartitionSpec(tableInfo: TableInfo, partitionSpec: PartitionSpec): TableInfo =
+    tableInfo
       .setPartitionColumn(partitionSpec.column)
       .setPartitionFormat(partitionSpec.format)
       .setPartitionInterval(WindowUtils.fromMillis(partitionSpec.spanMillis))
+      .setPartitionOffset(WindowUtils.fromMillis(partitionSpec.offsetMillis))
+
+  def tableInfo(table: String, partitionSpec: PartitionSpec): TableInfo =
+    applyPartitionSpec(new TableInfo().setTable(table), partitionSpec)
 
   def validateWideningOrEqualConsumer(nodeName: String,
                                       consumerPartitionSpec: PartitionSpec,
@@ -73,10 +76,7 @@ object MetaDataUtils {
         copy.executionInfo.outputTableInfo.setTable(copy.outputTable)
       }
 
-    tableInfo
-      .setPartitionColumn(effectivePartitionSpec.column)
-      .setPartitionFormat(effectivePartitionSpec.format)
-      .setPartitionInterval(WindowUtils.fromMillis(effectivePartitionSpec.spanMillis))
+    applyPartitionSpec(tableInfo, effectivePartitionSpec)
 
     // set table dependencies
     copy.executionInfo.setTableDependencies(tableDependencies.toJava)

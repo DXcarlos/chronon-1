@@ -1,6 +1,6 @@
 package ai.chronon.api.planner
 
-import ai.chronon.api.{DataModel, GroupBy, PartitionSpec, TableDependency, TableInfo}
+import ai.chronon.api.{DataModel, GroupBy, PartitionSpec, TableDependency}
 import ai.chronon.api.Extensions._
 import ai.chronon.planner.{
   ConfPlan,
@@ -93,11 +93,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
   def uploadToKVNode: Node = {
     val tableDep = new TableDependency()
       .setTableInfo(
-        new TableInfo()
-          .setTable(uploadNode.metaData.outputTable)
-          .setPartitionColumn(confOutputPartitionSpec.column)
-          .setPartitionFormat(confOutputPartitionSpec.format)
-          .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
+        MetaDataUtils.tableInfo(uploadNode.metaData.outputTable, confOutputPartitionSpec)
       )
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())
@@ -121,11 +117,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
       // Streaming node has table dependency on the upload to KV
       val uploadToKVDep = new TableDependency()
         .setTableInfo(
-          new TableInfo()
-            .setTable(uploadToKVNode.metaData.outputTable)
-            .setPartitionColumn(confOutputPartitionSpec.column)
-            .setPartitionFormat(confOutputPartitionSpec.format)
-            .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
+          MetaDataUtils.tableInfo(uploadToKVNode.metaData.outputTable, confOutputPartitionSpec)
         )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())

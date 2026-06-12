@@ -58,6 +58,13 @@ struct Query {
     **/
     25: optional bool timePartitioned
 
+    /**
+    * Offset from the UTC epoch/day boundary used when interpreting partitionInterval.
+    * For example, a 3-hour source partitioned at 01:00, 04:00, ... should set
+    * partitionInterval=3h and partitionOffset=1h.
+    **/
+    26: optional common.Window partitionOffset
+
 }
  
 /**

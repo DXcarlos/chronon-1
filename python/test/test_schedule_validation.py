@@ -39,6 +39,7 @@ class TestScheduleValidation:
             "0 0,12 * * *",  # every 12 hours
             "5/15 * * * *",  # every 15 minutes with cron offset
             "20 */3 * * *",  # every 3 hours with processing offset
+            "0 1-22/3 * * *",  # every 3 hours on an unaligned partition grid
         ]
 
         for schedule in valid_schedules:

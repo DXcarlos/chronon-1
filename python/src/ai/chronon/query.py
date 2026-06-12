@@ -32,6 +32,7 @@ def Query(
     partition_column: str = None,
     partition_format: str = None,
     partition_interval: Union[common.Window, str] = None,
+    partition_offset: Union[common.Window, str] = None,
     partition_lag: Union[common.Window, str] = None,
     sub_partitions_to_wait_for: List[str] = None,
     time_partitioned: bool = None,
@@ -92,6 +93,10 @@ def Query(
         Partition grain for the source table. Examples: "1d", "3h", "15m".
         Sub-daily partition labels use "yyyy-MM-dd HH:mm" unless partition_format is explicitly set.
     :type partition_interval: Union[common.Window, str], optional
+    :param partition_offset:
+        Offset from UTC midnight/epoch for the source partition grid. Examples: "1h" for
+        partitions at 01:00, 04:00, ... with a "3h" partition_interval.
+    :type partition_offset: Union[common.Window, str], optional
     :param partition_lag:
         Partition lag to apply when resolving dependencies. Examples: "1d", "3h", "15m".
     :type partition_lag: Union[common.Window, str], optional
@@ -123,8 +128,15 @@ def Query(
                 else None
             )
         ),
-        partitionInterval=window_utils.normalize_window(partition_interval) if partition_interval is not None else None,
-        partitionLag=window_utils.normalize_window(partition_lag) if partition_lag is not None else None,
+        partitionInterval=window_utils.normalize_window(partition_interval)
+        if partition_interval is not None
+        else None,
+        partitionOffset=window_utils.normalize_window(partition_offset)
+        if partition_offset is not None
+        else None,
+        partitionLag=window_utils.normalize_window(partition_lag)
+        if partition_lag is not None
+        else None,
         timePartitioned=time_partitioned,
     )
 

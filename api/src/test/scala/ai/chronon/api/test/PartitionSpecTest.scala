@@ -12,6 +12,7 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
   private val dailySpec = PartitionSpec.daily
   private val compactSpec = PartitionSpec("ds", "yyyyMMdd", 24 * 60 * 60 * 1000)
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+  private val unalignedThreeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
   private val fifteenMinuteSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 15 * 60 * 1000)
 
   "PartitionSpec.expandRange" should "expand date range into individual dates" in {
@@ -28,6 +29,11 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
   it should "expand sub-daily ranges by the partition interval" in {
     val result = threeHourSpec.expandRange("2024-01-15 00:00", "2024-01-15 09:00")
     result should be(List("2024-01-15 00:00", "2024-01-15 03:00", "2024-01-15 06:00", "2024-01-15 09:00"))
+  }
+
+  it should "expand unaligned sub-daily ranges by the partition interval" in {
+    val result = unalignedThreeHourSpec.expandRange("2024-01-01 22:00", "2024-01-02 04:00")
+    result should be(List("2024-01-01 22:00", "2024-01-02 01:00", "2024-01-02 04:00"))
   }
 
   it should "expand range across month boundaries" in {
@@ -114,6 +120,12 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     threeHourSpec.translate("2025-11-25 18:00", dailySpec) should be("2025-11-25")
   }
 
+  it should "floor timestamps using partition offset" in {
+    val jan2Midnight = dailySpec.epochMillis("2024-01-02")
+    unalignedThreeHourSpec.at(jan2Midnight + 30 * 60 * 1000) should be("2024-01-01 22:00")
+    unalignedThreeHourSpec.at(jan2Midnight + 60 * 60 * 1000) should be("2024-01-02 01:00")
+  }
+
   it should "round-trip between formats" in {
     val date = "2025-12-01"
     val roundTripped = compactSpec.translate(dailySpec.translate(date, compactSpec), dailySpec)
@@ -156,5 +168,31 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
 
     covering.start should be("2025-11-25")
     covering.end should be("2025-12-01")
+  }
+
+  it should "cover a daily range with every overlapping unaligned sub-daily partition" in {
+    val range = PartitionRange("2024-01-02", "2024-01-02")(dailySpec)
+    val translated = range.coveringRange(unalignedThreeHourSpec)
+
+    translated.start should be("2024-01-01 22:00")
+    translated.end should be("2024-01-02 22:00")
+    translated.partitions should contain theSameElementsInOrderAs Seq(
+      "2024-01-01 22:00",
+      "2024-01-02 01:00",
+      "2024-01-02 04:00",
+      "2024-01-02 07:00",
+      "2024-01-02 10:00",
+      "2024-01-02 13:00",
+      "2024-01-02 16:00",
+      "2024-01-02 19:00",
+      "2024-01-02 22:00"
+    )
+  }
+
+  it should "cover an unaligned boundary partition with all impacted daily partitions" in {
+    val range = PartitionRange("2024-01-02 22:00", "2024-01-02 22:00")(unalignedThreeHourSpec)
+    val translated = range.coveringRange(dailySpec)
+
+    translated should be(PartitionRange("2024-01-02", "2024-01-03")(dailySpec))
   }
 }

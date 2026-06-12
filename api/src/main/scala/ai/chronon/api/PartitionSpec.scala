@@ -161,6 +161,11 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
 
   def partitionEndMillis(partitionValue: String): Long = partitionStartMillis(partitionValue) + spanMillis
 
+  def intervalOf(partitionValue: String): PartitionInterval =
+    PartitionInterval(partitionStartMillis(partitionValue), partitionEndMillis(partitionValue))
+
+  def rangeInterval(range: PartitionRange): PartitionInterval = range.interval
+
   def rangeCovering(interval: PartitionInterval): Option[PartitionRange] = {
     if (interval.isEmpty) {
       None
@@ -170,6 +175,9 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
   }
 
   def before(s: String): String = shiftPartitions(s, -1)
+
+  def partitionsOverlapping(interval: PartitionInterval): Seq[String] =
+    rangeCovering(interval).map(_.partitions).getOrElse(Seq.empty)
 
   def calendarGrain(window: Window): Int = window.timeUnit match {
     case TimeUnit.DAYS    => Calendar.DAY_OF_MONTH

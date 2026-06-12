@@ -216,6 +216,7 @@ def Derivation(name: str, expression: str) -> api.Derivation:
         Use ``from ai.chronon.types import Derivation`` instead.
     """
     import warnings
+
     warnings.warn(
         "Importing Derivation from ai.chronon.join is deprecated. "
         "Use 'from ai.chronon.types import Derivation' instead.",
@@ -223,6 +224,7 @@ def Derivation(name: str, expression: str) -> api.Derivation:
         stacklevel=2,
     )
     from ai.chronon.derivation import Derivation as _Derivation
+
     return _Derivation(name=name, expression=expression)
 
 
@@ -294,6 +296,7 @@ def Join(
     modular_execution: bool = False,
     environments: Optional[List[str]] = None,
     partition_interval: Optional[Union[common.Window, str]] = None,
+    partition_offset: Optional[Union[common.Window, str]] = None,
 ) -> api.Join:
     """
     Construct a join object. A join can pull together data from various GroupBy's both offline and online. This is also
@@ -361,6 +364,9 @@ def Join(
     :param partition_interval:
         Output partition grain for this Join. Examples: "1d", "3h", "15m".
         When set below daily, Chronon uses "yyyy-MM-dd HH:mm" labels.
+    :param partition_offset:
+        Offset from UTC midnight/epoch for the output partition grid. When omitted and
+        offline_schedule is regular sub-daily, Chronon derives the offset from the cron fire time.
     :param row_ids:
         Columns of the left table that uniquely define a training record. Used as default keys during bootstrap.
         Optional.
@@ -508,7 +514,11 @@ def Join(
         historicalBackfill=historical_backfill,
         clusterConf=cluster_conf,
         enableStatsCompute=enable_stats_compute,
-        outputTableInfo=window_utils.output_table_info(partition_interval),
+        outputTableInfo=window_utils.output_table_info(
+            partition_interval,
+            partition_offset=partition_offset,
+            schedule=offline_schedule,
+        ),
     )
 
     metadata = api.MetaData(

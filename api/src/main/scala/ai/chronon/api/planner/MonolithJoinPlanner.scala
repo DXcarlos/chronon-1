@@ -3,7 +3,7 @@ package ai.chronon.api.planner
 import ai.chronon.api.Extensions.{GroupByOps, WindowUtils}
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions.IterableOps
-import ai.chronon.api.{Join, PartitionSpec, TableDependency, TableInfo}
+import ai.chronon.api.{Join, PartitionSpec, TableDependency}
 import ai.chronon.planner
 import ai.chronon.planner.Node
 
@@ -74,11 +74,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
 
       val groupByDep = new TableDependency()
         .setTableInfo(
-          new TableInfo()
-            .setTable(groupByTableName)
-            .setPartitionColumn(groupByOutputSpec.column)
-            .setPartitionFormat(groupByOutputSpec.format)
-            .setPartitionInterval(WindowUtils.fromMillis(groupByOutputSpec.spanMillis))
+          MetaDataUtils.tableInfo(groupByTableName, groupByOutputSpec)
         )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())
@@ -116,11 +112,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     // Stats compute depends on the monolith join output
     val tableDep = new TableDependency()
       .setTableInfo(
-        new TableInfo()
-          .setTable(monolithJoinNode.metaData.outputTable)
-          .setPartitionColumn(confOutputPartitionSpec.column)
-          .setPartitionFormat(confOutputPartitionSpec.format)
-          .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
+        MetaDataUtils.tableInfo(monolithJoinNode.metaData.outputTable, confOutputPartitionSpec)
       )
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())

@@ -91,6 +91,7 @@ object TableDependencies {
       .setPartitionColumn(source.query.getPartitionColumn)
       .setPartitionFormat(source.query.getPartitionFormat)
       .setPartitionInterval(source.query.getPartitionInterval)
+      .setPartitionOffset(source.query.getPartitionOffset)
 
     val tableDep = new TableDependency()
       .setTableInfo(tableInfo)
@@ -122,6 +123,7 @@ object TableDependencies {
       .setPartitionColumn(query.getPartitionColumn)
       .setPartitionFormat(query.getPartitionFormat)
       .setPartitionInterval(query.getPartitionInterval)
+      .setPartitionOffset(query.getPartitionOffset)
 
     new TableDependency()
       .setTableInfo(tableInfo)

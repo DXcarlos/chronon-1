@@ -75,6 +75,8 @@ struct TableInfo {
     100: optional string partitionColumn
     101: optional string partitionFormat
     102: optional Window partitionInterval
+    // Offset from the UTC epoch/day boundary used when interpreting partitionInterval.
+    103: optional Window partitionOffset
 
     /**
     * If isCumulative is true, then for a given output partition any single partition from input on or after the output

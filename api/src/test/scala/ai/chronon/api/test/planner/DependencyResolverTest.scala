@@ -11,6 +11,7 @@ class DependencyResolverTest extends AnyFlatSpec with Matchers {
 
   implicit val partitionSpec: PartitionSpec = PartitionSpec.daily
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
+  private val unalignedThreeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
 
   "computeOutputRange" should "return same range when no offsets are set" in {
     val parentRange = PartitionRange("2024-01-01", "2024-01-05")
@@ -73,6 +74,23 @@ class DependencyResolverTest extends AnyFlatSpec with Matchers {
     result shouldBe Some(PartitionRange("2024-01-02 00:00", "2024-01-02 21:00")(threeHourSpec))
   }
 
+  it should "map a daily consumer range to boundary-crossing unaligned input partitions" in {
+    val queryRange = PartitionRange("2024-01-02", "2024-01-02")
+    val tableDep = dep("test.hourly_table")
+    tableDep.setTableInfo(
+      new TableInfo()
+        .setTable("test.hourly_table")
+        .setPartitionColumn(unalignedThreeHourSpec.column)
+        .setPartitionFormat(unalignedThreeHourSpec.format)
+        .setPartitionInterval(WindowUtils.fromMillis(unalignedThreeHourSpec.spanMillis))
+        .setPartitionOffset(WindowUtils.fromMillis(unalignedThreeHourSpec.offsetMillis))
+    )
+
+    val result = DependencyResolver.computeInputRange(queryRange, tableDep)
+
+    result shouldBe Some(PartitionRange("2024-01-01 22:00", "2024-01-02 22:00")(unalignedThreeHourSpec))
+  }
+
   it should "keep the input start unbounded for unbounded start offsets" in {
     val queryRange = PartitionRange("2024-01-02", "2024-01-02")
     val tableDep = dep("test.events")
@@ -90,6 +108,15 @@ class DependencyResolverTest extends AnyFlatSpec with Matchers {
     val result = DependencyResolver.computeOutputRange(parentRange, tableDep, PartitionSpec.daily)
 
     result shouldBe Some(PartitionRange("2024-01-02", "2024-01-02"))
+  }
+
+  it should "map an unaligned boundary producer partition to both impacted daily output partitions" in {
+    val parentRange = PartitionRange("2024-01-02 22:00", "2024-01-02 22:00")(unalignedThreeHourSpec)
+    val tableDep = dep("test.hourly_table")
+
+    val result = DependencyResolver.computeOutputRange(parentRange, tableDep, PartitionSpec.daily)
+
+    result shouldBe Some(PartitionRange("2024-01-02", "2024-01-03"))
   }
 
 }

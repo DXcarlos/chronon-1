@@ -757,28 +757,31 @@ object GroupBy {
                                   window: Option[api.Window]): PartitionRange = {
 
     implicit val tu: TableUtils = tableUtils
-    val effectiveQueryRange = queryRange.coveringRange(source.query.partitionSpec(tableUtils.partitionSpec))
     implicit val sourcePartitionSpec: PartitionSpec = source.query.partitionSpec(tableUtils.partitionSpec)
+    // coveringRange so a coarser-grained source keeps the full coverage of the query range
+    val effectiveQueryRange = queryRange.coveringRange(sourcePartitionSpec)
+    val sourceStartPartition = sourcePartitionSpec.normalizeStart(source.query.startPartition, tableUtils.partitionSpec)
+    val sourceEndPartition = sourcePartitionSpec.normalizeEnd(source.query.endPartition, tableUtils.partitionSpec)
 
     // from here on down - the math is based entirely on source partition spec
     val PartitionRange(queryStart, queryEnd) = effectiveQueryRange
-    val effectiveEnd = (Option(effectiveQueryRange.end) ++ Option(source.query.endPartition))
+    val effectiveEnd = (Option(effectiveQueryRange.end) ++ Option(sourceEndPartition))
       .reduceLeftOption(Ordering[String].min)
       .orNull
 
     val dataProfile: SourceDataProfile = source.dataModel match {
-      case ENTITIES => SourceDataProfile(queryStart, source.query.startPartition, effectiveEnd)
+      case ENTITIES => SourceDataProfile(queryStart, sourceStartPartition, effectiveEnd)
       case EVENTS =>
         if (Option(source.getEvents.isCumulative).getOrElse(false)) {
           lazy val latestAvailable: Option[String] =
             tableUtils.lastAvailablePartition(source.table, subPartitionFilters = source.subPartitionFilters)
-          val latestValid: String = Option(source.query.endPartition).getOrElse(latestAvailable.orNull)
+          val latestValid: String = Option(sourceEndPartition).getOrElse(latestAvailable.orNull)
           SourceDataProfile(latestValid, latestValid, latestValid)
         } else {
           val minQuery = sourcePartitionSpec.before(queryStart)
           val windowStart: String =
             window.filterNot(_.length == Int.MaxValue).map(sourcePartitionSpec.minus(minQuery, _)).orNull
-          lazy val sourceStart = Option(source.query.startPartition).orNull
+          lazy val sourceStart = Option(sourceStartPartition).orNull
           SourceDataProfile(windowStart, sourceStart, effectiveEnd)
         }
     }
@@ -794,6 +797,7 @@ object GroupBy {
                |   source table: ${source.table}
                |   source data range: $sourceRange
                |   source start/end: ${source.query.startPartition}/${source.query.endPartition}
+               |   normalized source start/end: $sourceStartPartition/$sourceEndPartition
                |   source data model: ${source.dataModel}
                |   queryable data range: $queryableDataRange
                |   intersected range: $intersectedRange

@@ -51,12 +51,29 @@ def test_query_partition_interval_defaults_to_subdaily_format():
     assert q.partitionInterval == common.Window(length=15, timeUnit=common.TimeUnit.MINUTES)
 
 
+def test_query_partition_offset_is_serialized():
+    q = query.Query(partition_column="ds", partition_interval="3h", partition_offset="1h")
+
+    assert q.partitionOffset == _hours(1)
+
+
 def test_table_dependency_partition_interval_is_serialized():
     td = TableDependency(table="ns.upstream", partition_column="ds", partition_interval="3h").to_thrift()
 
     assert td.tableInfo.partitionColumn == "ds"
     assert td.tableInfo.partitionFormat is None
     assert td.tableInfo.partitionInterval == _hours(3)
+
+
+def test_table_dependency_partition_offset_is_serialized():
+    td = TableDependency(
+        table="ns.upstream",
+        partition_column="ds",
+        partition_interval="3h",
+        partition_offset="1h",
+    ).to_thrift()
+
+    assert td.tableInfo.partitionOffset == _hours(1)
 
 
 def test_staging_query_partition_interval_sets_output_table_info():
@@ -70,6 +87,20 @@ def test_staging_query_partition_interval_sets_output_table_info():
     assert table_info.partitionColumn == "ds"
     assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
     assert table_info.partitionInterval == _hours(3)
+
+
+def test_staging_query_infers_partition_interval_and_offset_from_schedule():
+    sq = StagingQuery(
+        query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+        dependencies=[TableDependency(table="ns.upstream", partition_interval="3h")],
+        offline_schedule="0 1-22/3 * * *",
+    )
+
+    table_info = sq.metaData.executionInfo.outputTableInfo
+    assert table_info.partitionColumn == "ds"
+    assert table_info.partitionFormat == "yyyy-MM-dd HH:mm"
+    assert table_info.partitionInterval == _hours(3)
+    assert table_info.partitionOffset == _hours(1)
 
 
 def test_start_offset_only_sets_start_and_defaults_end_to_zero():

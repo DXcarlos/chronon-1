@@ -1,3 +1,4 @@
+import datetime
 import functools
 import json
 import logging
@@ -10,6 +11,7 @@ from typing import Optional
 import click
 import requests
 
+from ai.chronon import windows as window_utils
 from ai.chronon.cli import options as cli_options
 from ai.chronon.cli.formatter import (
     Format,
@@ -56,8 +58,6 @@ def _env_string_to_enum(env_str: str) -> int:
 def _validate_supported_schedule(schedule_expression: str) -> Optional[str]:
     """Validates that a schedule expression is either at most daily or regular sub-daily.
     Returns None if valid, error message string if invalid."""
-    import datetime
-
     from croniter import croniter
 
     if not schedule_expression or schedule_expression.strip().lower() in ("", "none", "null", "@daily", "@never"):
@@ -74,44 +74,7 @@ def _validate_supported_schedule(schedule_expression: str) -> Optional[str]:
         return f"Invalid cron expression syntax: {e}"
 
     try:
-        test_start = datetime.datetime(2024, 1, 1, 0, 0)
-        horizon_end = test_start + datetime.timedelta(days=7)
-        cron = croniter(schedule_expression, test_start - datetime.timedelta(seconds=1))
-        runs = []
-        for _ in range(2000):
-            next_run = cron.get_next(datetime.datetime)
-            if next_run >= horizon_end:
-                break
-            runs.append(next_run)
-
-        if len(runs) < 2:
-            return None
-
-        max_executions_in_day = 0
-        for day_offset in range(7):
-            day_start = test_start + datetime.timedelta(days=day_offset)
-            day_end = day_start + datetime.timedelta(days=1)
-            executions_in_day = sum(day_start <= run < day_end for run in runs)
-            max_executions_in_day = max(max_executions_in_day, executions_in_day)
-
-        if max_executions_in_day <= 1:
-            return None
-
-        deltas = [
-            int((runs[i] - runs[i - 1]).total_seconds() * 1000)
-            for i in range(1, len(runs))
-        ]
-        interval_ms = deltas[0]
-        day_ms = 24 * 60 * 60 * 1000
-        minute_ms = 60 * 1000
-        if any(delta != interval_ms for delta in deltas):
-            return "Sub-daily schedules must have a constant interval across a 7 day UTC horizon."
-        if interval_ms <= 0 or interval_ms > day_ms:
-            return "Sub-daily schedule interval must be between 1 minute and 1 day."
-        if interval_ms % minute_ms != 0:
-            return "Sub-daily schedule interval must be minute-aligned."
-        if day_ms % interval_ms != 0:
-            return "Sub-daily schedule interval must divide a UTC day evenly."
+        window_utils.regular_subdaily_schedule(schedule_expression)
     except Exception as e:
         return f"Error validating schedule frequency: {e}"
 

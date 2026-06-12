@@ -132,10 +132,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
     // Join part tables are join intermediates and must be partitioned in the join/left domain.
     // The groupBy output spec still controls materialization and upload nodes, but merge reads these
     // intermediates by the join partition range.
-    metaData.executionInfo.outputTableInfo
-      .setPartitionColumn(confOutputPartitionSpec.column)
-      .setPartitionFormat(confOutputPartitionSpec.format)
-      .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
+    MetaDataUtils.applyPartitionSpec(metaData.executionInfo.outputTableInfo, confOutputPartitionSpec)
 
     val copy = result.deepCopy()
     copy.joinPart.groupBy.unsetMetaData()
@@ -274,11 +271,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
 
       val groupByDep = new TableDependency()
         .setTableInfo(
-          new TableInfo()
-            .setTable(groupByTableName)
-            .setPartitionColumn(groupByOutputSpec.column)
-            .setPartitionFormat(groupByOutputSpec.format)
-            .setPartitionInterval(WindowUtils.fromMillis(groupByOutputSpec.spanMillis))
+          MetaDataUtils.tableInfo(groupByTableName, groupByOutputSpec)
         )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())
