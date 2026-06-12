@@ -5,6 +5,7 @@ import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api.thrift.TBase
 import ai.chronon.api.{EngineType, ParametricMacro, PartitionRange, ThriftJsonCodec}
 import ai.chronon.spark.Extensions._
+import ai.chronon.spark.RunnerUtils
 import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.submission.SparkSessionBuilder
 import org.rogach.scallop.{ScallopConf, ScallopOption}
@@ -115,13 +116,6 @@ object StagingQuery {
 
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
 
-  private def outputPartitionSpec(stagingQueryConf: api.StagingQuery): ai.chronon.api.PartitionSpec =
-    (for {
-      executionInfo <- Option(stagingQueryConf.metaData.executionInfo)
-      outputTableInfo <- Option(executionInfo.outputTableInfo)
-    } yield outputTableInfo.partitionSpec(ai.chronon.api.PartitionSpec.daily))
-      .getOrElse(ai.chronon.api.PartitionSpec.daily)
-
   def substitute(tu: TableUtils, query: String, start: String, end: String, latest: String): String = {
 
     val maxDateMacro = ParametricMacro(
@@ -147,12 +141,12 @@ object StagingQuery {
     val parsedArgs = new Args(args)
     parsedArgs.verify()
     val stagingQueryConf = parsedArgs.parseConf[api.StagingQuery]
+    val sparkSession =
+      SparkSessionBuilder.build(s"staging_query_${stagingQueryConf.metaData.name}", enforceKryoSerializer = false)
     val stagingQueryJob = new StagingQuery(
       stagingQueryConf,
       parsedArgs.endDate(),
-      TableUtils(
-        SparkSessionBuilder.build(s"staging_query_${stagingQueryConf.metaData.name}", enforceKryoSerializer = false),
-        outputPartitionSpec(stagingQueryConf))
+      RunnerUtils.tableUtilsForMetadata(sparkSession, stagingQueryConf.metaData)
     )
     stagingQueryJob.computeStagingQuery(parsedArgs.stepDays.toOption)
   }

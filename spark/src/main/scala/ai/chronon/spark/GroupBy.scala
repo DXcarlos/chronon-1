@@ -756,7 +756,8 @@ object GroupBy {
           SourceDataProfile(latestValid, latestValid, latestValid)
         } else {
           val minQuery = sourcePartitionSpec.before(queryStart)
-          val windowStart: String = window.map(sourcePartitionSpec.minus(minQuery, _)).orNull
+          val windowStart: String =
+            window.filterNot(_.length == Int.MaxValue).map(sourcePartitionSpec.minus(minQuery, _)).orNull
           lazy val sourceStart = Option(source.query.startPartition).orNull
           SourceDataProfile(windowStart, sourceStart, effectiveEnd)
         }

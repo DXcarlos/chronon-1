@@ -120,7 +120,8 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       })
 
     // pull conf params from the groupBy metadata, but use the join namespace to write to.
-    val joinPartOutputPartitionSpec = MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, confOutputPartitionSpec)
+    val joinPartOutputPartitionSpec =
+      MetaDataUtils.outputPartitionSpec(joinPart.groupBy.metaData, confOutputPartitionSpec)
 
     val metaData = MetaDataUtils
       .layer(

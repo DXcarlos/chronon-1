@@ -121,12 +121,12 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
       // Streaming node has table dependency on the upload to KV
       val uploadToKVDep = new TableDependency()
         .setTableInfo(
-        new TableInfo()
-          .setTable(uploadToKVNode.metaData.outputTable)
-          .setPartitionColumn(confOutputPartitionSpec.column)
-          .setPartitionFormat(confOutputPartitionSpec.format)
-          .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
-      )
+          new TableInfo()
+            .setTable(uploadToKVNode.metaData.outputTable)
+            .setPartitionColumn(confOutputPartitionSpec.column)
+            .setPartitionFormat(confOutputPartitionSpec.format)
+            .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
+        )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())
 

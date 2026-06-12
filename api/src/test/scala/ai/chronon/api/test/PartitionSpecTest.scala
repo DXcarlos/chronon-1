@@ -1,9 +1,11 @@
 package ai.chronon.api.test
 
-import ai.chronon.api.{PartitionRange, PartitionSpec, Window, TimeUnit}
 import ai.chronon.api.Extensions.WindowUtils
+import ai.chronon.api.{PartitionRange, PartitionSpec, TimeUnit, Window}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import java.text.ParseException
 
 class PartitionSpecTest extends AnyFlatSpec with Matchers {
 
@@ -11,13 +13,13 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
   private val compactSpec = PartitionSpec("ds", "yyyyMMdd", 24 * 60 * 60 * 1000)
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 3 * 60 * 60 * 1000)
   private val fifteenMinuteSpec = PartitionSpec("ds", "yyyy-MM-dd HH:mm", 15 * 60 * 1000)
-  
+
   "PartitionSpec.expandRange" should "expand date range into individual dates" in {
     val result = dailySpec.expandRange("2024-01-01", "2024-01-05")
     val expected = List("2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05")
     result should be(expected)
   }
-  
+
   it should "handle single day range" in {
     val result = dailySpec.expandRange("2024-01-15", "2024-01-15")
     result should be(List("2024-01-15"))
@@ -27,29 +29,29 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     val result = threeHourSpec.expandRange("2024-01-15 00:00", "2024-01-15 09:00")
     result should be(List("2024-01-15 00:00", "2024-01-15 03:00", "2024-01-15 06:00", "2024-01-15 09:00"))
   }
-  
+
   it should "expand range across month boundaries" in {
     val result = dailySpec.expandRange("2024-01-30", "2024-02-02")
     val expected = List("2024-01-30", "2024-01-31", "2024-02-01", "2024-02-02")
     result should be(expected)
   }
-  
+
   "PartitionSpec.plusFast" should "add one day correctly" in {
     val result = dailySpec.plusFast("2024-01-01", WindowUtils.Day)
     result should be("2024-01-02")
   }
-  
+
   it should "add multiple days correctly" in {
     val window = new Window(3, TimeUnit.DAYS)
     val result = dailySpec.plusFast("2024-01-01", window)
     result should be("2024-01-04")
   }
-  
+
   it should "handle month boundary correctly when adding days" in {
     val result = dailySpec.plusFast("2024-01-31", WindowUtils.Day)
     result should be("2024-02-01")
   }
-  
+
   "PartitionSpec.afterFast" should "return the next day" in {
     val result = dailySpec.afterFast("2024-03-15")
     result should be("2024-03-16")
@@ -59,18 +61,18 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     threeHourSpec.afterFast("2024-03-15 21:00") should be("2024-03-16 00:00")
     fifteenMinuteSpec.afterFast("2024-03-15 00:45") should be("2024-03-15 01:00")
   }
-  
+
   "PartitionSpec.minusFast" should "subtract days correctly" in {
     val window = new Window(2, TimeUnit.DAYS)
     val result = dailySpec.minusFast("2024-01-03", window)
     result should be("2024-01-01")
   }
-  
+
   it should "handle month boundary correctly when subtracting days" in {
     val result = dailySpec.minusFast("2024-02-01", WindowUtils.Day)
     result should be("2024-01-31")
   }
-  
+
   "PartitionSpec.calendarGrain" should "return HOUR_OF_DAY for HOURS" in {
     val window = new Window(1, TimeUnit.HOURS)
     val result = dailySpec.calendarGrain(window)
@@ -93,6 +95,12 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     dailySpec.translate("2025-11-25", compactSpec) should be("20251125")
     dailySpec.translate("2025-01-01", compactSpec) should be("20250101")
     dailySpec.translate("1970-01-01", compactSpec) should be("19700101")
+  }
+
+  "PartitionSpec.epochMillis" should "reject partitions that do not match its format" in {
+    intercept[ParseException] {
+      dailySpec.epochMillis("20251125")
+    }
   }
 
   it should "convert from yyyyMMdd to yyyy-MM-dd" in {

@@ -85,7 +85,8 @@ object StepRunner {
   def apply(requestedDateRange: DateRange, metaData: MetaData)(body: DateRange => Unit)(implicit
       tableUtils: TableUtils): Unit = {
 
-    val requestedRange = PartitionRange(requestedDateRange.startDate, requestedDateRange.endDate)(tableUtils.partitionSpec)
+    val requestedRange =
+      PartitionRange(requestedDateRange.startDate, requestedDateRange.endDate)(tableUtils.partitionSpec)
 
     val tableName = metaData.outputTable
     val stepSize = metaData.stepSize

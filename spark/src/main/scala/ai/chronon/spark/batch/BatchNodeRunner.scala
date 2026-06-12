@@ -14,7 +14,7 @@ import ai.chronon.spark.catalog.TableUtils
 import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.submission.{NodeConfReader, SparkSessionBuilder}
 import ai.chronon.spark.utils.SemanticUtils
-import ai.chronon.spark.{GroupBy, GroupByUpload, Join, ModelTransformsJob}
+import ai.chronon.spark.{GroupBy, GroupByUpload, Join, ModelTransformsJob, RunnerUtils}
 import org.rogach.scallop.{ScallopConf, ScallopOption}
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -55,12 +55,6 @@ class BatchNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
 
 class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends NodeRunner {
   @transient private lazy val logger: Logger = LoggerFactory.getLogger(getClass)
-
-  private def outputPartitionSpec(metadata: MetaData): PartitionSpec =
-    (for {
-      executionInfo <- Option(metadata.executionInfo)
-      outputTableInfo <- Option(executionInfo.outputTableInfo)
-    } yield outputTableInfo.partitionSpec(tableUtils.partitionSpec)).getOrElse(tableUtils.partitionSpec)
 
   // in ad-hoc flows, the jobs downstream of external tables will simply fail (albeit, with retries)
   // in scheduled flow, the jobs downstream of external sensors will be stalled by the sensor
@@ -486,12 +480,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   }
 
   private def postJobActions(metadata: MetaData, range: PartitionRange, tableStatsDataset: Option[String]): Unit = {
-    val outputTablePartitionSpec = (for {
-      meta <- Option(metadata)
-      executionInfo <- Option(meta.executionInfo)
-      outputTableInfo <- Option(executionInfo.outputTableInfo)
-      definedSpec = outputTableInfo.partitionSpec(tableUtils.partitionSpec)
-    } yield definedSpec).getOrElse(tableUtils.partitionSpec)
+    val outputTablePartitionSpec = RunnerUtils.outputPartitionSpec(metadata, tableUtils.partitionSpec)
     val outputTable = metadata.executionInfo.outputTableInfo.table
 
     val firstOutputPartition =
@@ -614,7 +603,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   ): Int = {
     Try {
       val metadata = node.metaData
-      val range = PartitionRange(startDs, endDs)(outputPartitionSpec(metadata))
+      val range = PartitionRange(startDs, endDs)(RunnerUtils.outputPartitionSpec(metadata, tableUtils.partitionSpec))
 
       val inputTablePartitionStatuses = computeInputTablePartitionStatuses(metadata, range, tableUtils)
 
@@ -702,19 +691,13 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 
 object BatchNodeRunner {
 
-  private def outputPartitionSpec(metadata: MetaData): PartitionSpec =
-    (for {
-      executionInfo <- Option(metadata.executionInfo)
-      outputTableInfo <- Option(executionInfo.outputTableInfo)
-    } yield outputTableInfo.partitionSpec(PartitionSpec.daily)).getOrElse(PartitionSpec.daily)
-
   def main(args: Array[String]): Unit = {
     val batchArgs = new BatchNodeRunnerArgs(args)
     val resolvedEnv = SecretResolver.resolveVaultUris(sys.env.toMap)
     val driverSecrets = resolvedEnv -- sys.env.keySet
     val node = NodeConfReader.read(batchArgs.confPath())
-    val tableUtils = TableUtils(SparkSessionBuilder.build(s"batch-node-runner-${node.metaData.name}"),
-                                outputPartitionSpec(node.metaData))
+    val sparkSession = SparkSessionBuilder.build(s"batch-node-runner-${node.metaData.name}")
+    val tableUtils = RunnerUtils.tableUtilsForMetadata(sparkSession, node.metaData)
     val api = instantiateApi(batchArgs.onlineClass(), batchArgs.apiProps ++ driverSecrets)
     val runner = new BatchNodeRunner(node, tableUtils, api)
     val exitCode =

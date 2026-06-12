@@ -102,9 +102,12 @@ abstract class JoinBase(val joinConfCloned: api.Join,
       keyRenamedRightDf
         .withColumn(
           Constants.TimePartitionColumn,
-          date_format(from_unixtime(unix_timestamp(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
-                                      tableUtils.partitionSpec.spanMillis / 1000),
-                      tableUtils.partitionSpec.format)
+          date_format(
+            from_unixtime(
+              unix_timestamp(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
+                tableUtils.partitionSpec.spanMillis / 1000),
+            tableUtils.partitionSpec.format
+          )
         )
         .drop(tableUtils.partitionColumn)
     } else {
@@ -336,7 +339,8 @@ abstract class JoinBase(val joinConfCloned: api.Join,
       )
       .getOrElse(Seq.empty)
 
-    def finalResult: DataFrame = tableUtils.scanDf(null, outputTable, range = Some(rangeToFill))
+    val outputRangeToFill = rangeToFill.coveringRange(tableUtils.partitionSpec)
+    def finalResult: DataFrame = tableUtils.scanDf(null, outputTable, range = Some(outputRangeToFill))
 
     if (unfilledRanges.isEmpty) {
       logger.info(s"\nThere is no data to compute based on end partition of ${rangeToFill.end}.\n\n Exiting..")

@@ -254,10 +254,12 @@ object Extensions {
       df.withColumn(
         colName,
         date_format(
-          from_unixtime(unix_timestamp(df.col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
-            (days.toLong * tableUtils.partitionSpec.spanMillis / 1000)),
+          from_unixtime(
+            unix_timestamp(df.col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
+              (days.toLong * tableUtils.partitionSpec.spanMillis / 1000)),
           tableUtils.partitionSpec.format
-        ))
+        )
+      )
 
     def replaceWithReadableTime(cols: Seq[String], dropOriginal: Boolean): DataFrame = {
       cols.foldLeft(df) { (dfNew, col) =>

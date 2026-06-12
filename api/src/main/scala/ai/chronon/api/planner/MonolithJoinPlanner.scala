@@ -116,11 +116,11 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     // Stats compute depends on the monolith join output
     val tableDep = new TableDependency()
       .setTableInfo(
-          new TableInfo()
-            .setTable(monolithJoinNode.metaData.outputTable)
-            .setPartitionColumn(confOutputPartitionSpec.column)
-            .setPartitionFormat(confOutputPartitionSpec.format)
-            .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
+        new TableInfo()
+          .setTable(monolithJoinNode.metaData.outputTable)
+          .setPartitionColumn(confOutputPartitionSpec.column)
+          .setPartitionFormat(confOutputPartitionSpec.format)
+          .setPartitionInterval(WindowUtils.fromMillis(confOutputPartitionSpec.spanMillis))
       )
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())

@@ -73,6 +73,16 @@ class DependencyResolverTest extends AnyFlatSpec with Matchers {
     result shouldBe Some(PartitionRange("2024-01-02 00:00", "2024-01-02 21:00")(threeHourSpec))
   }
 
+  it should "keep the input start unbounded for unbounded start offsets" in {
+    val queryRange = PartitionRange("2024-01-02", "2024-01-02")
+    val tableDep = dep("test.events")
+    tableDep.setStartOffset(WindowUtils.Unbounded)
+
+    val result = DependencyResolver.computeInputRange(queryRange, tableDep)
+
+    result shouldBe Some(PartitionRange(null, "2024-01-02"))
+  }
+
   it should "map a partial three-hour producer range to the impacted daily output partition" in {
     val parentRange = PartitionRange("2024-01-02 06:00", "2024-01-02 06:00")(threeHourSpec)
     val tableDep = dep("test.hourly_table")

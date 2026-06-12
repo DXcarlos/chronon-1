@@ -432,8 +432,8 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
            |""".stripMargin
       )
 
-      outputPartitionRange.copy(start = partitionSpec.shiftPartitions(inputStart.get, inputToOutputShift))(
-        partitionSpec)
+      val rangeSpec = outputPartitionRange.partitionSpec
+      PartitionRange(rangeSpec.shiftPartitions(inputStart.get, inputToOutputShift), outputPartitionRange.end)(rangeSpec)
     } else {
 
       outputPartitionRange
@@ -472,15 +472,14 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
         inputPartitionSpec <- inputPartitionSpecs;
         table <- inputTables;
         subPartitionFilters = inputTableToSubPartitionFiltersMap.getOrElse(table, Map.empty);
+        inputRange = outputPartitionRange.coveringRange(inputPartitionSpec);
         partitionStr <- partitions(table,
                                    subPartitionFilters,
-                                   Option(outputPartitionRange),
+                                   Option(inputRange),
                                    tablePartitionSpec = Some(inputPartitionSpec))
       ) yield {
-        // partitions(..., tablePartitionSpec = Some(...)) already returns values in the
-        // TableUtils default spec, so the shift below parses them correctly even when the
-        // input table uses a non-default partition format.
-        partitionSpec.shiftPartitions(partitionStr, inputToOutputShift)
+        val shifted = inputPartitionSpec.shiftPartitions(partitionStr, inputToOutputShift)
+        inputPartitionSpec.translate(shifted, partitionSpec)
       }
 
     val inputMissing = inputTables

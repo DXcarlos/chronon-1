@@ -315,12 +315,6 @@ object GroupByUpload {
 
   case class UploadResult(kvDf: DataFrame, nullCounts: Map[String, Long])
 
-  private def outputPartitionSpec(groupByConf: api.GroupBy): PartitionSpec =
-    (for {
-      executionInfo <- Option(groupByConf.metaData.executionInfo)
-      outputTableInfo <- Option(executionInfo.outputTableInfo)
-    } yield outputTableInfo.partitionSpec(PartitionSpec.daily)).getOrElse(PartitionSpec.daily)
-
   // TODO - remove this if spark streaming can't reach hive tables
   private def buildServingInfo(groupByConf: api.GroupBy,
                                tableUtils: TableUtils,
@@ -461,11 +455,10 @@ object GroupByUpload {
           jsonPercent: Int = 1): Unit = {
     import ai.chronon.spark.submission.SparkSessionBuilder
     val tableUtils: TableUtils =
-      tableUtilsOpt.getOrElse(
-        TableUtils(
-          SparkSessionBuilder
-            .build(s"groupBy_${groupByConf.metaData.name}_upload"),
-          outputPartitionSpec(groupByConf)))
+      tableUtilsOpt.getOrElse {
+        val sparkSession = SparkSessionBuilder.build(s"groupBy_${groupByConf.metaData.name}_upload")
+        RunnerUtils.tableUtilsForMetadata(sparkSession, groupByConf.metaData)
+      }
     val context = Metrics.Context(Metrics.Environment.GroupByUpload, groupByConf)
     val startTs = System.currentTimeMillis()
     val result = generateDf(groupByConf = groupByConf,

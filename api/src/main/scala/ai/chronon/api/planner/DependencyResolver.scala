@@ -9,7 +9,7 @@ object DependencyResolver {
   private def minus(partition: String, offset: Window)(implicit partitionSpec: PartitionSpec): String = {
     if (partition == null) return null
     if (offset == null) return null
-    partitionSpec.minus(partition, offset)
+    partitionSpec.minusFast(partition, offset)
   }
 
   private def max(partition: String, cutOff: String): String = {
@@ -24,11 +24,8 @@ object DependencyResolver {
     Ordering[String].min(partition, cutOff)
   }
 
-  private def intervalEndMillis(range: PartitionRange): Long =
+  private def endBoundaryMillis(range: PartitionRange): Long =
     range.partitionSpec.epochMillis(range.end) + range.partitionSpec.spanMillis
-
-  private def inclusiveEndLabel(endExclusiveMillis: Long, targetSpec: PartitionSpec): String =
-    targetSpec.at(endExclusiveMillis - 1)
 
   def computeOutputRange(parentRange: PartitionRange, tableDep: TableDependency): Option[PartitionRange] =
     computeOutputRange(parentRange, tableDep, parentRange.partitionSpec)
@@ -42,12 +39,12 @@ object DependencyResolver {
     require(parentRange.start <= parentRange.end, "Parent range start must be <= end")
 
     val parentStartMillis = parentRange.partitionSpec.epochMillis(parentRange.start)
-    val parentEndExclusiveMillis = intervalEndMillis(parentRange)
+    val parentEndBoundaryMillis = endBoundaryMillis(parentRange)
     val childStartMillis = parentStartMillis + Option(tableDep.getEndOffset).map(_.millis).getOrElse(0L)
-    val childEndExclusiveMillis = parentEndExclusiveMillis + Option(tableDep.getStartOffset).map(_.millis).getOrElse(0L)
+    val childEndBoundaryMillis = parentEndBoundaryMillis + Option(tableDep.getStartOffset).map(_.millis).getOrElse(0L)
 
     val start = outputPartitionSpec.at(childStartMillis)
-    val end = inclusiveEndLabel(childEndExclusiveMillis, outputPartitionSpec)
+    val end = outputPartitionSpec.at(childEndBoundaryMillis - 1)
 
     if (start != null && end != null && start > end) {
       return None
@@ -61,17 +58,19 @@ object DependencyResolver {
     require(queryRange != null, "Query range cannot be null")
     require(queryRange.start != null, "Query range start cannot be null")
     require(queryRange.end != null, "Query range end cannot be null")
+    require(tableDep.tableInfo != null, "TableDependency.tableInfo cannot be null")
 
-    implicit val inputPartitionSpec: PartitionSpec =
-      Option(tableDep.tableInfo).map(_.partitionSpec(queryRange.partitionSpec)).getOrElse(queryRange.partitionSpec)
+    implicit val inputPartitionSpec: PartitionSpec = tableDep.tableInfo.partitionSpec(queryRange.partitionSpec)
 
     val queryStartMillis = queryRange.partitionSpec.epochMillis(queryRange.start)
-    val queryEndExclusiveMillis = intervalEndMillis(queryRange)
-    val inputStartMillis = queryStartMillis - Option(tableDep.getStartOffset).map(_.millis).getOrElse(0L)
-    val inputEndExclusiveMillis = queryEndExclusiveMillis - Option(tableDep.getEndOffset).map(_.millis).getOrElse(0L)
+    val queryEndBoundaryMillis = endBoundaryMillis(queryRange)
+    val inputEndBoundaryMillis = queryEndBoundaryMillis - Option(tableDep.getEndOffset).map(_.millis).getOrElse(0L)
 
-    val offsetStart = inputPartitionSpec.at(inputStartMillis)
-    val offsetEnd = inclusiveEndLabel(inputEndExclusiveMillis, inputPartitionSpec)
+    val offsetStart = Option(tableDep.getStartOffset)
+      .filterNot(_.length == Int.MaxValue)
+      .map(offset => inputPartitionSpec.at(queryStartMillis - offset.millis))
+      .orNull
+    val offsetEnd = inputPartitionSpec.at(inputEndBoundaryMillis - 1)
     val start = max(offsetStart, tableDep.getStartCutOff)
     val end = min(offsetEnd, tableDep.getEndCutOff)
 
@@ -79,7 +78,7 @@ object DependencyResolver {
       return None
     }
 
-    if (Option(tableDep.tableInfo).exists(_.isCumulative)) {
+    if (tableDep.tableInfo.isCumulative) {
 
       // we should always compute the latest possible partition when end_cutoff is not set
       val latestValidInput = Option(tableDep.getEndCutOff).getOrElse(inputPartitionSpec.now)

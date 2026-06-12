@@ -87,8 +87,9 @@ case object DeltaLake extends Format {
       sparkSession: SparkSession): Option[List[String]] =
     statsDateRange(tableName, columnName, partitionSpec).map { range =>
       sparkSession.read.table(tableName).schema(columnName).dataType match {
-        case TimestampType => partitionSpec.expandRange(range.firstAvailablePartition, partitionSpec.before(range.lastAvailablePartition))
-        case _             => range.virtualPartitions(partitionSpec)
+        case TimestampType =>
+          partitionSpec.expandRange(range.firstAvailablePartition, partitionSpec.before(range.lastAvailablePartition))
+        case _ => range.virtualPartitions(partitionSpec)
       }
     }
 

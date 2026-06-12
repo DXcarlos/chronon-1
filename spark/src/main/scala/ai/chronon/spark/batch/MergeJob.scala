@@ -205,9 +205,12 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       keyRenamedRightDf
         .withColumn(
           Constants.TimePartitionColumn,
-          date_format(from_unixtime(unix_timestamp(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
-                                      tableUtils.partitionSpec.spanMillis / 1000),
-                      tableUtils.partitionSpec.format)
+          date_format(
+            from_unixtime(
+              unix_timestamp(col(tableUtils.partitionColumn), tableUtils.partitionSpec.format) +
+                tableUtils.partitionSpec.spanMillis / 1000),
+            tableUtils.partitionSpec.format
+          )
         )
         .drop(tableUtils.partitionColumn)
     } else {

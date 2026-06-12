@@ -5,6 +5,7 @@ import ai.chronon.api.Extensions.TableInfoOps
 import ai.chronon.api.planner.NodeRunner
 import ai.chronon.online._
 import ai.chronon.planner.{Node, NodeContent}
+import ai.chronon.spark.RunnerUtils
 import ai.chronon.spark.submission.NodeConfReader
 import org.rogach.scallop.ScallopConf
 import org.slf4j.{Logger, LoggerFactory}
@@ -215,12 +216,6 @@ class ModelNodeRunner(api: Api) extends NodeRunner {
 
 object ModelNodeRunner {
 
-  private def outputPartitionSpec(metadata: MetaData): PartitionSpec =
-    (for {
-      executionInfo <- Option(metadata.executionInfo)
-      outputTableInfo <- Option(executionInfo.outputTableInfo)
-    } yield outputTableInfo.partitionSpec(PartitionSpec.daily)).getOrElse(PartitionSpec.daily)
-
   class ModelNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
     val confPath = opt[String](required = true, descr = "Path to node configuration file")
     val endDs = opt[String](required = true, descr = "End date string (yyyy-MM-dd format)")
@@ -266,7 +261,7 @@ object ModelNodeRunner {
 
       val api = instantiateApi(onlineClass, props)
 
-      implicit val partitionSpec: PartitionSpec = outputPartitionSpec(metadata)
+      implicit val partitionSpec: PartitionSpec = RunnerUtils.outputPartitionSpec(metadata)
 
       val range = Some(PartitionRange(null, endDs))
       val runner = new ModelNodeRunner(api)

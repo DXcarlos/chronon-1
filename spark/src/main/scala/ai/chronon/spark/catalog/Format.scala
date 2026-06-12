@@ -1,7 +1,7 @@
 package ai.chronon.spark.catalog
 
 import ai.chronon.api.PartitionSpec
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.connector.catalog.Identifier
@@ -18,6 +18,15 @@ trait Format {
   def tableProperties: Map[String, String] = Map.empty[String, String]
 
   def tableTypeString: String = ""
+
+  protected def partitionLabel(timestampColumn: Column, partitionSpec: PartitionSpec): Column =
+    date_format(timestampColumn.cast("timestamp"), partitionSpec.format)
+
+  protected def lastCompletePartitionLabel(timestampColumn: Column, partitionSpec: PartitionSpec): Column =
+    date_format(
+      from_unixtime((unix_timestamp(timestampColumn.cast("timestamp")) * 1000 - partitionSpec.spanMillis) / 1000),
+      partitionSpec.format
+    )
 
   def createTable(tableName: String,
                   schema: StructType,
@@ -154,10 +163,7 @@ trait Format {
             .headOption
             .flatMap(v => Option(v))
         case _ =>
-          df.select(date_format(
-            from_unixtime((unix_timestamp(max(col(partitionColumn)).cast("timestamp")) * 1000 - partitionSpec.spanMillis) / 1000),
-            partitionSpec.format)
-            .as("last_partition"))
+          df.select(lastCompletePartitionLabel(max(col(partitionColumn)), partitionSpec).as("last_partition"))
             .as[String]
             .collect()
             .headOption
@@ -189,7 +195,7 @@ trait Format {
             .headOption
             .flatMap(v => Option(v))
         case _ =>
-          df.select(date_format(min(col(partitionColumn)).cast("timestamp"), partitionSpec.format).as("first_partition"))
+          df.select(partitionLabel(min(col(partitionColumn)), partitionSpec).as("first_partition"))
             .as[String]
             .collect()
             .headOption
@@ -229,7 +235,7 @@ trait Format {
     import sparkSession.implicits._
     Try {
       val df = sparkSession.read.table(tableName)
-      df.select(date_format(max(col(timestampColumn)).cast("timestamp"), partitionSpec.format).as("max_date"))
+      df.select(partitionLabel(max(col(timestampColumn)), partitionSpec).as("max_date"))
         .as[String]
         .collect()
         .headOption
@@ -250,11 +256,8 @@ trait Format {
       val df = sparkSession.read.table(tableName)
       val result = df
         .select(
-          date_format(min(col(timestampColumn)).cast("timestamp"), partitionSpec.format).as("min_date"),
-          date_format(
-            from_unixtime((unix_timestamp(max(col(timestampColumn)).cast("timestamp")) * 1000 - partitionSpec.spanMillis) / 1000),
-            partitionSpec.format
-          ).as("max_date")
+          partitionLabel(min(col(timestampColumn)), partitionSpec).as("min_date"),
+          lastCompletePartitionLabel(max(col(timestampColumn)), partitionSpec).as("max_date")
         )
         .as[(String, String)]
         .collect()
