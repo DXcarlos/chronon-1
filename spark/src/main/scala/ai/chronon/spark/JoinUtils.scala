@@ -467,7 +467,7 @@ object JoinUtils {
 
   /** Snapshots are computed and stored at the snapshot grain: for each left partition, rows
     * bind to the latest snapshot whose as-of boundary is at or before the rows' time.
-    * Same-grain left over same-grain snapshots degenerates to shiftPartitions(-1) - exactly the old
+    * Same-grain left over same-grain snapshots degenerates to one-partition lookback - exactly the old
     * behavior. A left range whose grain differs from the snapshot grain looks back to the
     * covering snapshot intervals' previous snapshots; the merge join binds per row via
     * TimePartitionColumn (the row ts floored to the snapshot grid).

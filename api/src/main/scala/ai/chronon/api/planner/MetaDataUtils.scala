@@ -80,7 +80,7 @@ object MetaDataUtils {
   }
 
   /** Validates that a consumer can cleanly cover its producer's partition grid: the consumer
-    * interval must be an equal-or-coarser multiple of the producer interval AND the consumer
+    * interval must be an exact multiple of the producer interval AND the consumer
     * must be aligned to the producer grid.
     *
     * @param snapshotAsOf snapshot-shaped edges where the engine binds the producer per row,

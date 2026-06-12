@@ -306,7 +306,7 @@ object Extensions {
   implicit class AggregationOps(aggregation: Aggregation) {
 
     // one agg part per bucket per window
-    // unspecified windows are translated to one unbounded window
+    // unspecified windows are converted to one unbounded window
     def unpack: Seq[AggregationPart] = {
       val windows = Option(aggregation.windows)
         .map(_.toScala)

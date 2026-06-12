@@ -171,9 +171,6 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
 
   def before(s: String): String = shiftPartitions(s, -1)
 
-  def partitionsOverlapping(interval: PartitionInterval): Seq[String] =
-    rangeCovering(interval).map(_.partitions).getOrElse(Seq.empty)
-
   def calendarGrain(window: Window): Int = window.timeUnit match {
     case TimeUnit.DAYS    => Calendar.DAY_OF_MONTH
     case TimeUnit.HOURS   => Calendar.HOUR_OF_DAY

@@ -199,7 +199,7 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     covering.partitionSpec should be(compactSpec)
   }
 
-  it should "preserve range validity after translation" in {
+  it should "preserve range validity after coverage conversion" in {
     val cliRange = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
     val covering = cliRange.coveringRange(compactSpec)
 
@@ -219,11 +219,11 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
 
   it should "cover a daily range with every overlapping unaligned sub-daily partition" in {
     val range = PartitionRange("2024-01-02", "2024-01-02")(dailySpec)
-    val translated = range.coveringRange(unalignedThreeHourSpec)
+    val covering = range.coveringRange(unalignedThreeHourSpec)
 
-    translated.start should be("2024-01-01-22-00")
-    translated.end should be("2024-01-02-22-00")
-    translated.partitions should contain theSameElementsInOrderAs Seq(
+    covering.start should be("2024-01-01-22-00")
+    covering.end should be("2024-01-02-22-00")
+    covering.partitions should contain theSameElementsInOrderAs Seq(
       "2024-01-01-22-00",
       "2024-01-02-01-00",
       "2024-01-02-04-00",
@@ -238,9 +238,9 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
 
   it should "cover an unaligned boundary partition with all impacted daily partitions" in {
     val range = PartitionRange("2024-01-02-22-00", "2024-01-02-22-00")(unalignedThreeHourSpec)
-    val translated = range.coveringRange(dailySpec)
+    val covering = range.coveringRange(dailySpec)
 
-    translated should be(PartitionRange("2024-01-02", "2024-01-03")(dailySpec))
+    covering should be(PartitionRange("2024-01-02", "2024-01-03")(dailySpec))
   }
 
   it should "convert a sub-daily range to daily without underflowing" in {
