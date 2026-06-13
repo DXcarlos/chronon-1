@@ -11,6 +11,8 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import java.time.ZoneOffset
 import scala.util.{Failure, Success, Try}
 
+case class PartitionColumnNotFoundException(message: String) extends UnsupportedOperationException(message)
+
 case object BigQueryNative extends Format {
 
   private val bqFormat = classOf[Spark35BigQueryTableProvider].getName
@@ -96,9 +98,6 @@ case object BigQueryNative extends Format {
            |
            |""".stripMargin
 
-    // clustered-but-not-partitioned tables have no entry in is_partitioning_column: that's a
-    // legitimate "no native partitioning" signal, not an error - callers fall back to a
-    // value-scan over the partition column for the data that exists
     val partitionCol = sparkSession.read
       .format(bqFormat)
       .option("project", providedProject)
@@ -110,10 +109,7 @@ case object BigQueryNative extends Format {
       .as[String]
       .collect
       .headOption
-      .getOrElse {
-        logger.info(s"No native partitioning column for table ${tableName}; treating as unpartitioned.")
-        return List.empty
-      }
+      .getOrElse(throw PartitionColumnNotFoundException(s"No partition column for table ${tableName} found."))
 
     // See: https://cloud.google.com/bigquery/docs/information-schema-partitions
     val partValsSql =
@@ -163,94 +159,6 @@ case object BigQueryNative extends Format {
   }
 
   override def supportSubPartitionsFilter: Boolean = false
-
-  // generic impl reads via sparkSession.read.table, which BigQueryNative forbids - push the
-  // distinct down to BigQuery (same pattern as the view branch of primaryPartitions)
-  override def scanDistinctPartitions(tableName: String, partitionColumn: String, partitionFilters: String)(implicit
-      sparkSession: SparkSession): List[String] = {
-    import sparkSession.implicits._
-    Try {
-      val tableIdentifier = SparkBQUtils.toTableId(tableName)
-      val providedProject = scala.Option(tableIdentifier.getProject).getOrElse(bqOptions.getProjectId)
-      val database = scala
-        .Option(tableIdentifier.getDataset)
-        .getOrElse(throw new IllegalArgumentException(s"database required for table: ${tableName}"))
-
-      val partitionWheres = if (partitionFilters.nonEmpty) s"WHERE ${partitionFilters}" else ""
-      val sql = s"SELECT DISTINCT ${partitionColumn} FROM `${tableName}` ${partitionWheres}"
-      sparkSession.read
-        .format(bqFormat)
-        .option("project", providedProject)
-        .option("viewsEnabled", true)
-        .option("materializationDataset", database)
-        .load(sql)
-        .as[String]
-        .collect()
-        .toList
-    } match {
-      case Success(result) => result
-      case Failure(e) =>
-        logger.warn(
-          s"Failed to scan distinct partition values for $tableName.$partitionColumn: ${scala.Option(e.getMessage).getOrElse("(no message)")}")
-        List.empty
-    }
-  }
-
-  // the generic scan fallback reads via sparkSession.read.table, which BigQueryNative forbids;
-  // push the boundary aggregation down to BigQuery instead. This is what makes completeness checks
-  // work for clustered-but-not-partitioned tables (no entry in is_partitioning_column).
-  private def scanBoundary(tableName: String, partitionColumn: String, agg: String, toPartition: Long => String)(implicit
-      sparkSession: SparkSession): scala.Option[String] = {
-    import org.apache.spark.sql.types.{LongType, StringType, TimestampType}
-    import sparkSession.implicits._
-    Try {
-      val tableIdentifier = SparkBQUtils.toTableId(tableName)
-      val providedProject = scala.Option(tableIdentifier.getProject).getOrElse(bqOptions.getProjectId)
-      val database = scala
-        .Option(tableIdentifier.getDataset)
-        .getOrElse(throw new IllegalArgumentException(s"database required for table: ${tableName}"))
-
-      // backticks: project ids routinely contain dashes
-      val sql = s"SELECT ${agg}(${partitionColumn}) AS boundary FROM `${tableName}`"
-      val df = sparkSession.read
-        .format(bqFormat)
-        .option("project", providedProject)
-        .option("viewsEnabled", true)
-        .option("materializationDataset", database)
-        .load(sql)
-
-      df.schema("boundary").dataType match {
-        case StringType => df.as[String].collect().headOption.flatMap(scala.Option(_))
-        case _          =>
-          // raw epoch millis, ds arithmetic in the partition spec: a DATE cast would floor to
-          // midnight and lose sub-daily boundaries (session timezone is UTC by convention)
-          df.select((col("boundary").cast(TimestampType).cast(LongType) * 1000).as("boundary_millis"))
-            .collect()
-            .headOption
-            .filterNot(_.isNullAt(0))
-            .map(row => toPartition(row.getLong(0)))
-      }
-    } match {
-      case Success(result) => result
-      case Failure(e) =>
-        logger.warn(s"Failed to scan ${agg} partition boundary for $tableName: ${e.getMessage}")
-        None
-    }
-  }
-
-  override protected def scanLastAvailablePartition(tableName: String,
-                                                    partitionColumn: String,
-                                                    partitionSpec: PartitionSpec)(implicit
-      sparkSession: SparkSession): scala.Option[String] =
-    // last COMPLETE partition: the one before the partition containing the max timestamp,
-    // which degenerates to the historical DATE(MAX) - 1 day for daily specs
-    scanBoundary(tableName, partitionColumn, "MAX", ts => partitionSpec.before(partitionSpec.at(ts)))
-
-  override protected def scanFirstAvailablePartition(tableName: String,
-                                                     partitionColumn: String,
-                                                     partitionSpec: PartitionSpec)(implicit
-      sparkSession: SparkSession): scala.Option[String] =
-    scanBoundary(tableName, partitionColumn, "MIN", partitionSpec.at)
 
   override def maxTimestampDate(tableName: String, timestampColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): scala.Option[String] = {
