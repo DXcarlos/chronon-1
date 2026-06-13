@@ -2,7 +2,6 @@ package ai.chronon.spark.other
 
 import ai.chronon.api.{ExecutionInfo, MetaData, PartitionSpec, TableInfo}
 import ai.chronon.api.Extensions._
-import ai.chronon.api.planner.MetaDataUtils
 import ai.chronon.spark.RunnerUtils
 import ai.chronon.spark.utils.SparkTestBase
 import org.scalatest.matchers.should.Matchers
@@ -24,7 +23,7 @@ class RunnerUtilsTest extends SparkTestBase with Matchers {
 
   it should "prefer stamped metadata over Spark session partition defaults" in {
     val stampedSpec = PartitionSpec("event_hour", "yyyy-MM-dd-HH", WindowUtils.Hour.millis)
-    val tableInfo = MetaDataUtils.applyPartitionSpec(new TableInfo(), stampedSpec)
+    val tableInfo = new TableInfo().withSpec(stampedSpec)
     val metadata = new MetaData()
       .setName("stamped")
       .setExecutionInfo(new ExecutionInfo().setOutputTableInfo(tableInfo))

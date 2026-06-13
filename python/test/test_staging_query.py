@@ -92,7 +92,7 @@ def test_staging_query_partition_interval_sets_output_table_info():
 
 
 def test_staging_query_infers_interval_but_never_offset_from_schedule():
-    # The cron fire phase (1h) is a derived processing delay over the midnight-aligned
+    # The cron fire phase (1h) is a derived processing delay over the midnight-boundary
     # grid — it is never inferred as a partition offset.
     sq = StagingQuery(
         query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
@@ -107,7 +107,7 @@ def test_staging_query_infers_interval_but_never_offset_from_schedule():
     assert table_info.partitionOffset is None
 
 
-def test_staging_query_explicit_offset_with_aligned_cron_has_zero_delay():
+def test_staging_query_explicit_offset_with_matching_cron_has_zero_delay():
     # Declaring partition_offset="1h" makes the grid 01:00, 04:00, ... and the
     # `0 1-22/3 * * *` fires land exactly on it (zero derived delay).
     sq = StagingQuery(
@@ -122,7 +122,7 @@ def test_staging_query_explicit_offset_with_aligned_cron_has_zero_delay():
     assert table_info.partitionOffset == _hours(1)
 
 
-def test_staging_query_explicit_offset_with_misaligned_cron_is_rejected():
+def test_staging_query_explicit_offset_with_mismatched_cron_is_rejected():
     with pytest.raises(ValueError):
         StagingQuery(
             query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",

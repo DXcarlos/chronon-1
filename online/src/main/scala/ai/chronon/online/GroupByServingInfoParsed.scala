@@ -33,9 +33,9 @@ class GroupByServingInfoParsed(val groupByServingInfo: GroupByServingInfo)
   // only consulted when the explicit batchEndTs watermark is absent (uploads from older versions);
   // lazy so a missing/invalid dateFormat only fails when the fallback is actually exercised
   private lazy val partitionSpec = {
-    val span = Option(groupByServingInfo.partitionInterval).map(_.millis).getOrElse(WindowUtils.Day.millis)
+    val intervalMillis = Option(groupByServingInfo.partitionInterval).map(_.millis).getOrElse(WindowUtils.Day.millis)
     val offset = Option(groupByServingInfo.partitionOffset).map(_.millis).getOrElse(0L)
-    PartitionSpec("ds", groupByServingInfo.dateFormat, span, offset)
+    PartitionSpec("ds", groupByServingInfo.dateFormat, intervalMillis, offset)
   }
 
   // streaming starts scanning after batchEnd

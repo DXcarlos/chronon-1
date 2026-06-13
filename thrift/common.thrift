@@ -162,8 +162,8 @@ struct ExecutionInfo {
     # relevant for batch jobs
     # temporal workflow nodes maintain their own cron schedule
     10: optional string offlineSchedule
-    # day-denominated regardless of output partition span: sub-daily nodes get a day's worth
-    # of partitions (24h / span) per step
+    # day-denominated regardless of output partitionInterval: sub-daily nodes get a day's
+    # worth of partitions (24h / interval) per step
     11: optional i32 stepDays
     12: optional bool historicalBackfill
     13: optional list<TableDependency> tableDependencies

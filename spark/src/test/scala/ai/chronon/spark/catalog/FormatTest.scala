@@ -125,12 +125,12 @@ class FormatTest extends SparkTestBase {
                                      subPartitionsFilter: Map[String, String])(implicit
           ss: SparkSession) = List("2024-04-02", null, "2024-04-02", "2024-04-01")
 
-      def discoveredPartitions(tableName: String, partitionColumn: String)(implicit
+      def disfullyContainedPartitions(tableName: String, partitionColumn: String)(implicit
           ss: SparkSession): Option[List[String]] =
         metadataPartitions(tableName, partitionColumn)(ss)
     }
 
-    fmt.discoveredPartitions("db.table", "ds")(spark) shouldBe Some(List("2024-04-02", "2024-04-01"))
+    fmt.disfullyContainedPartitions("db.table", "ds")(spark) shouldBe Some(List("2024-04-02", "2024-04-01"))
   }
 
   it should "return the last complete partition when scanning a timestamp column" in {
@@ -242,23 +242,23 @@ class FormatTest extends SparkTestBase {
     Format.parseIdentifier("`c`.`s`.`t`") shouldBe Seq("c", "s", "t")
   }
 
-  // --- zero-parsed-labels canary ---
+  // --- zero-parsed-partitions canary ---
 
-  it should "warn when a nonempty listing parses zero labels under the spec" in {
+  it should "warn when a nonempty listing parses zero partitions under the spec" in {
     val threeHourly = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
-    // compact labels, or labels missing their minute level: nothing parses, the table reads as
+    // compact ds values, or values missing their minute level: nothing parses, the table reads as
     // permanently empty
-    Format.zeroParsedLabelsWarning("db.t", List("20260603-04", "20260603-05"), threeHourly) shouldBe defined
-    Format.zeroParsedLabelsWarning("db.t", List("2026-06-03-03"), threeHourly) shouldBe defined
+    Format.zeroParsedPartitionsWarning("db.t", List("20260603-04", "20260603-05"), threeHourly) shouldBe defined
+    Format.zeroParsedPartitionsWarning("db.t", List("2026-06-03-03"), threeHourly) shouldBe defined
   }
 
-  it should "stay quiet for empty listings or when any label parses" in {
+  it should "stay quiet for empty listings or when any partition parses" in {
     val threeHourly = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
-    Format.zeroParsedLabelsWarning("db.t", List.empty, threeHourly) shouldBe empty
-    Format.zeroParsedLabelsWarning("db.t", List("2026-06-03-03-00"), threeHourly) shouldBe empty
-    // one parseable label among garbage means the table is usable; per-label failures
+    Format.zeroParsedPartitionsWarning("db.t", List.empty, threeHourly) shouldBe empty
+    Format.zeroParsedPartitionsWarning("db.t", List("2026-06-03-03-00"), threeHourly) shouldBe empty
+    // one parseable ds among garbage means the table is usable; per-value failures
     // surface later as loud ParseExceptions instead
-    Format.zeroParsedLabelsWarning("db.t", List("garbage", "2026-06-03-03-00"), threeHourly) shouldBe empty
+    Format.zeroParsedPartitionsWarning("db.t", List("garbage", "2026-06-03-03-00"), threeHourly) shouldBe empty
   }
 
 }

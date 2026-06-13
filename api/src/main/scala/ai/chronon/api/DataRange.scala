@@ -190,11 +190,12 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
     }
   }
 
-  /** The range of `otherSpec` labels whose coverage intersects this range's coverage.
-    * The end label derives from the *end* of coverage, so translating a coarse range into a
-    * finer spec keeps the whole coverage instead of just the end label's first sub-partition.
+  /** The range of `otherSpec` partitions whose time intervals intersect this range's time
+    * interval. The end derives from the *end* of this range's last interval, so translating a
+    * coarse range into a finer spec keeps the whole time interval instead of just the first
+    * sub-partition of the last ds.
     */
-  def coveringRange(otherSpec: PartitionSpec): PartitionRange = {
+  def intersectingRange(otherSpec: PartitionSpec): PartitionRange = {
     if (otherSpec == partitionSpec) return this
     val newStart = Option(start).map(d => otherSpec.at(partitionSpec.partitionStartMillis(d))).orNull
     val newEnd = Option(end).map(d => otherSpec.at(partitionSpec.partitionEndMillis(d) - 1)).orNull
@@ -202,11 +203,11 @@ case class PartitionRange(start: String, end: String)(implicit val partitionSpec
     PartitionRange(newStart, newEnd)(otherSpec)
   }
 
-  /** inclusive-millis end of coverage; tolerates an unbounded start (used for readiness checks
-    * where only "data through when?" matters)
+  /** The last millisecond this range's partitions hold; tolerates an unbounded start (used for
+    * readiness checks where only "data through when?" matters)
     */
-  def coverageEnd: Long = {
-    require(end != null, s"coverage end undefined for end-unbounded range $this")
+  def maxMillis: Long = {
+    require(end != null, s"max millis undefined for end-unbounded range $this")
     partitionSpec.partitionEndMillis(end) - 1
   }
 
@@ -219,22 +220,25 @@ object PartitionRange {
     s"$tuples"
   }
 
-  /** Which `targetSpec` partitions are fully covered by `labels` (in `labelSpec`)?
-    * The rule: a target partition counts iff its whole coverage interval is contained in the
-    * union of the labels' coverage. Same grain: 1:1 translation. Across grains, candidates
-    * are every target partition intersecting a label's coverage, kept only when ALL the
-    * labels covering them exist - so a 3h@01:00 partition straddling midnight needs BOTH
-    * surrounding daily labels, and a daily partition needs all 24 hourly labels.
+  /** Which `targetSpec` partitions hold data that is fully present in `partitions` (in
+    * `sourceSpec`)? The rule: a target partition counts iff its whole time interval is contained
+    * in the union of the source partitions' time intervals. Same grid: 1:1 translation. Across
+    * grids, candidates are every target partition intersecting a source partition's interval,
+    * kept only when ALL the source partitions overlapping them exist. Example: a 3h@01:00
+    * partition straddling midnight needs BOTH surrounding daily partitions, and a daily
+    * partition needs all 24 hourly partitions.
     */
-  def coveredPartitions(labels: Seq[String], labelSpec: PartitionSpec, targetSpec: PartitionSpec): Seq[String] = {
-    if (labelSpec.hasSameGrid(targetSpec)) {
-      if (labelSpec == targetSpec) labels else labels.map(labelSpec.translate(_, targetSpec))
+  def fullyContainedPartitions(partitions: Seq[String],
+                               sourceSpec: PartitionSpec,
+                               targetSpec: PartitionSpec): Seq[String] = {
+    if (sourceSpec.hasSameGrid(targetSpec)) {
+      if (sourceSpec == targetSpec) partitions else partitions.map(sourceSpec.translate(_, targetSpec))
     } else {
-      val labelSet = labels.toSet
-      labels
-        .flatMap(l => PartitionRange(l, l)(labelSpec).coveringRange(targetSpec).partitions)
+      val partitionSet = partitions.toSet
+      partitions
+        .flatMap(p => PartitionRange(p, p)(sourceSpec).intersectingRange(targetSpec).partitions)
         .distinct
-        .filter { t => PartitionRange(t, t)(targetSpec).coveringRange(labelSpec).partitions.forall(labelSet) }
+        .filter { t => PartitionRange(t, t)(targetSpec).intersectingRange(sourceSpec).partitions.forall(partitionSet) }
     }
   }
 

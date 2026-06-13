@@ -20,6 +20,7 @@ import ai.chronon.api
 import ai.chronon.api.{Accuracy, Constants, DateRange, JoinPart, PartitionRange, PartitionSpec}
 import ai.chronon.api.DataModel.ENTITIES
 import ai.chronon.api.Extensions._
+import ai.chronon.api.planner.PartitionSpecResolver
 import ai.chronon.online.metrics.Metrics
 import ai.chronon.planner.JoinBootstrapNode
 import ai.chronon.spark.catalog.TableUtils
@@ -47,6 +48,12 @@ abstract class JoinBase(val joinConfCloned: api.Join,
   implicit val tu = tableUtils
   private implicit val partitionSpec: PartitionSpec = tableUtils.partitionSpec
 
+  // the join's own declared output spec (executionInfo.outputTableInfo, defaulting to the
+  // ambient TableUtils spec): part snapshot grids are compared against THIS, not against
+  // tableUtils.partitionSpec, which only happens to match it on standard runs
+  protected val joinOutputSpec: PartitionSpec =
+    PartitionSpecResolver.outputSpec(joinConfCloned.metaData, tableUtils.partitionSpec)
+
   val joinMetaData: MetaData = joinConfCloned.metaData
   assert(Option(joinMetaData.outputNamespace).nonEmpty, "output namespace could not be empty or null")
   val metrics: Metrics.Context = Metrics.Context(Metrics.Environment.JoinOffline, joinConfCloned)
@@ -69,7 +76,7 @@ abstract class JoinBase(val joinConfCloned: api.Join,
     lazy val partSpec = JoinUtils.partSnapshotSpec(joinPart)
     val leftEventsSnapshot =
       joinConfCloned.left.dataModel == api.DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT
-    val crossGridSnapshot = leftEventsSnapshot && !partSpec.hasSameGrid(tableUtils.partitionSpec)
+    val crossGridSnapshot = leftEventsSnapshot && !partSpec.hasSameGrid(joinOutputSpec)
 
     // compute join keys, besides the groupBy keys -  like ds, ts etc.,
     val additionalKeys: Seq[String] = {
@@ -100,17 +107,17 @@ abstract class JoinBase(val joinConfCloned: api.Join,
     }
     val keyRenamedRightDf = prefixedRightDf.select(newColumns: _*)
 
-    // adjust join keys: snapshot binding is per row ON THE RHS GROUPBY'S DECLARED GRID - a row
-    // at time T binds the latest RHS snapshot whose as-of boundary is <= T, independent of the
-    // join's own grid. Daily RHS under a daily join degenerates to the historical behavior.
+    // adjust join keys: the snapshot pick is per row ON THE RHS GROUPBY'S DECLARED GRID - a row
+    // at time T reads the latest RHS snapshot whose time is <= T, independent of the join's own
+    // grid. Daily RHS under a daily join degenerates to the historical behavior.
     val joinableRightDf = if (crossGridSnapshot) {
       keyRenamedRightDf
         .withColumn(Constants.TimePartitionColumn, col(Constants.TimeColumn).cast(LongType))
         .drop(tableUtils.partitionColumn, Constants.TimeColumn)
         .dropDuplicates(keys)
     } else if (additionalKeys.contains(Constants.TimePartitionColumn)) {
-      // snapshot partition p holds the aggregate as-of epoch(p) + one RHS span; relabel to
-      // the as-of boundary so it matches the left rows' RHS-grid floor
+      // snapshot partition p holds the aggregate as of epoch(p) + one RHS partitionInterval;
+      // rename to that snapshot time so it matches the left rows' RHS-grid floor
       keyRenamedRightDf
         .withColumn(
           Constants.TimePartitionColumn,
@@ -126,7 +133,7 @@ abstract class JoinBase(val joinConfCloned: api.Join,
       keyRenamedRightDf
     }
 
-    // per-joinPart left binding key: floor(left.ts, RHS grid)
+    // per-joinPart left match key: floor(left.ts, RHS grid)
     val joinableLeftDf = if (crossGridSnapshot) {
       val ts = col(Constants.TimeColumn)
       val gridOffset = lit(Math.floorMod(partSpec.offsetMillis, partSpec.spanMillis))
@@ -363,7 +370,7 @@ abstract class JoinBase(val joinConfCloned: api.Join,
       )
       .getOrElse(Seq.empty)
 
-    val outputRangeToFill = rangeToFill.coveringRange(tableUtils.partitionSpec)
+    val outputRangeToFill = rangeToFill.intersectingRange(tableUtils.partitionSpec)
     def finalResult: DataFrame = tableUtils.scanDf(null, outputTable, range = Some(outputRangeToFill))
 
     if (unfilledRanges.isEmpty) {

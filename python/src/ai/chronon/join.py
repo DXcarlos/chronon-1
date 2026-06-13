@@ -362,11 +362,11 @@ def Join(
         defaults to offline_schedule. Set to "@never" to explicitly disable online scheduling even when online=True.
         Supports the same format as offline_schedule.
     :param partition_interval:
-        Output partition grain for this Join. Examples: "1d", "3h", "15m".
-        When set below daily, Chronon uses "yyyy-MM-dd-HH-mm" labels.
+        Output partition interval for this Join. Examples: "1d", "3h", "15m".
+        When set below daily, Chronon uses "yyyy-MM-dd-HH-mm" ds values.
     :param partition_offset:
         Offset from UTC midnight/epoch for the output partition grid. Defaults to zero
-        (midnight-aligned grid) and must be declared explicitly to move the grid; the cron
+        (boundaries at midnight) and must be declared explicitly to move the grid; the cron
         fire phase is treated as a processing delay relative to the declared grid, never as
         a grid offset.
     :param row_ids:
@@ -534,11 +534,12 @@ def Join(
         output_info is not None
         and window_utils.window_millis(output_info.partitionInterval) < window_utils.DAY_MILLIS
     ):
-        # the left is a coverage edge; right parts bind per-row as-of time on their own grid
+        # the left feeds the join's own partitions; right parts pick the latest snapshot at
+        # or before each row's ts on their own grid
         # (mixed hourly/daily/realtime cadence is the product) and are deliberately NOT checked
         left_inner = updated_left.events or updated_left.entities or updated_left.joinSource
         left_table = getattr(left_inner, "table", None) or getattr(left_inner, "snapshotTable", None)
-        window_utils.validate_coverage_edge(
+        window_utils.validate_source_grid(
             "This Join", window_utils.source_query(updated_left), f"left source {left_table}"
         )
 

@@ -1,7 +1,7 @@
 package ai.chronon.api.planner
 
 import ai.chronon.api.Extensions._
-import ai.chronon.api.{PartitionSpec, StagingQuery}
+import ai.chronon.api.{DataModel, PartitionSpec, StagingQuery}
 import ai.chronon.planner.{ConfPlan, StagingQueryNode}
 
 import scala.collection.JavaConverters._
@@ -10,7 +10,7 @@ case class StagingQueryPlanner(stagingQuery: StagingQuery)(implicit outputPartit
     extends ConfPlanner[StagingQuery](stagingQuery)(outputPartitionSpec) {
 
   private val confOutputPartitionSpec: PartitionSpec =
-    MetaDataUtils.outputPartitionSpec(stagingQuery.metaData, outputPartitionSpec)
+    PartitionSpecResolver.outputSpec(stagingQuery.metaData, outputPartitionSpec)
 
   private def semanticStagingQuery(stagingQuery: StagingQuery): StagingQuery = {
     val semanticStagingQuery = stagingQuery.deepCopy()
@@ -19,12 +19,12 @@ case class StagingQueryPlanner(stagingQuery: StagingQuery)(implicit outputPartit
   }
 
   override def buildPlan: ConfPlan = {
-    val tableDependencies = PartitionSpecResolver.resolveCoverageDependencies(
+    val tableDependencies = PartitionSpecResolver.validateAndResolveDependencies(
       stagingQuery.metaData.name,
       confOutputPartitionSpec,
       TableDependencies.fromStagingQuery(stagingQuery),
       dep => s"table dependency ${dep.tableInfo.table}",
-      MetaDataUtils.EdgeShape.Events
+      DataModel.EVENTS
     )
 
     val metaData = MetaDataUtils.layer(

@@ -215,8 +215,8 @@ def Model(
         Defaults to ['prod']. Valid values: 'prod', 'canary' (case-insensitive).
     :type environments: List[str]
     :param partition_interval:
-        Output partition grain for model training/deploy nodes. Examples: "1d", "3h", "15m".
-        When set below daily, Chronon uses "yyyy-MM-dd-HH-mm" labels.
+        Output partition interval for model training/deploy nodes. Examples: "1d", "3h", "15m".
+        When set below daily, Chronon uses "yyyy-MM-dd-HH-mm" ds values.
     :type partition_interval: Optional[Union[common.Window, str]]
     :param partition_offset:
         Offset from UTC midnight/epoch for the output partition grid.
@@ -273,7 +273,7 @@ def Model(
         if source is not None:
             inner = source.events or source.entities or source.joinSource
             source_table = getattr(inner, "table", None) or getattr(inner, "snapshotTable", None)
-            window_utils.validate_coverage_edge(
+            window_utils.validate_source_grid(
                 "This Model", window_utils.source_query(source), f"training source {source_table}"
             )
 

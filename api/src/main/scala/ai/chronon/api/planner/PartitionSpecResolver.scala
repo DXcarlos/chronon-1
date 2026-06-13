@@ -16,10 +16,13 @@ import ai.chronon.api.{
   Window
 }
 
-/** Planner-side partition resolution. This object owns fallback policy and writes the resolved
-  * specs into existing thrift fields so runtime code can read them without re-deriving policy.
+/** Planner-side partition resolution and grid validation. This object owns fallback policy and
+  * writes the resolved specs into existing thrift fields so runtime code can read them without
+  * re-deriving policy.
   */
 object PartitionSpecResolver {
+
+  private val logger = org.slf4j.LoggerFactory.getLogger(getClass)
 
   /** Resolves a node output spec from metadata, falling back to the supplied planner default. */
   def outputSpec(metadata: MetaData, defaultSpec: PartitionSpec): PartitionSpec =
@@ -29,7 +32,16 @@ object PartitionSpecResolver {
       outputTableInfo <- Option(executionInfo.outputTableInfo)
     } yield outputTableInfo.partitionSpec(defaultSpec)).getOrElse(defaultSpec)
 
-  /** Resolves the logical RHS snapshot grid for an events-left snapshot join part. */
+  /** The snapshot grid a snapshot-accuracy join part lives on: the RHS groupBy's declared
+    * output grid (partition_interval/partition_offset), falling back to the coarsest grid the
+    * groupBy's sources declare (planner nodes strip executionInfo from embedded groupBys, and
+    * an entity source's table grid IS its snapshot cadence), then to the join's grid when
+    * nothing is declared anywhere. Declaring the join's own grid is a no-op, so daily-RHS-
+    * under-daily-join reproduces the historical behavior exactly. Part tables are always
+    * partitioned by the join's partition column; only the RHS interval/offset/format carry over.
+    * Deliberate relaxation: sources are validated independently against the downstream node;
+    * sources need not be multiples of each other.
+    */
   def snapshotSpec(joinPart: JoinPart, joinSpec: PartitionSpec): PartitionSpec = {
     val declaredOutput = for {
       md <- Option(joinPart.groupBy.metaData)
@@ -57,33 +69,11 @@ object PartitionSpecResolver {
   def querySpec(query: Query, defaultSpec: PartitionSpec): Option[PartitionSpec] =
     Option(query.partitionInterval).map(_ => query.partitionSpec(defaultSpec))
 
-  /** Returns a copy of a TableInfo with all partition fields set to the supplied spec. */
-  def tableInfoWithSpec(tableInfo: TableInfo, partitionSpec: PartitionSpec): TableInfo = {
-    val result = Option(tableInfo).map(_.deepCopy()).getOrElse(new TableInfo())
-    result
-      .setPartitionColumn(partitionSpec.column)
-      .setPartitionFormat(partitionSpec.format)
-      .setPartitionInterval(WindowUtils.fromMillis(partitionSpec.spanMillis))
-    if (partitionSpec.offsetMillis != 0)
-      result.setPartitionOffset(WindowUtils.fromMillis(partitionSpec.offsetMillis))
-    else
-      result.unsetPartitionOffset()
-    result
-  }
-
-  /** Builds a TableInfo for a table with all partition fields set to the supplied spec. */
-  def tableInfo(table: String, partitionSpec: PartitionSpec): TableInfo =
-    tableInfoWithSpec(new TableInfo().setTable(table), partitionSpec)
-
-  /** Returns a copy of a TableInfo with missing partition fields resolved from a default spec. */
-  def resolveTableInfo(tableInfo: TableInfo, defaultSpec: PartitionSpec): TableInfo =
-    tableInfoWithSpec(tableInfo, tableInfo.partitionSpec(defaultFor(tableInfo, defaultSpec)))
-
   /** Returns a copy of a dependency whose tableInfo carries a fully resolved partition spec. */
   def resolveDependency(tableDependency: TableDependency, defaultSpec: PartitionSpec): TableDependency = {
     val result = tableDependency.deepCopy()
-    if (result.tableInfo != null) {
-      result.setTableInfo(resolveTableInfo(result.tableInfo, defaultSpec))
+    Option(result.tableInfo).foreach { tableInfo =>
+      result.setTableInfo(tableInfo.withSpec(tableInfo.partitionSpec(defaultFor(tableInfo, defaultSpec))))
     }
     result
   }
@@ -92,8 +82,8 @@ object PartitionSpecResolver {
   def resolveDependencies(tableDependencies: Seq[TableDependency], defaultSpec: PartitionSpec): Seq[TableDependency] =
     tableDependencies.map(resolveDependency(_, defaultSpec))
 
-  /** Resolves a producer node's output spec using the global planner default, not a consumer spec. */
-  def producerOutputSpec(metadata: MetaData, globalDefaultSpec: PartitionSpec): PartitionSpec =
+  /** Resolves an upstream node's output spec using the global planner default, not a downstream spec. */
+  def upstreamOutputSpec(metadata: MetaData, globalDefaultSpec: PartitionSpec): PartitionSpec =
     outputSpec(metadata, globalDefaultSpec)
 
   /** Computes the source-dependency lookback needed by events-left snapshot join parts. */
@@ -123,83 +113,130 @@ object PartitionSpecResolver {
     metaData.setExecutionInfo(executionInfo)
 
     val tableInfo = Option(executionInfo.outputTableInfo).getOrElse(new TableInfo().setTable(metaData.outputTable))
-    executionInfo.setOutputTableInfo(tableInfoWithSpec(tableInfo, spec))
+    executionInfo.setOutputTableInfo(tableInfo.withSpec(spec))
     joinPart
   }
 
-  /** Validates that an authored query can cover a consumer output grid. */
-  def validateCoverageQuery(nodeName: String,
-                            consumerSpec: PartitionSpec,
-                            query: Query,
-                            sourceDescription: String,
-                            shape: MetaDataUtils.EdgeShape): Unit = {
-    if (Option(query.partitionInterval).isDefined) {
-      MetaDataUtils.validateEdgeGrids(nodeName,
-                                      consumerSpec,
-                                      query.partitionSpec(consumerSpec),
-                                      sourceDescription,
-                                      shape)
-    } else {
-      validateDeclaredPartitionInterval(nodeName, consumerSpec, query, sourceDescription)
+  /** Sub-daily entity snapshots are supported but storage-expensive: every snapshot partition
+    * is a FULL copy of dimensional state, so an N-per-day grid multiplies storage and the
+    * partitions scanned by windowed aggregations by N - mostly for features that did not
+    * change between snapshots. If intraday entity state matters, prefer declaring mutations
+    * and TEMPORAL accuracy, which gives row-granularity freshness without re-materializing
+    * the dimension table N times a day.
+    */
+  def warnSubDailyEntitySnapshot(nodeName: String, spec: PartitionSpec): Unit =
+    if (!spec.isDaily) {
+      val perDay = spec.grid.partitionsPerDay
+      logger.warn(
+        s"$nodeName: sub-daily ENTITIES snapshots (${WindowUtils.millisToString(spec.spanMillis)} grid) " +
+          s"re-materialize the full dimensional state ${perDay}x per day, multiplying storage and " +
+          s"windowed-aggregation scan cost ${perDay}x. If intraday entity state matters, consider " +
+          "declaring a mutation stream and TEMPORAL accuracy instead, which tracks entity state at " +
+          "row granularity without re-materializing snapshots."
+      )
     }
+
+  /** A downstream table can only read whole partitions of its upstream, so every downstream
+    * boundary must also be an upstream boundary: the downstream partitionInterval is a multiple
+    * of the upstream's, and the boundaries line up. Example: 6h@4h over 3h@1h is fine - 04:00,
+    * 10:00, 16:00, 22:00 all sit on the 3h@1h grid. 6h@2h over 3h@1h is rejected - 02:00 doesn't.
+    *
+    * Snapshot join parts never reach this check: they pick the latest snapshot at or before each
+    * row's ts on the RHS's own grid, so any RHS grid is fine there (see
+    * JoinPlanner.validateJoinPartGrids). ENTITIES upstreams that do reach it (a groupBy reading
+    * an entity snapshot source passes the upstream's partitions through unchanged) get the same
+    * boundary-subset requirement, with a note that the per-row relaxation does not apply yet.
+    */
+  def validateUpstreamGrid(nodeName: String,
+                           downstreamSpec: PartitionSpec,
+                           upstreamSpec: PartitionSpec,
+                           upstreamDescription: String,
+                           dataModel: DataModel): Unit = {
+    val downstreamGrid = downstreamSpec.grid
+    val upstreamGrid = upstreamSpec.grid
+
+    val snapshotNote = dataModel match {
+      case DataModel.ENTITIES =>
+        " Reading a finer snapshot grid by picking the latest snapshot at or before each boundary" +
+          " is not supported here yet."
+      case DataModel.EVENTS => ""
+    }
+
+    require(
+      downstreamGrid.isExactMultipleOf(upstreamGrid),
+      s"Invalid partition interval for $nodeName: its partitionInterval " +
+        s"(${WindowUtils.millisToString(downstreamGrid.spanMillis)}) must be equal to or an exact multiple of " +
+        s"$upstreamDescription's (${WindowUtils.millisToString(upstreamGrid.spanMillis)}).$snapshotNote"
+    )
+    require(
+      downstreamGrid.linesUpWith(upstreamGrid),
+      s"Incompatible partition grids for $nodeName: its partitions (${downstreamGrid.show}) " +
+        s"don't line up on $upstreamDescription's boundaries (${upstreamGrid.show})."
+    )
   }
 
-  /** Validates that an edge does not silently inherit a sub-daily consumer grid. */
-  private def validateDeclaredPartitionInterval(nodeName: String,
-                                                consumerSpec: PartitionSpec,
-                                                query: Query,
-                                                sourceDescription: String): Unit = {
-    if (consumerSpec.spanMillis < WindowUtils.Day.millis && !(query.isSetTimePartitioned && query.timePartitioned)) {
-      throw undeclaredPartitionInterval(nodeName, consumerSpec, sourceDescription)
+  /** Validates an authored query against the downstream node's output grid. */
+  def validateQueryGrid(nodeName: String,
+                        downstreamSpec: PartitionSpec,
+                        query: Query,
+                        sourceDescription: String,
+                        dataModel: DataModel): Unit = {
+    if (Option(query.partitionInterval).isDefined) {
+      validateUpstreamGrid(nodeName, downstreamSpec, query.partitionSpec(downstreamSpec), sourceDescription, dataModel)
+    } else if (
+      downstreamSpec.spanMillis < WindowUtils.Day.millis && !(query.isSetTimePartitioned && query.timePartitioned)
+    ) {
+      // an undeclared upstream must not silently inherit a sub-daily downstream grid
+      throw undeclaredPartitionInterval(nodeName, downstreamSpec, sourceDescription)
     }
   }
 
   /** Validates a table dependency when it declares a physical partition grid. */
-  def validateCoverageTableInfo(nodeName: String,
-                                consumerSpec: PartitionSpec,
-                                tableInfo: TableInfo,
-                                sourceDescription: String,
-                                shape: MetaDataUtils.EdgeShape): Unit = {
+  def validateTableInfoGrid(nodeName: String,
+                            downstreamSpec: PartitionSpec,
+                            tableInfo: TableInfo,
+                            sourceDescription: String,
+                            dataModel: DataModel): Unit = {
     val hasPartialPartitionFields = Option(tableInfo).exists { ti =>
       ti.isSetPartitionColumn || ti.isSetPartitionFormat || ti.isSetPartitionOffset
     }
     if (Option(tableInfo).exists(_.isSetPartitionInterval)) {
-      MetaDataUtils.validateEdgeGrids(nodeName,
-                                      consumerSpec,
-                                      tableInfo.partitionSpec(consumerSpec),
-                                      sourceDescription,
-                                      shape)
+      validateUpstreamGrid(nodeName,
+                           downstreamSpec,
+                           tableInfo.partitionSpec(downstreamSpec),
+                           sourceDescription,
+                           dataModel)
     } else if (
-      consumerSpec.spanMillis < WindowUtils.Day.millis &&
+      downstreamSpec.spanMillis < WindowUtils.Day.millis &&
       hasPartialPartitionFields &&
       !Option(tableInfo).exists(ti => ti.isSetTimePartitioned && ti.timePartitioned)
     ) {
-      throw undeclaredPartitionInterval(nodeName, consumerSpec, sourceDescription)
+      throw undeclaredPartitionInterval(nodeName, downstreamSpec, sourceDescription)
     }
   }
 
-  /** Validates and resolves table dependencies for planner nodes with coverage requirements. */
-  def resolveCoverageDependencies(nodeName: String,
-                                  consumerSpec: PartitionSpec,
-                                  tableDependencies: Seq[TableDependency],
-                                  sourceDescription: TableDependency => String,
-                                  shape: MetaDataUtils.EdgeShape): Seq[TableDependency] =
+  /** Validates and resolves table dependencies for planner nodes that read whole upstream partitions. */
+  def validateAndResolveDependencies(nodeName: String,
+                                     downstreamSpec: PartitionSpec,
+                                     tableDependencies: Seq[TableDependency],
+                                     sourceDescription: TableDependency => String,
+                                     dataModel: DataModel): Seq[TableDependency] =
     tableDependencies.map { tableDependency =>
       require(tableDependency.tableInfo != null, s"$nodeName has a table dependency without tableInfo")
-      validateCoverageTableInfo(nodeName,
-                                consumerSpec,
-                                tableDependency.tableInfo,
-                                sourceDescription(tableDependency),
-                                shape)
-      resolveDependency(tableDependency, consumerSpec)
+      validateTableInfoGrid(nodeName,
+                            downstreamSpec,
+                            tableDependency.tableInfo,
+                            sourceDescription(tableDependency),
+                            dataModel)
+      resolveDependency(tableDependency, downstreamSpec)
     }
 
-  /** Builds the shared error for sub-daily coverage over an implicitly daily dependency. */
+  /** Builds the shared error for a sub-daily node over an implicitly daily dependency. */
   private def undeclaredPartitionInterval(nodeName: String,
-                                          consumerSpec: PartitionSpec,
+                                          downstreamSpec: PartitionSpec,
                                           sourceDescription: String): IllegalArgumentException =
     new IllegalArgumentException(
-      s"$nodeName has a sub-daily output grid (${consumerSpec.grid.show}) over $sourceDescription " +
+      s"$nodeName has a sub-daily output grid (${downstreamSpec.grid.show}) over $sourceDescription " +
         "with no declared partition_interval - implicitly daily. Every intraday run would wait for the " +
         "full day's partition and land a day late. Declare the source's partition_interval, or mark it " +
         "time_partitioned if data lands continuously and readiness can be sensed from timestamps."

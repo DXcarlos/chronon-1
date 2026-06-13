@@ -444,7 +444,7 @@ Keys {unselected_keys}, are unselected in source
                 for window in agg.windows:
                     assert window_utils.window_millis(window) % grid_ms == 0, (
                         "Detected a snapshot accuracy group by with a window that is not a "
-                        "multiple of its partition interval; grid-aligned snapshots cannot "
+                        "multiple of its partition interval; on-boundary snapshots cannot "
                         "resolve it. Adjust the window or declare a finer partition_interval. "
                         f"input_column: {agg.inputColumn}, windows: {agg.windows}, "
                         f"partition interval: {grid_ms}ms"
@@ -615,12 +615,12 @@ def GroupBy(
         Examples follow the same format as offline_schedule.
     :type online_schedule: Optional[str]
     :param partition_interval:
-        Output partition grain for this GroupBy. Examples: "1d", "3h", "15m".
-        When set below daily, Chronon uses "yyyy-MM-dd-HH-mm" labels.
+        Output partition interval for this GroupBy. Examples: "1d", "3h", "15m".
+        When set below daily, Chronon uses "yyyy-MM-dd-HH-mm" ds values.
     :type partition_interval: Optional[Union[common.Window, str]]
     :param partition_offset:
         Offset from UTC midnight/epoch for the output partition grid. Defaults to zero
-        (midnight-aligned grid) and must be declared explicitly to move the grid; the cron
+        (boundaries at midnight) and must be declared explicitly to move the grid; the cron
         fire phase is treated as a processing delay relative to the declared grid, never as
         a grid offset.
     :type partition_offset: Optional[Union[common.Window, str]]
@@ -775,7 +775,7 @@ def GroupBy(
         for source in sources:
             inner = source.events or source.entities or source.joinSource
             source_table = getattr(inner, "table", None) or getattr(inner, "snapshotTable", None)
-            window_utils.validate_coverage_edge(
+            window_utils.validate_source_grid(
                 "This GroupBy", window_utils.source_query(source), f"source {source_table}"
             )
 

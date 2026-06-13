@@ -17,7 +17,7 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
   private val oneHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 60 * 60 * 1000)
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
   // divides the day (unlike 5h, which PartitionSpec now rejects at construction) but is not a
-  // multiple of the 3h source grid, so it still exercises the widening-rule rejection
+  // multiple of the 3h source grid, so it still exercises the exact-multiple rejection
   private val fourHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 4 * 60 * 60 * 1000)
   private val sixHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 6 * 60 * 60 * 1000)
 
@@ -142,14 +142,14 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
     }
   }
 
-  it should "allow groupBy output intervals that widen or match the source partition interval" in {
+  it should "allow groupBy output intervals that coarsen or match the source partition interval" in {
     Seq(threeHourSpec, sixHourSpec, PartitionSpec.daily).foreach { groupBySpec =>
       val gb = withOutputSpec(withEventSourceSpec(buildGroupBy(), threeHourSpec), groupBySpec)
       noException should be thrownBy GroupByPlanner(gb).buildPlan
     }
   }
 
-  it should "reject groupBy output intervals that are narrower or not multiples of the source partition interval" in {
+  it should "reject groupBy output intervals that are finer or not multiples of the source partition interval" in {
     Seq(oneHourSpec, fourHourSpec).foreach { groupBySpec =>
       val gb = withOutputSpec(withEventSourceSpec(buildGroupBy(), threeHourSpec), groupBySpec)
       an[IllegalArgumentException] should be thrownBy GroupByPlanner(gb).buildPlan
@@ -175,10 +175,10 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
     noException should be thrownBy GroupByPlanner(buildGroupBy()).buildPlan
   }
 
-  it should "stamp the consumer grid onto time_partitioned dependencies" in {
+  it should "stamp the downstream grid onto time_partitioned dependencies" in {
     // a time-partitioned source has no physical grid (its column is a real timestamp), so the
-    // dependency must carry the consumer's grid: sensing and range math then quantize intraday
-    // requirements on the node's grain instead of stalling on a daily boundary
+    // dependency must carry the downstream node's grid: sensing and range math then quantize
+    // intraday requirements on the node's partitionInterval instead of stalling on a daily boundary
     val gb = withOutputSpec(buildGroupBy(), threeHourSpec)
     gb.sources.asScala.foreach(_.getEvents.query.setTimePartitioned(true))
 
@@ -191,20 +191,21 @@ class GroupByPlannerTest extends AnyFlatSpec with Matchers {
     dep.tableInfo.partitionFormat should equal(threeHourSpec.format)
   }
 
-  it should "reject groupBy output grids that are not congruent with the source grid" in {
+  it should "reject groupBy output boundaries that don't line up on the source grid" in {
     val offsetSourceSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
     val gb = withOutputSpec(withEventSourceSpec(buildGroupBy(), offsetSourceSpec), sixHourSpec)
 
     val error = the[IllegalArgumentException] thrownBy GroupByPlanner(gb).buildPlan
-    // the error must name both grids so the misalignment is actionable
-    error.getMessage should include("consumer grid")
-    error.getMessage should include("producer grid")
+    // the error must name both grids so the mismatch is actionable
+    error.getMessage should include("don't line up")
+    error.getMessage should include("6h starting 00:00")
+    error.getMessage should include("3h starting 01:00")
   }
 
-  it should "allow groupBy output grids congruent with an offset source grid" in {
+  it should "allow groupBy output boundaries that line up on an offset source grid" in {
     val offsetSourceSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
-    // offsets differing by a whole number of producer intervals are congruent: 1h and 4h grids
-    // over a 3h producer interval both line up with the 1h-phased source grid
+    // offsets differing by a whole number of upstream intervals line up: 1h and 4h offsets
+    // over a 3h upstream interval both sit on the 1h-offset source grid
     val oneHourOffsetSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 6 * 60 * 60 * 1000, offsetMillis = 60 * 60 * 1000)
     val fourHourOffsetSpec =
       PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 6 * 60 * 60 * 1000, offsetMillis = 4 * 60 * 60 * 1000)

@@ -9,7 +9,7 @@ object DependencyResolver {
   private def minus(partition: String, offset: Window)(implicit partitionSpec: PartitionSpec): String = {
     if (partition == null) return null
     if (offset == null) return null
-    // defense in depth: unbounded offsets mean "no bound", not BCE-era label arithmetic
+    // defense in depth: unbounded offsets mean "no bound", not BCE-era partition arithmetic
     if (offset.isUnboundedSentinel) return null
     partitionSpec.minus(partition, offset)
   }
@@ -42,7 +42,7 @@ object DependencyResolver {
     val childStartMillis = parentRange.startMillis + Option(tableDep.getEndOffset).map(_.millis).getOrElse(0L)
     val childEndMillis = parentRange.endMillis + Option(tableDep.getStartOffset).map(_.millis).getOrElse(0L)
     if (childStartMillis >= childEndMillis) None
-    else outputPartitionSpec.rangeCovering(PartitionInterval(childStartMillis, childEndMillis))
+    else outputPartitionSpec.rangeIntersecting(PartitionInterval(childStartMillis, childEndMillis))
   }
 
   def computeInputRange(queryRange: PartitionRange, tableDep: TableDependency): Option[PartitionRange] = {

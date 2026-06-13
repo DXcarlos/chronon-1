@@ -162,10 +162,10 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
         if (join.left.dataModel == DataModel.EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
           val partSpec = JoinUtils.partSnapshotSpec(joinPart)
           if (partSpec.hasSameGrid(tableUtils.partitionSpec)) {
-            // Same-grid snapshot parts keep the historical right-aligned physical label.
+            // Same-grid snapshot parts keep the historical behavior: read one partition back.
             JoinUtils.snapshotLookbackRange(dayStep, partSpec)
           } else {
-            // Cross-grid snapshot parts are densely placed on the physical join grid and
+            // Cross-grid snapshot part tables are partitioned like the join output and
             // carry the RHS as-of boundary in `ts`.
             dayStep
           }
@@ -211,8 +211,8 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
 
     val keyRenamedRightDf = prefixedRightDf.select(newColumns: _*)
 
-    // adjust join keys: snapshot binding is per row ON THE RHS GROUPBY'S DECLARED GRID - a row
-    // at time T binds the latest RHS snapshot whose as-of boundary is <= T, independent of the
+    // adjust join keys: the snapshot pick is per row ON THE RHS GROUPBY'S DECLARED GRID - a row
+    // at time T reads the latest RHS snapshot whose time is <= T, independent of the
     // join's own grid. Daily RHS under a daily join degenerates to the historical behavior.
     val joinableRightDf = if (crossGridSnapshot) {
       keyRenamedRightDf
@@ -220,7 +220,8 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
         .drop(tableUtils.partitionColumn, Constants.TimeColumn)
         .dropDuplicates(keys)
     } else if (additionalKeys.contains(Constants.TimePartitionColumn)) {
-      // snapshot partition p holds the aggregate as-of epoch(p) + one RHS span; relabel to
+      // snapshot partition p holds the aggregate as of epoch(p) + one RHS partitionInterval;
+      // rename to
       // the as-of boundary so it matches the left rows' RHS-grid floor
       keyRenamedRightDf
         .withColumn(
@@ -237,7 +238,7 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
       keyRenamedRightDf
     }
 
-    // the left binding key is per-joinPart (different parts may live on different RHS grids):
+    // the left match key is per-joinPart (different parts may live on different RHS grids):
     // re-stamp TimePartitionColumn = floor(left.ts, RHS grid) instead of trusting the shared
     // join-grid column stamped by SourceJob
     val joinableLeftDf = if (crossGridSnapshot) {

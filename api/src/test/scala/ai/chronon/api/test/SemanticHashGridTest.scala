@@ -7,7 +7,7 @@ import org.scalatest.matchers.should.Matchers
 
 import java.util.Collections
 
-/** The output partition grid (interval + offset) is a data-layout property: changing it relabels
+/** The output partition grid (interval + offset) is a data-layout property: changing it renames every ds in
   * the output table, so it must participate in semantic hashing and force a version bump. The
   * schedule (and hence the derived processing delay) is execution-only and must not. The grid
   * participates via a conditional token so every existing (daily) conf keeps its exact hash.
@@ -63,7 +63,7 @@ class SemanticHashGridTest extends AnyFlatSpec with Matchers {
     offsetThreeHour.semanticHash should not be threeHour.semanticHash
   }
 
-  it should "treat congruent interval units as the same grid" in {
+  it should "treat equal-millis interval units as the same grid" in {
     val hoursForm = buildGroupBy(Some(grid(new Window(3, TimeUnit.HOURS))))
     val minutesForm = buildGroupBy(Some(grid(new Window(180, TimeUnit.MINUTES))))
     hoursForm.semanticHash should be(minutesForm.semanticHash)

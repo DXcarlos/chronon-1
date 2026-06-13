@@ -53,7 +53,7 @@ class TestGridInDiffDetection:
             _group_by(interval=_hours(3)),
         )
 
-    def test_congruent_units_are_not_a_diff(self):
+    def test_equal_millis_units_are_not_a_diff(self):
         assert not _has_diff(
             _group_by(interval=_hours(3)), _group_by(interval=_minutes(180))
         )

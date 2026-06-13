@@ -25,8 +25,9 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
   private def executionInfoFor(table: String, spec: PartitionSpec): ExecutionInfo =
     new ExecutionInfo().setOutputTableInfo(outputTableInfo(table, spec))
 
-  // the left is a coverage edge: sub-daily joins need a left whose grain covers the join grid,
-  // so sub-daily fixtures declare the left's partition interval explicitly
+  // join boundaries must sit on the left source's boundaries: sub-daily joins need a left
+  // whose declared grid the join's boundaries line up on, so sub-daily fixtures declare the
+  // left's partition interval explicitly
   private def leftEventsWithSpec(spec: PartitionSpec): ai.chronon.api.Source = {
     val query = Builders.Query(partitionColumn = spec.column)
     query.setPartitionFormat(spec.format)
@@ -139,7 +140,7 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
     backfillNode.metaData.executionInfo.outputTableInfo.partitionFormat should equal(PartitionSpec.daily.format)
   }
 
-  it should "resolve metadata upload dependencies using the producer output grid, not the join grid" in {
+  it should "resolve metadata upload dependencies using the upstream output grid, not the join grid" in {
     val defaultDailyGroupBy = Builders.GroupBy(
       sources = Seq(sourceEventsWithSpec("test.daily_source", threeHourSpec)),
       keyColumns = Seq("listing_id"),
@@ -168,8 +169,8 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
     groupByDep.tableInfo.partitionInterval should equal(WindowUtils.Day)
   }
 
-  it should "allow sub-daily joins over coarser groupBy outputs - parts bind by left row time" in {
-    // snapshot parts are bound as-of the left row time (floor to grid + one-span shift) and
+  it should "allow sub-daily joins over coarser groupBy outputs - parts read by left row time" in {
+    // snapshot parts pick the latest snapshot at or before the left row time and
     // temporal parts recompute from raw events, so a finer join over a coarser groupBy output
     // grid is staleness, not missing data
     val dailySnapshotGroupBy = groupByWithOutputSpec("daily_snapshot_gb", PartitionSpec.daily, Accuracy.SNAPSHOT)
@@ -209,8 +210,8 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
   }
 
   it should "reject a sub-daily join over a left source with no declared partition interval" in {
-    // unlike right parts, the left is a coverage edge: an undeclared (implicitly daily) left
-    // under a sub-daily join is the silent intraday-staleness trap
+    // unlike right parts, the left feeds the join's own partitions: an undeclared (implicitly
+    // daily) left under a sub-daily join is the silent intraday-staleness trap
     val subDailyJoin = Join(
       metaData = MetaData(
         name = "undeclared_left_join",
@@ -281,12 +282,12 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
       partDep.startOffset
     }
 
-    // Same-grid snapshot parts keep the historical shifted physical label.
+    // Same-grid snapshot parts keep the historical behavior: read one partition back.
     mergeSnapshotDepOffset(PartitionSpec.daily, PartitionSpec.daily).millis should equal(WindowUtils.Day.millis)
     mergeSnapshotDepOffset(threeHourSpec, threeHourSpec).millis should equal(threeHourSpec.spanMillis)
 
-    // Cross-grid snapshot parts are densely placed on the join grid and carry finer as-of
-    // buckets in `ts`, so readiness stays on the requested physical range.
+    // Cross-grid snapshot part tables are partitioned exactly like the join output and carry
+    // each row's snapshot time in `ts`, so readiness stays on the requested ds range; no shift.
     mergeSnapshotDepOffset(PartitionSpec.daily, threeHourSpec).millis shouldBe 0L
     mergeSnapshotDepOffset(threeHourSpec, PartitionSpec.daily).millis shouldBe 0L
   }

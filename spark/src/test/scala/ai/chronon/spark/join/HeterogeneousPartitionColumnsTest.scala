@@ -137,7 +137,7 @@ class HeterogeneousPartitionColumnsTest extends BaseJoinTest {
     // Pin start past the boundary partition. DataFrameGen.events derives its time window from
     // CStream.TimeStream(minTs = currentTimeMillis() - window), so the first written partition
     // spans only the fraction of a day from minTs's time-of-day to midnight and is materially
-    // sparser than the rest. tableUtils.partitions normalizes grid-matching labels to the
+    // sparser than the rest. tableUtils.partitions normalizes grid-matching ds values to the
     // global format, so translate back into the query's declared format.
     val writtenPartitions =
       tableUtils.partitions(itemQueriesTable, tablePartitionSpec = Some(leftEndFormatSpec)).sorted

@@ -3,7 +3,7 @@ package ai.chronon.api.planner
 import ai.chronon.api.Extensions.{GroupByOps, WindowUtils}
 import ai.chronon.api.Extensions._
 import ai.chronon.api.ScalaJavaConversions.IterableOps
-import ai.chronon.api.{Join, PartitionSpec, TableDependency}
+import ai.chronon.api.{DataModel, Join, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.planner
 import ai.chronon.planner.Node
 
@@ -13,34 +13,34 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     extends ConfPlanner[Join](join)(outputPartitionSpec) {
 
   private val confOutputPartitionSpec: PartitionSpec =
-    MetaDataUtils.outputPartitionSpec(join.metaData, outputPartitionSpec)
+    PartitionSpecResolver.outputSpec(join.metaData, outputPartitionSpec)
 
   private def validatePartitionIntervals(): Unit = {
     for {
       left <- Option(join.left)
       query <- Option(left.query)
     } {
-      PartitionSpecResolver.validateCoverageQuery(
+      PartitionSpecResolver.validateQueryGrid(
         join.metaData.name,
         confOutputPartitionSpec,
         query,
         s"left source ${left.rawTable}",
-        MetaDataUtils.EdgeShape.of(left.dataModel)
+        left.dataModel
       )
     }
-    validateBootstrapCoverage()
+    validateBootstrapGrids()
     JoinPlanner.validateJoinPartGrids(join, confOutputPartitionSpec)
   }
 
-  private def validateBootstrapCoverage(): Unit =
+  private def validateBootstrapGrids(): Unit =
     Option(join.bootstrapParts).foreach { bootstrapParts =>
       val deps = bootstrapParts.asScala.map(bp => TableDependencies.fromTable(bp.table, bp.query)).toSeq
-      PartitionSpecResolver.resolveCoverageDependencies(
+      PartitionSpecResolver.validateAndResolveDependencies(
         join.metaData.name,
         confOutputPartitionSpec,
         deps,
         dep => s"bootstrap table ${dep.tableInfo.table}",
-        MetaDataUtils.EdgeShape.Events
+        DataModel.EVENTS
       )
     }
 
@@ -85,11 +85,11 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
       } else {
         groupBy.metaData.outputTable + s"__${GroupByPlanner.UploadToKV}"
       }
-      val groupByOutputSpec = PartitionSpecResolver.producerOutputSpec(groupBy.metaData, outputPartitionSpec)
+      val groupByOutputSpec = PartitionSpecResolver.upstreamOutputSpec(groupBy.metaData, outputPartitionSpec)
 
       val groupByDep = new TableDependency()
         .setTableInfo(
-          MetaDataUtils.tableInfo(groupByTableName, groupByOutputSpec)
+          new TableInfo().setTable(groupByTableName).withSpec(groupByOutputSpec)
         )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())
@@ -127,7 +127,7 @@ case class MonolithJoinPlanner(join: Join)(implicit outputPartitionSpec: Partiti
     // Stats compute depends on the monolith join output
     val tableDep = new TableDependency()
       .setTableInfo(
-        MetaDataUtils.tableInfo(monolithJoinNode.metaData.outputTable, confOutputPartitionSpec)
+        new TableInfo().setTable(monolithJoinNode.metaData.outputTable).withSpec(confOutputPartitionSpec)
       )
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())

@@ -11,7 +11,7 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
     extends ConfPlanner[Model](model)(outputPartitionSpec) {
 
   private val confOutputPartitionSpec: PartitionSpec =
-    MetaDataUtils.outputPartitionSpec(model.metaData, outputPartitionSpec)
+    PartitionSpecResolver.outputSpec(model.metaData, outputPartitionSpec)
 
   private def validatePartitionIntervals(): Unit = {
     for {
@@ -19,12 +19,12 @@ class ModelPlanner(model: Model)(implicit outputPartitionSpec: PartitionSpec)
       trainingDataSource <- Option(trainingConf.trainingDataSource)
       query <- Option(trainingDataSource.query)
     } {
-      PartitionSpecResolver.validateCoverageQuery(
+      PartitionSpecResolver.validateQueryGrid(
         model.metaData.name,
         confOutputPartitionSpec,
         query,
         s"training source ${trainingDataSource.rawTable}",
-        MetaDataUtils.EdgeShape.of(trainingDataSource.dataModel)
+        trainingDataSource.dataModel
       )
     }
   }

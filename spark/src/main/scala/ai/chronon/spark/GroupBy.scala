@@ -759,8 +759,8 @@ object GroupBy {
 
     implicit val tu: TableUtils = tableUtils
     implicit val sourcePartitionSpec: PartitionSpec = source.query.partitionSpec(tableUtils.partitionSpec)
-    // coveringRange so a coarser-grained source keeps the full coverage of the query range
-    val effectiveQueryRange = queryRange.coveringRange(sourcePartitionSpec)
+    // intersectingRange so a coarser source still supplies the query range's full time interval
+    val effectiveQueryRange = queryRange.intersectingRange(sourcePartitionSpec)
     val sourceStartPartition = sourcePartitionSpec.normalizeStart(source.query.startPartition, tableUtils.partitionSpec)
     val sourceEndPartition = sourcePartitionSpec.normalizeEnd(source.query.endPartition, tableUtils.partitionSpec)
 
@@ -774,8 +774,8 @@ object GroupBy {
       case ENTITIES => SourceDataProfile(queryStart, sourceStartPartition, effectiveEnd)
       case EVENTS =>
         if (Option(source.getEvents.isCumulative).getOrElse(false)) {
-          // lastAvailablePartition normalizes grid-matching labels to the global format;
-          // translate back so all labels in this method stay in the source's spec
+          // lastAvailablePartition normalizes grid-matching ds values to the global format;
+          // translate back so all ds values in this method stay in the source's spec
           lazy val latestAvailable: Option[String] =
             tableUtils
               .lastAvailablePartition(source.table,
@@ -794,10 +794,10 @@ object GroupBy {
         } else {
           val minQuery = sourcePartitionSpec.before(queryStart)
           // sawtooth windows round their start down to the tail hop grid (e.g. daily hops for
-          // a 14d window), so the scan must cover the hop-aligned tail - not just the raw
-          // minQuery - window instant. A no-op for daily grids, where minQuery - window is
-          // already day-aligned; under sub-daily grids it extends the scan back by at most
-          // one tail hop.
+          // a 14d window), so the scan must reach back to the tail-hop boundary - not just the
+          // raw minQuery - window instant. A no-op for daily grids, where minQuery - window
+          // already sits on a day boundary; under sub-daily grids it extends the scan back by
+          // at most one tail hop.
           val windowStart: String =
             window
               .filterNot(_.isUnboundedSentinel)
@@ -871,7 +871,7 @@ object GroupBy {
     metaColumns ++= timeMapping
 
     // typed predicates: against a real timestamp/date column (time_partitioned sources),
-    // label literals cast to NULL and silently empty the scan - epoch bounds are emitted instead
+    // ds literals cast to NULL and silently empty the scan - epoch bounds are emitted instead
     val scanTable = if (mutations) source.getEntities.mutationTable.cleanSpec else source.table
     val partitionConditions = tableUtils.rangeWheresFor(
       intersectedRange,

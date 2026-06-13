@@ -81,14 +81,14 @@ object Extensions {
     def apply(dataFrame: DataFrame)(implicit partitionSpec: PartitionSpec): DfWithStats = {
       val pCol = partitionSpec.column
       val pFormat = partitionSpec.format
-      // string labels are already in the spec's format: date_format would route them through
-      // an implicit string->timestamp cast, which nulls any label Spark can't natively cast
+      // string ds values are already in the spec's format: date_format would route them through
+      // an implicit string->timestamp cast, which nulls any value Spark can't natively cast
       // (e.g. dash-separated sub-daily formats) and would key every count under null
-      val labelCol =
+      val partitionValueCol =
         if (dataFrame.schema(pCol).dataType == StringType) col(pCol)
         else date_format(col(pCol), pFormat)
       val partitionCounts = dataFrame
-        .groupBy(labelCol)
+        .groupBy(partitionValueCol)
         .count()
         .collect()
         .map(row => row.getString(0) -> row.getLong(1))
@@ -234,10 +234,10 @@ object Extensions {
     def withTimeFormattedColumn(columnName: String, timeColumn: String, format: String): DataFrame =
       df.withColumn(columnName, from_unixtime(df.col(timeColumn) / 1000, format))
 
-    // label of the partition containing the timestamp: floored to the spec's grid
-    // (span + offset) before formatting. Plain format truncation would leave sub-daily
-    // timestamps off-grid (12:07 -> "... 12:07"), which silently breaks equality joins
-    // against grid-aligned partition labels.
+    // ds of the partition containing the timestamp: floored to the spec's grid
+    // (partitionInterval + partitionOffset) before formatting. Plain format truncation would
+    // leave sub-daily timestamps off the boundary (12:07 -> "... 12:07"), which silently
+    // breaks equality joins against on-boundary partition values.
     def withTimeBasedColumn(columnName: String,
                             timeColumn: String = Constants.TimeColumn,
                             spec: PartitionSpec = tableUtils.partitionSpec): DataFrame = {
@@ -304,7 +304,7 @@ object Extensions {
       }
 
       // translate partition values through the target spec; format equality is not enough
-      // because mixed grids can share a label format but require target-grid flooring.
+      // because mixed grids can share a ds format but require target-grid flooring.
       if (existingSpec.format != newSpec.format || !existingSpec.hasSameGrid(newSpec)) {
         val seconds = unix_timestamp(col(newSpec.column), existingSpec.format)
         val spanSeconds = newSpec.spanMillis / 1000

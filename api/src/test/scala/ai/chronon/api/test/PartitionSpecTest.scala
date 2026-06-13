@@ -12,10 +12,10 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
   private val dailySpec = PartitionSpec.daily
   private val compactSpec = PartitionSpec("ds", "yyyyMMdd", 24 * 60 * 60 * 1000)
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
-  private val unalignedThreeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
+  private val offsetThreeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
   private val fifteenMinuteSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 15 * 60 * 1000)
 
-  "PartitionGrid" should "own grid invariants independent of label format" in {
+  "PartitionGrid" should "own grid invariants independent of ds format" in {
     an[IllegalArgumentException] should be thrownBy PartitionGrid(0)
     an[IllegalArgumentException] should be thrownBy PartitionGrid(5 * 60 * 60 * 1000L)
     an[IllegalArgumentException] should be thrownBy PartitionGrid(24 * 60 * 60 * 1000L, 60 * 60 * 1000L)
@@ -34,22 +34,22 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
       Some("grid:interval_ms=10800000,offset_ms=3600000"))
   }
 
-  it should "make producer alignment directional" in {
-    val producer = PartitionGrid(3 * 60 * 60 * 1000L, 60 * 60 * 1000L)
-    val alignedConsumer = PartitionGrid(6 * 60 * 60 * 1000L, 4 * 60 * 60 * 1000L)
-    val unalignedConsumer = PartitionGrid(6 * 60 * 60 * 1000L, 2 * 60 * 60 * 1000L)
+  it should "make the boundary-subset check directional" in {
+    val upstream = PartitionGrid(3 * 60 * 60 * 1000L, 60 * 60 * 1000L)
+    val linedUpDownstream = PartitionGrid(6 * 60 * 60 * 1000L, 4 * 60 * 60 * 1000L)
+    val offBoundaryDownstream = PartitionGrid(6 * 60 * 60 * 1000L, 2 * 60 * 60 * 1000L)
 
-    alignedConsumer.isExactMultipleOf(producer) should be(true)
-    alignedConsumer.isAlignedTo(producer) should be(true)
-    alignedConsumer.canCover(producer) should be(true)
+    linedUpDownstream.isExactMultipleOf(upstream) should be(true)
+    linedUpDownstream.linesUpWith(upstream) should be(true)
+    linedUpDownstream.isBoundarySubsetOf(upstream) should be(true)
 
-    producer.isExactMultipleOf(alignedConsumer) should be(false)
-    producer.isAlignedTo(alignedConsumer) should be(false)
-    producer.canCover(alignedConsumer) should be(false)
+    upstream.isExactMultipleOf(linedUpDownstream) should be(false)
+    upstream.linesUpWith(linedUpDownstream) should be(false)
+    upstream.isBoundarySubsetOf(linedUpDownstream) should be(false)
 
-    unalignedConsumer.isExactMultipleOf(producer) should be(true)
-    unalignedConsumer.isAlignedTo(producer) should be(false)
-    unalignedConsumer.canCover(producer) should be(false)
+    offBoundaryDownstream.isExactMultipleOf(upstream) should be(true)
+    offBoundaryDownstream.linesUpWith(upstream) should be(false)
+    offBoundaryDownstream.isBoundarySubsetOf(upstream) should be(false)
   }
 
   "PartitionSpec.expandRange" should "expand date range into individual dates" in {
@@ -68,8 +68,8 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     result should be(List("2024-01-15-00-00", "2024-01-15-03-00", "2024-01-15-06-00", "2024-01-15-09-00"))
   }
 
-  it should "expand unaligned sub-daily ranges by the partition interval" in {
-    val result = unalignedThreeHourSpec.expandRange("2024-01-01-22-00", "2024-01-02-04-00")
+  it should "expand offset sub-daily ranges by the partition interval" in {
+    val result = offsetThreeHourSpec.expandRange("2024-01-01-22-00", "2024-01-02-04-00")
     result should be(List("2024-01-01-22-00", "2024-01-02-01-00", "2024-01-02-04-00"))
   }
 
@@ -79,40 +79,40 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     result should be(expected)
   }
 
-  "PartitionSpec.plusFast" should "add one day correctly" in {
-    val result = dailySpec.plusFast("2024-01-01", WindowUtils.Day)
+  "PartitionSpec.plus" should "add one day correctly" in {
+    val result = dailySpec.plus("2024-01-01", WindowUtils.Day)
     result should be("2024-01-02")
   }
 
   it should "add multiple days correctly" in {
     val window = new Window(3, TimeUnit.DAYS)
-    val result = dailySpec.plusFast("2024-01-01", window)
+    val result = dailySpec.plus("2024-01-01", window)
     result should be("2024-01-04")
   }
 
   it should "handle month boundary correctly when adding days" in {
-    val result = dailySpec.plusFast("2024-01-31", WindowUtils.Day)
+    val result = dailySpec.plus("2024-01-31", WindowUtils.Day)
     result should be("2024-02-01")
   }
 
-  "PartitionSpec.afterFast" should "return the next day" in {
-    val result = dailySpec.afterFast("2024-03-15")
+  "PartitionSpec.after" should "return the next day" in {
+    val result = dailySpec.after("2024-03-15")
     result should be("2024-03-16")
   }
 
   it should "return the next sub-daily partition" in {
-    threeHourSpec.afterFast("2024-03-15-21-00") should be("2024-03-16-00-00")
-    fifteenMinuteSpec.afterFast("2024-03-15-00-45") should be("2024-03-15-01-00")
+    threeHourSpec.after("2024-03-15-21-00") should be("2024-03-16-00-00")
+    fifteenMinuteSpec.after("2024-03-15-00-45") should be("2024-03-15-01-00")
   }
 
-  "PartitionSpec.minusFast" should "subtract days correctly" in {
+  "PartitionSpec.minus" should "subtract days correctly" in {
     val window = new Window(2, TimeUnit.DAYS)
-    val result = dailySpec.minusFast("2024-01-03", window)
+    val result = dailySpec.minus("2024-01-03", window)
     result should be("2024-01-01")
   }
 
   it should "handle month boundary correctly when subtracting days" in {
-    val result = dailySpec.minusFast("2024-02-01", WindowUtils.Day)
+    val result = dailySpec.minus("2024-02-01", WindowUtils.Day)
     result should be("2024-01-31")
   }
 
@@ -159,8 +159,8 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
 
   it should "floor timestamps using partition offset" in {
     val jan2Midnight = dailySpec.epochMillis("2024-01-02")
-    unalignedThreeHourSpec.at(jan2Midnight + 30 * 60 * 1000) should be("2024-01-01-22-00")
-    unalignedThreeHourSpec.at(jan2Midnight + 60 * 60 * 1000) should be("2024-01-02-01-00")
+    offsetThreeHourSpec.at(jan2Midnight + 30 * 60 * 1000) should be("2024-01-01-22-00")
+    offsetThreeHourSpec.at(jan2Midnight + 60 * 60 * 1000) should be("2024-01-02-01-00")
   }
 
   it should "round-trip between formats" in {
@@ -169,7 +169,7 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     roundTripped should be(date)
   }
 
-  "PartitionSpec.canonical" should "admit only fully-parsing on-grid labels, normalizing padding" in {
+  "PartitionSpec.canonical" should "admit only fully-parsing on-boundary ds values, normalizing padding" in {
     val spec = PartitionSpec("ds", "yyyy-MM-dd-HH", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
     spec.canonical("2024-01-02-04") should be(Some("2024-01-02-04"))
     spec.canonical("2024-01-02-4") should be(Some("2024-01-02-04")) // unpadded but on-grid
@@ -190,40 +190,40 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     compactSpec.minus("20251125", twoDays) should be("20251123")
   }
 
-  "PartitionRange.coveringRange" should "convert CLI dates (yyyy-MM-dd) to yyyyMMdd" in {
+  "PartitionRange.intersectingRange" should "convert CLI dates (yyyy-MM-dd) to yyyyMMdd" in {
     val cliRange = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
-    val covering = cliRange.coveringRange(compactSpec)
+    val intersecting = cliRange.intersectingRange(compactSpec)
 
-    covering.start should be("20251125")
-    covering.end should be("20251201")
-    covering.partitionSpec should be(compactSpec)
+    intersecting.start should be("20251125")
+    intersecting.end should be("20251201")
+    intersecting.partitionSpec should be(compactSpec)
   }
 
-  it should "preserve range validity after coverage conversion" in {
+  it should "preserve range validity after cross-format conversion" in {
     val cliRange = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
-    val covering = cliRange.coveringRange(compactSpec)
+    val intersecting = cliRange.intersectingRange(compactSpec)
 
-    covering.wellDefined should be(true)
-    covering.partitions.size should be(7)
-    covering.partitions.head should be("20251125")
-    covering.partitions.last should be("20251201")
+    intersecting.wellDefined should be(true)
+    intersecting.partitions.size should be(7)
+    intersecting.partitions.head should be("20251125")
+    intersecting.partitions.last should be("20251201")
   }
 
   it should "be a no-op when source and target formats match" in {
     val range = PartitionRange("2025-11-25", "2025-12-01")(dailySpec)
-    val covering = range.coveringRange(dailySpec)
+    val intersecting = range.intersectingRange(dailySpec)
 
-    covering.start should be("2025-11-25")
-    covering.end should be("2025-12-01")
+    intersecting.start should be("2025-11-25")
+    intersecting.end should be("2025-12-01")
   }
 
-  it should "cover a daily range with every overlapping unaligned sub-daily partition" in {
+  it should "expand a daily range into every overlapping offset sub-daily partition" in {
     val range = PartitionRange("2024-01-02", "2024-01-02")(dailySpec)
-    val covering = range.coveringRange(unalignedThreeHourSpec)
+    val intersecting = range.intersectingRange(offsetThreeHourSpec)
 
-    covering.start should be("2024-01-01-22-00")
-    covering.end should be("2024-01-02-22-00")
-    covering.partitions should contain theSameElementsInOrderAs Seq(
+    intersecting.start should be("2024-01-01-22-00")
+    intersecting.end should be("2024-01-02-22-00")
+    intersecting.partitions should contain theSameElementsInOrderAs Seq(
       "2024-01-01-22-00",
       "2024-01-02-01-00",
       "2024-01-02-04-00",
@@ -236,11 +236,11 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     )
   }
 
-  it should "cover an unaligned boundary partition with all impacted daily partitions" in {
-    val range = PartitionRange("2024-01-02-22-00", "2024-01-02-22-00")(unalignedThreeHourSpec)
-    val covering = range.coveringRange(dailySpec)
+  it should "expand a midnight-straddling partition into all impacted daily partitions" in {
+    val range = PartitionRange("2024-01-02-22-00", "2024-01-02-22-00")(offsetThreeHourSpec)
+    val intersecting = range.intersectingRange(dailySpec)
 
-    covering should be(PartitionRange("2024-01-02", "2024-01-03")(dailySpec))
+    intersecting should be(PartitionRange("2024-01-02", "2024-01-03")(dailySpec))
   }
 
   it should "convert a sub-daily range to daily without underflowing" in {
@@ -248,25 +248,26 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     // containing (endMillis - 1ms), not from subtracting a full daily interval (which would
     // underflow to 2024-01-01)
     val lastInterval = PartitionRange("2024-01-02-21-00", "2024-01-02-21-00")(threeHourSpec)
-    lastInterval.coveringRange(dailySpec) should be(PartitionRange("2024-01-02", "2024-01-02")(dailySpec))
+    lastInterval.intersectingRange(dailySpec) should be(PartitionRange("2024-01-02", "2024-01-02")(dailySpec))
 
     val firstInterval = PartitionRange("2024-01-02-00-00", "2024-01-02-00-00")(threeHourSpec)
-    firstInterval.coveringRange(dailySpec) should be(PartitionRange("2024-01-02", "2024-01-02")(dailySpec))
+    firstInterval.intersectingRange(dailySpec) should be(PartitionRange("2024-01-02", "2024-01-02")(dailySpec))
   }
 
-  it should "convert between specs with different offsets by time-interval coverage" in {
+  it should "convert between specs with different offsets by time-interval intersection" in {
     val sixHourOffsetSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 6 * 60 * 60 * 1000, 60 * 60 * 1000)
 
-    // congruent grids (offsets differ by a whole number of producer intervals): the 6h@1h
-    // consumer partition [01:00, 07:00) is covered exactly by the 3h@1h producer partitions
-    val consumer = PartitionRange("2024-01-02-01-00", "2024-01-02-01-00")(sixHourOffsetSpec)
-    consumer.coveringRange(unalignedThreeHourSpec).partitions should contain theSameElementsInOrderAs Seq(
+    // boundaries line up (offsets differ by a whole number of upstream intervals): the 6h@1h
+    // partition [01:00, 07:00) maps exactly onto the 3h@1h partitions
+    val downstream = PartitionRange("2024-01-02-01-00", "2024-01-02-01-00")(sixHourOffsetSpec)
+    downstream.intersectingRange(offsetThreeHourSpec).partitions should contain theSameElementsInOrderAs Seq(
       "2024-01-02-01-00",
       "2024-01-02-04-00"
     )
 
-    // incongruent grids over-cover: every midnight-aligned 3h partition overlapping [01:00, 07:00)
-    consumer.coveringRange(threeHourSpec).partitions should contain theSameElementsInOrderAs Seq(
+    // grids whose boundaries don't line up over-fetch: every midnight-boundary 3h partition
+    // overlapping [01:00, 07:00)
+    downstream.intersectingRange(threeHourSpec).partitions should contain theSameElementsInOrderAs Seq(
       "2024-01-02-00-00",
       "2024-01-02-03-00",
       "2024-01-02-06-00"
@@ -279,7 +280,7 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     // non-sortable orderings and 12-hour clocks are rejected
     an[IllegalArgumentException] should be thrownBy PartitionSpec("ds", "MM-dd-yyyy", 24 * 60 * 60 * 1000L)
     an[IllegalArgumentException] should be thrownBy PartitionSpec("ds", "yyyy-MM-dd-hh", 60 * 60 * 1000L)
-    // labels containing literal quotes would embed quotes in SQL unescaped
+    // ds values containing literal quotes would embed quotes in SQL unescaped
     an[IllegalArgumentException] should be thrownBy PartitionSpec("ds", "yyyy-MM-dd''HH", 60 * 60 * 1000L)
     // a 30m offset is not expressible in an hour-resolution format
     an[IllegalArgumentException] should be thrownBy PartitionSpec("ds", "yyyy-MM-dd-HH", 60 * 60 * 1000L, 30 * 60 * 1000L)
@@ -298,59 +299,59 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
       PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000L, 3 * 60 * 60 * 1000L)
   }
 
-  "PartitionRange.coverageEnd" should "derive the inclusive end of coverage" in {
+  "PartitionRange.maxMillis" should "derive the last millisecond the range holds" in {
     val daily = PartitionRange("2024-01-01", "2024-01-03")(dailySpec)
-    daily.coverageEnd should be(dailySpec.epochMillis("2024-01-04") - 1)
+    daily.maxMillis should be(dailySpec.epochMillis("2024-01-04") - 1)
 
     val slice = PartitionRange("2024-01-02-21-00", "2024-01-02-21-00")(threeHourSpec)
-    slice.coverageEnd should be(dailySpec.epochMillis("2024-01-03") - 1)
+    slice.maxMillis should be(dailySpec.epochMillis("2024-01-03") - 1)
 
     // tolerates an unbounded start
-    PartitionRange(null, "2024-01-03")(dailySpec).coverageEnd should be(dailySpec.epochMillis("2024-01-04") - 1)
+    PartitionRange(null, "2024-01-03")(dailySpec).maxMillis should be(dailySpec.epochMillis("2024-01-04") - 1)
   }
 
-  "PartitionRange.coveringRange" should "compute covering ranges across grains" in {
+  "PartitionRange.intersectingRange" should "compute intersecting ranges across grids" in {
     val day = PartitionRange("2024-01-05", "2024-01-05")(dailySpec)
-    day.coveringRange(dailySpec) should be theSameInstanceAs day
+    day.intersectingRange(dailySpec) should be theSameInstanceAs day
 
     // [00:00, 24:00) intersects the 3h@01:00 partitions from yesterday 22:00 through today 22:00
-    val covering = day.coveringRange(unalignedThreeHourSpec)
-    covering.start should be("2024-01-04-22-00")
-    covering.end should be("2024-01-05-22-00")
-    covering.partitions.size should be(9)
+    val intersecting = day.intersectingRange(offsetThreeHourSpec)
+    intersecting.start should be("2024-01-04-22-00")
+    intersecting.end should be("2024-01-05-22-00")
+    intersecting.partitions.size should be(9)
 
     val slice = PartitionRange("2024-01-05-00-00", "2024-01-05-03-00")(threeHourSpec)
-    slice.coveringRange(dailySpec) should be(PartitionRange("2024-01-05", "2024-01-05")(dailySpec))
+    slice.intersectingRange(dailySpec) should be(PartitionRange("2024-01-05", "2024-01-05")(dailySpec))
 
     // a partition straddling midnight needs both days
-    val straddling = PartitionRange("2024-01-05-22-00", "2024-01-05-22-00")(unalignedThreeHourSpec)
-    straddling.coveringRange(dailySpec).start should be("2024-01-05")
-    straddling.coveringRange(dailySpec).end should be("2024-01-06")
+    val straddling = PartitionRange("2024-01-05-22-00", "2024-01-05-22-00")(offsetThreeHourSpec)
+    straddling.intersectingRange(dailySpec).start should be("2024-01-05")
+    straddling.intersectingRange(dailySpec).end should be("2024-01-06")
   }
 
-  "PartitionRange.coveredPartitions" should "cover partitions across grains" in {
-    // same grain: 1:1 translation
-    PartitionRange.coveredPartitions(Seq("2024-01-05", "2024-01-06"), dailySpec, compactSpec) should be(
+  "PartitionRange.fullyContainedPartitions" should "translate partitions across grids" in {
+    // same grid: 1:1 translation
+    PartitionRange.fullyContainedPartitions(Seq("2024-01-05", "2024-01-06"), dailySpec, compactSpec) should be(
       Seq("20240105", "20240106"))
 
-    // coarser labels expand into finer partitions, but only FULLY contained ones: the
-    // day-straddling 22:00 partitions need both surrounding daily labels
-    val covered = PartitionRange.coveredPartitions(Seq("2024-01-05"), dailySpec, unalignedThreeHourSpec)
+    // coarser partitions expand into finer ones, but only FULLY contained ones count: the
+    // day-straddling 22:00 partitions need both surrounding daily partitions
+    val covered = PartitionRange.fullyContainedPartitions(Seq("2024-01-05"), dailySpec, offsetThreeHourSpec)
     covered should contain("2024-01-05-01-00")
     covered should not contain "2024-01-04-22-00" // [22:00, 01:00) also needs daily 2024-01-04
     covered should not contain "2024-01-05-22-00" // also needs daily 2024-01-06
     covered.size should be(7)
 
     val coveredTwoDays =
-      PartitionRange.coveredPartitions(Seq("2024-01-05", "2024-01-06"), dailySpec, unalignedThreeHourSpec)
-    coveredTwoDays should contain("2024-01-05-22-00") // both covering days present now
+      PartitionRange.fullyContainedPartitions(Seq("2024-01-05", "2024-01-06"), dailySpec, offsetThreeHourSpec)
+    coveredTwoDays should contain("2024-01-05-22-00") // both surrounding days present now
     coveredTwoDays.size should be(15)
 
-    // a coarser partition counts only when ALL its finer labels exist
+    // a coarser partition counts only when ALL its finer partitions exist
     val allSlices = Seq("2024-01-05-00-00", "2024-01-05-03-00", "2024-01-05-06-00", "2024-01-05-09-00",
       "2024-01-05-12-00", "2024-01-05-15-00", "2024-01-05-18-00", "2024-01-05-21-00")
-    PartitionRange.coveredPartitions(allSlices, threeHourSpec, dailySpec) should be(Seq("2024-01-05"))
-    PartitionRange.coveredPartitions(allSlices.drop(1), threeHourSpec, dailySpec) should be(Seq.empty)
+    PartitionRange.fullyContainedPartitions(allSlices, threeHourSpec, dailySpec) should be(Seq("2024-01-05"))
+    PartitionRange.fullyContainedPartitions(allSlices.drop(1), threeHourSpec, dailySpec) should be(Seq.empty)
   }
 
   "PartitionRange.steps" should "tumble by partition count and by days" in {
@@ -362,8 +363,8 @@ class PartitionSpecTest extends AnyFlatSpec with Matchers {
     subDaily.last.partitions.size should be(3) // ragged tail
   }
 
-  "TimeRange.toTimePoints" should "stride on the anchored grid" in {
-    implicit val spec: PartitionSpec = unalignedThreeHourSpec
+  "TimeRange.toTimePoints" should "stride on the offset grid" in {
+    implicit val spec: PartitionSpec = offsetThreeHourSpec
     def utc(s: String): Long = java.time.Instant.parse(s).toEpochMilli
     val tr = ai.chronon.api.TimeRange(utc("2024-01-05T02:00:00Z"), utc("2024-01-05T08:00:00Z"))
     tr.toTimePoints should be(

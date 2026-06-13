@@ -489,7 +489,7 @@ struct GroupByServingInfo {
     5: optional string batchEndDate
     6: optional string dateFormat
 
-    // span and anchor offset of the upload partition grid; absent means daily at midnight UTC
+    // partitionInterval and partitionOffset of the upload partition grid; absent means daily at midnight UTC
     7: optional common.Window partitionInterval
     8: optional common.Window partitionOffset
 

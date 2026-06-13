@@ -36,8 +36,8 @@ def event_source(table):
 
 
 def subdaily_event_source(table):
-    """Left source declaring a 3h grid - sub-daily joins need a left whose grain covers the
-    join grid (the left is a coverage edge)."""
+    """Left source declaring a 3h grid - sub-daily joins need a left on whose boundaries the
+    join grid sits (the left feeds the join's own partitions)."""
     return api.Source(
         events=api.EventSource(
             table=table,
@@ -241,7 +241,7 @@ def test_subdaily_join_rejects_undeclared_left():
 
 
 def test_subdaily_join_right_parts_stay_unvalidated():
-    # right parts bind per left-row as-of time on their own grid: a daily-cadence part under
+    # right parts pick the latest snapshot per left-row ts on their own grid: a daily-cadence part under
     # a sub-daily join is the product (mixed hourly/daily/realtime features), never an error
     j = join.Join(
         left=subdaily_event_source("table"),

@@ -131,7 +131,7 @@ case object DeltaLake extends Format {
         )
 
       // raw epoch millis, grid-floored via spec.at in Scala: a format-truncation here would
-      // emit off-grid labels for sub-daily or offset-anchored specs (e.g. '...09:17' from
+      // emit off-boundary ds values for sub-daily or offset specs (e.g. '...09:17' from
       // MIN(ts)=09:17 on a 3h grid)
       val boundaries = stats
         .agg(

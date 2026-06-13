@@ -12,21 +12,21 @@ class GroupByServingInfoParsedTest extends AnyFlatSpec with Matchers {
   // eager members of the parsed class only need a groupBy to exist, not a full conf
   private def servingInfo: GroupByServingInfo = new GroupByServingInfo().setGroupBy(new GroupBy())
 
-  "batchEndTsMillis" should "prefer the explicit watermark and fall back to label parsing" in {
-    // explicit thrift watermark wins, even over a deliberately inconsistent label
+  "batchEndTsMillis" should "prefer the explicit watermark and fall back to ds parsing" in {
+    // explicit thrift watermark wins, even over a deliberately inconsistent ds
     val explicit = servingInfo
       .setBatchEndTs(utc("2026-06-03T04:00:00Z"))
       .setBatchEndDate("1999-01-01")
       .setDateFormat("yyyy-MM-dd")
     new GroupByServingInfoParsed(explicit).batchEndTsMillis should be(utc("2026-06-03T04:00:00Z"))
 
-    // uploads from older versions: daily label parse
+    // uploads from older versions: daily ds parse
     val daily = servingInfo
       .setBatchEndDate("2026-06-03")
       .setDateFormat("yyyy-MM-dd")
     new GroupByServingInfoParsed(daily).batchEndTsMillis should be(utc("2026-06-03T00:00:00Z"))
 
-    // sub-daily labels parse via the partition interval and offset fields
+    // sub-daily ds values parse via the partition interval and offset fields
     val subDaily = servingInfo
       .setBatchEndDate("2026-06-03-04-00")
       .setDateFormat("yyyy-MM-dd-HH-mm")

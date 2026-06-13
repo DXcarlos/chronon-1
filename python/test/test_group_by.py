@@ -179,8 +179,8 @@ def test_validator_ok():
 
 
 def subdaily_event_source(table):
-    """Source declaring a 3h grid - sub-daily groupBys need sources whose grain covers the
-    output grid (coverage edges)."""
+    """Source declaring a 3h grid - sub-daily groupBys need sources whose boundaries the
+    output grid sits on."""
     return ttypes.EventSource(
         table=table,
         query=query.Query(
@@ -293,7 +293,7 @@ def test_snapshot_with_hour_aggregation():
 
 
 def _subdaily_entity_source():
-    # source declares the same 3h grid as the groupBy so grain validation stays satisfied
+    # source declares the same 3h grid as the groupBy so source-grid validation stays satisfied
     return ttypes.EntitySource(
         snapshotTable="entity_table1",
         query=query.Query(
@@ -329,7 +329,7 @@ def test_snapshot_subdaily_window_allowed_on_subdaily_grid():
 
 
 def test_snapshot_window_must_be_multiple_of_grid():
-    # a 4h window on a 3h grid cannot be resolved by grid-aligned snapshots
+    # a 4h window on a 3h grid cannot be resolved by on-boundary snapshots
     with pytest.raises(AssertionError, match="multiple"):
         group_by.GroupBy(
             sources=[_subdaily_entity_source()],
@@ -352,7 +352,7 @@ def test_snapshot_window_must_be_multiple_of_grid():
 
 def test_subdaily_group_by_rejects_undeclared_sources():
     # an undeclared source is implicitly daily: a sub-daily groupBy over it would land a day
-    # late, permanently - the grain-inversion trap, caught at authoring time
+    # late, permanently - the coarse-source-under-fine-output trap, caught at authoring time
     with pytest.raises(ValueError, match="time_partitioned"):
         group_by.GroupBy(
             sources=[event_source("table")],

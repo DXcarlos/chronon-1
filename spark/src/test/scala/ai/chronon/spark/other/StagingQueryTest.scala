@@ -366,7 +366,7 @@ class StagingQueryTest extends SparkTestBase {
 
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
 
-  it should "render inclusive sub-daily macro labels with an exclusive end via offset" in {
+  it should "render inclusive sub-daily macro values with an exclusive end via offset" in {
     val subDailyTableUtils = TableUtils(spark, threeHourSpec)
     // the macro engine renders quoted values
     val rendered = StagingQuery.substitute(
@@ -377,7 +377,7 @@ class StagingQueryTest extends SparkTestBase {
       latest = "2024-01-01-06-00"
     )
 
-    // start_date and end_date are inclusive output-domain labels; offset=1 renders the
+    // start_date and end_date are inclusive output-domain ds values; offset=1 renders the
     // exclusive interval end
     assertEquals(
       "SELECT '2024-01-01-06-00' AS s, '2024-01-01-06-00' AS e, '2024-01-01-09-00' AS x",
@@ -385,7 +385,7 @@ class StagingQueryTest extends SparkTestBase {
     )
   }
 
-  // Space/colon formats are NOT the default (labels become object-store directory names,
+  // Space/colon formats are NOT the default (ds values become object-store directory names,
   // where spaces and colons URL-escape — Hive percent-escapes colons), but they remain
   // expressible when declared explicitly. This test deliberately declares the legacy
   // space/colon format to lock the explicit-format capability.

@@ -196,7 +196,7 @@ class ModelPlannerTest extends AnyFlatSpec with Matchers {
     noException should be thrownBy new ModelPlanner(model).buildPlan
   }
 
-  it should "reject sub-daily model intervals that are narrower than the training source" in {
+  it should "reject sub-daily model intervals that are finer than the training source" in {
     val model = B.Model(
       metaData = B.MetaData(
         name = "invalid_hourly_model",

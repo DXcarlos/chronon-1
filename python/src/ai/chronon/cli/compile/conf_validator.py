@@ -67,8 +67,9 @@ class ConfigChange:
 
 
 def _output_grid_token(obj) -> Optional[str]:
-    """The output partition grid is a data-layout property (a regrid relabels the output
-    table), so unlike the rest of metaData it participates in in-place change detection --
+    """The output partition grid is a data-layout property (changing it renames every ds in
+    the output table), so unlike the rest of metaData it participates in in-place change
+    detection --
     via a conditional token so daily/unset grids contribute nothing and existing confs never
     churn. The schedule (and hence the derived delay) stays excluded. Canonicalized to millis
     so Window(1, DAYS) == Window(24, HOURS) == unset. Mirrors MetadataOps.outputGridToken in
@@ -290,7 +291,7 @@ class ConfValidator(object):
         old_json = json.loads(thrift_simple_json(old_obj))
         _strip_fields_recursive(new_json, skipped_fields)
         _strip_fields_recursive(old_json, skipped_fields)
-        # stripping metaData would hide a regrid; reinject the grid as a synthetic field
+        # stripping metaData would hide a grid change; reinject the grid as a synthetic field
         if "metaData" in skipped_fields:
             for stripped_json, source_obj in ((new_json, obj), (old_json, old_obj)):
                 token = _output_grid_token(source_obj)

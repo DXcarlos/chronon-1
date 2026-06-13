@@ -385,12 +385,12 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     statuses.foreach { tps =>
       assertTrue("Should be ready", tps.ready)
       assertTrue("Should have last available partition", tps.lastAvailablePartition.isDefined)
-      // Same-grain input labels keep the historical global-format presentation in diagnostics,
-      // and readiness is expressed in time space: coverage of the required yyyyMMdd partition
+      // Same-grid input ds values keep the historical global-format presentation in diagnostics,
+      // and readiness is compared in epoch millis: the required yyyyMMdd partition's data
       // ends at the next midnight.
       val lastPart = tps.lastAvailablePartition.get
       assertEquals(yesterday, lastPart)
-      assertEquals(PartitionSpec.daily.epochMillis(today) - 1, tps.requiredCoverageEnd)
+      assertEquals(PartitionSpec.daily.epochMillis(today) - 1, tps.requiredEndMillis)
     }
   }
 
@@ -1291,7 +1291,7 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     noException should be thrownBy runner.run(metadata, nodeContent, Option(range))
   }
 
-  // ---------- sub-daily sensor coverage ----------
+  // ---------- sub-daily sensor readiness ----------
 
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
 
@@ -1446,7 +1446,7 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     }
   }
 
-  it should "support sub-daily timestamp-shaped trigger labels" in {
+  it should "support sub-daily timestamp-shaped trigger ds values" in {
     spark.sql("DROP TABLE IF EXISTS test_db.trigger_subdaily")
     spark.sql(
       """CREATE TABLE test_db.trigger_subdaily (
@@ -1466,7 +1466,7 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     val sensor = sensorFor(dep).setEngineType(EngineType.SPARK)
     val runner = defaultRunner()
 
-    // '2024-01-01-08-59' > '2024-01-01-06-00': timestamp-shaped labels stay string-ordered
+    // '2024-01-01-08-59' > '2024-01-01-06-00': timestamp-shaped ds values stay string-ordered
     runner.checkPartitions(sensor, PartitionRange("2024-01-01-06-00", "2024-01-01-06-00")(threeHourSpec)) match {
       case Success(_) => // triggered
       case Failure(e) => fail(s"sub-daily trigger should fire for the 06:00 partition: ${e.getMessage}")

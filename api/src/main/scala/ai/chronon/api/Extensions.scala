@@ -71,7 +71,7 @@ object Extensions {
 
   implicit class WindowOps(window: Window) {
     // distinct from the display notion of `unbounded` below: a zero-length window is a valid
-    // no-op OFFSET, but Int.MaxValue means "no bound" and must never enter label arithmetic
+    // no-op OFFSET, but Int.MaxValue means "no bound" and must never enter partition arithmetic
     def isUnboundedSentinel: Boolean = window.length == Int.MaxValue
 
     private def unbounded: Boolean = window.length == Int.MaxValue || window.length <= 0
@@ -112,7 +112,7 @@ object Extensions {
       } else if (millis % MinuteMillis == 0) {
         new Window((millis / MinuteMillis).toInt, TimeUnit.MINUTES)
       } else {
-        throw new IllegalArgumentException(s"Window duration must be minute-aligned, found ${millis}ms")
+        throw new IllegalArgumentException(s"Window duration must be whole minutes, found ${millis}ms")
       }
     }
 
@@ -166,11 +166,12 @@ object Extensions {
   implicit class MetadataOps(metaData: MetaData) {
     def cleanName: String = metaData.name.sanitize
 
-    /** The output partition grid is a data-layout property (a regrid relabels the output table),
-      * so unlike the rest of executionInfo it participates in semantic hashing — via a conditional
-      * token so that daily/unset grids contribute nothing and existing hashes stay byte-stable.
-      * The schedule, and hence the derived processing delay, never participates. Canonicalized to
-      * millis so Window(1, DAYS) == Window(24, HOURS) == unset.
+    /** The output partition grid is a data-layout property (changing partitionInterval or
+      * partitionOffset renames every ds in the output table), so unlike the rest of executionInfo
+      * it participates in semantic hashing — via a conditional token so that daily/unset grids
+      * contribute nothing and existing hashes stay byte-stable. The schedule, and hence the
+      * derived processing delay, never participates. Canonicalized to millis so
+      * Window(1, DAYS) == Window(24, HOURS) == unset.
       */
     def outputGridToken: Option[String] =
       for {
@@ -1014,8 +1015,9 @@ object Extensions {
      * changes and determine whether any intermediate/final tables of the join need to be recomputed.
      */
     def semanticHash: Map[String, String] = {
-      // the join's own output grid rides on the left hash: a regrid relabels every
-      // intermediate/final table computed off the left, so it must read as a left change
+      // the join's own output grid rides on the left hash: changing partitionInterval or
+      // partitionOffset renames every ds in the intermediate/final tables computed off the
+      // left, so it must read as a left change
       val baseLeftHash = ThriftJsonCodec.md5Digest(join.left)
       val leftHash = Option(join.metaData).map(_.mixGridToken(baseLeftHash)).getOrElse(baseLeftHash)
       logger.info(s"Join Left Hash: $leftHash")
@@ -1257,13 +1259,13 @@ object Extensions {
       val declaredInterval = Option(ti).flatMap((q) => Option(q.partitionInterval))
       val timePartitioned = Option(ti).exists(t => t.isSetTimePartitioned && t.timePartitioned)
       // a time-partitioned table has no physical grid - its column is a real timestamp, so it
-      // is sensed and quantized on the CONSUMER's grid: inherit the default spec's full
-      // span+offset instead of assuming daily (which would quantize an intraday requirement
-      // up to a whole day and stall sub-daily readiness until the day closes)
+      // is sensed and quantized on the DOWNSTREAM node's grid: inherit the default spec's full
+      // partitionInterval+partitionOffset instead of assuming daily (which would quantize an
+      // intraday requirement up to a whole day and stall sub-daily readiness until the day closes)
       val interval = declaredInterval.getOrElse(
         if (timePartitioned) WindowUtils.fromMillis(defaultSpec.spanMillis) else WindowUtils.Day)
       // a conf that declares its own interval gets offset 0 unless it also declares one - the
-      // default spec's anchor must not leak into an explicitly-intervaled table
+      // default spec's offset must not leak into an explicitly-intervaled table
       val offset = Option(ti)
         .flatMap((q) => Option(q.partitionOffset))
         .map(_.millis)
@@ -1271,6 +1273,20 @@ object Extensions {
       PartitionSpec(column, format, interval.millis, offset)
     }
 
+    /** Stamps the spec's partition fields onto this TableInfo; the offset is set only when
+      * nonzero so existing daily confs serialize byte-identically (absent offset means
+      * midnight boundaries).
+      */
+    def withSpec(spec: PartitionSpec): TableInfo = {
+      ti.setPartitionColumn(spec.column)
+        .setPartitionFormat(spec.format)
+        .setPartitionInterval(WindowUtils.fromMillis(spec.spanMillis))
+      if (spec.offsetMillis != 0)
+        ti.setPartitionOffset(WindowUtils.fromMillis(spec.offsetMillis))
+      else
+        ti.unsetPartitionOffset()
+      ti
+    }
   }
 
   implicit class QueryOps(query: Query) {
@@ -1305,11 +1321,11 @@ object Extensions {
       val declaredInterval = Option(query).flatMap(q => Option(q.partitionInterval))
       val timePartitioned = Option(query).exists(q => q.isSetTimePartitioned && q.timePartitioned)
       // a time-partitioned source has no physical grid - its column is a real timestamp, so it
-      // is sensed and quantized on the CONSUMER's grid (see TableInfoOps.partitionSpec)
+      // is sensed and quantized on the DOWNSTREAM node's grid (see TableInfoOps.partitionSpec)
       val interval = declaredInterval.getOrElse(
         if (timePartitioned) WindowUtils.fromMillis(defaultSpec.spanMillis) else WindowUtils.Day)
       // a conf that declares its own interval gets offset 0 unless it also declares one - the
-      // default spec's anchor must not leak into an explicitly-intervaled source
+      // default spec's offset must not leak into an explicitly-intervaled source
       val offset = Option(query)
         .flatMap(q => Option(q.partitionOffset))
         .map(_.millis)

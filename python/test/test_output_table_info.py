@@ -20,7 +20,7 @@ class TestIntervalConstraints:
             output_table_info(partition_interval="5h")
 
     def test_rejects_multi_day_intervals(self):
-        # week/month-sized partitions are unrepresentable: 7d grids anchor to Thursday
+        # week/month-sized partitions are unrepresentable: 7d boundaries start on Thursday
         # (epoch day zero), 30d grids drift off calendar months. Weekly/monthly SCHEDULES
         # still work over daily partitions.
         with pytest.raises(ValueError, match="divide|day"):
@@ -51,13 +51,13 @@ class TestOffsetConstraints:
     """Offsets only exist on sub-daily grids and must be canonical: 0 <= offset < interval."""
 
     def test_rejects_offset_on_daily_grid(self):
-        # daily grids stay midnight-anchored
+        # daily grids keep their boundaries at midnight
         with pytest.raises(ValueError, match="daily|sub-daily"):
             output_table_info(partition_interval="1d", partition_offset="1h")
 
     def test_rejects_negative_offset_object_form(self):
         # string "-1h" already fails _from_str positivity; the Window object path must
-        # reject too instead of letting scala silently floorMod it to span-1h
+        # reject too instead of letting scala silently floorMod it to interval-1h
         with pytest.raises(ValueError):
             output_table_info(
                 partition_interval="3h",
@@ -90,7 +90,7 @@ class TestOffsetConstraints:
 class TestFormatOverrideWarning:
     def test_custom_output_format_warns(self):
         # the knob stays (input tables need it) but custom OUTPUT formats are discouraged:
-        # compact/composed formats can silently mismatch downstream consumers
+        # compact/composed formats can silently mismatch downstream readers
         with pytest.warns(UserWarning, match="Custom output partition_format"):
             info = output_table_info(partition_interval="3h", partition_format="yyyyMMddHH")
         assert info.partitionFormat == "yyyyMMddHH"

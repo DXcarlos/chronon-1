@@ -198,12 +198,13 @@ class Join(joinConf: api.Join,
       val effectiveRange =
         if (joinConfCloned.left.dataModel != ENTITIES && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT) {
           val partSpec = JoinUtils.partSnapshotSpec(joinPart)
-          if (partSpec.hasSameGrid(tableUtils.partitionSpec)) {
-            // Same-grid snapshot parts keep the historical right-aligned physical label.
+          if (partSpec.hasSameGrid(joinOutputSpec)) {
+            // Same-grid snapshot parts keep the historical behavior: read one partition back.
             JoinUtils.snapshotLookbackRange(leftRange, partSpec)
           } else {
-            // Cross-grid snapshot parts are densely placed on the physical join grid and
-            // carry the RHS as-of boundary in `ts`.
+            // Cross-grid snapshot part tables are partitioned exactly like the join output -
+            // one ds per join partition, each row's snapshot time in `ts` - so read the
+            // requested range as-is.
             leftRange
           }
         } else {

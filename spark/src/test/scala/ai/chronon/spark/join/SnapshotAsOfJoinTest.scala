@@ -10,28 +10,28 @@ import ai.chronon.spark.batch.MergeJob
 import ai.chronon.spark.catalog.TableUtils
 import org.junit.Assert._
 
-/** Snapshot-accuracy joins must be point-in-time correct ACROSS snapshot changes: a row at
-  * time T binds to the latest snapshot whose as-of boundary is <= T, on the RHS table's
+/** Snapshot-accuracy joins must stay as-of correct ACROSS snapshot changes: a row at
+  * time T reads the latest snapshot whose time is <= T, on the RHS table's
   * declared grid, regardless of which left partition the row sits in. The interesting case
   * for sub-daily outputs is a left partition straddling midnight - its rows must SPLIT
   * across two snapshot versions.
   */
-class SnapshotPitBindingTest extends BaseJoinTest {
+class SnapshotAsOfJoinTest extends BaseJoinTest {
 
   private def buildMergeJob(suffix: String): (MergeJob, api.JoinPart) = {
     val viewsGroupBy = Builders.GroupBy(
-      sources = Seq(Builders.Source.events(query = Builders.Query(), table = s"$namespace.snapshot_pit_views")),
+      sources = Seq(Builders.Source.events(query = Builders.Query(), table = s"$namespace.snapshot_asof_views")),
       keyColumns = Seq("item"),
       aggregations = Seq(Builders.Aggregation(operation = Operation.AVERAGE, inputColumn = "time_spent_ms")),
-      metaData = Builders.MetaData(name = s"unit_test.snapshot_pit_gb_$suffix", namespace = namespace),
+      metaData = Builders.MetaData(name = s"unit_test.snapshot_asof_gb_$suffix", namespace = namespace),
       accuracy = Accuracy.SNAPSHOT
     )
 
     val joinPart = Builders.JoinPart(groupBy = viewsGroupBy)
     val join = Builders.Join(
-      left = Builders.Source.events(Builders.Query(), table = s"$namespace.snapshot_pit_left"),
+      left = Builders.Source.events(Builders.Query(), table = s"$namespace.snapshot_asof_left"),
       joinParts = Seq(joinPart),
-      metaData = Builders.MetaData(name = s"unit_test.snapshot_pit_join_$suffix", namespace = namespace)
+      metaData = Builders.MetaData(name = s"unit_test.snapshot_asof_join_$suffix", namespace = namespace)
     )
 
     val mergeJob = new MergeJob(
@@ -43,8 +43,8 @@ class SnapshotPitBindingTest extends BaseJoinTest {
     (mergeJob, joinPart)
   }
 
-  // daily snapshots with a value CHANGE between versions: ds=06-02 is as-of midnight 06-03,
-  // ds=06-03 is as-of midnight 06-04
+  // daily snapshots with a value CHANGE between versions: ds=06-02 holds state as of midnight
+  // 06-03, ds=06-03 as of midnight 06-04
   private def snapshotDf = {
     import spark.implicits._
     Seq(
@@ -53,7 +53,7 @@ class SnapshotPitBindingTest extends BaseJoinTest {
     ).toDF("item", "time_spent_ms_average", "ds")
   }
 
-  it should "bind rows of one sub-daily left partition to different snapshot versions per row time" in {
+  it should "match rows of one sub-daily left partition to different snapshot versions per row time" in {
     import spark.implicits._
 
     val (mergeJob, joinPart) = buildMergeJob("straddle")
@@ -78,15 +78,15 @@ class SnapshotPitBindingTest extends BaseJoinTest {
     assertEquals(200.0, byTs(TsUtils.datetimeToTs("2026-06-04 00:30:00")), 0.0)
   }
 
-  it should "bind exact-boundary rows and rows 1ms either side of the RHS as-of boundary" in {
+  it should "match exact-boundary rows and rows 1ms either side of the RHS snapshot boundary" in {
     import spark.implicits._
 
     val (mergeJob, joinPart) = buildMergeJob("boundary")
 
-    val boundary = TsUtils.datetimeToTs("2026-06-04 00:00:00") // as-of boundary of snapshot ds=06-03
+    val boundary = TsUtils.datetimeToTs("2026-06-04 00:00:00") // snapshot time of ds=06-03
     val leftDf = Seq(
       ("a", boundary - 1, "2026-06-03-22-00"), // 1ms before: still the old snapshot
-      ("a", boundary, "2026-06-03-22-00"), // exactly at the boundary: the new snapshot (as-of <= ts)
+      ("a", boundary, "2026-06-03-22-00"), // exactly at the boundary: the new snapshot (snapshot time <= ts)
       ("a", boundary + 1, "2026-06-03-22-00") // 1ms after: the new snapshot
     ).toDF("item", "ts", "ds")
       .withTimeBasedColumn(Constants.TimePartitionColumn)
@@ -118,19 +118,19 @@ class SnapshotPitBindingTest extends BaseJoinTest {
       .setPartitionInterval(WindowUtils.Day)
 
     val viewsGroupBy = Builders.GroupBy(
-      sources = Seq(Builders.Source.events(query = Builders.Query(), table = s"$namespace.snapshot_pit_views")),
+      sources = Seq(Builders.Source.events(query = Builders.Query(), table = s"$namespace.snapshot_asof_views")),
       keyColumns = Seq("item"),
       aggregations = Seq(Builders.Aggregation(operation = Operation.AVERAGE, inputColumn = "time_spent_ms")),
       metaData = Builders
-        .MetaData(name = "unit_test.snapshot_pit_gb_monolith_dedupe", namespace = namespace)
+        .MetaData(name = "unit_test.snapshot_asof_gb_monolith_dedupe", namespace = namespace)
         .setExecutionInfo(new ExecutionInfo().setOutputTableInfo(dailySnapshotInfo)),
       accuracy = Accuracy.SNAPSHOT
     )
     val joinPart = Builders.JoinPart(groupBy = viewsGroupBy)
     val join = Builders.Join(
-      left = Builders.Source.events(Builders.Query(), table = s"$namespace.snapshot_pit_left"),
+      left = Builders.Source.events(Builders.Query(), table = s"$namespace.snapshot_asof_left"),
       joinParts = Seq(joinPart),
-      metaData = Builders.MetaData(name = "unit_test.snapshot_pit_join_monolith_dedupe", namespace = namespace)
+      metaData = Builders.MetaData(name = "unit_test.snapshot_asof_join_monolith_dedupe", namespace = namespace)
     )
     val monolithJoin = new Join(join, "2026-06-03-22-00", subDailyTableUtils)
 
@@ -141,12 +141,12 @@ class SnapshotPitBindingTest extends BaseJoinTest {
     ).toDF("item", "ts", "ds")
 
     val snapshotAsOf = TsUtils.datetimeToTs("2026-06-03 00:00:00")
-    val denseFanoutRightDf = Seq(
+    val fanoutRightDf = Seq(
       ("a", 100.0, snapshotAsOf, "2026-06-03-19-00"),
       ("a", 100.0, snapshotAsOf, "2026-06-03-22-00")
     ).toDF("item", "time_spent_ms_average", "ts", "ds")
 
-    val joined = monolithJoin.joinWithLeft(leftDf, denseFanoutRightDf, joinPart)
+    val joined = monolithJoin.joinWithLeft(leftDf, fanoutRightDf, joinPart)
     val valueCol = joined.columns.find(_.endsWith("time_spent_ms_average")).get
     val rows = joined.collect()
 

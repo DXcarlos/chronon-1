@@ -229,15 +229,15 @@ class JoinPartJob(node: JoinPartNode,
       skewFilteredLeft.select(columns: _*)
     }
 
-    // RHS-grid lookback: snapshot part partitions are labeled one RHS span before their as-of
-    // boundary. Aligned output only makes sense when the RHS grid matches the join grid.
+    // RHS-grid lookback: snapshot part partitions are named one RHS partitionInterval before
+    // their snapshot time. alignOutput only makes sense when the RHS grid matches the join grid.
     lazy val shiftedPartitionRange =
       if (alignOutput && partSnapshotSpec.hasSameGrid(tableUtils.partitionSpec)) unfilledPartitionRange
       else JoinUtils.snapshotLookbackRange(unfilledPartitionRange, partSnapshotSpec)
 
-    // normalize non-string (date/timestamp-typed) partition columns into formatted labels.
-    // String labels pass through untouched: date_format's implicit string->timestamp cast
-    // nulls labels Spark can't natively cast (e.g. dash-separated sub-daily formats).
+    // normalize non-string (date/timestamp-typed) partition columns into formatted ds values.
+    // String values pass through untouched: date_format's implicit string->timestamp cast
+    // nulls values Spark can't natively cast (e.g. dash-separated sub-daily formats).
     val renamedLeftDf = renamedLeftRawDf.select(renamedLeftRawDf.columns.map {
       case c if c == tableUtils.partitionColumn && renamedLeftRawDf.schema(c).dataType != StringType =>
         date_format(renamedLeftRawDf.col(c), tableUtils.partitionFormat).as(c)
@@ -276,7 +276,7 @@ class JoinPartJob(node: JoinPartNode,
         // Snapshots and mutations live on the groupBy's declared (typically daily) grid: a
         // partition holds data between its interval start and end. Run the computation in
         // that grid's universe so the ds_of_ts/mutation-day arithmetic lands on it; left
-        // partition labels pass through unchanged.
+        // partition values pass through unchanged.
         genGroupBy(JoinUtils.snapshotLookbackRange(unfilledPartitionRange, partSnapshotSpec), snapshotTableUtils)
           .temporalEntities(renamedLeftDf)
     }
@@ -308,7 +308,7 @@ class JoinPartJob(node: JoinPartNode,
         val snapshotSpanMillis = partSnapshotSpec.spanMillis
         val physicalPartitions = udf { asOfMillis: Long =>
           physicalSpec
-            .rangeCovering(PartitionInterval(asOfMillis, asOfMillis + snapshotSpanMillis))
+            .rangeIntersecting(PartitionInterval(asOfMillis, asOfMillis + snapshotSpanMillis))
             .map(_.partitions)
             .getOrElse(Seq.empty)
         }

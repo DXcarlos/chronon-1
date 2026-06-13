@@ -45,12 +45,12 @@ class Eval(implicit tableUtils: TableUtils) {
     // Filter on the latest partition if it exists
     val leftSpec = join.left.query.partitionSpec(partitionSpec)
     val latestPartitionOpt = tableUtils.lastAvailablePartition(sourceTable, tablePartitionSpec = Option(leftSpec))
-    // lastAvailablePartition normalizes grid-matching labels to the global format and leaves
-    // other-grid labels raw - tag the range with the spec the label actually arrived in
-    val labelSpec = if (leftSpec.hasSameGrid(partitionSpec)) partitionSpec else leftSpec
+    // lastAvailablePartition normalizes grid-matching ds values to the global format and
+    // leaves other-grid values raw - tag the range with the spec the value actually arrived in
+    val arrivalSpec = if (leftSpec.hasSameGrid(partitionSpec)) partitionSpec else leftSpec
     val latestPartitonRange = latestPartitionOpt
       .map { partStr =>
-        PartitionRange(partStr, partStr)(labelSpec)
+        PartitionRange(partStr, partStr)(arrivalSpec)
       }
       .getOrElse(twoDaysAgo)
 
@@ -68,12 +68,12 @@ class Eval(implicit tableUtils: TableUtils) {
     sources
       .flatMap { source =>
         val sourceSpec = source.query.partitionSpec(partitionSpec)
-        // grid-matching labels come back normalized to the global format; parse with the spec
-        // the label is actually in
-        val labelSpec = if (sourceSpec.hasSameGrid(partitionSpec)) partitionSpec else sourceSpec
+        // grid-matching ds values come back normalized to the global format; parse with the
+        // spec the value is actually in
+        val arrivalSpec = if (sourceSpec.hasSameGrid(partitionSpec)) partitionSpec else sourceSpec
         tableUtils
           .lastAvailablePartition(source.table, tablePartitionSpec = Option(sourceSpec))
-          .map(labelSpec.partitionStartMillis)
+          .map(arrivalSpec.partitionStartMillis)
       }
       .reduceOption((left, right) => math.max(left, right))
       .map { latestMillis =>

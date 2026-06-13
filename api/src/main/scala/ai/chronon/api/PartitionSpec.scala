@@ -25,69 +25,68 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.{Calendar, Locale, TimeZone}
 import scala.collection.mutable.ListBuffer
+import scala.util.Try
 
-/** Regular partition boundaries: `{ k * spanMillis + offsetMillis }`, with each cell covering
-  * `[start, start + spanMillis)`. Independent of label format and partition column.
+/** Regular partition boundaries: `{ k * spanMillis + offsetMillis }`, with each partition holding
+  * `[start, start + spanMillis)`. Independent of partition format and column.
   */
 case class PartitionGrid(spanMillis: Long, offsetMillis: Long = 0L) {
-  require(spanMillis > 0, s"Partition span must be positive, found $spanMillis")
+  require(spanMillis > 0, s"Partition interval must be positive, found $spanMillis")
   // day-denominated reasoning (partitionsPerDay, stepsByDays, snapshot/orchestration math) relies
   // on partitions tiling the UTC day; week/month-sized partitions are deliberately unrepresentable
-  // (7d grids would anchor to Thursday - epoch day zero; 30d grids drift off calendar months)
+  // (7d boundaries would start on Thursday - epoch day zero; 30d boundaries drift off calendar months)
   require(
     spanMillis == WindowUtils.Day.millis || (spanMillis < WindowUtils.Day.millis && WindowUtils.Day.millis % spanMillis == 0),
-    s"Partition span must divide a UTC day evenly or equal one day, found ${spanMillis}ms. " +
-      s"Weekly/monthly cadences are expressed as schedules over daily partitions, not as partition spans."
+    s"Partition interval must divide a UTC day evenly or equal one day, found ${spanMillis}ms. " +
+      s"Weekly/monthly cadences are expressed as schedules over daily partitions, not as partition intervals."
   )
   require(
     offsetMillis >= 0 && offsetMillis < spanMillis,
-    s"Partition offset must be in [0, span), found ${offsetMillis}ms for span ${spanMillis}ms. " +
+    s"Partition offset must be in [0, interval), found ${offsetMillis}ms for interval ${spanMillis}ms. " +
       s"Declare the canonical offset instead of relying on modular normalization."
   )
   require(
     spanMillis < WindowUtils.Day.millis || offsetMillis == 0,
-    s"Daily partitions stay midnight-anchored: offsets are only supported on sub-daily grids, " +
-      s"found offset ${offsetMillis}ms on a ${spanMillis}ms span."
+    s"Daily partitions keep their boundaries at midnight UTC: offsets are only supported on sub-daily grids, " +
+      s"found offset ${offsetMillis}ms on a ${spanMillis}ms interval."
   )
 
   def isDaily: Boolean = spanMillis == WindowUtils.Day.millis && offsetMillis == 0
 
-  /** 1 for daily spans; used to convert day-denominated configs like stepDays. */
+  /** 1 for daily intervals; used to convert day-denominated configs like stepDays. */
   def partitionsPerDay: Int = math.max(1, (WindowUtils.Day.millis / spanMillis).toInt)
 
   /** start of the grid interval containing `millis` */
   def floor(millis: Long): Long =
     millis - Math.floorMod(millis - offsetMillis, spanMillis)
 
-  /** True when this grid's interval is an exact multiple of the producer's interval. */
-  def isExactMultipleOf(producer: PartitionGrid): Boolean =
-    spanMillis >= producer.spanMillis && spanMillis % producer.spanMillis == 0
+  /** True when this grid's interval is an exact multiple of the upstream's interval. */
+  def isExactMultipleOf(upstream: PartitionGrid): Boolean =
+    spanMillis >= upstream.spanMillis && spanMillis % upstream.spanMillis == 0
 
-  def exactMultipleRequirement(producer: PartitionGrid): String =
-    s"consumer interval ${WindowUtils.millisToString(spanMillis)} must be equal to or an exact multiple of " +
-      s"producer interval ${WindowUtils.millisToString(producer.spanMillis)}"
+  /** Directional: true when this grid's boundaries land on the upstream grid. Example: a 6h@4h
+    * grid lines up with a 3h@1h grid (04:00, 10:00, ... are all 3h@1h boundaries); 6h@2h does not.
+    */
+  def linesUpWith(upstream: PartitionGrid): Boolean =
+    Math.floorMod(offsetMillis - upstream.offsetMillis, upstream.spanMillis) == 0L
 
-  /** Directional alignment: this grid's offset must land on the producer's grid. */
-  def isAlignedTo(producer: PartitionGrid): Boolean =
-    Math.floorMod(offsetMillis - producer.offsetMillis, producer.spanMillis) == 0L
-
-  def alignmentRequirement(producer: PartitionGrid): String =
-    s"consumer grid ($show) is not aligned with producer grid (${producer.show}); " +
-      "grid offsets must differ by a whole number of producer intervals."
-
-  def canCover(producer: PartitionGrid): Boolean =
-    isExactMultipleOf(producer) && isAlignedTo(producer)
+  /** True when every boundary of this grid is also a boundary of `upstream`. */
+  def isBoundarySubsetOf(upstream: PartitionGrid): Boolean =
+    isExactMultipleOf(upstream) && linesUpWith(upstream)
 
   /** Conditional semantic-hash token: the historical daily-at-midnight grid contributes nothing. */
   def semanticToken: Option[String] =
     if (isDaily) None else Some(s"grid:interval_ms=$spanMillis,offset_ms=$offsetMillis")
 
-  def show: String =
-    s"interval ${WindowUtils.millisToString(spanMillis)} @ offset ${WindowUtils.millisToString(offsetMillis)}"
+  def show: String = {
+    val offsetMinutes = offsetMillis / WindowUtils.MinuteMillis
+    f"${WindowUtils.millisToString(spanMillis)} starting ${offsetMinutes / 60}%02d:${offsetMinutes % 60}%02d"
+  }
 }
 
-/** Table-facing partition spec: a grid plus the column/format used to parse and render labels.
-  * Labels name interval starts, and `format` must be sortable and precise enough for the grid.
+/** Table-facing partition spec: a grid plus the column/format used to parse and render ds values.
+  * A ds value names the start of its interval, and `format` must be sortable and precise enough
+  * for the grid.
   */
 case class PartitionSpec(column: String, format: String, spanMillis: Long, offsetMillis: Long = 0L) {
 
@@ -131,15 +130,19 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
     dates.toList
   }
 
-  private def sdf = {
-    val formatter = new SimpleDateFormat(format)
-    formatter.setTimeZone(TimeZone.getTimeZone("UTC"))
-    formatter.setLenient(false)
-    formatter
+  // SimpleDateFormat is not thread-safe, so cache one strict instance per thread instead of
+  // re-building the formatter on every parse; @transient so Spark closures stay serializable
+  @transient private lazy val strictParser: ThreadLocal[SimpleDateFormat] = new ThreadLocal[SimpleDateFormat] {
+    override def initialValue(): SimpleDateFormat = {
+      val formatter = new SimpleDateFormat(format)
+      formatter.setTimeZone(TimeZone.getTimeZone("UTC"))
+      formatter.setLenient(false)
+      formatter
+    }
   }
 
   def epochMillis(partition: String): Long = {
-    val formatter = sdf
+    val formatter = strictParser.get()
     val position = new ParsePosition(0)
     val parsed = formatter.parse(partition, position)
     if (parsed == null || position.getIndex != partition.length) {
@@ -151,7 +154,9 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
 
   def isDaily: Boolean = grid.isDaily
 
-  /** Same span and anchor; labels translate 1:1 even if column or format differs. */
+  /** Same partitionInterval and partitionOffset; ds values translate 1:1 even if column or
+    * format differs.
+    */
   def hasSameGrid(other: PartitionSpec): Boolean = grid == other.grid
 
   // the partition value containing this timestamp
@@ -161,7 +166,7 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
 
   def partitionEndMillis(partitionValue: String): Long = partitionStartMillis(partitionValue) + spanMillis
 
-  def rangeCovering(interval: PartitionInterval): Option[PartitionRange] = {
+  def rangeIntersecting(interval: PartitionInterval): Option[PartitionRange] = {
     if (interval.isEmpty) {
       None
     } else {
@@ -176,32 +181,6 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
     case TimeUnit.HOURS   => Calendar.HOUR_OF_DAY
     case TimeUnit.MINUTES => Calendar.MINUTE
   }
-
-  // TODO-test:
-  // takes a string and a window and returns the string representing the advancement by window
-  def plusFast(s: String, window: Window, sign: Int = 1): String = {
-    // Parse/format in UTC with a stable locale
-    val tz = TimeZone.getTimeZone("UTC")
-    val dateFormat = FastDateFormat.getInstance(format, tz, Locale.US)
-
-    // Parse the given timestamp
-    val date = dateFormat.parse(s)
-
-    // Use Calendar for date math in UTC/Locale.US
-    val calendar = Calendar.getInstance(tz, Locale.US)
-    calendar.setTime(date)
-
-    // Advance by the window length
-    calendar.add(calendarGrain(window), sign * window.length)
-
-    // Format back to string
-    dateFormat.format(calendar.getTime)
-  }
-
-  def afterFast(s: String): String = plusFast(s, intervalWindow)
-
-  // TODO-test:
-  def minusFast(s: String, window: Window): String = plusFast(s, window, -1)
 
   def minus(s: String, window: Window): String = at(epochMillis(s) - window.millis)
 
@@ -243,7 +222,7 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
     else if (spanMillis % WindowUtils.MinuteMillis == 0) {
       new Window((spanMillis / WindowUtils.MinuteMillis).toInt, TimeUnit.MINUTES)
     } else
-      throw new UnsupportedOperationException(s"Partition intervals should be minute-aligned - found ${spanMillis}ms")
+      throw new UnsupportedOperationException(s"Partition intervals should be whole minutes - found ${spanMillis}ms")
   }
 
   /** Converts a partition value from this spec into the equivalent value in `targetSpec`.
@@ -255,68 +234,61 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
     targetSpec.at(millis)
   }
 
-  /** This label re-rendered canonically when it parses fully and starts a grid interval; None
-    * otherwise. Lookup paths use it to admit externally-stored label parts (normalizing
-    * padding quirks) without ever letting an off-grid value into coverage math.
+  /** This ds value re-rendered canonically when it parses fully and starts a grid interval; None
+    * otherwise. Lookup paths use it to admit externally-stored partition values (normalizing
+    * padding quirks) without ever letting an off-boundary value into range math.
     */
-  def canonical(label: String): Option[String] =
-    scala.util.Try(epochMillis(label)).toOption.filter(ms => grid.floor(ms) == ms).map(at)
+  def canonical(value: String): Option[String] =
+    Try(epochMillis(value)).toOption.filter(ms => grid.floor(ms) == ms).map(at)
 
-  def normalize(partition: String, fallbackSpec: PartitionSpec): String = {
-    normalizeStart(partition, fallbackSpec)
-  }
-
-  /** Normalizes a start label by translating from the fallback spec's interval start when needed. */
+  /** Normalizes a start value by translating from the fallback spec's interval start when needed. */
   def normalizeStart(partition: String, fallbackSpec: PartitionSpec): String = {
     if (partition == null) return null
     val startMillis =
-      scala.util
-        .Try(epochMillis(partition))
-        .toOption
+      Try(epochMillis(partition)).toOption
         .getOrElse(fallbackSpec.partitionStartMillis(partition))
     at(startMillis)
   }
 
-  /** Normalizes an end label by translating from the fallback spec's interval end when needed. */
+  /** Normalizes an end value by translating from the fallback spec's interval end when needed. */
   def normalizeEnd(partition: String, fallbackSpec: PartitionSpec): String = {
     if (partition == null) return null
     val endMillis =
-      scala.util
-        .Try(partitionEndMillis(partition))
-        .toOption
+      Try(partitionEndMillis(partition)).toOption
         .getOrElse(fallbackSpec.partitionEndMillis(partition))
     at(endMillis - 1)
   }
 
   private def validateFormat(): Unit = {
     import PartitionSpec._
-    // resolution: every grid instant must round-trip exactly, else range arithmetic on labels
-    // would drift (e.g. a 3h span with a date-only format collapses 8 partitions into one label)
+    // resolution: every grid instant must round-trip exactly, else range arithmetic on ds values
+    // would drift (e.g. a 3h partitionInterval with a date-only format collapses 8 partitions
+    // into one ds value)
     val t0 = grid.floor(ProbeInstantMillis)
     Seq(t0, t0 + spanMillis).foreach { t =>
-      val label = partitionFormatter.format(Instant.ofEpochMilli(t))
+      val value = partitionFormatter.format(Instant.ofEpochMilli(t))
       require(
-        !label.contains("'"),
-        s"partition format '$format' produces labels containing quotes; labels are embedded in SQL unescaped"
+        !value.contains("'"),
+        s"partition format '$format' produces ds values containing quotes; ds values are embedded in SQL unescaped"
       )
-      val parsed = epochMillis(label)
+      val parsed = epochMillis(value)
       require(
         parsed == t,
-        s"partition format '$format' cannot represent partition boundaries for span=${spanMillis}ms " +
-          s"offset=${offsetMillis}ms: '$label' parses back to ${TsUtils.toStr(parsed)} instead of " +
-          s"${TsUtils.toStr(t)}. Include time fields, e.g. 'yyyy-MM-dd-HH'."
+        s"partition format '$format' cannot represent partition boundaries for partitionInterval=${spanMillis}ms " +
+          s"partitionOffset=${offsetMillis}ms: '$value' parses back to ${TsUtils.toStr(parsed)} instead of " +
+          s"${TsUtils.toStr(t)}. Include time fields, e.g. 'yyyy-MM-dd-HH-mm'."
       )
     }
-    // sortability heuristic: consecutive grid labels straddling hour-12, day, month and year
+    // sortability heuristic: consecutive ds values straddling hour-12, day, month and year
     // rollovers must order lexicographically (catches MM-dd-yyyy, 12-hour clocks, etc.)
     SortabilityProbeBoundaries.foreach { boundary =>
       val prev = grid.floor(boundary - 1)
-      val prevLabel = partitionFormatter.format(Instant.ofEpochMilli(prev))
-      val nextLabel = partitionFormatter.format(Instant.ofEpochMilli(prev + spanMillis))
+      val prevValue = partitionFormatter.format(Instant.ofEpochMilli(prev))
+      val nextValue = partitionFormatter.format(Instant.ofEpochMilli(prev + spanMillis))
       require(
-        prevLabel < nextLabel,
+        prevValue < nextValue,
         s"partition format '$format' is not lexicographically sortable: " +
-          s"'$prevLabel' !< '$nextLabel' (instants ${TsUtils.toStr(prev)} -> ${TsUtils.toStr(prev + spanMillis)})"
+          s"'$prevValue' !< '$nextValue' (instants ${TsUtils.toStr(prev)} -> ${TsUtils.toStr(prev + spanMillis)})"
       )
     }
     if (format.exists(c => c == ' ' || c == ':')) {
@@ -342,6 +314,6 @@ object PartitionSpec {
 
   val daily: PartitionSpec = PartitionSpec("ds", "yyyy-MM-dd", 24 * 60 * 60 * 1000)
 
-  def hourly(column: String = "ds", format: String = "yyyy-MM-dd-HH"): PartitionSpec =
+  def hourly(column: String = "ds", format: String = "yyyy-MM-dd-HH-mm"): PartitionSpec =
     PartitionSpec(column, format, 60 * 60 * 1000)
 }

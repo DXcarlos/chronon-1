@@ -1,6 +1,6 @@
 package ai.chronon.api.planner
 
-import ai.chronon.api.{DataModel, GroupBy, PartitionSpec, TableDependency}
+import ai.chronon.api.{DataModel, GroupBy, PartitionSpec, TableDependency, TableInfo}
 import ai.chronon.api.Extensions._
 import ai.chronon.planner.{
   ConfPlan,
@@ -16,24 +16,24 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
     extends ConfPlanner[GroupBy](groupBy)(outputPartitionSpec) {
 
   private val confOutputPartitionSpec: PartitionSpec =
-    MetaDataUtils.outputPartitionSpec(groupBy.metaData, outputPartitionSpec)
+    PartitionSpecResolver.outputSpec(groupBy.metaData, outputPartitionSpec)
 
   private def validatePartitionIntervals(): Unit = {
     if (groupBy.dataModel == DataModel.ENTITIES && groupBy.inferredAccuracy == ai.chronon.api.Accuracy.SNAPSHOT) {
-      MetaDataUtils.warnSubDailyEntitySnapshot(s"groupBy ${groupBy.metaData.name}", confOutputPartitionSpec)
+      PartitionSpecResolver.warnSubDailyEntitySnapshot(s"groupBy ${groupBy.metaData.name}", confOutputPartitionSpec)
     }
-    Option(groupBy.sources).foreach { sources =>
-      sources.asScala.foreach { source =>
-        Option(source.query).foreach { query =>
-          PartitionSpecResolver.validateCoverageQuery(
-            groupBy.metaData.name,
-            confOutputPartitionSpec,
-            query,
-            s"source ${source.rawTable}",
-            MetaDataUtils.EdgeShape.of(source.dataModel)
-          )
-        }
-      }
+    for {
+      sources <- Option(groupBy.sources).toSeq
+      source <- sources.asScala
+      query <- Option(source.query)
+    } {
+      PartitionSpecResolver.validateQueryGrid(
+        groupBy.metaData.name,
+        confOutputPartitionSpec,
+        query,
+        s"source ${source.rawTable}",
+        source.dataModel
+      )
     }
   }
 
@@ -93,7 +93,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
   def uploadToKVNode: Node = {
     val tableDep = new TableDependency()
       .setTableInfo(
-        MetaDataUtils.tableInfo(uploadNode.metaData.outputTable, confOutputPartitionSpec)
+        new TableInfo().setTable(uploadNode.metaData.outputTable).withSpec(confOutputPartitionSpec)
       )
       .setStartOffset(WindowUtils.zero())
       .setEndOffset(WindowUtils.zero())
@@ -117,7 +117,7 @@ case class GroupByPlanner(groupBy: GroupBy)(implicit outputPartitionSpec: Partit
       // Streaming node has table dependency on the upload to KV
       val uploadToKVDep = new TableDependency()
         .setTableInfo(
-          MetaDataUtils.tableInfo(uploadToKVNode.metaData.outputTable, confOutputPartitionSpec)
+          new TableInfo().setTable(uploadToKVNode.metaData.outputTable).withSpec(confOutputPartitionSpec)
         )
         .setStartOffset(WindowUtils.zero())
         .setEndOffset(WindowUtils.zero())

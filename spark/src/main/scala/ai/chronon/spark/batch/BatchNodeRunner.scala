@@ -123,9 +123,10 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       return retryTriggerExpr(0)
     }
 
-    // Case 2: Has partition column — unified check in time space: data watermark must pass the
-    // end of the required input range's coverage. Works for dense Hive, sparse Hive, Iceberg
-    // hidden partitions, timestamp columns — and across grains/formats without label translation.
+    // Case 2: Has partition column — unified check on epoch millis: the data watermark must
+    // pass the last millisecond of the required input range. Works for gap-free Hive, gappy
+    // Hive, Iceberg hidden partitions, timestamp columns — and across partitionIntervals and
+    // formats without ds translation.
     if (hasPartitionColumn) {
       val spec = tableInfo.partitionSpec(tableUtils.partitionSpec)
       @tailrec
@@ -136,17 +137,17 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             .dataWatermarkMillis(tableName, Some(spec))
             .getOrElse(throw new RuntimeException(s"Could not determine data watermark for ${tableName}"))
 
-          val requiredCoverageEnd = requiredRange.coverageEnd
+          val requiredEndMillis = requiredRange.maxMillis
           logger.info(
-            s"Data watermark: ${TsUtils.toStr(watermark)}, required coverage end: ${TsUtils.toStr(requiredCoverageEnd)}")
+            s"Data watermark: ${TsUtils.toStr(watermark)}, required end: ${TsUtils.toStr(requiredEndMillis)}")
 
-          if (watermark > requiredCoverageEnd) {
-            logger.info(s"Sensor succeeded: ${TsUtils.toStr(watermark)} > ${TsUtils.toStr(requiredCoverageEnd)}")
+          if (watermark > requiredEndMillis) {
+            logger.info(s"Sensor succeeded: ${TsUtils.toStr(watermark)} > ${TsUtils.toStr(requiredEndMillis)}")
             ()
           } else {
             throw new RuntimeException(
               s"Sensor check failed: data watermark ${TsUtils.toStr(watermark)} has not passed " +
-                s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
+                s"required end ${TsUtils.toStr(requiredEndMillis)}")
           }
         } match {
           case Success(_) => Success(())
@@ -493,23 +494,23 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     val outputTablePartitionSpec = RunnerUtils.outputPartitionSpec(metadata, tableUtils.partitionSpec)
     val outputTable = metadata.executionInfo.outputTableInfo.table
 
-    // coverage is validated in time space - spec-free, no cross-format label comparison
+    // completeness is validated on epoch millis - spec-free, no cross-format ds comparison
     val watermark = tableUtils.dataWatermarkMillis(outputTable, Some(outputTablePartitionSpec))
-    val requiredCoverageEnd = range.coverageEnd
+    val requiredEndMillis = range.maxMillis
 
     logger.info(
       s"Output table data watermark for '${metadata.name}': ${watermark.map(TsUtils.toStr).getOrElse("none")}")
 
     // Validate output covers the requested range
     watermark match {
-      case Some(w) if w > requiredCoverageEnd =>
+      case Some(w) if w > requiredEndMillis =>
         logger.info(
           s"Output table $outputTable covers requested range " +
-            s"(watermark: ${TsUtils.toStr(w)} > coverage end: ${TsUtils.toStr(requiredCoverageEnd)})")
+            s"(watermark: ${TsUtils.toStr(w)} > required end: ${TsUtils.toStr(requiredEndMillis)})")
       case Some(w) =>
         logger.error(
           s"After job completion, output table $outputTable watermark ${TsUtils.toStr(w)} <= " +
-            s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
+            s"required end ${TsUtils.toStr(requiredEndMillis)}")
       case None =>
         logger.error(s"After job completion, output table $outputTable has no partitions")
     }
@@ -537,12 +538,13 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
                                   firstAvailablePartition: Option[String],
                                   lastAvailablePartition: Option[String],
                                   ready: Boolean,
-                                  requiredCoverageEnd: Long,
+                                  requiredEndMillis: Long,
                                   semanticHash: Option[String])
 
   /** Computes partition statuses for input tables: ready when the table's data watermark has
-    * passed the required input range's coverage end. Works uniformly for dense, sparse, Hive,
-    * Iceberg, timestamp columns - and across grains/formats without label translation.
+    * passed the required input range's last millisecond. Works uniformly for gap-free and gappy
+    * Hive, Iceberg, timestamp columns - and across partitionIntervals and formats without ds
+    * translation.
     */
   private[batch] def computeInputTablePartitionStatuses(
       metadata: MetaData,
@@ -561,35 +563,35 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     inputTableDependencies
       .filterNot(_._2.forall(td => td.isSetIsSoftNodeDependency && td.isSoftNodeDependency))
       .flatMap { case (table, deps) =>
-        // readiness compares epoch watermarks - spec-free, so a sub-daily consumer over a
-        // daily (or differently-formatted) input needs no label translation at all
-        val requiredCoverageEnds = deps
+        // readiness compares epoch watermarks - spec-free, so a sub-daily node over a
+        // daily (or differently-formatted) input needs no ds translation at all
+        val requiredEndsMillis = deps
           .flatMap { td =>
             DependencyResolver
               .computeInputRange(range, td)
-              // start may be unbounded (null) - only the end label's coverage matters here
-              .map(_.coverageEnd)
+              // start may be unbounded (null) - only the end partition's last millisecond matters here
+              .map(_.maxMillis)
           }
           .toSeq
           .sorted
 
-        if (requiredCoverageEnds.isEmpty) {
+        if (requiredEndsMillis.isEmpty) {
           None
         } else {
           val inputPartitionSpec = deps.head.tableInfo.partitionSpec(tableUtils.partitionSpec)
 
           val firstPartition =
             tableUtils.firstAvailablePartition(table, partitionSpec = inputPartitionSpec)
-          // one metadata read answers both the display label and readiness
+          // one metadata read answers both the display value and readiness
           val watermark = tableUtils.dataWatermark(table, Some(inputPartitionSpec))
-          // diagnostics keep the historical global-format presentation for same-grain tables
-          val lastPartition = watermark.map { case (label, _) =>
+          // diagnostics keep the historical global-format presentation for same-grid tables
+          val lastPartition = watermark.map { case (value, _) =>
             if (inputPartitionSpec.hasSameGrid(tableUtils.partitionSpec))
-              inputPartitionSpec.translate(label, tableUtils.partitionSpec)
-            else label
+              inputPartitionSpec.translate(value, tableUtils.partitionSpec)
+            else value
           }
-          val requiredCoverageEnd = requiredCoverageEnds.last
-          val ready = watermark.exists(_._2 > requiredCoverageEnd)
+          val requiredEndMillis = requiredEndsMillis.last
+          val ready = watermark.exists(_._2 > requiredEndMillis)
 
           // Collect semanticHash values from all dependencies for this table
           val semanticHashes = deps.flatMap { td =>
@@ -607,7 +609,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             semanticHashes.headOption
           }
 
-          Some(TablePartitionStatus(table, firstPartition, lastPartition, ready, requiredCoverageEnd, semanticHash))
+          Some(TablePartitionStatus(table, firstPartition, lastPartition, ready, requiredEndMillis, semanticHash))
         }
       }
   }
@@ -628,7 +630,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
       Seq(startDs, endDs).foreach { ds =>
         require(
           Try(spec.at(spec.epochMillis(ds)) == ds).getOrElse(false),
-          s"--start-ds/--end-ds value '$ds' is not a valid partition label for node '${metadata.name}' " +
+          s"--start-ds/--end-ds value '$ds' is not a valid partition value for node '${metadata.name}' " +
             s"(expected format '${spec.format}' on a ${spec.spanMillis}ms grid with offset ${spec.offsetMillis}ms)"
         )
       }
@@ -657,7 +659,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             notReadyTables
               .map { tps =>
                 s"Table: ${tps.name}, last available: ${tps.lastAvailablePartition.getOrElse("none")}, " +
-                  s"required coverage end: ${TsUtils.toStr(tps.requiredCoverageEnd)}"
+                  s"required end: ${TsUtils.toStr(tps.requiredEndMillis)}"
               }
               .mkString("\n")
         )

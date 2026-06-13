@@ -677,7 +677,7 @@ class TableUtilsTest extends AnyFlatSpec {
     val tableName = s"$dbName.subdaily_time_partitioned"
     spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
 
-    // min/max are deliberately off-grid: labels must land on the declared 3h grid.
+    // min/max are deliberately off-boundary: ds values must land on the declared 3h grid.
     // SQL timestamp literals parse in the session timezone (UTC), unlike Timestamp.valueOf.
     spark.sql(s"CREATE TABLE $tableName (user_id STRING, created_at TIMESTAMP)")
     spark.sql(s"""
@@ -706,7 +706,7 @@ class TableUtilsTest extends AnyFlatSpec {
     spark.sql(s"DROP DATABASE IF EXISTS $dbName")
   }
 
-  it should "preserve string sub-daily partition labels through scanDf" in {
+  it should "preserve string sub-daily partition values through scanDf" in {
     val dbName = s"db_${System.nanoTime()}"
     val tableName = s"$dbName.scan_subdaily_string_ds"
     spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
@@ -720,8 +720,8 @@ class TableUtilsTest extends AnyFlatSpec {
     val range = PartitionRange("2024-01-01-09-00", "2024-01-01-12-00")(threeHourSpec)
     val result = subDailyTableUtils.scanDf(null, tableName, range = Some(range))
 
-    // regression: scanDfBase used to date_format string labels through an implicit
-    // string->timestamp cast, which nulled any label Spark can't natively cast (the dash
+    // regression: scanDfBase used to date_format string ds values through an implicit
+    // string->timestamp cast, which nulled any value Spark can't natively cast (the dash
     // sub-daily formats; the legacy space/colon format survived only by coincidence)
     val dsValues = result.select("ds").collect().map(_.getString(0)).sorted.toList
     assertEquals(List("2024-01-01-09-00", "2024-01-01-12-00"), dsValues)
@@ -730,7 +730,7 @@ class TableUtilsTest extends AnyFlatSpec {
     spark.sql(s"DROP DATABASE IF EXISTS $dbName")
   }
 
-  it should "scan timestamp partition columns with epoch-typed bounds and grid labels" in {
+  it should "scan timestamp partition columns with epoch-typed bounds and grid ds values" in {
     val dbName = s"db_${System.nanoTime()}"
     val tableName = s"$dbName.scan_subdaily_ts_ds"
     spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
@@ -748,14 +748,14 @@ class TableUtilsTest extends AnyFlatSpec {
         ('above', TIMESTAMP '2024-01-01 15:01:00')
     """)
 
-    // [09:00, 12:00] labels on a 3h grid = coverage [09:00, 15:00). Regression: label
+    // ds [09:00, 12:00] on a 3h grid = time interval [09:00, 15:00). Regression: ds
     // literals like '2024-01-01-09-00' cast to NULL against a timestamp column, so the scan
     // was silently empty; epoch-typed bounds make it correct and rerun-deterministic.
     val range = PartitionRange("2024-01-01-09-00", "2024-01-01-12-00")(threeHourSpec)
     val result = subDailyTableUtils.scanDf(null, tableName, range = Some(range))
 
     val rows = result.select("user_id", "ds").collect().map(r => (r.getString(0), r.getString(1))).sortBy(_._1)
-    // off-grid timestamps render as grid labels, not per-minute ones
+    // off-boundary timestamps render as grid ds values, not per-minute ones
     assertEquals(List(("in1", "2024-01-01-09-00"), ("in2", "2024-01-01-12-00")), rows.toList)
 
     spark.sql(s"DROP TABLE IF EXISTS $tableName")
@@ -814,12 +814,12 @@ class TableUtilsTest extends AnyFlatSpec {
     spark.sql(s"DROP DATABASE IF EXISTS $dbName")
   }
 
-  it should "derive coverage from a value scan for unpartitioned (clustered-style) tables" in {
-    // an unpartitioned table with a string ds column: no catalog partitions exist, so coverage
+  it should "derive existing partitions from a value scan for unpartitioned (clustered-style) tables" in {
+    // an unpartitioned table with a string ds column: no catalog partitions exist, so the data
     // must come from the MAX(ds) scan fallback - this is the join-part reuse path for
     // clustered warehouse tables
     import spark.implicits._
-    val tableName = "db.unpartitioned_coverage_table"
+    val tableName = "db.unpartitioned_scan_table"
     spark.sql("CREATE DATABASE IF NOT EXISTS db")
     spark.sql(s"DROP TABLE IF EXISTS $tableName")
     Seq(("2024-01-01", "a"), ("2024-01-02", "b"), ("2024-01-03", "c"))
@@ -828,7 +828,7 @@ class TableUtilsTest extends AnyFlatSpec {
       .saveAsTable(tableName)
 
     // logical partitions come from the distinct values of the ds column, so compute
-    // planning (unfilledRanges, step runners) sees coverage instead of recomputing
+    // planning (unfilledRanges, step runners) sees existing data instead of recomputing
     assertEquals(List("2024-01-01", "2024-01-02", "2024-01-03"), tableUtils.partitions(tableName).sorted)
 
     val watermark = tableUtils.dataWatermarkMillis(tableName)
@@ -842,13 +842,13 @@ class TableUtilsTest extends AnyFlatSpec {
     spark.sql(s"DROP TABLE IF EXISTS $tableName")
   }
 
-  it should "compute watermarks in time space for sub-daily partition specs" in {
+  it should "compute watermarks in epoch millis for sub-daily partition specs" in {
     // dash-separated format: the Hive catalog percent-escapes colons in partition values
     // ('04:00' lists as '04%3A00'), which is exactly the format-hygiene warning on
     // PartitionSpec construction
     val subDailySpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000L, 60 * 60 * 1000L)
     import spark.implicits._
-    val tableName = "db.sub_daily_coverage_table"
+    val tableName = "db.sub_daily_watermark_table"
     spark.sql("CREATE DATABASE IF NOT EXISTS db")
     spark.sql(s"DROP TABLE IF EXISTS $tableName")
     Seq(("2024-01-05-01-00", "a"), ("2024-01-05-04-00", "b"))

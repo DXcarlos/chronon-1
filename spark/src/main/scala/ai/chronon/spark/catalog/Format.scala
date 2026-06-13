@@ -19,8 +19,9 @@ trait Format {
 
   def tableTypeString: String = ""
 
-  // Raw epoch millis of a (possibly aggregated) time column; label math happens Scala-side via
-  // PartitionSpec so grid flooring (span + offset) has exactly one implementation. Chronon's
+  // Raw epoch millis of a (possibly aggregated) time column; ds arithmetic happens Scala-side
+  // via PartitionSpec so grid flooring (partitionInterval + partitionOffset) has exactly one
+  // implementation. Chronon's
   // convention: numeric time columns hold epoch MILLIS already - casting a numeric through
   // TimestampType would interpret it as seconds and scramble units by 1000x.
   protected def epochMillisCol(c: Column, dt: DataType): Column =
@@ -198,8 +199,8 @@ trait Format {
             .flatMap(v => Option(v))
         case dt =>
           // last COMPLETE partition: the one before the partition containing the max timestamp -
-          // identical to DATE(MAX) - 1 day for daily, but grid-correct (span + offset) for
-          // sub-daily and offset-anchored specs
+          // identical to DATE(MAX) - 1 day for daily, but grid-correct (partitionInterval +
+          // partitionOffset) for sub-daily and offset specs
           df.select(epochMillisCol(max(col(partitionColumn)), dt).as("max_millis"))
             .collect()
             .headOption
@@ -339,20 +340,20 @@ object Format {
 
   private val stringOrdering: Ordering[String] = Ordering.String
 
-  /** Composition-mismatch canary: a table whose listing is nonempty but parses to ZERO labels
-    * under the consumer's spec reads as permanently empty downstream - sensors never fire,
-    * silently. One label parsing is enough to clear the canary; per-label mismatches surface
+  /** Composition-mismatch canary: a table whose listing is nonempty but parses to ZERO ds
+    * values under the reader's spec reads as permanently empty downstream - sensors never fire,
+    * silently. One value parsing is enough to clear the canary; per-value mismatches surface
     * later as loud ParseExceptions in range arithmetic. Sampled so huge listings stay cheap.
     */
-  def zeroParsedLabelsWarning(tableName: String, labels: Seq[String], spec: PartitionSpec): Option[String] = {
-    if (labels.isEmpty) None
+  def zeroParsedPartitionsWarning(tableName: String, partitions: Seq[String], spec: PartitionSpec): Option[String] = {
+    if (partitions.isEmpty) None
     else {
-      val sample = labels.take(100)
-      if (sample.exists(label => Try(spec.epochMillis(label)).isSuccess)) None
+      val sample = partitions.take(100)
+      if (sample.exists(value => Try(spec.epochMillis(value)).isSuccess)) None
       else
         Some(
-          s"Table $tableName listed ${labels.size} partitions but none of the first ${sample.size} parse under " +
-            s"partition format '${spec.format}' (sample label: '${sample.head}'). Downstream readiness will treat " +
+          s"Table $tableName listed ${partitions.size} partitions but none of the first ${sample.size} parse under " +
+            s"partition format '${spec.format}' (sample value: '${sample.head}'). Downstream readiness will treat " +
             "this table as permanently empty and sensors will never fire. Common causes: a compact (dash-less) " +
             "or stale partition format on the dependency's table info."
         )

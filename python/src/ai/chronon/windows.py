@@ -102,7 +102,7 @@ def from_millis(millis: int) -> common.Window:
         return _hours(millis // HOUR_MILLIS)
     if millis % MINUTE_MILLIS == 0:
         return _minutes(millis // MINUTE_MILLIS)
-    raise ValueError(f"Window duration must be minute-aligned, found {millis}ms")
+    raise ValueError(f"Window duration must be whole minutes, found {millis}ms")
 
 
 def window_millis(w: Union[common.Window, str]) -> int:
@@ -141,7 +141,7 @@ def regular_subdaily_schedule(schedule_expression: str, partition_offset_ms: int
     schedules, or None for daily-or-coarser (or absent) schedules.
 
     The rule is structural (pure cron-field inspection, no probing — fixed probe windows can
-    be defeated by month/day-of-month crons aligned with the window):
+    be defeated by month/day-of-month crons that coincide with the window):
 
     - fires at most once per day → daily interval: day-of-month / month / weekday
       restrictions are fine (weekly or monthly reports over daily partitions).
@@ -207,14 +207,16 @@ def regular_subdaily_schedule(schedule_expression: str, partition_offset_ms: int
     return interval_ms
 
 
-def validate_coverage_edge(conf_desc: str, query, source_desc: str) -> None:
-    """Coverage edges (groupBy/model sources and the join LEFT) need the output partition's
-    time range actually covered by input data. Call only when the conf's output grid is
-    sub-daily: the source must declare a partition_interval (covering/congruence is validated
-    at plan time) or be marked time_partitioned (data lands continuously and intraday
-    readiness is sensed from timestamps). Join RIGHT parts are point-in-time edges - they
-    bind per left-row as-of time on their own grid, mixed cadence is the product - and must
-    never be validated through this. Mirrors MetaDataUtils.validateCoverageEdge in scala."""
+def validate_source_grid(conf_desc: str, query, source_desc: str) -> None:
+    """GroupBy/model sources and the join LEFT must hold the output partition's whole time
+    range: every output boundary must also be a source boundary. Example: a 3h@1h output over
+    a daily source can't fill [13:00, 16:00) until the day closes. Call only when the conf's
+    output grid is sub-daily: the source must declare a partition_interval (the boundary
+    relationship is validated at plan time) or be marked time_partitioned (data lands
+    continuously and intraday readiness is sensed from timestamps). Join RIGHT parts pick the
+    latest snapshot at or before each left row's ts on their own grid - mixed cadence is the
+    product - and must never be validated through this. Mirrors
+    PartitionSpecResolver.validateQueryGrid in scala."""
     if query is None or query.partitionInterval is not None or query.timePartitioned:
         return
     raise ValueError(
@@ -236,8 +238,8 @@ def source_query(source):
 def is_subdaily(
     partition_interval: Union[common.Window, str] = None, schedule: str = None
 ) -> bool:
-    """True when the output grain is sub-daily — either via an explicit partition interval
-    below one day or a regular sub-daily schedule it would be inferred from."""
+    """True when the output partitionInterval is sub-daily — either via an explicit partition
+    interval below one day or a regular sub-daily schedule it would be inferred from."""
     if partition_interval is not None:
         return window_millis(partition_interval) < DAY_MILLIS
     if schedule:
@@ -252,8 +254,8 @@ def output_table_info(
     partition_format: str = None,
     schedule: str = None,
 ) -> common.TableInfo:
-    # The offset is never inferred from the cron fire phase; it defaults to zero (midnight-
-    # aligned grid) and only an explicit partition_offset moves the grid. The cron fire phase
+    # The offset is never inferred from the cron fire phase; it defaults to zero (midnight
+    # boundaries) and only an explicit partition_offset moves the grid. The cron fire phase
     # is treated as a derived processing delay relative to the declared grid.
     offset_ms = window_millis(partition_offset) if partition_offset is not None else 0
     cron_interval_ms = regular_subdaily_schedule(schedule, offset_ms) if schedule else None
@@ -271,7 +273,7 @@ def output_table_info(
     interval_ms = window_millis(interval)
     # day-denominated reasoning relies on partitions tiling the UTC day; week/month-sized
     # partitions are deliberately unrepresentable (weekly/monthly cadences are schedules over
-    # daily partitions, not partition spans)
+    # daily partitions, not partition intervals)
     if interval_ms != DAY_MILLIS and (interval_ms > DAY_MILLIS or DAY_MILLIS % interval_ms != 0):
         raise ValueError(
             f"partition_interval ({interval_ms}ms) must divide a UTC day evenly or equal one day. "
@@ -286,8 +288,8 @@ def output_table_info(
     if offset_ms != 0:
         if interval_ms >= DAY_MILLIS:
             raise ValueError(
-                "Daily partitions stay midnight-anchored: partition_offset is only supported "
-                "on sub-daily grids."
+                "Daily partitions keep their boundaries at midnight: partition_offset is only "
+                "supported on sub-daily grids."
             )
         if offset_ms < 0 or offset_ms >= interval_ms:
             raise ValueError(
@@ -304,7 +306,7 @@ def output_table_info(
         warnings.warn(
             f"Custom output partition_format '{partition_format}' (default for this interval is "
             f"'{default_format}'). Custom output formats are discouraged: compact or composed "
-            "formats can silently mismatch downstream consumers. "
+            "formats can silently mismatch downstream readers. "
             "Prefer the default; input tables can keep declaring their actual format.",
             UserWarning,
             stacklevel=2,

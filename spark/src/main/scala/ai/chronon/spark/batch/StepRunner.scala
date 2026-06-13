@@ -88,10 +88,12 @@ object StepRunner {
     val requestedRange =
       PartitionRange(requestedDateRange.startDate, requestedDateRange.endDate)(tableUtils.partitionSpec)
 
-    // the physical partitions of the output table may live on a different grid than the range
-    // labels (snapshot join-part tables live on the RHS groupBy's snapshot grid while their
-    // ranges stay in the join/left domain) - list and watermark with the declared output spec
-    val outputSpec = ai.chronon.api.planner.MetaDataUtils.outputPartitionSpec(metaData, tableUtils.partitionSpec)
+    // the physical partitions of the output table may live on a different grid than the
+    // range's ds values (snapshot join-part tables live on the RHS groupBy's snapshot grid
+    // while their ranges stay in the join/left domain) - list and watermark with the declared
+    // output spec
+    val outputSpec =
+      ai.chronon.api.planner.PartitionSpecResolver.outputSpec(metaData, tableUtils.partitionSpec)
 
     val tableName = metaData.outputTable
     val stepSize = metaData.stepSize
@@ -104,18 +106,18 @@ object StepRunner {
 
     stepRunner.run(requestedRange)
 
-    // coverage check in time space - no label-format coupling between range and listing
+    // completeness check in epoch millis - no ds-format coupling between range and listing
     val watermark = tableUtils.dataWatermarkMillis(tableName, Some(outputSpec))
-    val requiredCoverageEnd = requestedRange.coverageEnd
+    val requiredEndMillis = requestedRange.maxMillis
     watermark match {
-      case Some(w) if w > requiredCoverageEnd =>
+      case Some(w) if w > requiredEndMillis =>
         logger.info(
-          s"Output table $tableName covers requested range " +
-            s"(watermark: ${TsUtils.toStr(w)} > coverage end: ${TsUtils.toStr(requiredCoverageEnd)})")
+          s"Output table $tableName holds the requested range " +
+            s"(watermark: ${TsUtils.toStr(w)} > required end: ${TsUtils.toStr(requiredEndMillis)})")
       case Some(w) =>
         logger.error(
           s"Output table $tableName watermark ${TsUtils.toStr(w)} <= " +
-            s"required coverage end ${TsUtils.toStr(requiredCoverageEnd)}")
+            s"required end ${TsUtils.toStr(requiredEndMillis)}")
       case None =>
         logger.error(s"Output table $tableName has no partitions after run")
     }

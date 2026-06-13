@@ -256,9 +256,9 @@ class GroupByTest extends SparkTestBase {
   }
 
   // Test that the output of Group by with Step Days is the same as the output without Steps (full data range)
-  // E2E pin for the fine-source-under-coarse-consumer direction: a daily groupBy over a
-  // 3h-partitioned source must scan the full covering day (all 8 sub-partitions via
-  // coveringRange coverage), not just the first sub-partition of each daily label
+  // E2E pin for the fine-source-under-coarse-downstream direction: a daily groupBy over a
+  // 3h-partitioned source must scan the full overlapping day (all 8 sub-partitions via
+  // intersectingRange expansion), not just the first sub-partition of each daily ds
   it should "aggregate a full day from a sub-daily partitioned source under a daily groupBy" in {
     val namespace = "test_subdaily_source_daily_gb"
     createDatabase(namespace)
