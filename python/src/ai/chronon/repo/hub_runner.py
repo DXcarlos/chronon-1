@@ -85,7 +85,74 @@ def _validate_at_most_daily_schedule(schedule_expression: str) -> Optional[str]:
     return _validate_supported_schedule(schedule_expression)
 
 
-ALLOWED_DATE_FORMATS = ["%Y-%m-%d"]
+_PARTITION_DS_FORMATS = (
+    ("%Y-%m-%d", "%Y-%m-%d"),
+    ("%Y/%m/%d", "%Y-%m-%d"),
+    ("%Y-%m-%d-%H", "%Y-%m-%d-%H-00"),
+    ("%Y-%m-%d-%H-%M", "%Y-%m-%d-%H-%M"),
+    ("%Y-%m-%d-%H:%M", "%Y-%m-%d-%H-%M"),
+    ("%Y-%m-%d %H", "%Y-%m-%d-%H-00"),
+    ("%Y-%m-%d %H:%M", "%Y-%m-%d-%H-%M"),
+    ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d-%H-%M"),
+    ("%Y/%m/%d %H", "%Y-%m-%d-%H-00"),
+    ("%Y/%m/%d %H:%M", "%Y-%m-%d-%H-%M"),
+    ("%Y/%m/%d %H:%M:%S", "%Y-%m-%d-%H-%M"),
+    ("%Y-%m-%dT%H", "%Y-%m-%d-%H-00"),
+    ("%Y-%m-%dT%H:%M", "%Y-%m-%d-%H-%M"),
+    ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d-%H-%M"),
+)
+_PARTITION_DS_FORMAT_HELP = "YYYY-MM-DD, YYYY-MM-DD-HH, YYYY-MM-DD-HH-mm, ISO, or space-separated datetime"
+
+
+def _validate_partition_ds_precision(parsed, value):
+    if parsed.second != 0 or parsed.microsecond != 0:
+        raise ValueError(f"'{value}' must be aligned to minute precision")
+
+
+def _parse_partition_ds(value):
+    if isinstance(value, datetime.datetime):
+        _validate_partition_ds_precision(value, value)
+        return value
+    if isinstance(value, date):
+        return datetime.datetime.combine(value, datetime.time.min)
+
+    raw = str(value).strip()
+    for date_format, _ in _PARTITION_DS_FORMATS:
+        try:
+            parsed = datetime.datetime.strptime(raw, date_format)
+        except ValueError:
+            continue
+        _validate_partition_ds_precision(parsed, value)
+        return parsed
+    raise ValueError(f"'{value}' does not match any supported date format: {_PARTITION_DS_FORMAT_HELP}")
+
+
+def _format_partition_ds(value):
+    raw = str(value).strip()
+    for date_format, output_format in _PARTITION_DS_FORMATS:
+        try:
+            parsed = datetime.datetime.strptime(raw, date_format)
+        except ValueError:
+            continue
+        _validate_partition_ds_precision(parsed, value)
+        return parsed.strftime(output_format)
+    if isinstance(value, (datetime.datetime, date)):
+        parsed = _parse_partition_ds(value)
+        return parsed.strftime("%Y-%m-%d-%H-%M" if parsed.time() != datetime.time.min else "%Y-%m-%d")
+    raise ValueError(f"'{value}' does not match any supported date format: {_PARTITION_DS_FORMAT_HELP}")
+
+
+class PartitionDsParamType(click.ParamType):
+    name = "partition"
+
+    def convert(self, value, param, ctx):
+        try:
+            return _format_partition_ds(value)
+        except ValueError as e:
+            self.fail(str(e), param, ctx)
+
+
+PARTITION_DS = PartitionDsParamType()
 
 
 def _resolve_data_type_kinds(obj):
@@ -221,8 +288,8 @@ def ds_option(func):
         "--date",
         "--ds",
         "ds",
-        help="End date for the backfill (format: YYYY-MM-DD).",
-        type=click.DateTime(formats=ALLOWED_DATE_FORMATS),
+        help=f"End date for the backfill (format: {_PARTITION_DS_FORMAT_HELP}).",
+        type=PARTITION_DS,
     )(func)
 
 
@@ -231,8 +298,8 @@ def start_ds_option(func):
         "--start-date",
         "--start-ds",
         "start_ds",
-        type=click.DateTime(formats=ALLOWED_DATE_FORMATS),
-        help="Start date override for a range backfill (format: YYYY-MM-DD). "
+        type=PARTITION_DS,
+        help=f"Start date override for a range backfill (format: {_PARTITION_DS_FORMAT_HELP}). "
         "Supports staging query, group by, and join jobs. "
         "May leave holes in the output table due to the overridden date range.",
     )(func)
@@ -249,7 +316,7 @@ def confirm_end_ds_not_future(end_ds, assume_yes: bool = False):
     """
     if end_ds is None or assume_yes:
         return
-    end_date_value = end_ds.date() if hasattr(end_ds, "date") else end_ds
+    end_date_value = _parse_partition_ds(end_ds).date()
     today = date.today()
     if end_date_value >= today:
         click.confirm(
@@ -271,8 +338,8 @@ def end_ds_option(func):
         "--end-date",
         "--end-ds",
         "end_ds",
-        help="End date for a range backfill (format: YYYY-MM-DD).",
-        type=click.DateTime(formats=ALLOWED_DATE_FORMATS),
+        help=f"End date for a range backfill (format: {_PARTITION_DS_FORMAT_HELP}).",
+        type=PARTITION_DS,
         default=str(date.today() - timedelta(days=2)),
         show_default=True,
     )
@@ -900,8 +967,8 @@ def clear_downstream(conf, repo, hub_url, use_auth, format, start_ds, end_ds, as
     affected_confs = preview_json.get("affectedConfs", [])
 
     print_key_value("Conf", conf_name, format=format)
-    start_str = start_ds.strftime("%Y-%m-%d") if hasattr(start_ds, "strftime") else str(start_ds)
-    end_str = end_ds.strftime("%Y-%m-%d") if hasattr(end_ds, "strftime") else str(end_ds)
+    start_str = str(start_ds)
+    end_str = str(end_ds)
     print_key_value("Range", f"{start_str} to {end_str}", format=format)
     print_key_value("Affected confs", len(affected_confs), format=format)
     click.echo()

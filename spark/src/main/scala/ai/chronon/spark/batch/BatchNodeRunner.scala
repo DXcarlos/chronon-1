@@ -405,7 +405,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 
       case NodeContent._Fields.SOURCE_WITH_FILTER =>
         logger.info(s"Running source with filter job for '${metadata.name}' for range: [${range.start}, ${range.end}]")
-        new SourceJob(conf.getSourceWithFilter, metadata, dateRange)(tableUtils).run()
+        new SourceJob(conf.getSourceWithFilter, metadata, dateRange)(jobTableUtils(range)).run()
         logger.info(s"Successfully completed source with filter job for '${metadata.name}'")
 
       case NodeContent._Fields.JOIN_BOOTSTRAP =>

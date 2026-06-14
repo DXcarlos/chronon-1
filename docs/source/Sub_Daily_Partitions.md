@@ -139,6 +139,14 @@ format they actually have. If a table's listing yields zero ds values that parse
 declared format, jobs log a loud format-mismatch error instead of treating the table as
 empty.
 
+Hub CLI partition inputs are forgiving but the stored partition string is not. `--start-ds`
+and `--end-ds` accept daily dates, dash-separated sub-daily values, ISO datetimes, and
+space-separated datetimes such as `2024-01-15`, `2024-01-15-03`,
+`2024-01-15-03-30`, `2024-01-15T03:30`, or `2024/01/15 03:30:00`. The CLI
+validates the value and sends daily partitions as `yyyy-MM-dd` and sub-daily partitions as
+`yyyy-MM-dd-HH-mm`. Inputs with non-zero seconds are rejected because Chronon partitions are
+minute-aligned.
+
 ## Rules at a glance
 
 1. Interval divides 24h or equals `1d`; offsets only below a day; whole minutes; all UTC

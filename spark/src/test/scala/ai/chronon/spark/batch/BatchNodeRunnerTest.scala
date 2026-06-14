@@ -21,7 +21,7 @@ import ai.chronon.api._
 import ai.chronon.api.planner.{MetaDataUtils, TableDependencies}
 import ai.chronon.observability.{TileSummaryKey, TileSummary}
 import ai.chronon.online.KVStore.PutRequest
-import ai.chronon.planner.{ExternalSourceSensorNode, GroupByBackfillNode, JoinStatsComputeNode, MonolithJoinNode, Node, NodeContent, StagingQueryNode}
+import ai.chronon.planner.{ExternalSourceSensorNode, GroupByBackfillNode, JoinStatsComputeNode, MonolithJoinNode, Node, NodeContent, SourceWithFilterNode, StagingQueryNode}
 import ai.chronon.spark.other.MockKVStore
 import ai.chronon.spark.utils.{MockApi, SparkTestBase}
 import ai.chronon.spark.catalog.TableUtils
@@ -1327,6 +1327,66 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
         |(2, '2024-01-01-03-00'),
         |(3, '2024-01-01-06-00')
         |""".stripMargin)
+  }
+
+  "Source with filter nodes" should "run with the requested sub-daily partition spec" in {
+    val inputTable = "test_db.subdaily_source_input"
+    val outputTable = "test_db.subdaily_source_output"
+    spark.sql(s"DROP TABLE IF EXISTS $outputTable")
+    spark.sql(s"DROP TABLE IF EXISTS $inputTable")
+    spark.sql(
+      s"""CREATE TABLE $inputTable (
+         |  user_id STRING,
+         |  ts BIGINT,
+         |  ds STRING
+         |)
+         |PARTITIONED BY (ds)""".stripMargin)
+
+    val ts0300 = threeHourSpec.partitionStartMillis("2024-01-01-03-00") + 60 * 1000
+    val ts0600 = threeHourSpec.partitionStartMillis("2024-01-01-06-00") + 60 * 1000
+    val ts0900 = threeHourSpec.partitionStartMillis("2024-01-01-09-00") + 60 * 1000
+    spark.sql(
+      s"""INSERT INTO $inputTable VALUES
+         |('u1', $ts0300, '2024-01-01-03-00'),
+         |('u2', $ts0600, '2024-01-01-06-00'),
+         |('u3', $ts0900, '2024-01-01-09-00')
+         |""".stripMargin)
+
+    val query = subDailyQuery()
+      .setTimeColumn("ts")
+      .setSelects(Map("user_id" -> "user_id", "ts" -> "ts").asJava)
+    val source = new Source()
+    source.setEvents(new EventSource().setTable(inputTable).setQuery(query))
+    val sourceWithFilter = new SourceWithFilterNode()
+    sourceWithFilter.setSource(source)
+    val nodeContent = new NodeContent()
+    nodeContent.setSourceWithFilter(sourceWithFilter)
+
+    implicit val partitionSpec: PartitionSpec = threeHourSpec
+    val metadata = MetaDataUtils.layer(
+      baseMetadata = new MetaData().setOutputNamespace("test_db").setTeam("test_team"),
+      modeName = "backfill",
+      nodeName = "test_db__subdaily_source_with_filter",
+      tableDependencies = Seq(TableDependencies.fromTable(inputTable, query)),
+      stepDays = Some(1),
+      outputTableOverride = Some(outputTable)
+    )
+
+    val node = new Node().setMetaData(metadata).setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange("2024-01-01-03-00", "2024-01-01-06-00")
+
+    runner.run(metadata, nodeContent, Option(range))
+
+    val outputRows = spark
+      .sql(s"SELECT user_id, ds FROM $outputTable ORDER BY ds, user_id")
+      .collect()
+      .map(row => row.getString(0) -> row.getString(1))
+      .toSeq
+    outputRows shouldBe Seq("u1" -> "2024-01-01-03-00", "u2" -> "2024-01-01-06-00")
+    tableUtils.partitions(outputTable, tablePartitionSpec = Some(threeHourSpec)).sorted shouldBe List(
+      "2024-01-01-03-00",
+      "2024-01-01-06-00")
   }
 
   "BatchNodeRunnerArgs" should "accept formatted sub-daily start and end ds values" in {
