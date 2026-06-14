@@ -118,6 +118,10 @@ class KVUploadNodeRunner(api: Api) extends NodeRunner {
 }
 
 object KVUploadNodeRunner {
+  private[chronon] val PartitionColumnProp = "spark.chronon.partition.column"
+  private[chronon] val PartitionFormatProp = "spark.chronon.partition.format"
+  private[chronon] val PartitionSpanMillisProp = "spark.chronon.partition.span.millis"
+  private[chronon] val PartitionOffsetMillisProp = "spark.chronon.partition.offset.millis"
 
   class KVUploadNodeRunnerArgs(args: Array[String]) extends ScallopConf(args) {
     val confPath = opt[String](required = true, descr = "Path to node configuration file")
@@ -169,13 +173,20 @@ object KVUploadNodeRunner {
       val nodeCommonConf = metadata.commonConf
       val mergedProps = nodeCommonConf ++ props // CLI props take precedence
 
-      val api = instantiateApi(onlineClass, mergedProps)
-
       implicit val partitionSpec: PartitionSpec = RunnerUtils.outputPartitionSpec(metadata)
+      val api = instantiateApi(onlineClass, mergedProps ++ partitionSpecProps(partitionSpec))
       val range = Some(PartitionRange(null, endDs))
 
       val runner = new KVUploadNodeRunner(api)
       runner.run(metadata, node.content, range)
     }
   }
+
+  private[chronon] def partitionSpecProps(partitionSpec: PartitionSpec): Map[String, String] =
+    Map(
+      PartitionColumnProp -> partitionSpec.column,
+      PartitionFormatProp -> partitionSpec.format,
+      PartitionSpanMillisProp -> partitionSpec.spanMillis.toString,
+      PartitionOffsetMillisProp -> partitionSpec.offsetMillis.toString
+    )
 }
