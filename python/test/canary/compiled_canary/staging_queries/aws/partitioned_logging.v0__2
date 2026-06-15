@@ -109,6 +109,10 @@
         "timeUnit": 1
       },
       "tableInfo": {
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
         "table": "data.loggable_response"
       }
     }

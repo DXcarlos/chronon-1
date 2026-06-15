@@ -70,6 +70,10 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
         "table": "data.azure_scd2_under18_contacts_claim_spine_join__1"
       }
     }

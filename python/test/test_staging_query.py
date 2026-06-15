@@ -35,7 +35,7 @@ def test_nothing_set_defaults_both_sides_to_zero():
     assert td.endOffset == _days(0)
     assert td.startCutOff is None
     assert td.endCutOff is None
-    assert td.tableInfo.partitionInterval is None
+    assert td.tableInfo.partitionInterval == _days(1)
 
 
 def test_partition_column_without_offsets_no_longer_raises():
@@ -65,6 +65,17 @@ def test_table_dependency_partition_interval_is_serialized():
     assert td.tableInfo.partitionColumn == "ds"
     assert td.tableInfo.partitionFormat is None
     assert td.tableInfo.partitionInterval == _hours(3)
+
+
+def test_time_partitioned_table_dependency_without_interval_omits_partition_interval():
+    td = TableDependency(
+        table="ns.upstream",
+        partition_column="event_ts",
+        time_partitioned=True,
+    ).to_thrift()
+
+    assert td.tableInfo.timePartitioned is True
+    assert td.tableInfo.partitionInterval is None
 
 
 def test_table_dependency_partition_offset_is_serialized():
@@ -106,7 +117,7 @@ def test_table_dependency_does_not_propagate_daily_table_reference():
     td = TableDependency(table=producer.table).to_thrift()
 
     assert td.tableInfo.table == "data.team_producer__1"
-    assert td.tableInfo.partitionInterval is None
+    assert td.tableInfo.partitionInterval == _days(1)
     assert td.tableInfo.partitionOffset is None
 
 

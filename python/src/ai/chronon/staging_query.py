@@ -174,6 +174,8 @@ class TableDependency:
                     window_utils.normalize_window(self.partition_interval)
                     if self.partition_interval is not None
                     else None
+                    if self.time_partitioned
+                    else common.Window(1, common.TimeUnit.DAYS)
                 ),
                 partitionOffset=(
                     window_utils.normalize_window(self.partition_offset)

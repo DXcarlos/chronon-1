@@ -71,6 +71,10 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
         "table": "checkouts"
       }
     }

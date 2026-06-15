@@ -64,6 +64,10 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
         "table": "kaggle_outbrain.clicks_train"
       }
     },
@@ -78,6 +82,10 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
         "table": "kaggle_outbrain.events"
       }
     }

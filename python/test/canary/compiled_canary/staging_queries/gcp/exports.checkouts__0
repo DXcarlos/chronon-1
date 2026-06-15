@@ -97,6 +97,10 @@
       },
       "tableInfo": {
         "partitionColumn": "_PARTITIONTIME",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
         "table": "demo.`checkouts`"
       }
     }

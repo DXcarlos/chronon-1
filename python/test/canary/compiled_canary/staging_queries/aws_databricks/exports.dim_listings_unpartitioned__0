@@ -74,6 +74,10 @@
       },
       "tableInfo": {
         "partitionColumn": "snapshot_ts",
+        "partitionInterval": {
+          "length": 1,
+          "timeUnit": 1
+        },
         "table": "workspace.poc.dim_listings_unpartitioned"
       }
     }
