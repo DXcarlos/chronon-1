@@ -125,12 +125,12 @@ class FormatTest extends SparkTestBase {
                                      subPartitionsFilter: Map[String, String])(implicit
           ss: SparkSession) = List("2024-04-02", null, "2024-04-02", "2024-04-01")
 
-      def disfullyContainedPartitions(tableName: String, partitionColumn: String)(implicit
+      def discoveredPartitions(tableName: String, partitionColumn: String)(implicit
           ss: SparkSession): Option[List[String]] =
         metadataPartitions(tableName, partitionColumn)(ss)
     }
 
-    fmt.disfullyContainedPartitions("db.table", "ds")(spark) shouldBe Some(List("2024-04-02", "2024-04-01"))
+    fmt.discoveredPartitions("db.table", "ds")(spark) shouldBe Some(List("2024-04-02", "2024-04-01"))
   }
 
   it should "return the last complete partition when scanning a timestamp column" in {

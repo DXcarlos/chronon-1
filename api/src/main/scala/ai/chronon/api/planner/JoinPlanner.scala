@@ -15,7 +15,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
   private val joinPartitionSpec: PartitionSpec =
     PartitionSpecResolver.outputSpec(join.metaData, outputPartitionSpec)
 
-  private def validatePartitionIntervals(): Unit = {
+  private def validatePartitionGrids(): Unit = {
     // join output partitions are computed from left rows in the same time range, so the join's
     // boundaries must sit on the left source's boundaries; a coarser/undeclared left
     // partitionInterval under a sub-daily join is the silent-staleness trap. Right parts read
@@ -350,7 +350,7 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
   }
 
   override def buildPlan: ConfPlan = {
-    validatePartitionIntervals()
+    validatePartitionGrids()
     // Check if this join is eligible for UnionJoin
     // Conditions: left is events, 1 join part, TEMPORAL accuracy, no bootstrap parts
     val isUnionJoinEligible = join.left.isSetEvents &&
