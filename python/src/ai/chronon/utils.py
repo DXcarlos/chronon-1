@@ -12,6 +12,7 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
+import copy
 import gc
 import importlib
 import inspect
@@ -324,6 +325,89 @@ def sanitize(name):
 # passes it through unchanged. A `{{ db }}`-style token would be mangled to `____db____`
 # by sanitize and become unfindable at compile-time substitution.
 OUTPUT_NAMESPACE_PLACEHOLDER = "_chronon_namespace_placeholder_"
+
+
+class TableReference(str):
+    """String table name plus Chronon producer grid metadata.
+
+    This stays string-compatible for SQL formatting and thrift fields, while
+    source constructors can preserve a producer's non-daily output grid when a
+    consumer uses ``producer.table`` directly.
+    """
+
+    def __new__(
+        cls,
+        value: str,
+        *,
+        partition_column=None,
+        partition_format=None,
+        partition_interval=None,
+        partition_offset=None,
+        producer_name=None,
+    ):
+        obj = str.__new__(cls, value)
+        obj.partition_column = partition_column
+        obj.partition_format = partition_format
+        obj.partition_interval = partition_interval
+        obj.partition_offset = partition_offset
+        obj.producer_name = producer_name
+        return obj
+
+
+def _non_daily_output_grid(obj):
+    meta_data = getattr(obj, "metaData", None)
+    exec_info = getattr(meta_data, "executionInfo", None) if meta_data else None
+    table_info = getattr(exec_info, "outputTableInfo", None) if exec_info else None
+    if table_info is None or table_info.partitionInterval is None:
+        return {}
+
+    from ai.chronon import windows as window_utils
+
+    interval_ms = window_utils.window_millis(table_info.partitionInterval)
+    offset_ms = window_utils.window_millis(table_info.partitionOffset) if table_info.partitionOffset else 0
+    if interval_ms == window_utils.DAY_MILLIS and offset_ms == 0:
+        return {}
+
+    return {
+        "partition_column": copy.deepcopy(table_info.partitionColumn),
+        "partition_format": copy.deepcopy(table_info.partitionFormat),
+        "partition_interval": copy.deepcopy(table_info.partitionInterval),
+        "partition_offset": copy.deepcopy(table_info.partitionOffset),
+    }
+
+
+def _ensure_name_and_get_output_table_reference(obj, cls, mod_prefix, full_name=False, suffix=""):
+    table = _ensure_name_and_get_output_table(obj, cls, mod_prefix, full_name)
+    return TableReference(
+        table + suffix,
+        producer_name=getattr(getattr(obj, "metaData", None), "name", None),
+        **_non_daily_output_grid(obj),
+    )
+
+
+def propagate_table_reference_grid(query, table):
+    """Copy a direct producer table reference's grid into a consumer query.
+
+    Explicit consumer partition_interval wins. When it is set, the consumer owns
+    the full source-grid declaration, including offset and format.
+    """
+    if (
+        query is None
+        or not isinstance(table, TableReference)
+        or table.partition_interval is None
+        or query.partitionInterval is not None
+    ):
+        return query
+
+    result = copy.deepcopy(query)
+    result.partitionInterval = copy.deepcopy(table.partition_interval)
+    if result.partitionColumn is None and table.partition_column is not None:
+        result.partitionColumn = copy.deepcopy(table.partition_column)
+    if result.partitionFormat is None and table.partition_format is not None:
+        result.partitionFormat = copy.deepcopy(table.partition_format)
+    if result.partitionOffset is None and table.partition_offset is not None:
+        result.partitionOffset = copy.deepcopy(table.partition_offset)
+    return result
 
 
 def output_table_name(obj, full_name: bool):

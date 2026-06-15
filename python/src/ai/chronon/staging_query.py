@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import re
@@ -41,7 +42,7 @@ def _normalize_table_name(table_name: str) -> str:
 
 def _get_output_table_name(staging_query: ttypes.StagingQuery, full_name: bool = False):
     """generate output table name for staging query job"""
-    return utils._ensure_name_and_get_output_table(
+    return utils._ensure_name_and_get_output_table_reference(
         staging_query, ttypes.StagingQuery, "staging_queries", full_name
     )
 
@@ -111,6 +112,21 @@ class TableDependency:
     end_cutoff: Optional[str] = None
     time_partitioned: Optional[bool] = None
 
+    def __post_init__(self):
+        if (
+            self.partition_interval is None
+            and isinstance(self.table, utils.TableReference)
+            and self.table.partition_interval is not None
+        ):
+            self.partition_interval = copy.deepcopy(self.table.partition_interval)
+            if self.partition_column is None:
+                self.partition_column = copy.deepcopy(self.table.partition_column)
+            if self.partition_format is None:
+                self.partition_format = copy.deepcopy(self.table.partition_format)
+            if self.partition_offset is None:
+                self.partition_offset = copy.deepcopy(self.table.partition_offset)
+        self.table = str(self.table)
+
     def resolved_offsets(self) -> Tuple[Optional[int], int]:
         """Resolve ``(start_offset, end_offset)`` from the dataclass fields using
         the same precedence as ``to_thrift``. ``start`` may be ``None`` (pin at
@@ -157,7 +173,7 @@ class TableDependency:
                 partitionInterval=(
                     window_utils.normalize_window(self.partition_interval)
                     if self.partition_interval is not None
-                    else common.Window(1, common.TimeUnit.DAYS)
+                    else None
                 ),
                 partitionOffset=(
                     window_utils.normalize_window(self.partition_offset)
@@ -175,6 +191,29 @@ class TableDependency:
             startCutOff=self.start_cutoff,
             endCutOff=self.end_cutoff,
         )
+
+
+def _propagate_output_grid_to_time_partitioned_dependency(
+    dependency: TableDependency, output_info: common.TableInfo
+) -> None:
+    if (
+        dependency is None
+        or not dependency.time_partitioned
+        or dependency.partition_interval is not None
+        or output_info is None
+        or output_info.partitionInterval is None
+    ):
+        return
+    if window_utils.window_millis(output_info.partitionInterval) == window_utils.DAY_MILLIS:
+        return
+
+    dependency.partition_interval = copy.deepcopy(output_info.partitionInterval)
+    if dependency.partition_column is None:
+        dependency.partition_column = copy.deepcopy(output_info.partitionColumn)
+    if dependency.partition_format is None:
+        dependency.partition_format = copy.deepcopy(output_info.partitionFormat)
+    if dependency.partition_offset is None:
+        dependency.partition_offset = copy.deepcopy(output_info.partitionOffset)
 
 
 def StagingQuery(
@@ -328,6 +367,8 @@ def StagingQuery(
 
     if dependencies:
         for d in dependencies:
+            if isinstance(d, TableDependency):
+                _propagate_output_grid_to_time_partitioned_dependency(d, output_info)
             if subdaily_output and isinstance(d, TableDependency):
                 window_utils.validate_table_dependency_grid(
                     "This StagingQuery", d, f"dependency {d.table}"

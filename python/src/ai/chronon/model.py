@@ -284,7 +284,7 @@ def _get_model_transforms_output_table_name(
     model_transforms: ttypes.ModelTransforms, full_name: bool = False
 ):
     """Generate output table name for ModelTransforms"""
-    return utils._ensure_name_and_get_output_table(
+    return utils._ensure_name_and_get_output_table_reference(
         model_transforms, ttypes.ModelTransforms, "models", full_name
     )
 

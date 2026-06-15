@@ -84,10 +84,6 @@
       },
       "tableInfo": {
         "partitionColumn": "DS",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "DEMO.CLAIMS_DEMO.CLAIMS_DEMO_BASELINE_SOURCE"
       }
     }

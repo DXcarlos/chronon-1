@@ -41,7 +41,9 @@ def _get_output_table_name(obj, full_name: bool = False):
     Group by backfill output table name
     To be synced with api.Extensions.scala
     """
-    return utils._ensure_name_and_get_output_table(obj, ttypes.GroupBy, "group_bys", full_name)
+    return utils._ensure_name_and_get_output_table_reference(
+        obj, ttypes.GroupBy, "group_bys", full_name
+    )
 
 
 #  The GroupBy's default online/production status is None and it will inherit

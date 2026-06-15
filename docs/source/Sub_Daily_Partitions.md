@@ -106,9 +106,8 @@ The two kinds of upstreams follow different rules:
   source `Query` — readiness and scans resolve on that grid.
 - **`time_partitioned=True`**: the partition column is a real timestamp/date column and data
   lands continuously. It only changes how readiness is sensed (max timestamp instead of
-  partition existence). It does **not** declare cadence and Chronon does not inherit the
-  downstream grid into the source. For sub-daily outputs, still declare the source's
-  `partition_interval`/`partition_offset`; Python validation rejects implicit cadence.
+  partition existence). External time-partitioned sources can omit `partition_interval`/
+  `partition_offset`; Chronon slices them on the consumer grid.
 
   ```python
   source = EventSource(
@@ -117,11 +116,14 @@ The two kinds of upstreams follow different rules:
           time_column="ts",
           partition_column="ts",
           time_partitioned=True,
-          partition_interval="3h",
-          partition_offset="1h",
       ),
   )
   ```
+- **Chronon-produced tables**: use `producer.table` (or `join.derived_table` for modular
+  join derivation output). For non-daily producers, that reference carries the producer grid
+  into the consumer. Avoid string composition such as `f"{join.table}__derived"`; it drops
+  grid metadata and compile will ask you to use `join.derived_table` or set the grid
+  explicitly.
 - **`triggerExpr`**: unchanged escape hatch for custom SQL readiness.
 
 For catalog-partitioned upstreams with none of the above, partition-exists is trusted: a ds

@@ -101,10 +101,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.gcp_sample_staging_query_cart__0"
       }
     },
@@ -119,10 +115,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.gcp_sample_staging_query_user__0"
       }
     },
@@ -137,10 +129,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.gcp_sample_staging_query_item__0"
       }
     },
@@ -155,10 +143,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.gcp_sample_staging_query_order__0"
       }
     },
@@ -173,10 +157,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.gcp_sample_staging_query_payment__0"
       }
     },
@@ -191,10 +171,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.gcp_sample_staging_query_shipping__0"
       }
     }

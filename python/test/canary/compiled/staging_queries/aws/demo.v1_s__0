@@ -112,10 +112,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.aws_demo_derivations_v1__2"
       }
     }

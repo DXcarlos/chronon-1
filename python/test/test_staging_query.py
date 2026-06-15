@@ -35,6 +35,7 @@ def test_nothing_set_defaults_both_sides_to_zero():
     assert td.endOffset == _days(0)
     assert td.startCutOff is None
     assert td.endCutOff is None
+    assert td.tableInfo.partitionInterval is None
 
 
 def test_partition_column_without_offsets_no_longer_raises():
@@ -75,6 +76,38 @@ def test_table_dependency_partition_offset_is_serialized():
     ).to_thrift()
 
     assert td.tableInfo.partitionOffset == _hours(1)
+
+
+def test_table_dependency_inherits_non_daily_grid_from_table_reference():
+    producer = StagingQuery(
+        query="SELECT 1 as user_id, 1 as event_id, 0L as ts",
+        output_namespace="data",
+        partition_interval="3h",
+        partition_offset="1h",
+    )
+    producer.metaData.name = "team.producer__1"
+
+    td = TableDependency(table=producer.table).to_thrift()
+
+    assert td.tableInfo.table == "data.team_producer__1"
+    assert td.tableInfo.partitionColumn == "ds"
+    assert td.tableInfo.partitionFormat == "yyyy-MM-dd-HH-mm"
+    assert td.tableInfo.partitionInterval == _hours(3)
+    assert td.tableInfo.partitionOffset == _hours(1)
+
+
+def test_table_dependency_does_not_propagate_daily_table_reference():
+    producer = StagingQuery(
+        query="SELECT 1 as user_id, 1 as event_id, 0L as ts",
+        output_namespace="data",
+    )
+    producer.metaData.name = "team.producer__1"
+
+    td = TableDependency(table=producer.table).to_thrift()
+
+    assert td.tableInfo.table == "data.team_producer__1"
+    assert td.tableInfo.partitionInterval is None
+    assert td.tableInfo.partitionOffset is None
 
 
 def test_staging_query_partition_interval_sets_output_table_info():
@@ -163,13 +196,20 @@ def test_staging_query_subdaily_rejects_dependency_without_interval():
         )
 
 
-def test_staging_query_subdaily_rejects_time_partitioned_dependency_without_interval():
-    with pytest.raises(ValueError, match="time_partitioned"):
-        StagingQuery(
-            query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
-            dependencies=[TableDependency(table="ns.upstream", time_partitioned=True)],
-            partition_interval="3h",
-        )
+def test_staging_query_subdaily_propagates_output_grid_to_time_partitioned_dependency_without_interval():
+    sq = StagingQuery(
+        query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+        dependencies=[TableDependency(table="ns.upstream", time_partitioned=True)],
+        partition_interval="3h",
+        partition_offset="1h",
+    )
+
+    dep = sq.tableDependencies[0].tableInfo
+    assert dep.timePartitioned is True
+    assert dep.partitionColumn == "ds"
+    assert dep.partitionFormat == "yyyy-MM-dd-HH-mm"
+    assert dep.partitionInterval == _hours(3)
+    assert dep.partitionOffset == _hours(1)
 
 
 def test_staging_query_subdaily_allows_time_partitioned_dependency_with_interval():

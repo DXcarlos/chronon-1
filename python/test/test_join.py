@@ -238,18 +238,20 @@ def test_subdaily_join_rejects_undeclared_left():
         )
 
 
-def test_subdaily_join_rejects_time_partitioned_left_without_interval():
+def test_subdaily_join_allows_time_partitioned_left_without_interval():
     left = event_source("table")
     left.events.query.timePartitioned = True
 
-    with pytest.raises(ValueError, match="time_partitioned"):
-        join.Join(
-            left=left,
-            right_parts=[right_part(event_source("table"))],
-            version=1,
-            row_ids=["id"],
-            partition_interval="3h",
-        )
+    j = join.Join(
+        left=left,
+        right_parts=[right_part(event_source("table"))],
+        version=1,
+        row_ids=["id"],
+        partition_interval="3h",
+    )
+
+    assert j.left.events.query.timePartitioned is True
+    assert j.left.events.query.partitionInterval is None
 
 
 def test_subdaily_join_allows_time_partitioned_left_with_interval_and_offset():

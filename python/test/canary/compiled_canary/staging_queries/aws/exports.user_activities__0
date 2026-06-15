@@ -112,10 +112,6 @@
       },
       "tableInfo": {
         "partitionColumn": "event_time",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "demo.user_activities"
       }
     }

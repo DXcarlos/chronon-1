@@ -112,10 +112,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.aws_cutoff_example_export_a__0"
       }
     },
@@ -127,10 +123,6 @@
       "startCutOff": "2026-02-25",
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.aws_cutoff_example_export_b__0"
       }
     }

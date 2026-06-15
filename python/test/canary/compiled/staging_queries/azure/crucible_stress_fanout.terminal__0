@@ -85,10 +85,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "claims_demo.azure_crucible_stress_fanout_segment_000__0"
       }
     },
@@ -103,10 +99,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "claims_demo.azure_crucible_stress_fanout_segment_001__0"
       }
     },
@@ -121,10 +113,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "claims_demo.azure_crucible_stress_fanout_segment_002__0"
       }
     },
@@ -139,10 +127,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "claims_demo.azure_crucible_stress_fanout_segment_003__0"
       }
     }

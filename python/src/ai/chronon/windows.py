@@ -211,20 +211,15 @@ def validate_source_grid(conf_desc: str, query, source_desc: str) -> None:
     """GroupBy/model sources and the join LEFT must hold the output partition's whole time
     range: every output boundary must also be a source boundary. Example: a 3h@1h output over
     a daily source can't fill [13:00, 16:00) until the day closes. Call only when the conf's
-    output grid is sub-daily: the source must declare a partition_interval (the boundary
-    relationship is validated at plan time). time_partitioned only changes readiness sensing;
-    it does not declare a cadence and must not inherit one from the downstream conf. Join RIGHT
+    output grid is sub-daily: physical sources must declare a partition_interval unless the
+    table is Chronon-produced and the TableReference propagated it. time_partitioned sources
+    use timestamp/date slicing and may inherit the consumer grid at planning time. Join RIGHT
     parts pick the latest snapshot at or before each left row's ts on their own grid - mixed
     cadence is the product - and must never be validated through this."""
     if query is None or query.partitionInterval is not None:
         return
     if query.timePartitioned:
-        raise ValueError(
-            f"{conf_desc} has a sub-daily output grid over {source_desc} marked "
-            "time_partitioned but with no declared partition_interval. time_partitioned only "
-            "changes readiness sensing; it does not declare or inherit the source cadence. "
-            "Declare the source's partition_interval/partition_offset explicitly."
-        )
+        return
     raise ValueError(
         f"{conf_desc} has a sub-daily output grid over {source_desc} with no declared "
         "partition_interval - implicitly daily. Every intraday run would wait for the full "
@@ -235,19 +230,14 @@ def validate_source_grid(conf_desc: str, query, source_desc: str) -> None:
 def validate_table_dependency_grid(conf_desc: str, dependency, source_desc: str) -> None:
     """Validate a Python StagingQuery TableDependency for a sub-daily output grid.
 
-    TableDependency does not have a downstream query object to infer from. The author must
-    declare the upstream cadence explicitly; time_partitioned only controls how readiness is
-    sensed for that declared cadence.
+    Physical dependencies must declare the upstream cadence explicitly. Chronon-produced
+    tables propagate their non-daily grid through TableReference, and time_partitioned
+    dependencies may inherit the StagingQuery output grid.
     """
     if dependency is None or dependency.partition_interval is not None:
         return
     if dependency.time_partitioned:
-        raise ValueError(
-            f"{conf_desc} has a sub-daily output grid over {source_desc} marked "
-            "time_partitioned but with no declared partition_interval. time_partitioned only "
-            "changes readiness sensing; it does not declare or inherit the source cadence. "
-            "Declare the dependency's partition_interval/partition_offset explicitly."
-        )
+        return
     raise ValueError(
         f"{conf_desc} has a sub-daily output grid over {source_desc} with no declared "
         "partition_interval - implicitly daily. Declare the dependency's partition_interval."

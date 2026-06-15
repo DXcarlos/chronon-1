@@ -31,7 +31,14 @@ logging.basicConfig(level=logging.INFO)
 
 def _get_output_table_name(join: api.Join, full_name: bool = False):
     """generate output table name for join backfill job"""
-    return utils._ensure_name_and_get_output_table(join, api.Join, "joins", full_name)
+    return utils._ensure_name_and_get_output_table_reference(join, api.Join, "joins", full_name)
+
+
+def _get_derived_output_table_name(join: api.Join, full_name: bool = False):
+    """Generate output table name for modular join derivation output."""
+    return utils._ensure_name_and_get_output_table_reference(
+        join, api.Join, "joins", full_name, suffix="__derived"
+    )
 
 
 def JoinPart(
@@ -570,5 +577,8 @@ def Join(
 
     # Add the table property that calls the private function
     join.__class__.table = property(lambda self: _get_output_table_name(self, full_name=True))
+    join.__class__.derived_table = property(
+        lambda self: _get_derived_output_table_name(self, full_name=True)
+    )
 
     return mark_factory_created_config(join)

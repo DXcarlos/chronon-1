@@ -16,7 +16,8 @@
 import pytest
 
 import gen_thrift.common.ttypes as common
-from ai.chronon import group_by, query
+from ai.chronon import group_by, query, source
+from ai.chronon.staging_query import StagingQuery
 from gen_thrift.api import ttypes
 
 
@@ -209,6 +210,52 @@ def test_partition_interval_sets_output_table_info():
     assert table_info.partitionInterval.timeUnit == common.TimeUnit.HOURS
 
 
+def test_event_source_inherits_non_daily_grid_from_table_reference():
+    producer = StagingQuery(
+        query="SELECT 1 as subject, 1 as event_id, 0L as ts",
+        output_namespace="data",
+        partition_interval="3h",
+        partition_offset="1h",
+    )
+    producer.metaData.name = "team.producer__1"
+
+    src = source.EventSource(
+        table=producer.table,
+        query=query.Query(
+            selects={"subject": "subject_sql", "event_id": "event_sql"},
+            time_column="ts",
+        ),
+    )
+
+    assert src.events.table == "data.team_producer__1"
+    assert src.events.query.partitionColumn == "ds"
+    assert src.events.query.partitionFormat == "yyyy-MM-dd-HH-mm"
+    assert src.events.query.partitionInterval == common.Window(length=3, timeUnit=common.TimeUnit.HOURS)
+    assert src.events.query.partitionOffset == common.Window(length=1, timeUnit=common.TimeUnit.HOURS)
+
+
+def test_event_source_explicit_grid_wins_over_table_reference():
+    producer = StagingQuery(
+        query="SELECT 1 as subject, 1 as event_id, 0L as ts",
+        output_namespace="data",
+        partition_interval="3h",
+        partition_offset="1h",
+    )
+    producer.metaData.name = "team.producer__1"
+
+    src = source.EventSource(
+        table=producer.table,
+        query=query.Query(
+            selects={"subject": "subject_sql", "event_id": "event_sql"},
+            time_column="ts",
+            partition_interval="6h",
+        ),
+    )
+
+    assert src.events.query.partitionInterval == common.Window(length=6, timeUnit=common.TimeUnit.HOURS)
+    assert src.events.query.partitionOffset is None
+
+
 def test_generic_collector():
     aggregation = group_by.Aggregation(
         input_column="test", operation=group_by.Operation.APPROX_PERCENTILE([0.4, 0.2])
@@ -368,7 +415,7 @@ def test_subdaily_group_by_rejects_undeclared_sources():
         )
 
 
-def test_subdaily_group_by_rejects_time_partitioned_source_without_interval():
+def test_subdaily_group_by_allows_time_partitioned_source_without_interval():
     src = ttypes.EventSource(
         table="table",
         query=query.Query(
@@ -377,17 +424,18 @@ def test_subdaily_group_by_rejects_time_partitioned_source_without_interval():
             time_partitioned=True,
         ),
     )
-    with pytest.raises(ValueError, match="time_partitioned"):
-        group_by.GroupBy(
-            sources=[src],
-            keys=["subject"],
-            aggregations=group_by.Aggregations(
-                random=ttypes.Aggregation(inputColumn="event_id", operation=ttypes.Operation.SUM),
-            ),
-            partition_interval="3h",
-            offline_schedule="0 */3 * * *",
-            version=0,
-        )
+    gb = group_by.GroupBy(
+        sources=[src],
+        keys=["subject"],
+        aggregations=group_by.Aggregations(
+            random=ttypes.Aggregation(inputColumn="event_id", operation=ttypes.Operation.SUM),
+        ),
+        partition_interval="3h",
+        offline_schedule="0 */3 * * *",
+        version=0,
+    )
+    assert gb.sources[0].events.query.timePartitioned is True
+    assert gb.sources[0].events.query.partitionInterval is None
 
 
 def test_subdaily_group_by_allows_time_partitioned_source_with_interval():

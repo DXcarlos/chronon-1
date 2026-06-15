@@ -98,10 +98,6 @@
       },
       "tableInfo": {
         "partitionColumn": "notds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "data.purchases_notds"
       }
     }

@@ -112,10 +112,6 @@
       },
       "tableInfo": {
         "partitionColumn": "ts",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
-        },
         "table": "demo.checkouts"
       }
     }

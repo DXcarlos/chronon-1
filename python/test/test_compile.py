@@ -648,6 +648,61 @@ def test_compile_never_leaves_namespace_placeholder_in_thriftjson(tmp_path, monk
     _assert_no_namespace_placeholder_in_compiled(tmp_path / "compiled")
 
 
+def test_compile_rejects_lost_table_reference_grid_metadata(tmp_path, monkeypatch, capsys):
+    _scaffold_repo(tmp_path)
+    _write(
+        tmp_path / "staging_queries" / "sample_team" / "producer.py",
+        dedent(
+            """
+            from ai.chronon.types import StagingQuery
+
+            hourly = StagingQuery(
+                query="SELECT 1 as user_id, 1 as value, 0L as ts",
+                partition_interval="3h",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+    _write(
+        tmp_path / "group_bys" / "sample_team" / "consumer.py",
+        dedent(
+            """
+            from staging_queries.sample_team.producer import hourly
+            from ai.chronon.types import Aggregation, EventSource, GroupBy, Operation, Query, TimeUnit, Window
+
+            v1 = GroupBy(
+                sources=[
+                    EventSource(
+                        table=str(hourly.table),
+                        query=Query(
+                            selects={"user_id": "user_id", "value": "value"},
+                            time_column="ts",
+                        ),
+                    )
+                ],
+                keys=["user_id"],
+                aggregations=[
+                    Aggregation(
+                        input_column="value",
+                        operation=Operation.SUM,
+                        windows=[Window(1, TimeUnit.DAYS)],
+                    )
+                ],
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+
+    _, has_errors, _ = _run_compile(tmp_path, monkeypatch, ignore_python_errors=True)
+
+    assert has_errors
+    out = capsys.readouterr().out
+    assert "did not receive partition_interval metadata" in out
+    assert "producer's .table" in out
+
+
 def test_compile_preserves_nested_left_join_source_name(tmp_path, monkeypatch):
     """A JoinSource used as Join.left should carry the nested join's compiled
     metadata name into the compiled thriftjson so downstream planning resolves
