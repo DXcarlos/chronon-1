@@ -532,19 +532,12 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
         inputPartitionSpec <- inputPartitionSpecs;
         table <- inputTables;
         subPartitionFilters = inputTableToSubPartitionFiltersMap.getOrElse(table, Map.empty);
-        // the listing filter must be expressed in the INPUT table's spec: a sub-daily output
-        // range's ds values would otherwise exclude the coarser input partitions holding its
-        // data (e.g. ds >= '2024-01-04-22-00' excludes daily '2024-01-04')
+        // List in the input table's spec; output ds filters can exclude coarser input partitions.
         listed = partitions(table,
                             subPartitionFilters,
                             Option(outputPartitionRange.intersectingRange(inputPartitionSpec)),
                             tablePartitionSpec = Some(inputPartitionSpec));
-        // partitions(..., tablePartitionSpec = Some(...)) returns values in the TableUtils
-        // default spec when the input grid matches it, and raw input-spec values otherwise
         listedSpec = if (inputPartitionSpec.hasSameGrid(partitionSpec)) partitionSpec else inputPartitionSpec;
-        // honest cross-grid accounting: a coarser input partition holds the finer outputs
-        // inside it; finer inputs satisfy a coarser output only when ALL overlapping input
-        // partitions exist
         contained <- PartitionRange.fullyContainedPartitions(listed, listedSpec, workingSpec)
       ) yield {
         workingSpec.shiftPartitions(contained, inputToOutputShift)
