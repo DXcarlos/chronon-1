@@ -37,8 +37,8 @@ my_group_by = GroupBy(
     keys=["user_id"],
     aggregations=[Aggregation(input_column="amount", operation=Operation.SUM, windows=["7d"])],
     online=True,
-    partition_interval="3h",     # output grid
-    partition_offset="1h",       # boundaries at 01:00, 04:00, ..., 22:00 UTC
+    partition_interval="3h",     # output grid interval
+    partition_offset="1h",       # output grid offset: boundaries at 01:00, 04:00, ..., 22:00 UTC
     offline_schedule="15 1-22/3 * * *",  # fires at 01:15, 04:15, ... = 15m delay over the grid
 )
 ```
