@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Optional, Union
 
 import gen_thrift.common.ttypes as common
@@ -93,6 +94,97 @@ DAILY_PARTITION_FORMAT = "yyyy-MM-dd"
 # colons get URL-escaped (Hive percent-escapes colons). Space/colon formats remain
 # expressible by setting an explicit partition format.
 SUB_DAILY_PARTITION_FORMAT = "yyyy-MM-dd-HH-mm"
+
+
+@dataclass(frozen=True)
+class PartitionSpec:
+    column: Optional[str] = None
+    format: Optional[str] = None
+    interval: Optional[Union[common.Window, str]] = None
+    offset: Optional[Union[common.Window, str]] = None
+    time_partitioned: Optional[bool] = None
+
+    @classmethod
+    def from_table_info(cls, table_info) -> "PartitionSpec":
+        if table_info is None:
+            return cls()
+        return cls(
+            column=table_info.partitionColumn,
+            format=table_info.partitionFormat,
+            interval=table_info.partitionInterval,
+            offset=table_info.partitionOffset,
+            time_partitioned=getattr(table_info, "timePartitioned", None),
+        )
+
+    @classmethod
+    def from_table_reference(cls, table_reference) -> "PartitionSpec":
+        return cls(
+            column=getattr(table_reference, "partition_column", None),
+            format=getattr(table_reference, "partition_format", None),
+            interval=getattr(table_reference, "partition_interval", None),
+            offset=getattr(table_reference, "partition_offset", None),
+        )
+
+    def has_interval(self) -> bool:
+        return self.interval is not None
+
+    def with_missing_from(self, fallback: "PartitionSpec") -> "PartitionSpec":
+        return PartitionSpec(
+            column=self.column if self.column is not None else fallback.column,
+            format=self.format if self.format is not None else fallback.format,
+            interval=self.interval if self.interval is not None else fallback.interval,
+            offset=self.offset if self.offset is not None else fallback.offset,
+            time_partitioned=(
+                self.time_partitioned
+                if self.time_partitioned is not None
+                else fallback.time_partitioned
+            ),
+        )
+
+    def normalized_interval(self) -> Optional[common.Window]:
+        return normalize_window(self.interval) if self.interval is not None else None
+
+    def normalized_offset(self) -> Optional[common.Window]:
+        return normalize_window(self.offset) if self.offset is not None else None
+
+    def defaulted_format(self) -> Optional[str]:
+        if self.format is not None:
+            return self.format
+        if self.interval is None:
+            return None
+        return default_partition_format(self.interval)
+
+    def interval_millis(self) -> Optional[int]:
+        return window_millis(self.interval) if self.interval is not None else None
+
+    def offset_millis(self) -> int:
+        return window_millis(self.offset) if self.offset is not None else 0
+
+    def is_daily_grid(self) -> bool:
+        return self.interval_millis() == DAY_MILLIS and self.offset_millis() == 0
+
+    def is_subdaily_grid(self) -> bool:
+        interval_ms = self.interval_millis()
+        return interval_ms is not None and interval_ms < DAY_MILLIS
+
+    def query_kwargs(self):
+        return {
+            "partitionColumn": self.column,
+            "partitionFormat": self.defaulted_format(),
+            "partitionInterval": self.normalized_interval(),
+            "partitionOffset": self.normalized_offset(),
+            "timePartitioned": self.time_partitioned,
+        }
+
+    def table_info(self, table: str = None, use_default_format: bool = False) -> common.TableInfo:
+        return common.TableInfo(
+            table=table,
+            partitionColumn=self.column,
+            partitionFormat=self.defaulted_format() if use_default_format else self.format,
+            partitionInterval=self.normalized_interval(),
+            partitionOffset=self.normalized_offset(),
+            timePartitioned=self.time_partitioned,
+        )
 
 
 def from_millis(millis: int) -> common.Window:
@@ -328,9 +420,9 @@ def output_table_info(
             UserWarning,
             stacklevel=2,
         )
-    return common.TableInfo(
-        partitionColumn=partition_column,
-        partitionFormat=partition_format or default_format,
-        partitionInterval=interval,
-        partitionOffset=offset,
-    )
+    return PartitionSpec(
+        column=partition_column,
+        format=partition_format or default_format,
+        interval=interval,
+        offset=offset,
+    ).table_info(use_default_format=True)

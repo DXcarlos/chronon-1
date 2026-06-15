@@ -358,21 +358,17 @@ def _non_daily_output_grid(obj):
     meta_data = getattr(obj, "metaData", None)
     exec_info = getattr(meta_data, "executionInfo", None) if meta_data else None
     table_info = getattr(exec_info, "outputTableInfo", None) if exec_info else None
-    if table_info is None or table_info.partitionInterval is None:
-        return {}
-
     from ai.chronon import windows as window_utils
 
-    interval_ms = window_utils.window_millis(table_info.partitionInterval)
-    offset_ms = window_utils.window_millis(table_info.partitionOffset) if table_info.partitionOffset else 0
-    if interval_ms == window_utils.DAY_MILLIS and offset_ms == 0:
+    partition_spec = window_utils.PartitionSpec.from_table_info(table_info)
+    if not partition_spec.has_interval() or partition_spec.is_daily_grid():
         return {}
 
     return {
-        "partition_column": copy.deepcopy(table_info.partitionColumn),
-        "partition_format": copy.deepcopy(table_info.partitionFormat),
-        "partition_interval": copy.deepcopy(table_info.partitionInterval),
-        "partition_offset": copy.deepcopy(table_info.partitionOffset),
+        "partition_column": copy.deepcopy(partition_spec.column),
+        "partition_format": copy.deepcopy(partition_spec.format),
+        "partition_interval": copy.deepcopy(partition_spec.interval),
+        "partition_offset": copy.deepcopy(partition_spec.offset),
     }
 
 
@@ -394,19 +390,22 @@ def propagate_table_reference_grid(query, table):
     if (
         query is None
         or not isinstance(table, TableReference)
-        or table.partition_interval is None
         or query.partitionInterval is not None
     ):
         return query
 
+    from ai.chronon import windows as window_utils
+
+    table_spec = window_utils.PartitionSpec.from_table_reference(table)
+    if not table_spec.has_interval():
+        return query
+
     result = copy.deepcopy(query)
-    result.partitionInterval = copy.deepcopy(table.partition_interval)
-    if result.partitionColumn is None and table.partition_column is not None:
-        result.partitionColumn = copy.deepcopy(table.partition_column)
-    if result.partitionFormat is None and table.partition_format is not None:
-        result.partitionFormat = copy.deepcopy(table.partition_format)
-    if result.partitionOffset is None and table.partition_offset is not None:
-        result.partitionOffset = copy.deepcopy(table.partition_offset)
+    resolved_spec = window_utils.PartitionSpec.from_table_info(result).with_missing_from(table_spec)
+    result.partitionInterval = copy.deepcopy(resolved_spec.interval)
+    result.partitionColumn = copy.deepcopy(resolved_spec.column)
+    result.partitionFormat = copy.deepcopy(resolved_spec.format)
+    result.partitionOffset = copy.deepcopy(resolved_spec.offset)
     return result
 
 

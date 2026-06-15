@@ -118,13 +118,16 @@ class TableDependency:
             and isinstance(self.table, utils.TableReference)
             and self.table.partition_interval is not None
         ):
-            self.partition_interval = copy.deepcopy(self.table.partition_interval)
-            if self.partition_column is None:
-                self.partition_column = copy.deepcopy(self.table.partition_column)
-            if self.partition_format is None:
-                self.partition_format = copy.deepcopy(self.table.partition_format)
-            if self.partition_offset is None:
-                self.partition_offset = copy.deepcopy(self.table.partition_offset)
+            resolved_spec = window_utils.PartitionSpec(
+                column=self.partition_column,
+                format=self.partition_format,
+                interval=self.partition_interval,
+                offset=self.partition_offset,
+            ).with_missing_from(window_utils.PartitionSpec.from_table_reference(self.table))
+            self.partition_interval = copy.deepcopy(resolved_spec.interval)
+            self.partition_column = copy.deepcopy(resolved_spec.column)
+            self.partition_format = copy.deepcopy(resolved_spec.format)
+            self.partition_offset = copy.deepcopy(resolved_spec.offset)
         self.table = str(self.table)
 
     def resolved_offsets(self) -> Tuple[Optional[int], int]:
@@ -166,23 +169,20 @@ class TableDependency:
         resolved_start_offset, resolved_end_offset = self.resolved_offsets()
 
         return common.TableDependency(
-            tableInfo=common.TableInfo(
-                table=self.table,
-                partitionColumn=self.partition_column,
-                partitionFormat=self.partition_format,
-                partitionInterval=(
-                    window_utils.normalize_window(self.partition_interval)
+            tableInfo=window_utils.PartitionSpec(
+                column=self.partition_column,
+                format=self.partition_format,
+                interval=(
+                    self.partition_interval
                     if self.partition_interval is not None
                     else None
                     if self.time_partitioned
                     else common.Window(1, common.TimeUnit.DAYS)
                 ),
-                partitionOffset=(
-                    window_utils.normalize_window(self.partition_offset)
-                    if self.partition_offset is not None
-                    else None
-                ),
-                timePartitioned=self.time_partitioned,
+                offset=self.partition_offset,
+                time_partitioned=self.time_partitioned,
+            ).table_info(
+                table=self.table,
             ),
             startOffset=(
                 None
@@ -202,20 +202,23 @@ def _propagate_output_grid_to_time_partitioned_dependency(
         dependency is None
         or not dependency.time_partitioned
         or dependency.partition_interval is not None
-        or output_info is None
-        or output_info.partitionInterval is None
     ):
         return
-    if window_utils.window_millis(output_info.partitionInterval) == window_utils.DAY_MILLIS:
+
+    output_spec = window_utils.PartitionSpec.from_table_info(output_info)
+    if not output_spec.is_subdaily_grid():
         return
 
-    dependency.partition_interval = copy.deepcopy(output_info.partitionInterval)
-    if dependency.partition_column is None:
-        dependency.partition_column = copy.deepcopy(output_info.partitionColumn)
-    if dependency.partition_format is None:
-        dependency.partition_format = copy.deepcopy(output_info.partitionFormat)
-    if dependency.partition_offset is None:
-        dependency.partition_offset = copy.deepcopy(output_info.partitionOffset)
+    resolved_spec = window_utils.PartitionSpec(
+        column=dependency.partition_column,
+        format=dependency.partition_format,
+        interval=dependency.partition_interval,
+        offset=dependency.partition_offset,
+    ).with_missing_from(output_spec)
+    dependency.partition_interval = copy.deepcopy(resolved_spec.interval)
+    dependency.partition_column = copy.deepcopy(resolved_spec.column)
+    dependency.partition_format = copy.deepcopy(resolved_spec.format)
+    dependency.partition_offset = copy.deepcopy(resolved_spec.offset)
 
 
 def StagingQuery(

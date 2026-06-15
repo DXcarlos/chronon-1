@@ -109,6 +109,13 @@ def Query(
     :type time_partitioned: bool, optional
     :return: A Query object that Chronon can use to scan just the necessary data efficiently.
     """
+    partition_spec = window_utils.PartitionSpec(
+        column=partition_column,
+        format=partition_format,
+        interval=partition_interval,
+        offset=partition_offset,
+        time_partitioned=time_partitioned,
+    )
     return api.Query(
         selects=selects,
         wheres=wheres,
@@ -118,26 +125,11 @@ def Query(
         setups=setups,
         mutationTimeColumn=mutation_time_column,
         reversalColumn=reversal_column,
-        partitionColumn=partition_column,
         subPartitionsToWaitFor=sub_partitions_to_wait_for,
-        partitionFormat=(
-            partition_format
-            or (
-                window_utils.default_partition_format(partition_interval)
-                if partition_interval is not None
-                else None
-            )
-        ),
-        partitionInterval=window_utils.normalize_window(partition_interval)
-        if partition_interval is not None
-        else None,
-        partitionOffset=window_utils.normalize_window(partition_offset)
-        if partition_offset is not None
-        else None,
         partitionLag=window_utils.normalize_window(partition_lag)
         if partition_lag is not None
         else None,
-        timePartitioned=time_partitioned,
+        **partition_spec.query_kwargs(),
     )
 
 
