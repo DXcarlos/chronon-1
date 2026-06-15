@@ -22,7 +22,7 @@ import ai.chronon.spark.JoinUtils
 import ai.chronon.spark.catalog.TableUtils
 import com.google.gson.Gson
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.functions.{col, date_format, from_unixtime, left, lit, log, pmod, unix_timestamp}
+import org.apache.spark.sql.functions.{col, date_format, from_unixtime, left, log, unix_timestamp}
 import org.apache.spark.sql.types.LongType
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -242,10 +242,8 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
     // re-stamp TimePartitionColumn = floor(left.ts, RHS grid) instead of trusting the shared
     // join-grid column stamped by SourceJob
     val joinableLeftDf = if (crossGridSnapshot) {
-      val ts = col(Constants.TimeColumn)
-      val gridOffset = lit(Math.floorMod(partSpec.offsetMillis, partSpec.spanMillis))
-      val snapshotTs = (ts - pmod(ts - gridOffset, lit(partSpec.spanMillis))).cast(LongType)
-      leftDf.withColumn(Constants.TimePartitionColumn, snapshotTs)
+      leftDf.withColumn(Constants.TimePartitionColumn,
+                        JoinUtils.snapshotGridFloorMillis(col(Constants.TimeColumn), partSpec))
     } else if (additionalKeys.contains(Constants.TimePartitionColumn)) {
       leftDf.withTimeBasedColumn(Constants.TimePartitionColumn, spec = partSpec)
     } else {

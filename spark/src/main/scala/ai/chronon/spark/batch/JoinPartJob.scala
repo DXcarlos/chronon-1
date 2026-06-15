@@ -313,6 +313,8 @@ class JoinPartJob(node: JoinPartNode,
             .getOrElse(Seq.empty)
         }
         rightDfWithDerivations
+          // Cross-grid part tables are physically placed on the join output grid; `ts` carries
+          // the RHS snapshot as-of boundary used by merge for per-row matching.
           .withColumn(Constants.TimeColumn, snapshotStartMillis + lit(partSnapshotSpec.spanMillis))
           .withColumn(physicalColumn, explode(physicalPartitions(col(Constants.TimeColumn))))
           .where(col(physicalColumn).isin(unfilledPartitionRange.partitions: _*))

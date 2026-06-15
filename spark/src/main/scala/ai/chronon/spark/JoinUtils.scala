@@ -26,9 +26,10 @@ import ai.chronon.spark.batch.ModularMonolith
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.catalog.TableUtils
 import com.google.gson.Gson
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{coalesce, col, udf}
+import org.apache.spark.sql.functions.{coalesce, col, lit, pmod, udf}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.sketch.BloomFilter
 import org.slf4j.{Logger, LoggerFactory}
 
@@ -474,6 +475,11 @@ object JoinUtils {
     */
   def snapshotLookbackRange(leftRange: PartitionRange, snapshotSpec: PartitionSpec): PartitionRange =
     leftRange.intersectingRange(snapshotSpec).shiftPartitions(-1)
+
+  def snapshotGridFloorMillis(tsMillis: Column, snapshotSpec: PartitionSpec): Column = {
+    val gridOffset = lit(Math.floorMod(snapshotSpec.offsetMillis, snapshotSpec.spanMillis))
+    (tsMillis - pmod(tsMillis - gridOffset, lit(snapshotSpec.spanMillis))).cast(LongType)
+  }
 
   /** The RHS range a snapshot-accuracy join part should scan for a given left range. */
   def snapshotScanRange(leftDataModel: DataModel,

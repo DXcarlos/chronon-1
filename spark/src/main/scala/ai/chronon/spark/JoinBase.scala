@@ -135,10 +135,8 @@ abstract class JoinBase(val joinConfCloned: api.Join,
 
     // per-joinPart left match key: floor(left.ts, RHS grid)
     val joinableLeftDf = if (crossGridSnapshot) {
-      val ts = col(Constants.TimeColumn)
-      val gridOffset = lit(Math.floorMod(partSpec.offsetMillis, partSpec.spanMillis))
-      val snapshotTs = (ts - pmod(ts - gridOffset, lit(partSpec.spanMillis))).cast(LongType)
-      leftDf.withColumn(Constants.TimePartitionColumn, snapshotTs)
+      leftDf.withColumn(Constants.TimePartitionColumn,
+                        JoinUtils.snapshotGridFloorMillis(col(Constants.TimeColumn), partSpec))
     } else if (additionalKeys.contains(Constants.TimePartitionColumn)) {
       leftDf.withTimeBasedColumn(Constants.TimePartitionColumn, spec = partSpec)
     } else {
