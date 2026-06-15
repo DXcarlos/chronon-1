@@ -13,11 +13,11 @@
 #     limitations under the License.
 
 
-import gen_thrift.common.ttypes as common
 import pytest
-from gen_thrift.api import ttypes
 
+import gen_thrift.common.ttypes as common
 from ai.chronon import group_by, query
+from gen_thrift.api import ttypes
 
 
 @pytest.fixture
@@ -353,7 +353,7 @@ def test_snapshot_window_must_be_multiple_of_grid():
 def test_subdaily_group_by_rejects_undeclared_sources():
     # an undeclared source is implicitly daily: a sub-daily groupBy over it would land a day
     # late, permanently - the coarse-source-under-fine-output trap, caught at authoring time
-    with pytest.raises(ValueError, match="time_partitioned"):
+    with pytest.raises(ValueError, match="partition_interval"):
         group_by.GroupBy(
             sources=[event_source("table")],
             keys=["subject"],
@@ -368,13 +368,37 @@ def test_subdaily_group_by_rejects_undeclared_sources():
         )
 
 
-def test_subdaily_group_by_allows_time_partitioned_source():
+def test_subdaily_group_by_rejects_time_partitioned_source_without_interval():
     src = ttypes.EventSource(
         table="table",
         query=query.Query(
             selects={"subject": "subject_sql", "event_id": "event_sql"},
             time_column="ts",
             time_partitioned=True,
+        ),
+    )
+    with pytest.raises(ValueError, match="time_partitioned"):
+        group_by.GroupBy(
+            sources=[src],
+            keys=["subject"],
+            aggregations=group_by.Aggregations(
+                random=ttypes.Aggregation(inputColumn="event_id", operation=ttypes.Operation.SUM),
+            ),
+            partition_interval="3h",
+            offline_schedule="0 */3 * * *",
+            version=0,
+        )
+
+
+def test_subdaily_group_by_allows_time_partitioned_source_with_interval():
+    src = ttypes.EventSource(
+        table="table",
+        query=query.Query(
+            selects={"subject": "subject_sql", "event_id": "event_sql"},
+            time_column="ts",
+            time_partitioned=True,
+            partition_interval="3h",
+            partition_offset="1h",
         ),
     )
     gb = group_by.GroupBy(
@@ -388,6 +412,9 @@ def test_subdaily_group_by_allows_time_partitioned_source():
         version=0,
     )
     assert gb is not None
+    assert gb.sources[0].events.query.partitionOffset == common.Window(
+        length=1, timeUnit=common.TimeUnit.HOURS
+    )
 
 
 def test_additional_metadata():
@@ -489,7 +516,7 @@ def test_query_with_time_partitioned_flag():
         time_partitioned=True,
     )
 
-    assert query_obj.timePartitioned == True
+    assert query_obj.timePartitioned is True
     assert query_obj.partitionColumn == "created_at"
 
 

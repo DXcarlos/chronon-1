@@ -18,8 +18,7 @@ import pytest
 
 import gen_thrift.common.ttypes as common
 from ai.chronon import query
-from ai.chronon.staging_query import TableDependency
-from ai.chronon.staging_query import StagingQuery
+from ai.chronon.staging_query import StagingQuery, TableDependency
 
 
 def _days(n):
@@ -153,6 +152,43 @@ def test_staging_query_partition_interval_dividing_cron_interval_is_accepted():
     table_info = sq.metaData.executionInfo.outputTableInfo
     assert table_info.partitionInterval == _hours(1)
     assert table_info.partitionOffset is None
+
+
+def test_staging_query_subdaily_rejects_dependency_without_interval():
+    with pytest.raises(ValueError, match="partition_interval"):
+        StagingQuery(
+            query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+            dependencies=[TableDependency(table="ns.upstream")],
+            partition_interval="3h",
+        )
+
+
+def test_staging_query_subdaily_rejects_time_partitioned_dependency_without_interval():
+    with pytest.raises(ValueError, match="time_partitioned"):
+        StagingQuery(
+            query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+            dependencies=[TableDependency(table="ns.upstream", time_partitioned=True)],
+            partition_interval="3h",
+        )
+
+
+def test_staging_query_subdaily_allows_time_partitioned_dependency_with_interval():
+    sq = StagingQuery(
+        query="SELECT * FROM ns.upstream WHERE ds BETWEEN '{{ start_date }}' AND '{{ end_date }}'",
+        dependencies=[
+            TableDependency(
+                table="ns.upstream",
+                time_partitioned=True,
+                partition_interval="3h",
+                partition_offset="1h",
+            )
+        ],
+        partition_interval="3h",
+    )
+
+    assert sq.tableDependencies[0].tableInfo.timePartitioned is True
+    assert sq.tableDependencies[0].tableInfo.partitionInterval == _hours(3)
+    assert sq.tableDependencies[0].tableInfo.partitionOffset == _hours(1)
 
 
 def test_staging_query_offset_must_be_smaller_than_interval():

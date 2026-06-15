@@ -98,22 +98,28 @@ The two kinds of upstreams follow different rules:
   boundary.** The output partition `[13:00, 16:00)` needs input data through 16:00 — a
   daily source can't provide that until the day closes, which would silently make the whole
   pipeline a day stale. So a sub-daily conf over a coarser (or undeclared, hence implicitly
-  daily) source is a **compile error**, unless the source is `time_partitioned` (below).
+  daily) source is a **compile error**.
 
 ## Sources that don't write sub-daily partitions
 
 - **Same-or-finer declared interval**: declare `partition_interval`/`partition_offset` on the
   source `Query` — readiness and scans resolve on that grid.
 - **`time_partitioned=True`**: the partition column is a real timestamp/date column and data
-  lands continuously. Readiness is sensed from the data itself (max timestamp), quantized to
-  the *downstream* grid — so a 3h job over a continuously-loaded table fires as soon as data
-  through its boundary has landed, no re-partitioning needed. Scans are bounded by the
-  partition's exclusive end in epoch millis, so reruns are deterministic.
+  lands continuously. It only changes how readiness is sensed (max timestamp instead of
+  partition existence). It does **not** declare cadence and Chronon does not inherit the
+  downstream grid into the source. For sub-daily outputs, still declare the source's
+  `partition_interval`/`partition_offset`; Python validation rejects implicit cadence.
 
   ```python
   source = EventSource(
-      table="vendor.events",   # daily-loaded or unpartitioned, events land all day
-      query=Query(time_column="ts", partition_column="ts", time_partitioned=True),
+      table="vendor.events",
+      query=Query(
+          time_column="ts",
+          partition_column="ts",
+          time_partitioned=True,
+          partition_interval="3h",
+          partition_offset="1h",
+      ),
   )
   ```
 - **`triggerExpr`**: unchanged escape hatch for custom SQL readiness.

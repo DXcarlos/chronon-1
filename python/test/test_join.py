@@ -12,7 +12,10 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
+import pytest
+
 import gen_thrift.common.ttypes as common
+from ai.chronon import join
 from gen_thrift.api import ttypes as api
 
 
@@ -66,11 +69,6 @@ def right_part(source):
             accuracy=api.Accuracy.SNAPSHOT,
         ),
     )
-
-
-import pytest
-from ai.chronon import join
-
 
 def test_online_schedule_validation():
     """Test that online_schedule validation works correctly for joins."""
@@ -230,7 +228,7 @@ def test_partition_interval_sets_output_table_info():
 
 def test_subdaily_join_rejects_undeclared_left():
     # an undeclared left is implicitly daily: a sub-daily join over it lands a day late
-    with pytest.raises(ValueError, match="time_partitioned"):
+    with pytest.raises(ValueError, match="partition_interval"):
         join.Join(
             left=event_source("table"),
             right_parts=[right_part(event_source("table"))],
@@ -238,6 +236,41 @@ def test_subdaily_join_rejects_undeclared_left():
             row_ids=["id"],
             partition_interval="3h",
         )
+
+
+def test_subdaily_join_rejects_time_partitioned_left_without_interval():
+    left = event_source("table")
+    left.events.query.timePartitioned = True
+
+    with pytest.raises(ValueError, match="time_partitioned"):
+        join.Join(
+            left=left,
+            right_parts=[right_part(event_source("table"))],
+            version=1,
+            row_ids=["id"],
+            partition_interval="3h",
+        )
+
+
+def test_subdaily_join_allows_time_partitioned_left_with_interval_and_offset():
+    left = event_source("table")
+    left.events.query.timePartitioned = True
+    left.events.query.partitionInterval = common.Window(
+        length=3, timeUnit=common.TimeUnit.HOURS
+    )
+    left.events.query.partitionOffset = common.Window(length=1, timeUnit=common.TimeUnit.HOURS)
+
+    j = join.Join(
+        left=left,
+        right_parts=[right_part(event_source("table"))],
+        version=1,
+        row_ids=["id"],
+        partition_interval="3h",
+    )
+
+    assert j.left.events.query.partitionOffset == common.Window(
+        length=1, timeUnit=common.TimeUnit.HOURS
+    )
 
 
 def test_subdaily_join_right_parts_stay_unvalidated():

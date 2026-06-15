@@ -320,9 +320,18 @@ def StagingQuery(
     )
 
     airflow_dependencies = []
+    output_info = exec_info.outputTableInfo
+    subdaily_output = (
+        output_info is not None
+        and window_utils.window_millis(output_info.partitionInterval) < window_utils.DAY_MILLIS
+    )
 
     if dependencies:
         for d in dependencies:
+            if subdaily_output and isinstance(d, TableDependency):
+                window_utils.validate_table_dependency_grid(
+                    "This StagingQuery", d, f"dependency {d.table}"
+                )
             if isinstance(d, TableDependency) and d.partition_column is not None:
                 _, end_offset = d.resolved_offsets()
                 airflow_dependency = airflow_helpers.create_airflow_dependency(
