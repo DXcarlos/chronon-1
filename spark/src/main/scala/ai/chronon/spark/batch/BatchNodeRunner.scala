@@ -138,8 +138,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             .getOrElse(throw new RuntimeException(s"Could not determine data watermark for ${tableName}"))
 
           val requiredEndMillis = requiredRange.maxMillis
-          logger.info(
-            s"Data watermark: ${TsUtils.toStr(watermark)}, required end: ${TsUtils.toStr(requiredEndMillis)}")
+          logger.info(s"Data watermark: ${TsUtils.toStr(watermark)}, required end: ${TsUtils.toStr(requiredEndMillis)}")
 
           if (watermark > requiredEndMillis) {
             logger.info(s"Sensor succeeded: ${TsUtils.toStr(watermark)} > ${TsUtils.toStr(requiredEndMillis)}")
