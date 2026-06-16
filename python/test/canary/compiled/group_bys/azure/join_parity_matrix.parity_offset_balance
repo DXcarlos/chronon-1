@@ -71,6 +71,7 @@
         }
       },
       "historicalBackfill": 0,
+      "offlineSchedule": "0 1-22/3 * * *",
       "outputTableInfo": {
         "partitionColumn": "ds",
         "partitionFormat": "yyyy-MM-dd-HH-mm",

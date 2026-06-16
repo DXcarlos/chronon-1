@@ -123,6 +123,70 @@ def JoinPart(
     return join_part
 
 
+def _window_millis_or_none(window) -> Optional[int]:
+    return window_utils.window_millis(window) if window is not None else None
+
+
+def _format_millis(millis: int) -> str:
+    if millis % window_utils.DAY_MILLIS == 0:
+        return f"{millis // window_utils.DAY_MILLIS}d"
+    if millis % window_utils.HOUR_MILLIS == 0:
+        return f"{millis // window_utils.HOUR_MILLIS}h"
+    return f"{millis // window_utils.MINUTE_MILLIS}m"
+
+
+def _validate_online_join_subdaily_group_by_schedules(right_parts: List[api.JoinPart]) -> None:
+    """Online joins schedule sub-daily groupBy uploads independently."""
+    for part in right_parts or []:
+        group_by = part.groupBy
+        metadata = getattr(group_by, "metaData", None)
+        execution_info = getattr(metadata, "executionInfo", None)
+        output_info = getattr(execution_info, "outputTableInfo", None)
+        output_interval_ms = _window_millis_or_none(
+            getattr(output_info, "partitionInterval", None)
+        )
+        if output_interval_ms is None or output_interval_ms >= window_utils.DAY_MILLIS:
+            continue
+
+        group_by_name = getattr(metadata, "name", None) or "<unnamed>"
+        schedule = (
+            getattr(execution_info, "onlineSchedule", None)
+            or getattr(execution_info, "offlineSchedule", None)
+        )
+        normalized_schedule = schedule.strip().lower() if isinstance(schedule, str) else schedule
+        if normalized_schedule in (None, "", "none", "null", "@daily", "@never"):
+            raise ValueError(
+                f"Online Join includes sub-daily GroupBy '{group_by_name}' "
+                f"(partition_interval={_format_millis(output_interval_ms)}) without a regular "
+                "sub-daily offline_schedule or online_schedule. Declare the GroupBy schedule so "
+                "the orchestrator can schedule its upload independently."
+            )
+
+        try:
+            schedule_interval_ms = window_utils.regular_subdaily_schedule(schedule)
+        except ValueError as e:
+            raise ValueError(
+                f"Online Join includes sub-daily GroupBy '{group_by_name}' with invalid "
+                f"schedule '{schedule}': {e}"
+            ) from None
+
+        if schedule_interval_ms is None:
+            raise ValueError(
+                f"Online Join includes sub-daily GroupBy '{group_by_name}' "
+                f"(partition_interval={_format_millis(output_interval_ms)}) without a regular "
+                "sub-daily offline_schedule or online_schedule. Declare the GroupBy schedule so "
+                "the orchestrator can schedule its upload independently."
+            )
+
+        if schedule_interval_ms != output_interval_ms:
+            raise ValueError(
+                f"Online Join includes sub-daily GroupBy '{group_by_name}' with schedule "
+                f"'{schedule}' ({_format_millis(schedule_interval_ms)}) but output "
+                f"partition_interval={_format_millis(output_interval_ms)}. Sub-daily groupBy "
+                "uploads that feed online joins must be scheduled at their own partition cadence."
+            )
+
+
 def ExternalSource(
     name: str,
     team: str,
@@ -510,6 +574,9 @@ def Join(
             "online_schedule must match offline_schedule for sub-daily partition_interval when both are set. "
             "Leave online_schedule empty to inherit the offline schedule."
         )
+
+    if online:
+        _validate_online_join_subdaily_group_by_schedules(right_parts)
 
     if modular_execution:
         if conf is None:

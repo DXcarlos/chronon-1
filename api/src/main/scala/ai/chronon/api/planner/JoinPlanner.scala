@@ -415,8 +415,9 @@ object JoinPlanner {
   //     required between the RHS and the join (deliberate relaxation; only the storage-cost
   //     warning applies),
   //   - temporal parts: the engine recomputes from raw events with temporal accuracy, so the
-  //     groupBy output grid does not constrain the join grid at all - only the part's raw
-  //     event sources must line up with the join's boundaries.
+  //     groupBy output grid does not constrain the join grid at all. The part's raw event
+  //     sources only need to be finer exact divisors of the join grid; if their offsets do
+  //     not line up, DependencyResolver expands to every intersecting source partition.
   def validateJoinPartGrids(join: Join, joinSpec: PartitionSpec): Unit = {
     Option(join.joinParts).foreach { joinParts =>
       joinParts.asScala.foreach { joinPart =>
@@ -432,12 +433,11 @@ object JoinPlanner {
             sources.asScala
               .filter(_.dataModel == DataModel.EVENTS)
               .foreach { source =>
-                PartitionSpecResolver.validateQueryGrid(
+                PartitionSpecResolver.validateTemporalJoinEventSourceGrid(
                   join.metaData.name,
                   joinSpec,
                   source.query,
-                  s"temporal join part ${joinPart.groupBy.metaData.name} source ${source.rawTable}",
-                  DataModel.EVENTS
+                  s"temporal join part ${joinPart.groupBy.metaData.name} source ${source.rawTable}"
                 )
               }
           }

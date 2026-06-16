@@ -19,9 +19,12 @@ from ai.chronon.types import (
 INPUT_NAMESPACE = "join_matrix_input"
 OUTPUT_NAMESPACE = "join_matrix"
 
+HOURLY_INTERVAL = "1h"
 SUBDAILY_INTERVAL = "3h"
 SUBDAILY_OFFSET = "1h"
 SUBDAILY_FORMAT = "yyyy-MM-dd-HH-mm"
+HOURLY_SCHEDULE = "0 * * * *"
+SUBDAILY_SCHEDULE = "0 1-22/3 * * *"
 DAILY_INTERVAL = "1d"
 DAILY_FORMAT = "yyyy-MM-dd"
 ZERO_HOURS = Window(length=0, time_unit=TimeUnit.HOURS)
@@ -44,6 +47,18 @@ def _subdaily_query(select_map, start_partition, time_column=None, **kwargs):
         partition_format=SUBDAILY_FORMAT,
         partition_interval=SUBDAILY_INTERVAL,
         partition_offset=SUBDAILY_OFFSET,
+        **kwargs,
+    )
+
+
+def _hourly_query(select_map, start_partition, time_column=None, **kwargs):
+    return Query(
+        selects=select_map,
+        start_partition=start_partition,
+        time_column=time_column,
+        partition_column="ds",
+        partition_format=SUBDAILY_FORMAT,
+        partition_interval=HOURLY_INTERVAL,
         **kwargs,
     )
 
@@ -89,6 +104,36 @@ parity_txn_sum = GroupBy(
     env_vars=_claims_demo_env(),
     partition_interval=SUBDAILY_INTERVAL,
     partition_offset=SUBDAILY_OFFSET,
+    offline_schedule=SUBDAILY_SCHEDULE,
+)
+
+
+parity_hourly_amount = GroupBy(
+    sources=[
+        EventSource(
+            table=f"{INPUT_NAMESPACE}.hourly_events",
+            query=_hourly_query(
+                selects("user_id", "amount_1h"),
+                start_partition="2023-08-13-19-00",
+                time_column="ts",
+            ),
+        )
+    ],
+    keys=["user_id"],
+    aggregations=[
+        Aggregation(input_column="amount_1h", operation=Operation.SUM),
+        Aggregation(
+            input_column="amount_1h",
+            operation=Operation.SUM,
+            windows=[Window(length=6, time_unit=TimeUnit.HOURS)],
+        ),
+    ],
+    accuracy=Accuracy.SNAPSHOT,
+    output_namespace=OUTPUT_NAMESPACE,
+    conf=_claims_demo_conf(),
+    env_vars=_claims_demo_env(),
+    partition_interval=HOURLY_INTERVAL,
+    offline_schedule=HOURLY_SCHEDULE,
 )
 
 
@@ -143,6 +188,7 @@ parity_offset_amount = GroupBy(
     env_vars=_claims_demo_env(),
     partition_interval=SUBDAILY_INTERVAL,
     partition_offset=SUBDAILY_OFFSET,
+    offline_schedule=SUBDAILY_SCHEDULE,
 )
 
 
@@ -164,6 +210,7 @@ parity_offset_balance = GroupBy(
     env_vars=_claims_demo_env(),
     partition_interval=SUBDAILY_INTERVAL,
     partition_offset=SUBDAILY_OFFSET,
+    offline_schedule=SUBDAILY_SCHEDULE,
 )
 
 
@@ -211,6 +258,7 @@ parity_offset_ratings_sum = GroupBy(
     env_vars=_claims_demo_env(),
     partition_interval=SUBDAILY_INTERVAL,
     partition_offset=SUBDAILY_OFFSET,
+    offline_schedule=SUBDAILY_SCHEDULE,
 )
 
 

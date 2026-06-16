@@ -151,7 +151,8 @@ object PartitionSpecResolver {
                            downstreamSpec: PartitionSpec,
                            upstreamSpec: PartitionSpec,
                            upstreamDescription: String,
-                           dataModel: DataModel): Unit = {
+                           dataModel: DataModel,
+                           requireBoundaryAlignment: Boolean = true): Unit = {
     val downstreamGrid = downstreamSpec.grid
     val upstreamGrid = upstreamSpec.grid
 
@@ -168,11 +169,13 @@ object PartitionSpecResolver {
         s"(${WindowUtils.millisToString(downstreamGrid.spanMillis)}) must be equal to or an exact multiple of " +
         s"$upstreamDescription's (${WindowUtils.millisToString(upstreamGrid.spanMillis)}).$snapshotNote"
     )
-    require(
-      downstreamGrid.linesUpWith(upstreamGrid),
-      s"Incompatible partition grids for $nodeName: its partitions (${downstreamGrid.show}) " +
-        s"don't line up on $upstreamDescription's boundaries (${upstreamGrid.show})."
-    )
+    if (requireBoundaryAlignment) {
+      require(
+        downstreamGrid.linesUpWith(upstreamGrid),
+        s"Incompatible partition grids for $nodeName: its partitions (${downstreamGrid.show}) " +
+          s"don't line up on $upstreamDescription's boundaries (${upstreamGrid.show})."
+      )
+    }
   }
 
   /** Validates an authored query against the downstream node's output grid. */
@@ -187,6 +190,28 @@ object PartitionSpecResolver {
       downstreamSpec.spanMillis < WindowUtils.Day.millis && !(query.isSetTimePartitioned && query.timePartitioned)
     ) {
       // an undeclared upstream must not silently inherit a sub-daily downstream grid
+      throw undeclaredPartitionInterval(nodeName, downstreamSpec, sourceDescription)
+    }
+  }
+
+  /** Temporal join parts filter by left-row time and DependencyResolver expands source reads
+    * by interval intersection. That makes a coarser join grid over a finer, non-aligned event
+    * source safe: it may read boundary-crossing source partitions, but it does not skip time.
+    */
+  def validateTemporalJoinEventSourceGrid(nodeName: String,
+                                          downstreamSpec: PartitionSpec,
+                                          query: Query,
+                                          sourceDescription: String): Unit = {
+    if (Option(query.partitionInterval).isDefined) {
+      validateUpstreamGrid(nodeName,
+                           downstreamSpec,
+                           query.partitionSpec(downstreamSpec),
+                           sourceDescription,
+                           DataModel.EVENTS,
+                           requireBoundaryAlignment = false)
+    } else if (
+      downstreamSpec.spanMillis < WindowUtils.Day.millis && !(query.isSetTimePartitioned && query.timePartitioned)
+    ) {
       throw undeclaredPartitionInterval(nodeName, downstreamSpec, sourceDescription)
     }
   }

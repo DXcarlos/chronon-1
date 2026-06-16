@@ -18,12 +18,11 @@ left = EventSource(
     table=f"{group_bys.INPUT_NAMESPACE}.left_events",
     query=Query(
         selects=selects("user_id"),
-        start_partition="2023-08-13-22-00",
+        start_partition="2023-08-13",
         time_column="ts",
         partition_column="ds",
-        partition_format=group_bys.SUBDAILY_FORMAT,
-        partition_interval=group_bys.SUBDAILY_INTERVAL,
-        partition_offset=group_bys.SUBDAILY_OFFSET,
+        partition_format=group_bys.DAILY_FORMAT,
+        partition_interval=group_bys.DAILY_INTERVAL,
     ),
 )
 
@@ -32,6 +31,7 @@ matrix = Join(
     left=left,
     right_parts=[
         JoinPart(group_by=group_bys.parity_txn_sum, prefix="tmp"),
+        JoinPart(group_by=group_bys.parity_hourly_amount, prefix="snap1"),
         JoinPart(group_by=group_bys.parity_daily_amount, prefix="snapd"),
         JoinPart(group_by=group_bys.parity_offset_amount, prefix="snap3"),
         JoinPart(group_by=group_bys.parity_offset_balance, prefix="ent3"),
@@ -44,7 +44,6 @@ matrix = Join(
     use_long_names=False,
     conf=_claims_demo_conf(),
     env_vars=_claims_demo_env(),
-    partition_interval=group_bys.SUBDAILY_INTERVAL,
-    partition_offset=group_bys.SUBDAILY_OFFSET,
+    partition_interval=group_bys.DAILY_INTERVAL,
     modular_execution=True,
 )

@@ -70,6 +70,31 @@ def right_part(source):
         ),
     )
 
+
+def scheduled_subdaily_right_part(schedule=None):
+    execution_info = common.ExecutionInfo(
+        offlineSchedule=schedule,
+        outputTableInfo=common.TableInfo(
+            table="data.subdaily_right",
+            partitionColumn="ds",
+            partitionFormat="yyyy-MM-dd-HH-mm",
+            partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+        ),
+    )
+    return api.JoinPart(
+        groupBy=api.GroupBy(
+            sources=[subdaily_event_source("table")],
+            keyColumns=["subject"],
+            aggregations=[],
+            accuracy=api.Accuracy.SNAPSHOT,
+            metaData=api.MetaData(
+                name="group_bys.test.subdaily_right",
+                executionInfo=execution_info,
+            ),
+        ),
+    )
+
+
 def test_online_schedule_validation():
     """Test that online_schedule validation works correctly for joins."""
     # Test that online_schedule cannot be set when online=False
@@ -285,4 +310,27 @@ def test_subdaily_join_right_parts_stay_unvalidated():
         row_ids=["id"],
         partition_interval="3h",
     )
+    assert j is not None
+
+
+def test_online_join_rejects_subdaily_right_part_without_schedule():
+    with pytest.raises(ValueError, match="regular sub-daily offline_schedule or online_schedule"):
+        join.Join(
+            left=event_source("table"),
+            right_parts=[scheduled_subdaily_right_part()],
+            version=1,
+            row_ids=["id"],
+            online=True,
+        )
+
+
+def test_online_join_accepts_scheduled_subdaily_right_part():
+    j = join.Join(
+        left=event_source("table"),
+        right_parts=[scheduled_subdaily_right_part(schedule="0 */3 * * *")],
+        version=1,
+        row_ids=["id"],
+        online=True,
+    )
+
     assert j is not None

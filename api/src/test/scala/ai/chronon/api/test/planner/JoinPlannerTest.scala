@@ -14,13 +14,18 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
 
   private implicit val testPartitionSpec: PartitionSpec = PartitionSpec.daily
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+  private val offsetThreeHourSpec =
+    PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
 
-  private def outputTableInfo(table: String, spec: PartitionSpec): TableInfo =
-    new TableInfo()
+  private def outputTableInfo(table: String, spec: PartitionSpec): TableInfo = {
+    val result = new TableInfo()
       .setTable(table)
       .setPartitionColumn(spec.column)
       .setPartitionFormat(spec.format)
       .setPartitionInterval(WindowUtils.fromMillis(spec.spanMillis))
+    if (spec.offsetMillis != 0) result.setPartitionOffset(WindowUtils.fromMillis(spec.offsetMillis))
+    result
+  }
 
   private def executionInfoFor(table: String, spec: PartitionSpec): ExecutionInfo =
     new ExecutionInfo().setOutputTableInfo(outputTableInfo(table, spec))
@@ -39,6 +44,7 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
     val query = Builders.Query(partitionColumn = spec.column)
     query.setPartitionFormat(spec.format)
     query.setPartitionInterval(WindowUtils.fromMillis(spec.spanMillis))
+    if (spec.offsetMillis != 0) query.setPartitionOffset(WindowUtils.fromMillis(spec.offsetMillis))
     Builders.Source.events(query, table = table)
   }
 
@@ -138,6 +144,31 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
 
     val backfillNode = plan.nodes.asScala.find(_.content.isSetUnionJoin).get
     backfillNode.metaData.executionInfo.outputTableInfo.partitionFormat should equal(PartitionSpec.daily.format)
+  }
+
+  it should "allow daily temporal join parts over offset sub-daily event sources" in {
+    val offsetGroupBy =
+      groupByWithOutputSpec("offset_temporal_gb", offsetThreeHourSpec, sourceSpec = Some(offsetThreeHourSpec))
+    val join = Join(
+      metaData = MetaData(
+        name = "daily_join_offset_temporal_source",
+        namespace = "test_namespace",
+        executionInfo = modularExecutionInfo
+      ),
+      left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
+      joinParts = Seq(Builders.JoinPart(groupBy = offsetGroupBy)),
+      bootstrapParts = Seq.empty
+    )
+
+    val plan = new JoinPlanner(join).buildPlan
+    val joinPartNode = plan.nodes.asScala.find(_.content.isSetJoinPart).get
+    val sourceDep = joinPartNode.metaData.executionInfo.tableDependencies.asScala
+      .find(_.tableInfo.table == "test.offset_temporal_gb")
+      .get
+
+    sourceDep.tableInfo.partitionFormat should equal(offsetThreeHourSpec.format)
+    sourceDep.tableInfo.partitionInterval should equal(WindowUtils.fromMillis(offsetThreeHourSpec.spanMillis))
+    sourceDep.tableInfo.partitionOffset should equal(WindowUtils.fromMillis(offsetThreeHourSpec.offsetMillis))
   }
 
   it should "resolve metadata upload dependencies using the upstream output grid, not the join grid" in {
