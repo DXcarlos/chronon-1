@@ -116,7 +116,7 @@ class IcebergTest extends SparkTestBase with Matchers {
     parts should contain theSameElementsAs List("2024-02-01", "2024-02-02", "2024-02-03")
   }
 
-  "StepRunner" should "skip Iceberg tables when logical partitions cover the requested range" in {
+  "StepRunner with Iceberg logical partitions" should "skip unpartitioned tables when logical partitions cover the requested range" in {
     val tableName = "default.iceberg_step_runner_logical_partitions_test"
     val tableUtils = TableUtils(spark)
     spark.sql(s"DROP TABLE IF EXISTS $tableName")
@@ -232,6 +232,32 @@ class IcebergTest extends SparkTestBase with Matchers {
       """)
 
       val requestedRange = PartitionRange("2024-02-01", "2024-02-03")(PartitionSpec.daily)
+      tableUtils.unfilledRanges(tableName, requestedRange) shouldBe None
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "preserve retention cutoff for unpartitioned Iceberg tables when the requested range is empty" in {
+    val tableName = "default.iceberg_unfilled_ranges_logical_retention_test"
+    val tableUtils = TableUtils(spark)
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          id INT,
+          value STRING,
+          ds STRING
+        ) USING iceberg
+      """)
+
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+        (1, 'a', '2024-02-01')
+      """)
+
+      val requestedRange = PartitionRange("2024-01-01", "2024-01-03")(PartitionSpec.daily)
       tableUtils.unfilledRanges(tableName, requestedRange) shouldBe None
     } finally {
       spark.sql(s"DROP TABLE IF EXISTS $tableName")

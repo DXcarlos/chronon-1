@@ -519,11 +519,14 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
       else validPartitionRange.translate(partitionSpec)
 
     val outputExisting = partitions(outputTable, partitionRange = Some(canonicalRange), deriveLogicalPartitions = true)
+    // The hole calculation only needs requested-range output partitions, but the retention cutoff
+    // must see the first retained output partition even when it falls outside the requested range.
+    val outputExistingForCutoff = partitions(outputTable, deriveLogicalPartitions = true)
     // To avoid recomputing partitions removed by retention mechanisms we will not fill holes in the very beginning of the range
     // If a user fills a new partition in the newer end of the range, then we will never fill any partitions before that range.
     // We instead log a message saying why we won't fill the earliest hole.
-    val cutoffPartition = if (outputExisting.nonEmpty) {
-      Format.pickMaxPartition(Seq(outputExisting.min, canonicalRange.start)).getOrElse(canonicalRange.start)
+    val cutoffPartition = if (outputExistingForCutoff.nonEmpty) {
+      Format.pickMaxPartition(Seq(outputExistingForCutoff.min, canonicalRange.start)).getOrElse(canonicalRange.start)
     } else {
       canonicalRange.start
     }
