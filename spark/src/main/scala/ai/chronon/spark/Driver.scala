@@ -612,10 +612,12 @@ object Driver {
       "ENABLE_UPLOAD_CLIENTS" -> enableUploadClients.toOption.getOrElse("true")
     )
 
-    lazy val api: Api = isGcp.toOption match {
-      case Some(true) => impl(serializableProps ++ gcpMap)
-      case _          => impl(serializableProps)
+    def apiProps: Map[String, String] = isGcp.toOption match {
+      case Some(true) => serializableProps ++ gcpMap
+      case _          => serializableProps
     }
+
+    lazy val api: Api = impl(apiProps)
 
     lazy val fetchContext: FetchContext =
       FetchContext(api.genKvStore, MetadataDataset)
@@ -683,6 +685,17 @@ object Driver {
         super.serializableProps + ("UPLOADER" -> uploader().toLowerCase)
     }
 
+    private[spark] def uploadApiProps(groupByConf: api.GroupBy, cliProps: Map[String, String]): Map[String, String] = {
+      val uploadConf = for {
+        executionInfo <- Option(groupByConf.metaData.executionInfo)
+        conf <- Option(executionInfo.conf)
+        modeConfigs <- Option(conf.modeConfigs)
+        modeConf <- Option(modeConfigs.get("upload"))
+      } yield modeConf.asScala.toMap
+
+      groupByConf.metaData.commonConf ++ uploadConf.getOrElse(Map.empty) ++ cliProps
+    }
+
     def run(args: Args): Unit = {
       val groupByConf = parseConf[api.GroupBy](args.confPath())
       val offlineTable = groupByConf.metaData.uploadTable
@@ -694,7 +707,7 @@ object Driver {
         s"Triggering bulk load for GroupBy: ${groupByName} for partition: ${args.partitionString()} " +
           s"from table: ${offlineTable} using ${uploader}")
 
-      val kvStore = args.api.genKvStore
+      val kvStore = args.impl(uploadApiProps(groupByConf, args.apiProps)).genKvStore
 
       try {
         // The kvStore implementation will handle different warehouse types based on the configuration
