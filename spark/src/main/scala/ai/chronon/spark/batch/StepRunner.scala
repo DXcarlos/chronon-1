@@ -2,7 +2,7 @@ package ai.chronon.spark.batch
 
 import ai.chronon.api.Extensions.MetadataOps
 import ai.chronon.api.{DateRange, MetaData, PartitionRange, PartitionSpec}
-import ai.chronon.spark.catalog.TableUtils
+import ai.chronon.spark.catalog.{Format, TableUtils}
 import org.slf4j.{Logger, LoggerFactory}
 
 case class StepRunner(
@@ -93,20 +93,24 @@ object StepRunner {
 
     val tableName = metaData.outputTable
     val stepSize = metaData.stepSize
+    val outputPartitions: String => Seq[String] = { t =>
+      tableUtils.partitions(t, partitionRange = Some(requestedRange), deriveLogicalPartitions = deriveLogicalPartitions)
+    }
     val stepRunner = StepRunner(
       tableName,
       body,
-      { t =>
-        tableUtils.partitions(t,
-                              partitionRange = Some(requestedRange),
-                              deriveLogicalPartitions = deriveLogicalPartitions)
-      },
+      outputPartitions,
       Some(stepSize)
     )(tableUtils, tableUtils.partitionSpec)
 
     stepRunner.run(requestedRange)
 
-    val lastPartition = tableUtils.lastAvailablePartition(tableName)
+    val lastPartition =
+      if (deriveLogicalPartitions) {
+        Format.pickMaxPartition(outputPartitions(tableName))
+      } else {
+        tableUtils.lastAvailablePartition(tableName)
+      }
     lastPartition match {
       case Some(lp) if lp >= requestedRange.end =>
         logger.info(s"Output table $tableName covers requested range (last: $lp >= end: ${requestedRange.end})")

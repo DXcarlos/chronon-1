@@ -116,10 +116,15 @@ class TableUtils(@transient val sparkSession: SparkSession) extends Serializable
                  tablePartitionSpec: Option[PartitionSpec] = None,
                  timePartitioned: Boolean = false,
                  deriveLogicalPartitions: Boolean = false): List[String] = {
-    val rangeWheres = andPredicates(partitionRange.map(_.whereClauses).getOrElse(Seq.empty))
-
     val effectivePartColumn = tablePartitionSpec.map(_.column).getOrElse(partitionSpec.column)
     val effectiveSpec = tablePartitionSpec.getOrElse(partitionSpec)
+    val effectiveRange = partitionRange.map { range =>
+      if (range.partitionSpec == effectiveSpec) range else range.translate(effectiveSpec)
+    }
+    val rangeWheres = andPredicates(
+      effectiveRange
+        .map(range => whereClauses(range, partitionColumn = Some(effectivePartColumn)))
+        .getOrElse(Seq.empty))
 
     val partitions = tableFormatProvider
       .readFormat(tableName)

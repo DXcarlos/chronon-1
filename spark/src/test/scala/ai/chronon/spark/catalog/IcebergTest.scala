@@ -163,6 +163,53 @@ class IcebergTest extends SparkTestBase with Matchers {
     }
   }
 
+  it should "skip Iceberg tables with timestamp logical partitions" in {
+    val tableName = "default.iceberg_step_runner_timestamp_logical_partitions_test"
+    val previousPartitionColumn = spark.conf.getOption("spark.chronon.partition.column")
+    spark.conf.set("spark.chronon.partition.column", "ts")
+    val tableUtils = TableUtils(spark)
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          id INT,
+          value STRING,
+          ts TIMESTAMP
+        ) USING iceberg
+      """)
+
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+        (1, 'a', TIMESTAMP '2024-02-01 12:00:00'),
+        (2, 'b', TIMESTAMP '2024-02-02 12:00:00'),
+        (3, 'c', TIMESTAMP '2024-02-03 12:00:00')
+      """)
+
+      val dateRange = new DateRange().setStartDate("2024-02-01").setEndDate("2024-02-03")
+      val metadata = new MetaData()
+        .setName("iceberg_step_runner_timestamp_logical_partitions_test")
+        .setOutputNamespace("default")
+        .setExecutionInfo(
+          new ExecutionInfo()
+            .setOutputTableInfo(new TableInfo().setTable(tableName))
+            .setStepDays(1)
+        )
+
+      var logicalPartitionRuns = 0
+      StepRunner(dateRange, metadata, deriveLogicalPartitions = true) { _ =>
+        logicalPartitionRuns += 1
+      }(tableUtils)
+      logicalPartitionRuns shouldBe 0
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+      previousPartitionColumn match {
+        case Some(value) => spark.conf.set("spark.chronon.partition.column", value)
+        case None        => spark.conf.unset("spark.chronon.partition.column")
+      }
+    }
+  }
+
   "TableUtils.unfilledRanges" should "reuse unpartitioned Iceberg tables using logical partitions" in {
     val tableName = "default.iceberg_unfilled_ranges_logical_partitions_test"
     val tableUtils = TableUtils(spark)
@@ -186,6 +233,40 @@ class IcebergTest extends SparkTestBase with Matchers {
 
       val requestedRange = PartitionRange("2024-02-01", "2024-02-03")(PartitionSpec.daily)
       tableUtils.unfilledRanges(tableName, requestedRange) shouldBe None
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "derive logical partitions from timestamp columns through the requested end date" in {
+    val tableName = "default.iceberg_timestamp_logical_partitions_test"
+    val tableUtils = TableUtils(spark)
+    val timestampPartitionSpec = PartitionSpec("ts", "yyyy-MM-dd", 24 * 60 * 60 * 1000)
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          id INT,
+          value STRING,
+          ts TIMESTAMP
+        ) USING iceberg
+      """)
+
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+        (1, 'a', TIMESTAMP '2024-02-01 12:00:00'),
+        (2, 'b', TIMESTAMP '2024-02-02 12:00:00'),
+        (3, 'c', TIMESTAMP '2024-02-03 12:00:00')
+      """)
+
+      val requestedRange = PartitionRange("2024-02-01", "2024-02-03")(timestampPartitionSpec)
+      tableUtils.partitions(
+        tableName,
+        partitionRange = Some(requestedRange),
+        tablePartitionSpec = Some(timestampPartitionSpec),
+        deriveLogicalPartitions = true
+      ) should contain theSameElementsAs List("2024-02-01", "2024-02-02", "2024-02-03")
     } finally {
       spark.sql(s"DROP TABLE IF EXISTS $tableName")
     }
