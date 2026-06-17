@@ -47,11 +47,17 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
       })
       .getOrElse(source)
 
+    val sourcePartitionSpec = Option(source.query)
+      .map(_.partitionSpec(tableUtils.partitionSpec))
+      .getOrElse(tableUtils.partitionSpec)
+    val sourceDateRange = dateRange.translate(sourcePartitionSpec)
+    val sourcePartitionColumn = sourcePartitionSpec.column
+
     // This job benefits from a step day of 1 to avoid needing to shuffle on writing output (single partition)
-    dateRange.steps(days = 1).foreach { dayStep =>
+    sourceDateRange.steps(days = 1).foreach { dayStep =>
       val df = tableUtils.scanDf(skewFilteredSource.query,
                                  skewFilteredSource.table,
-                                 Some((Map(tableUtils.partitionColumn -> null) ++ timeProjection).toMap),
+                                 Some((Map(sourcePartitionColumn -> null) ++ timeProjection).toMap),
                                  range = Some(dayStep))
 
       if (df.isEmpty) {

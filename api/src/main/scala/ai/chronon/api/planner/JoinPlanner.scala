@@ -242,6 +242,33 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       statsComputeNodeOpt
   }
 
+  private def tableDependencies(node: Node): Seq[TableDependency] =
+    Option(node.metaData)
+      .flatMap(metaData => Option(metaData.executionInfo))
+      .flatMap(executionInfo => Option(executionInfo.tableDependencies))
+      .map(_.toScala.toSeq)
+      .getOrElse(Seq.empty)
+
+  private def externalSensorNodes(nodes: Seq[Node]): Seq[Node] = {
+    val internalOutputTables = nodes.flatMap(node => Option(node.metaData).map(_.outputTable)).toSet
+    val externalDeps = nodes
+      .flatMap(tableDependencies)
+      .filter { tableDependency =>
+        Option(tableDependency.tableInfo)
+          .flatMap(tableInfo => Option(tableInfo.table))
+          .exists(table => !internalOutputTables.contains(table))
+      }
+      .distinct
+
+    val sensorMetaData =
+      MetaDataUtils.layer(join.metaData, "sensor", join.metaData.name + "__external_sensors", externalDeps)
+
+    ExternalSourceSensorUtil
+      .sensorNodes(sensorMetaData)
+      .map(es =>
+        toNode(es.metaData, _.setExternalSourceSensor(es), ExternalSourceSensorUtil.semanticExternalSourceSensor(es)))
+  }
+
   def metadataUploadNode: Node = {
     val stepDays = 1 // Default step days for metadata upload
 
@@ -343,11 +370,9 @@ class JoinPlanner(join: Join)(implicit outputPartitionSpec: PartitionSpec)
       // The final offline node is the backfill terminal
       val backfillTerminalNode = allOfflineNodes.last
 
-      // Get sensor nodes for the backfill terminal node
-      val sensorNodes = ExternalSourceSensorUtil
-        .sensorNodes(backfillTerminalNode.metaData)
-        .map((es) =>
-          toNode(es.metaData, _.setExternalSourceSensor(es), ExternalSourceSensorUtil.semanticExternalSourceSensor(es)))
+      // Modular offline nodes depend on each other through generated internal tables. Sensors should be created for
+      // the raw external inputs used anywhere in the modular DAG, not for only the terminal node's direct dependencies.
+      val sensorNodes = externalSensorNodes(allOfflineNodes)
 
       val metadataUpload = metadataUploadNode
 

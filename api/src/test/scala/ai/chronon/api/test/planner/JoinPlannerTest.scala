@@ -120,6 +120,46 @@ class JoinPlannerTest extends AnyFlatSpec with Matchers {
     mutationDep.endOffset should equal(WindowUtils.zero())
   }
 
+  it should "create external sensors for all standard modular offline inputs" in {
+    val standardGroupBy = Builders.GroupBy(
+      sources = Seq(Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.other_events")),
+      keyColumns = Seq("listing_id"),
+      aggregations = Seq(Builders.Aggregation(Operation.COUNT, "event_count", Seq(WindowUtils.Unbounded))),
+      accuracy = Accuracy.TEMPORAL,
+      metaData = Builders.MetaData(namespace = "test_namespace", name = "standard_events_gb")
+    )
+
+    val join = Join(
+      metaData = MetaData(
+        name = "modular_standard_join",
+        namespace = "test_namespace",
+        executionInfo = modularExecutionInfo
+      ),
+      left = Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.left_events"),
+      joinParts = Seq(
+        Builders.JoinPart(groupBy = temporalEntityGroupBy("standard_temporal_entity_gb")),
+        Builders.JoinPart(groupBy = standardGroupBy)
+      ),
+      bootstrapParts = Seq.empty
+    )
+
+    val plan = new JoinPlanner(join).buildPlan
+    val nonSensorOutputTables = plan.nodes.asScala
+      .filterNot(_.content.isSetExternalSourceSensor)
+      .map(_.metaData.outputTable)
+      .toSet
+
+    val sensorOutputTables = plan.nodes.asScala
+      .filter(_.content.isSetExternalSourceSensor)
+      .map(_.content.getExternalSourceSensor.metaData.executionInfo.outputTableInfo.table)
+      .toSet
+
+    sensorOutputTables should equal(
+      Set("test.left_events", "test.dim_snapshot", "test.dim_mutations", "test.other_events")
+    )
+    sensorOutputTables.intersect(nonSensorOutputTables) should be(empty)
+  }
+
   it should "depend on upstream join output when the left source is a join source" in {
     val upstreamListingLookup = Builders.GroupBy(
       sources = Seq(Builders.Source.events(Builders.Query(partitionColumn = "ds"), table = "test.user_listings")),
