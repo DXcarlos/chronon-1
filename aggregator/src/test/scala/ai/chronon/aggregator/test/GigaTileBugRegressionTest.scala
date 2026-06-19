@@ -1,11 +1,14 @@
 package ai.chronon.aggregator.test
 
+import ai.chronon.aggregator.row.RowAggregator
 import ai.chronon.aggregator.windowing._
 import ai.chronon.api._
 import ai.chronon.api.Extensions.WindowOps
 import com.google.gson.Gson
 import org.junit.Assert._
 import org.scalatest.flatspec.AnyFlatSpec
+
+import scala.collection.mutable
 
 /** Failing tests demonstrating bugs in GigaTile (PR #1645) that Mick already fixed in MegaTile (PRs #1680/#1776).
   *
@@ -19,6 +22,200 @@ class GigaTileBugRegressionTest extends AnyFlatSpec {
   val MinuteMillis: Long = 60 * 1000L
   val TailBufferMillis: Long = new Window(2, TimeUnit.DAYS).millis
   val schema: Seq[(String, DataType)] = Seq("ts" -> LongType, "num" -> LongType)
+
+  private def irEqual(a: Array[Any], b: Array[Any]): Boolean = {
+    if (a == null && b == null) true
+    else if (a == null || b == null) false
+    else a.length == b.length && a.zip(b).forall { case (x, y) => x == y }
+  }
+
+  private class SwitchableGigaTileStore(windowedAgg: RowAggregator) extends GigaTileStore {
+    private val stores = mutable.Map.empty[String, InMemoryGigaTileStore]
+    private var currentKey: String = _
+
+    def bind(key: String): Unit = {
+      currentKey = key
+      stores.getOrElseUpdate(key, new InMemoryGigaTileStore(windowedAgg))
+    }
+
+    private def currentStore: InMemoryGigaTileStore = stores(currentKey)
+
+    override def getTile(hopSize: Long, tileStart: Long): Array[Any] = currentStore.getTile(hopSize, tileStart)
+    override def putTile(hopSize: Long, tileStart: Long, ir: Array[Any]): Unit =
+      currentStore.putTile(hopSize, tileStart, ir)
+    override def removeTile(hopSize: Long, tileStart: Long): Unit = currentStore.removeTile(hopSize, tileStart)
+    override def tileIterator: Iterator[(Long, Long, Array[Any])] = currentStore.tileIterator
+
+    override def getCachedSmallWindowIr: Array[Any] = currentStore.getCachedSmallWindowIr
+    override def putCachedSmallWindowIr(ir: Array[Any]): Unit = currentStore.putCachedSmallWindowIr(ir)
+
+    override def getLargeTodayIr: Array[Any] = currentStore.getLargeTodayIr
+    override def putLargeTodayIr(ir: Array[Any]): Unit = currentStore.putLargeTodayIr(ir)
+    override def getLargeYesterdayIr: Array[Any] = currentStore.getLargeYesterdayIr
+    override def putLargeYesterdayIr(ir: Array[Any]): Unit = currentStore.putLargeYesterdayIr(ir)
+
+    override def getCurrentDayStart: Long = currentStore.getCurrentDayStart
+    override def putCurrentDayStart(ts: Long): Unit = currentStore.putCurrentDayStart(ts)
+    override def getEarliestTileStart: Long = currentStore.getEarliestTileStart
+    override def putEarliestTileStart(ts: Long): Unit = currentStore.putEarliestTileStart(ts)
+
+    override def getBatchIr: FinalBatchIr = currentStore.getBatchIr
+    override def putBatchIr(ir: FinalBatchIr): Unit = currentStore.putBatchIr(ir)
+    override def getBatchEndTs: Long = currentStore.getBatchEndTs
+    override def putBatchEndTs(ts: Long): Unit = currentStore.putBatchEndTs(ts)
+    override def getRunningLargeIr: Array[Any] = currentStore.getRunningLargeIr
+    override def putRunningLargeIr(ir: Array[Any]): Unit = currentStore.putRunningLargeIr(ir)
+
+    override def getDailyLargeIr(dayStart: Long): Array[Any] = currentStore.getDailyLargeIr(dayStart)
+    override def putDailyLargeIr(dayStart: Long, ir: Array[Any]): Unit =
+      currentStore.putDailyLargeIr(dayStart, ir)
+    override def removeDailyLargeIr(dayStart: Long): Unit = currentStore.removeDailyLargeIr(dayStart)
+    override def dailyLargeIrIterator: Iterator[(Long, Array[Any])] = currentStore.dailyLargeIrIterator
+
+  }
+
+  private class CountingGigaTileStore(windowedAgg: RowAggregator) extends InMemoryGigaTileStore(windowedAgg) {
+    var runningLargeWrites: Int = 0
+    var tileScans: Int = 0
+
+    override def putRunningLargeIr(ir: Array[Any]): Unit = {
+      runningLargeWrites += 1
+      super.putRunningLargeIr(ir)
+    }
+
+    override def tileIterator: Iterator[(Long, Long, Array[Any])] = {
+      tileScans += 1
+      super.tileIterator
+    }
+  }
+
+  private def mixedBoundaryAggregations: Seq[Aggregation] =
+    Seq(
+      Builders.Aggregation(Operation.SUM, "num", Seq(new Window(1, TimeUnit.HOURS), new Window(3, TimeUnit.DAYS))),
+      Builders.Aggregation(Operation.SUM, "num")
+    )
+
+  private def emptyBatchIr(batchEnd: Long, aggregations: Seq[Aggregation]): FinalBatchIr = {
+    val onlineAgg = new SawtoothOnlineAggregator(batchEnd, aggregations, schema, tailBufferMillis = TailBufferMillis)
+    onlineAgg.denormalizeBatchIr(onlineAgg.finalizeSnapshot(onlineAgg.init))
+  }
+
+  private def batchIrFromEvents(events: Array[TestRow], batchEnd: Long, aggregations: Seq[Aggregation]): FinalBatchIr = {
+    val onlineAgg = new SawtoothOnlineAggregator(batchEnd, aggregations, schema, tailBufferMillis = TailBufferMillis)
+    var batchIr = onlineAgg.init
+    events.foreach(row => batchIr = onlineAgg.update(batchIr, row))
+    onlineAgg.denormalizeBatchIr(onlineAgg.finalizeSnapshot(batchIr))
+  }
+
+  // -----------------------------------------------------------------
+  // Gap N — eviction suppression must be keyed and based on the key's current full IR.
+  //
+  // Flink creates one GigaTileStreamProcessor per operator subtask and rebinds only the
+  // GigaTileStore to the current key. A processor field such as lastEvictionPackedIr is
+  // therefore shared across keys. If key A evicts to [7, 12, 12], key B evicting to the
+  // same vector must still emit because B's external KV row may still hold [12, 12, 12].
+  // The same test also covers a large-window batch boundary while an unwindowed column
+  // remains non-null, so all three column classes are represented.
+  // -----------------------------------------------------------------
+  it should "FAIL: eviction suppression must be keyed across small, large, and unwindowed columns" in {
+    val aggregations = mixedBoundaryAggregations
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new SwitchableGigaTileStore(megaTileAgg.windowedAggregator)
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store, irEqual)
+    val baseDay = TsUtils.round(1700000000000L, DayMillis)
+    val emptyBatch = emptyBatchIr(baseDay, aggregations)
+    val queryTs = baseDay + 12 * HourMillis
+
+    def loadStreamingKey(key: String): Unit = {
+      store.bind(key)
+      processor.onBatchUpdate(emptyBatch, baseDay, baseDay)
+      processor.advanceWatermark(queryTs - 2 * HourMillis)
+      processor.onEvent(new TestRow(queryTs - 2 * HourMillis, 5L)(0), queryTs - 2 * HourMillis)
+      processor.advanceWatermark(queryTs - 30 * MinuteMillis)
+      processor.onEvent(new TestRow(queryTs - 30 * MinuteMillis, 7L)(0), queryTs - 30 * MinuteMillis)
+    }
+
+    loadStreamingKey("a")
+    loadStreamingKey("b")
+
+    store.bind("a")
+    val aSmallBoundary = processor.onEviction(queryTs)
+    assertNotNull("key a must emit when the 1h small-window tile expires", aSmallBoundary.finalizedVector)
+    assertEquals(7L, aSmallBoundary.finalizedVector(0))
+    assertEquals(12L, aSmallBoundary.finalizedVector(1))
+    assertEquals(12L, aSmallBoundary.finalizedVector(2))
+
+    store.bind("b")
+    val bSmallBoundary = processor.onEviction(queryTs)
+    assertNotNull(
+      "key b must emit the same post-eviction vector; another key's memo cannot suppress it",
+      bSmallBoundary.finalizedVector
+    )
+    assertEquals(7L, bSmallBoundary.finalizedVector(0))
+    assertEquals(12L, bSmallBoundary.finalizedVector(1))
+    assertEquals(12L, bSmallBoundary.finalizedVector(2))
+
+    val batchEnd = baseDay
+    val batchEvents = Array(new TestRow(batchEnd - HourMillis, 12L)(0))
+    val batchIr = batchIrFromEvents(batchEvents, batchEnd, aggregations)
+    val largeBoundaryTs = batchEnd + 4 * DayMillis
+
+    def loadBatchKey(key: String): Unit = {
+      store.bind(key)
+      processor.onBatchUpdate(batchIr, batchEnd, batchEnd)
+    }
+
+    loadBatchKey("batch-a")
+    loadBatchKey("batch-b")
+
+    store.bind("batch-a")
+    val aLargeBoundary = processor.onEviction(largeBoundaryTs)
+    assertNotNull("key batch-a must emit when the 3d large window moves past batch data",
+                  aLargeBoundary.finalizedVector)
+    assertNull(aLargeBoundary.finalizedVector(0))
+    assertNull(aLargeBoundary.finalizedVector(1))
+    assertEquals(12L, aLargeBoundary.finalizedVector(2))
+
+    store.bind("batch-b")
+    val bLargeBoundary = processor.onEviction(largeBoundaryTs)
+    assertNotNull(
+      "key batch-b must emit the same large-window decay vector; another key's memo cannot suppress it",
+      bLargeBoundary.finalizedVector
+    )
+    assertNull(bLargeBoundary.finalizedVector(0))
+    assertNull(bLargeBoundary.finalizedVector(1))
+    assertEquals(12L, bLargeBoundary.finalizedVector(2))
+  }
+
+  it should "FAIL: scheduled eviction before the next real boundary must not scan or rewrite full state" in {
+    val aggregations = mixedBoundaryAggregations
+    val megaTileAgg = new MegaTileAggregator(aggregations, schema, tailBufferMillis = TailBufferMillis)
+    val store = new CountingGigaTileStore(megaTileAgg.windowedAggregator)
+    val processor = new GigaTileStreamProcessor(megaTileAgg, store, irEqual)
+    val baseDay = TsUtils.round(1700000000000L, DayMillis)
+    val eventTs = baseDay + 10 * HourMillis + 30 * MinuteMillis
+    val earlyTimer = eventTs + 5 * MinuteMillis
+    val expiryTimer = TsUtils.round(eventTs, 5 * MinuteMillis) + HourMillis + 5 * MinuteMillis
+
+    processor.onBatchUpdate(emptyBatchIr(baseDay, aggregations), baseDay, baseDay)
+    processor.advanceWatermark(eventTs)
+    processor.onEvent(new TestRow(eventTs, 3L)(0), eventTs)
+    val writesAfterEvent = store.runningLargeWrites
+    val scansAfterEvent = store.tileScans
+
+    val earlyEviction = processor.onScheduledEviction(earlyTimer)
+    assertNull("timer before any small/large boundary should not emit", earlyEviction.finalizedVector)
+    assertEquals("timer before a real boundary should not rewrite runningLargeIr",
+                 writesAfterEvent,
+                 store.runningLargeWrites)
+    assertEquals("timer before a real boundary should not scan tile state", scansAfterEvent, store.tileScans)
+
+    val boundaryEviction = processor.onEviction(expiryTimer)
+    assertNotNull("timer at the 1h small-window expiry should recompute and emit", boundaryEviction.finalizedVector)
+    assertNull(boundaryEviction.finalizedVector(0))
+    assertEquals(3L, boundaryEviction.finalizedVector(1))
+    assertEquals(3L, boundaryEviction.finalizedVector(2))
+  }
 
   // -----------------------------------------------------------------
   // Bug A — Late retained event re-inflates the cached 1h window.

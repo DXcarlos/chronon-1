@@ -197,7 +197,7 @@ class GigaTileProcessFunction(
 
       ensureStateBound(ctx.getCurrentKey)
       processor.advanceWatermark(ctx.timerService().currentWatermark())
-      val result = processor.onEviction(timestamp)
+      val result = processor.onScheduledEviction(timestamp)
 
       if (result.finalizedVector != null) {
         out.collect(

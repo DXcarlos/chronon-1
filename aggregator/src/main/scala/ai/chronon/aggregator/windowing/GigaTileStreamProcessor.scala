@@ -65,8 +65,6 @@ class GigaTileStreamProcessor(
   private def defaultSmallWindowAsOfTs(eventTs: Long): Long =
     TsUtils.round(eventTs, minSmallWindowTileSize) + minSmallWindowTileSize
 
-  private var lastEvictionPackedIr: Array[Any] = _
-
   // Hop indices only used by small (NO BATCH) windows — stripped from batch IR on load.
   // 5-min tail hops for ≤12h windows are never used by mergeTailHopsForBatchColumns.
   private[windowing] val smallWindowOnlyHopIndices: Set[Int] = {
@@ -81,6 +79,12 @@ class GigaTileStreamProcessor(
     }
     (0 until megaTileAgg.hopSizesArray.length).filterNot(usedByBatch.contains(_)).toSet
   }
+
+  private def addIfNoOverflow(a: Long, b: Long): Long =
+    if (a > Long.MaxValue - b) Long.MaxValue else a + b
+
+  private def subtractIfNoUnderflow(a: Long, b: Long): Long =
+    if (a < Long.MinValue + b) Long.MinValue else a - b
 
   def onEvent(row: Row, eventTs: Long): GigaEmitResult = onEvent(row, eventTs, defaultSmallWindowAsOfTs(eventTs))
 
@@ -198,26 +202,39 @@ class GigaTileStreamProcessor(
     }
   }
 
-  /** Periodic eviction: corrects small window sawtooth and large window tail hop selection. */
-  def onEviction(timerTs: Long): GigaEmitResult = {
+  /** Direct eviction/serve-as-of: corrects small window sawtooth and large window tail selection. */
+  def onEviction(timerTs: Long): GigaEmitResult =
+    runEviction(timerTs, force = true)
+
+  /** Scheduled eviction used by Flink timers. Timer cadence stays fixed, but a timer that does
+    * not cross a real small or large boundary skips the expensive state rebuilds.
+    */
+  def onScheduledEviction(timerTs: Long): GigaEmitResult =
+    runEviction(timerTs, force = false)
+
+  private def runEviction(timerTs: Long, force: Boolean): GigaEmitResult = {
     val currentDayStart = store.getCurrentDayStart
     if (currentDayStart == -1L) return GigaEmitResult(null)
 
-    rebuildCachedSmallWindowIr(timerTs, currentDayStart)
-    recomputeRunningLargeIr(timerTs, currentDayStart)
+    val smallMayChange = force || smallWindowMayChangeAt(timerTs, currentDayStart)
+    val largeMayChange = force || largeIrMayChangeAt(timerTs)
+    if (!smallMayChange && !largeMayChange) {
+      return GigaEmitResult(null, isEmpty = isAllNull(pack()))
+    }
+
+    val previousPackedIr = windowedAgg.clone(pack())
+
+    if (smallMayChange) rebuildCachedSmallWindowIr(timerTs, currentDayStart)
+    if (largeMayChange) recomputeRunningLargeIr(timerTs, currentDayStart)
 
     val packed = pack()
     val packedIsEmpty = isAllNull(packed)
-    val previousWasEmpty = lastEvictionPackedIr != null && isAllNull(lastEvictionPackedIr)
-    if (packedIsEmpty && previousWasEmpty) {
-      // Both rebuilds produced all-null vectors — nothing has changed and nothing more can
-      // decay until a new event arrives. Suppress to avoid burning a KV write per eviction
-      // for fully-decayed idle entities.
-      GigaEmitResult(null, isEmpty = true)
-    } else if (lastEvictionPackedIr != null && irEqual(lastEvictionPackedIr, packed)) {
+    val previousWasEmpty = isAllNull(previousPackedIr)
+    if ((packedIsEmpty && previousWasEmpty) || irEqual(previousPackedIr, packed)) {
+      // Nothing changed for this key. Suppress redundant KV writes, including fully-decayed
+      // idle entities where the previous and current packed IR are both all-null.
       GigaEmitResult(null, isEmpty = packedIsEmpty)
     } else {
-      lastEvictionPackedIr = windowedAgg.clone(packed)
       GigaEmitResult(windowedAgg.finalize(packed), isEmpty = packedIsEmpty)
     }
   }
@@ -333,6 +350,107 @@ class GigaTileStreamProcessor(
 
   // --- Private helpers ---
 
+  private def previousTimerTs(queryTs: Long): Long =
+    if (queryTs <= Long.MinValue + minEvictionInterval) Long.MinValue else queryTs - minEvictionInterval
+
+  private def crossedSincePreviousTimer(queryTs: Long, boundaryTs: Long): Boolean =
+    boundaryTs > previousTimerTs(queryTs) && boundaryTs <= queryTs
+
+  private def smallWindowMayChangeAt(queryTs: Long, currentDayStart: Long): Boolean = {
+    if (!hasSmallWindows || store.getEarliestTileStart == Long.MaxValue) return false
+
+    var col = 0
+    while (col < windowedAgg.length) {
+      val windowMillis = megaTileAgg.columnWindowMillis(col)
+      if (isNoBatch(col) && windowMillis > 0) {
+        val hopSize = columnHopSize(col)
+        val effectiveStart = megaTileAgg.effectiveStart(col, queryTs, currentDayStart)
+        if (effectiveStart >= Long.MinValue + hopSize) {
+          val expiredTileStart = effectiveStart - hopSize
+          if (store.getTile(hopSize, expiredTileStart) != null) return true
+        }
+      }
+      col += 1
+    }
+
+    false
+  }
+
+  private def largeIrMayChangeAt(queryTs: Long): Boolean = {
+    val batchIr = store.getBatchIr
+    val batchEndTs = store.getBatchEndTs
+    val batchEndDay = if (batchEndTs > 0) TsUtils.round(batchEndTs, DayMillis) else Long.MinValue
+
+    if (batchEndDay != Long.MinValue) {
+      val iter = store.dailyLargeIrIterator
+      while (iter.hasNext) {
+        val (dayStart, _) = iter.next()
+        if (dayStart < batchEndDay) return true
+      }
+    }
+
+    if (batchIr != null && batchEndTs > 0L) {
+      var col = 0
+      while (col < windowedAgg.length) {
+        val windowMillis = megaTileAgg.columnWindowMillis(col)
+        if (!isNoBatch(col) && windowMillis > 0) {
+          val collapsedExpiry = addIfNoOverflow(batchEndTs, windowMillis)
+          if (batchIr.collapsed != null && col < batchIr.collapsed.length &&
+              batchIr.collapsed(col) != null && crossedSincePreviousTimer(queryTs, collapsedExpiry)) {
+            return true
+          }
+
+          val hopIndex = megaTileAgg.tailHopIndicesArray(col)
+          if (batchIr.tailHops != null && hopIndex < batchIr.tailHops.length && batchIr.tailHops(hopIndex) != null) {
+            val hopSize = megaTileAgg.hopSizesArray(hopIndex)
+            val prevTs = previousTimerTs(queryTs)
+            val previousTail =
+              if (prevTs == Long.MinValue) Long.MinValue
+              else TsUtils.round(subtractIfNoUnderflow(prevTs, windowMillis), hopSize)
+            val queryTail = TsUtils.round(subtractIfNoUnderflow(queryTs, windowMillis), hopSize)
+            if (queryTail > previousTail) {
+              val baseIrIndex = megaTileAgg.baseIrIndicesArray(col)
+              val hopIrs = batchIr.tailHops(hopIndex)
+              var idx = 0
+              while (idx < hopIrs.length) {
+                val hopIr = hopIrs(idx)
+                if (hopIr != null && baseIrIndex < hopIr.length - 1) {
+                  val hopStart = hopIr.last.asInstanceOf[Long]
+                  if (hopStart >= previousTail && hopStart < queryTail && hopIr(baseIrIndex) != null) {
+                    return true
+                  }
+                }
+                idx += 1
+              }
+            }
+          }
+        }
+        col += 1
+      }
+    }
+
+    val columnWindowMillis = megaTileAgg.columnWindowMillis
+    val baseIrIndices = megaTileAgg.baseIrIndicesArray
+    var col = 0
+    while (col < windowedAgg.length) {
+      val windowMillis = columnWindowMillis(col)
+      if (!isNoBatch(col) && windowMillis > 0 && queryTs >= windowMillis + DayMillis) {
+        val dayStart = TsUtils.round(queryTs - windowMillis - DayMillis, DayMillis)
+        val expiryTs = addIfNoOverflow(addIfNoOverflow(dayStart, DayMillis), windowMillis)
+        if (crossedSincePreviousTimer(queryTs, expiryTs)) {
+          val dayIr = store.getDailyLargeIr(dayStart)
+          val baseIrIndex = baseIrIndices(col)
+          if (dayIr != null && baseIrIndex < dayIr.length && dayIr(baseIrIndex) != null) {
+            return true
+          }
+        }
+      }
+      col += 1
+    }
+
+    false
+  }
+
   /** Recompute runningLargeIr from: batch (collapsed + tail hops) + every retained daily slot
     * with dayStart >= batchEndDay. For columns where the entire window has moved past
     * batchEndTs, the collapsed value is stale — zero it out so stale batch data doesn't
@@ -373,7 +491,9 @@ class GigaTileStreamProcessor(
       val (dayStart, dayIr) = iter.next()
       val slotEnd = dayStart + DayMillis
       // Slot entirely outside the largest window — useful to no column. Drop from state.
-      if (maxWindowMillis > 0 && slotEnd <= queryTs - maxWindowMillis) {
+      if (dayStart < batchEndDay) {
+        toEvict += dayStart
+      } else if (maxWindowMillis > 0 && slotEnd <= queryTs - maxWindowMillis) {
         toEvict += dayStart
       } else if (dayStart >= batchEndDay && dayIr != null) {
         var col = 0
@@ -488,6 +608,8 @@ class GigaTileStreamProcessor(
 
 case class GigaEmitResult(
     finalizedVector: Array[Any],
+    // True when a non-timer path, such as batch update, wants the next fixed-cadence
+    // eviction timer registered.
     needsEvictionTimer: Boolean = false,
     // True when the packed pre-finalize IR has every column null. The Flink wiring uses this
     // to (a) DELETE the PUSH KV row instead of writing a row of nulls and (b) decide whether
