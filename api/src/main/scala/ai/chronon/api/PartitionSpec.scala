@@ -19,10 +19,13 @@ package ai.chronon.api
 import ai.chronon.api.Extensions._
 import org.apache.commons.lang3.time.FastDateFormat
 
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.text.{ParseException, ParsePosition, SimpleDateFormat}
-import java.time.Instant
+import java.time.{Instant, LocalDateTime, LocalTime}
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder}
+import java.time.temporal.ChronoField
 import java.util.{Calendar, Locale, TimeZone}
 import scala.collection.mutable.ListBuffer
 import scala.util.Try
@@ -244,6 +247,28 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
   def canonical(value: String): Option[String] =
     Try(epochMillis(value)).toOption.filter(ms => grid.leftBound(ms) == ms).map(at)
 
+  /** Catalogs can stringify daily DATE/TIMESTAMP partitions as yyyy-MM-dd HH:mm:ss even when the
+    * logical Chronon partition spec is daily yyyy-MM-dd. Normalize that compatibility shape only
+    * at catalog-input boundaries; user-authored partition strings still go through strict parsing.
+    */
+  def canonicalCatalogValue(value: String): Option[String] =
+    catalogStartMillis(value).filter(ms => grid.leftBound(ms) == ms).map(at)
+
+  def catalogStartMillis(value: String): Option[Long] = {
+    if (value == null) return None
+    val candidates = Seq(value, PartitionSpec.unescapeCatalogValue(value)).distinct
+    candidates.iterator.flatMap(v => Try(epochMillis(v)).toOption).toSeq.headOption.orElse {
+      if (isDaily && format == PartitionSpec.daily.format) {
+        candidates.iterator.flatMap(PartitionSpec.midnightTimestampMillis).toSeq.headOption
+      } else {
+        None
+      }
+    }
+  }
+
+  def translateCatalogValue(partitionValue: String, targetSpec: PartitionSpec): String =
+    targetSpec.at(catalogStartMillis(partitionValue).getOrElse(epochMillis(partitionValue)))
+
   /** Normalizes a start value by translating from the fallback spec's interval start when needed. */
   def normalizeStart(partition: String, fallbackSpec: PartitionSpec): String = {
     if (partition == null) return null
@@ -278,6 +303,21 @@ object PartitionSpec {
     1706745600000L, // 2024-02-01T00:00:00Z - month rollover
     1735689600000L // 2025-01-01T00:00:00Z - year rollover
   )
+
+  private val DailyTimestampFormatter: DateTimeFormatter = new DateTimeFormatterBuilder()
+    .appendPattern("yyyy-MM-dd HH:mm:ss")
+    .optionalStart()
+    .appendFraction(ChronoField.NANO_OF_SECOND, 1, 9, true)
+    .optionalEnd()
+    .toFormatter(Locale.US)
+
+  private def unescapeCatalogValue(value: String): String =
+    Try(URLDecoder.decode(value.replace("+", "%2B"), StandardCharsets.UTF_8.name())).getOrElse(value)
+
+  private def midnightTimestampMillis(value: String): Option[Long] =
+    Try(LocalDateTime.parse(value, DailyTimestampFormatter)).toOption
+      .filter(_.toLocalTime == LocalTime.MIDNIGHT)
+      .map(_.toInstant(ZoneOffset.UTC).toEpochMilli)
 
   def validate(column: String, format: String, spanMillis: Long, offsetMillis: Long = 0L): Unit = {
     val grid = PartitionGrid(spanMillis, offsetMillis)
