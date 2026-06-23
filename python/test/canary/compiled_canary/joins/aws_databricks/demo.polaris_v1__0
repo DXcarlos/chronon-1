@@ -7,13 +7,16 @@
         ],
         "metaData": {
           "columnHashes": {
-            "currency": "1e4fe9bfda620401a502c00d3b2e4c45",
-            "headline": "4aa0f35a360d8efdf559b42d520ae928",
-            "is_active": "f792c4178833afcde9c5944f6dbe8bce",
-            "listing_id": "8b6028838b306d5dfa9fa6f414c604ec",
-            "merchant_id": "239f72077b902e0927811d1e0cb7cd39",
-            "price_cents": "283f0c2269b27308b4176869197f53f5"
+            "currency": "3e49910d8567a92888c3149a493a05f2",
+            "headline": "0fed9d122a70095fd9c25f4dd5c857f0",
+            "is_active": "944046c01dd20a8e195bfc0b138c733f",
+            "listing_id": "6c560eddebd54fcd48a75b3e1c71e2fc",
+            "merchant_id": "988bda6f309ff2a04b742cff05986efa",
+            "price_cents": "334cfef9707fbbfc499c576a981445b9"
           },
+          "environments": [
+            1
+          ],
           "executionInfo": {
             "clusterConf": {
               "common": {
@@ -76,9 +79,9 @@
             "historicalBackfill": 0,
             "stepDays": 30
           },
-          "name": "aws_databricks.dim_listings.unpartitioned_v1__0",
+          "name": "aws_databricks.dim_listings.polaris_v1__0",
           "online": 0,
-          "outputNamespace": "workspace_iceberg.poc",
+          "outputNamespace": "polaris.default",
           "team": "aws_databricks",
           "version": "0"
         },
@@ -90,13 +93,13 @@
                   "currency": "currency",
                   "headline": "headline",
                   "is_active": "is_active",
-                  "listing_id": "listing_id",
+                  "listing_id": "CAST(listing_id AS INT)",
                   "merchant_id": "merchant_id",
                   "price_cents": "price_cents"
                 },
                 "startPartition": "2025-01-01"
               },
-              "snapshotTable": "workspace_iceberg.poc.aws_databricks_exports_dim_listings_unpartitioned__0"
+              "snapshotTable": "polaris.default.aws_databricks_exports_polaris_smoke_dim_listings__0"
             }
           }
         ]
@@ -112,20 +115,23 @@
         },
         "startPartition": "2025-01-01"
       },
-      "snapshotTable": "workspace_iceberg.poc.aws_databricks_exports_dim_listings_unpartitioned__0"
+      "snapshotTable": "polaris.default.aws_databricks_exports_polaris_smoke_dim_listings__0"
     }
   },
   "metaData": {
     "columnHashes": {
-      "listing_id": "7fda2abe680b6dfefd16644aa2759b30",
-      "listing_id_currency": "e8c1572142b24c3612370a1317c52dfc",
-      "listing_id_headline": "35afd36b82ea963b08d9702bbe1589f2",
-      "listing_id_is_active": "479d067bb619d1d27e9981262b3ea1ba",
-      "listing_id_listing_id": "d13c194d3ca493e85b1485197596f922",
-      "listing_id_merchant_id": "62ff7f797013d9a523893e3f054a52ec",
-      "listing_id_price_cents": "dce4e46d2a7b5cf01729da5b509294fa"
+      "listing_id": "0ae0364720ca6842e77d1193ec8b9a0b",
+      "listing_id_currency": "44af29d6362c08479fbaa129c25e8c74",
+      "listing_id_headline": "d7518fabba619bc02392c90cad1ca6b5",
+      "listing_id_is_active": "44c09cbc93e50ad39cffcd38ffda3ef3",
+      "listing_id_listing_id": "20fbf96acb6e5cdcb77dc5951f9f766e",
+      "listing_id_merchant_id": "2769bf0cd4de5860249b11ecc9a2e556",
+      "listing_id_price_cents": "deb7fb7715db8f8ec76db79417671bc4"
     },
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_workspace_iceberg_poc_aws_databricks_exports_dim_listings_unpartitioned__0_with_offset_0\", \"spec\": \"workspace_iceberg.poc.aws_databricks_exports_dim_listings_unpartitioned__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_polaris_default_aws_databricks_exports_polaris_smoke_dim_listings__0_with_offset_0\", \"spec\": \"polaris.default.aws_databricks_exports_polaris_smoke_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "environments": [
+      1
+    ],
     "executionInfo": {
       "clusterConf": {
         "common": {
@@ -188,13 +194,14 @@
       "offlineSchedule": "@daily",
       "stepDays": 30
     },
-    "name": "aws_databricks.demo.unpartitioned_v1",
+    "name": "aws_databricks.demo.polaris_v1__0",
     "online": 0,
-    "outputNamespace": "workspace_iceberg.poc",
+    "outputNamespace": "polaris.default",
     "production": 0,
     "samplePercent": 100.0,
     "sourceFile": "joins/aws_databricks/demo.py",
-    "team": "aws_databricks"
+    "team": "aws_databricks",
+    "version": "0"
   },
   "rowIds": [],
   "useLongNames": 0

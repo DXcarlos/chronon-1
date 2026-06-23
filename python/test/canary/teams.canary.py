@@ -189,9 +189,20 @@ aws_databricks_env.common['DATABRICKS_EXTRA'] = "DATABRICKS_EXTRA_1"
 # /services/hub path) — the crucible cluster runs PR-77 consolidated domain wiring.
 aws_databricks_env.common['ARTIFACT_PREFIX'] = "s3://zipline-artifacts-crucible"
 aws_databricks_env.common['WAREHOUSE_PREFIX'] = "s3://zipline-warehouse-crucible"
+aws_databricks_env.common['CUSTOMER_ID'] = "crucible"
 aws_databricks_env.common['FRONTEND_URL'] = "https://crucible-aws.zipline.ai"
 aws_databricks_env.common['HUB_URL'] = "https://crucible-aws.zipline.ai/services/hub"
+aws_databricks_env.common['EVAL_URL'] = "https://crucible-aws.zipline.ai/services/eval"
+aws_databricks_env.common['SPARK_CLUSTER_NAME'] = "crucible-eks"
 aws_databricks.conf.common['spark.sql.warehouse.dir'] = "s3://zipline-warehouse-crucible/data/uc-poc/warehouse/"
+aws_databricks.conf.common['spark.sql.catalog.polaris'] = "org.apache.iceberg.spark.SparkCatalog"
+aws_databricks.conf.common['spark.sql.catalog.polaris.type'] = "rest"
+aws_databricks.conf.common['spark.sql.catalog.polaris.uri'] = "https://crucible-aws.zipline.ai/services/catalog"
+aws_databricks.conf.common['spark.sql.catalog.polaris.warehouse'] = "polaris_crucible"
+aws_databricks.conf.common['spark.sql.catalog.polaris.credential'] = "{OC_CREDENTIAL}"
+aws_databricks.conf.common['spark.sql.catalog.polaris.scope'] = "PRINCIPAL_ROLE:ALL"
+aws_databricks.conf.common['spark.sql.catalog.polaris.header.X-Iceberg-Access-Delegation'] = "vended-credentials"
+aws_databricks.conf.common['spark.sql.catalog.polaris.io-impl'] = "org.apache.iceberg.aws.s3.S3FileIO"
 # UC's vended-creds default works on the K8sSubmitter path; only EMR needs the opt-out.
 del aws_databricks.conf.common['spark.sql.catalog.workspace.renewCredential.enabled']
 

@@ -27,12 +27,38 @@ source = EntitySource(
     ),
 )
 
+polaris_source = EntitySource(
+    snapshot_table=exports.polaris_smoke_dim_listings.table,
+    query=Query(
+        selects=selects(
+            listing_id="CAST(listing_id AS INT)",
+            merchant_id="merchant_id",
+            headline="headline",
+            price_cents="price_cents",
+            currency="currency",
+            is_active="is_active",
+        ),
+        start_partition="2025-01-01",
+    ),
+)
+
 v1 = GroupBy(
     sources=[source],
     keys=["listing_id"],
     online=False,
     aggregations=None,
     output_namespace="workspace_iceberg.poc",
+)
+
+polaris_v1 = GroupBy(
+    sources=[polaris_source],
+    keys=["listing_id"],
+    online=False,
+    aggregations=None,
+    output_namespace="polaris.default",
+    environments=["canary"],
+    version=0,
+    step_days=30,
 )
 
 # Smaller select set used by the four partitioned/unpartitioned × dense/sparse

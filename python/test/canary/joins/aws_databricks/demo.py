@@ -21,6 +21,20 @@ v1 = Join(
 # test_hub_backfill_uc.py against the Crucible-backed AWS Hub.
 _left_selects = selects(listing_id="listing_id")
 
+polaris_v1 = Join(
+    left=EntitySource(
+        snapshot_table=exports.polaris_smoke_dim_listings.table,
+        query=Query(selects=_left_selects, start_partition="2025-01-01"),
+    ),
+    row_ids=[],
+    right_parts=[JoinPart(group_by=dim_listings.polaris_v1)],
+    online=False,
+    output_namespace="polaris.default",
+    environments=["canary"],
+    version=0,
+    step_days=30,
+)
+
 pt_v1 = Join(
     left=EntitySource(
         snapshot_table=exports.dim_listings_pt.table,

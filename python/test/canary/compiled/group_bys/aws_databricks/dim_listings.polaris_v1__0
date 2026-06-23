@@ -1,7 +1,17 @@
 {
-  "engineType": 0,
+  "keyColumns": [
+    "listing_id"
+  ],
   "metaData": {
-    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_workspace_poc_dim_listings_with_offset_0\", \"spec\": \"workspace.poc.dim_listings/ds={{ macros.ds_add(ds, 0) }}\"}]}",
+    "columnHashes": {
+      "currency": "3e49910d8567a92888c3149a493a05f2",
+      "headline": "0fed9d122a70095fd9c25f4dd5c857f0",
+      "is_active": "944046c01dd20a8e195bfc0b138c733f",
+      "listing_id": "6c560eddebd54fcd48a75b3e1c71e2fc",
+      "merchant_id": "988bda6f309ff2a04b742cff05986efa",
+      "price_cents": "334cfef9707fbbfc499c576a981445b9"
+    },
+    "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_polaris_default_aws_databricks_exports_polaris_smoke_dim_listings__0_with_offset_0\", \"spec\": \"polaris.default.aws_databricks_exports_polaris_smoke_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
       1
     ],
@@ -57,32 +67,31 @@
           "WAREHOUSE_PREFIX": "s3://zipline-warehouse-canary"
         }
       },
-      "offlineSchedule": "@daily"
+      "historicalBackfill": 0,
+      "stepDays": 30
     },
-    "name": "aws_databricks.exports.polaris_smoke_dim_listings__0",
+    "name": "aws_databricks.dim_listings.polaris_v1__0",
+    "online": 0,
     "outputNamespace": "polaris.default",
-    "sourceFile": "staging_queries/aws_databricks/exports.py",
+    "sourceFile": "group_bys/aws_databricks/dim_listings.py",
     "team": "aws_databricks",
     "version": "0"
   },
-  "query": "\n    SELECT\n        *\n    FROM workspace.poc.dim_listings\n    WHERE\n    ds BETWEEN {{ start_date }} AND {{ end_date }}\n    ",
-  "tableDependencies": [
+  "sources": [
     {
-      "endOffset": {
-        "length": 0,
-        "timeUnit": 1
-      },
-      "startOffset": {
-        "length": 0,
-        "timeUnit": 1
-      },
-      "tableInfo": {
-        "partitionColumn": "ds",
-        "partitionInterval": {
-          "length": 1,
-          "timeUnit": 1
+      "entities": {
+        "query": {
+          "selects": {
+            "currency": "currency",
+            "headline": "headline",
+            "is_active": "is_active",
+            "listing_id": "CAST(listing_id AS INT)",
+            "merchant_id": "merchant_id",
+            "price_cents": "price_cents"
+          },
+          "startPartition": "2025-01-01"
         },
-        "table": "workspace.poc.dim_listings"
+        "snapshotTable": "polaris.default.aws_databricks_exports_polaris_smoke_dim_listings__0"
       }
     }
   ]
