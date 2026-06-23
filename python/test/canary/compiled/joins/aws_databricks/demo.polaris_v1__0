@@ -104,7 +104,7 @@
     "entities": {
       "query": {
         "selects": {
-          "listing_id": "listing_id"
+          "listing_id": "CAST(listing_id AS INT)"
         },
         "startPartition": "2025-01-01"
       },
@@ -113,13 +113,13 @@
   },
   "metaData": {
     "columnHashes": {
-      "listing_id": "0ae0364720ca6842e77d1193ec8b9a0b",
-      "listing_id_currency": "44af29d6362c08479fbaa129c25e8c74",
-      "listing_id_headline": "d7518fabba619bc02392c90cad1ca6b5",
-      "listing_id_is_active": "44c09cbc93e50ad39cffcd38ffda3ef3",
-      "listing_id_listing_id": "20fbf96acb6e5cdcb77dc5951f9f766e",
-      "listing_id_merchant_id": "2769bf0cd4de5860249b11ecc9a2e556",
-      "listing_id_price_cents": "deb7fb7715db8f8ec76db79417671bc4"
+      "listing_id": "2f0f99ad087f11fd941575a08f923a02",
+      "listing_id_currency": "75154cb9428a93d01d1dd2edcdcff7be",
+      "listing_id_headline": "577d7840ee0e93694cc43d67d7bce5eb",
+      "listing_id_is_active": "ff657e63b93997a8d9dd84de393fda22",
+      "listing_id_listing_id": "86d98b99ad6d53f229662d078d5a9383",
+      "listing_id_merchant_id": "2b003ce0dbfcd48759490e85d6b75ed5",
+      "listing_id_price_cents": "0e27242f91efe7547562c8de884667c1"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_polaris_default_aws_databricks_exports_polaris_smoke_dim_listings__0_with_offset_0\", \"spec\": \"polaris.default.aws_databricks_exports_polaris_smoke_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
