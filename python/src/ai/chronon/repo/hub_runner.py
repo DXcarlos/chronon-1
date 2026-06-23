@@ -151,10 +151,15 @@ def print_env_banner(env: str, format: Format = Format.TEXT) -> None:
         console.rule(f"[bold cyan]🐤 RUNNING AGAINST {e.upper()} ENVIRONMENT[/]")
 
 
+def _service_url(base_url: str, service: str) -> str:
+    return f"{base_url.rstrip('/')}/services/{service}"
+
+
 @dataclass
 class HubConfig:
-    hub_url: str
-    frontend_url: str
+    hub_url: Optional[str]
+    frontend_url: Optional[str]
+    zipline_url: Optional[str] = None
     sa_name: Optional[str] = None
     eval_url: Optional[str] = None
     fetcher_url: Optional[str] = None
@@ -162,6 +167,19 @@ class HubConfig:
     artifact_prefix: Optional[str] = None
     customer_id: Optional[str] = None
     auth_scope: Optional[str] = None
+
+    def __post_init__(self):
+        if self.zipline_url:
+            self.frontend_url = self.zipline_url
+        service_base_url = self.zipline_url or self.frontend_url
+        if not service_base_url:
+            return
+        if not self.hub_url:
+            self.hub_url = _service_url(service_base_url, "hub")
+        if not self.eval_url:
+            self.eval_url = _service_url(service_base_url, "eval")
+        if not self.fetcher_url:
+            self.fetcher_url = _service_url(service_base_url, "fetcher")
 
 
 SCHEDULE_NONE_STR = "None"
@@ -1415,6 +1433,7 @@ def get_hub_conf_from_metadata_conf(
     common_env_map.update(os.environ)  # Override config with cli args
     hub_url = common_env_map.get("HUB_URL")
     frontend_url = common_env_map.get("FRONTEND_URL")
+    zipline_url = common_env_map.get("ZIPLINE_URL")
     sa_name = common_env_map.get("SA_NAME")
     eval_url = common_env_map.get("EVAL_URL")
 
@@ -1434,6 +1453,7 @@ def get_hub_conf_from_metadata_conf(
     return HubConfig(
         hub_url=hub_url,
         frontend_url=frontend_url,
+        zipline_url=zipline_url,
         sa_name=sa_name,
         eval_url=eval_url,
         cloud_provider=cloud_provider,

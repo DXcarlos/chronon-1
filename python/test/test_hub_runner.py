@@ -19,7 +19,7 @@ from click.testing import CliRunner
 from rich.text import Text
 
 from ai.chronon.cli.formatter import Format
-from ai.chronon.repo.hub_runner import get_conf_type, hub, redeploy_streaming, repo_option
+from ai.chronon.repo.hub_runner import HubConfig, get_conf_type, hub, redeploy_streaming, repo_option
 from gen_thrift.api.ttypes import Environment
 
 
@@ -54,6 +54,49 @@ def test_get_conf_type_handles_per_env_output_dirs(conf, expected):
 def test_get_conf_type_rejects_unknown_folder():
     with pytest.raises(ValueError, match="Unsupported conf type"):
         get_conf_type("compiled_canary/widgets/team/x")
+
+
+def test_hub_config_derives_service_urls_from_frontend_url():
+    hub_conf = HubConfig(hub_url=None, frontend_url="https://example.zipline.ai/")
+
+    assert hub_conf.hub_url == "https://example.zipline.ai/services/hub"
+    assert hub_conf.eval_url == "https://example.zipline.ai/services/eval"
+    assert hub_conf.fetcher_url == "https://example.zipline.ai/services/fetcher"
+
+
+def test_hub_config_derives_frontend_and_service_urls_from_zipline_url():
+    hub_conf = HubConfig(hub_url=None, frontend_url=None, zipline_url="https://zipline.example/")
+
+    assert hub_conf.frontend_url == "https://zipline.example/"
+    assert hub_conf.hub_url == "https://zipline.example/services/hub"
+    assert hub_conf.eval_url == "https://zipline.example/services/eval"
+    assert hub_conf.fetcher_url == "https://zipline.example/services/fetcher"
+
+
+def test_hub_config_uses_zipline_url_as_frontend_and_service_base():
+    hub_conf = HubConfig(
+        hub_url=None,
+        frontend_url="https://frontend.example",
+        zipline_url="https://zipline.example",
+    )
+
+    assert hub_conf.frontend_url == "https://zipline.example"
+    assert hub_conf.hub_url == "https://zipline.example/services/hub"
+    assert hub_conf.eval_url == "https://zipline.example/services/eval"
+    assert hub_conf.fetcher_url == "https://zipline.example/services/fetcher"
+
+
+def test_hub_config_preserves_explicit_service_urls():
+    hub_conf = HubConfig(
+        hub_url="https://hub.example",
+        frontend_url="https://example.zipline.ai",
+        eval_url="https://eval.example",
+        fetcher_url="https://fetcher.example",
+    )
+
+    assert hub_conf.hub_url == "https://hub.example"
+    assert hub_conf.eval_url == "https://eval.example"
+    assert hub_conf.fetcher_url == "https://fetcher.example"
 
 
 class TestHubRunner:
