@@ -157,8 +157,8 @@ def _service_url(base_url: str, service: str) -> str:
 
 @dataclass
 class HubConfig:
-    hub_url: Optional[str]
-    frontend_url: Optional[str]
+    hub_url: Optional[str] = None
+    frontend_url: Optional[str] = None
     zipline_url: Optional[str] = None
     sa_name: Optional[str] = None
     eval_url: Optional[str] = None
