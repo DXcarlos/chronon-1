@@ -20,12 +20,11 @@ v1 = Join(
 # Four partitioned/unpartitioned × dense/sparse variants exercised by
 # test_hub_backfill_uc.py against the Crucible-backed AWS Hub.
 _left_selects = selects(listing_id="listing_id")
-_polaris_left_selects = selects(listing_id="CAST(listing_id AS INT)")
 
 polaris_v1 = Join(
     left=EntitySource(
         snapshot_table=exports.polaris_smoke_dim_listings.table,
-        query=Query(selects=_polaris_left_selects, start_partition="2025-01-01"),
+        query=Query(selects=_left_selects, start_partition="2025-01-01"),
     ),
     row_ids=[],
     right_parts=[JoinPart(group_by=dim_listings.polaris_v1)],

@@ -4,12 +4,12 @@
   ],
   "metaData": {
     "columnHashes": {
-      "currency": "3e49910d8567a92888c3149a493a05f2",
-      "headline": "0fed9d122a70095fd9c25f4dd5c857f0",
-      "is_active": "944046c01dd20a8e195bfc0b138c733f",
-      "listing_id": "6c560eddebd54fcd48a75b3e1c71e2fc",
-      "merchant_id": "988bda6f309ff2a04b742cff05986efa",
-      "price_cents": "334cfef9707fbbfc499c576a981445b9"
+      "currency": "3b3b9ffc7e4986a25e89d001c367e17f",
+      "headline": "99924d89af0ded29010e8f72d6a2e569",
+      "is_active": "7038860e51d66465fe6ace0fcea9148c",
+      "listing_id": "b2ecfd982c4832c4c174e15d9072c636",
+      "merchant_id": "ed0afad239b65129fe23952efaf964d5",
+      "price_cents": "e3f543dd5e79792d6c6620f881ad7cac"
     },
     "customJson": "{\"airflowDependencies\": [{\"name\": \"wf_polaris_default_aws_databricks_exports_polaris_smoke_dim_listings__0_with_offset_0\", \"spec\": \"polaris.default.aws_databricks_exports_polaris_smoke_dim_listings__0/ds={{ macros.ds_add(ds, 0) }}\"}]}",
     "environments": [
@@ -85,7 +85,7 @@
             "currency": "currency",
             "headline": "headline",
             "is_active": "is_active",
-            "listing_id": "CAST(listing_id AS INT)",
+            "listing_id": "listing_id",
             "merchant_id": "merchant_id",
             "price_cents": "price_cents"
           },
