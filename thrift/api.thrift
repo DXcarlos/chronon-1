@@ -350,6 +350,8 @@ struct MetaData {
 
     # information that needs to be present on every physical node
     204: optional common.ExecutionInfo executionInfo
+
+    205: optional list<Webhook> webhooks
 }
 
 // This has to be 0-indexed for Java usage
@@ -528,6 +530,17 @@ struct DataSpec {
     4: optional map<string, string> props
 }
 
+enum WebhookType {
+    SLACK = 0
+}
+
+struct Webhook {
+    1: optional string name
+    2: optional string url
+    3: optional map<string, string> headers
+    4: optional WebhookType type
+}
+
 struct Team {
     1: optional string name
     2: optional string description
@@ -539,7 +552,7 @@ struct Team {
     20: optional common.EnvironmentVariables env
     21: optional common.ConfigProperties conf
     22: optional common.ClusterConfigProperties clusterConf
-
+    23: optional list<Webhook> webhooks
 }
 
 enum DataModel {
