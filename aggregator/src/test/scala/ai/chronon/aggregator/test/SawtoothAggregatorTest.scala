@@ -251,6 +251,116 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
 
   }
 
+  it should "match computeWindows to computeWindows2 across hop tiers" in {
+    val dayMillis = 24L * 60 * 60 * 1000
+    val baseTs = TsUtils.datetimeToTs("2026-01-01 00:00:00")
+    val eventCount = 5000
+    val queryCount = 2000
+    val events = Array.tabulate(eventCount) { i =>
+      val ts = baseTs + ((45L * dayMillis * i) / eventCount)
+      new TestRow(ts, (i % 1000).toLong)(0)
+    }
+    val queries = Array.tabulate(queryCount) { i =>
+      baseTs + 20L * dayMillis + ((20L * dayMillis * i) / queryCount)
+    }
+    val columns = Seq(Column("ts", LongType, 45), Column("num", LongType, 1000))
+    val schema = columns.map(_.schema)
+    val windows = Seq(new Window(1, TimeUnit.HOURS),
+                      new Window(1, TimeUnit.DAYS),
+                      new Window(7, TimeUnit.DAYS),
+                      new Window(30, TimeUnit.DAYS))
+    val aggregations = Seq(
+      Builders.Aggregation(Operation.SUM, "num", windows),
+      Builders.Aggregation(Operation.COUNT, "num", windows),
+      Builders.Aggregation(Operation.LAST_K, "num", windows, argMap = Map("k" -> "20"))
+    )
+
+    val hopsAggregator = new HopsAggregator(queries.min, aggregations, schema, FiveMinuteResolution)
+    val sawtoothAggregator = new SawtoothAggregator(aggregations, schema, FiveMinuteResolution)
+    var hopMaps = hopsAggregator.init()
+    events.foreach { event => hopMaps = hopsAggregator.update(hopMaps, event) }
+    val hops = hopsAggregator.toTimeSortedArray(hopMaps)
+
+    val computeWindowsIrs = sawtoothAggregator.computeWindows(hops, queries)
+    val computeWindowsIteratorIrs = sawtoothAggregator.computeWindowsIterator(hops, queries).toArray
+    val computeWindows2Irs = sawtoothAggregator.computeWindows2(hops, queries)
+    val computeWindows2IteratorIrs = sawtoothAggregator.computeWindows2Iterator(hops, queries).toArray
+
+    assertEquals(computeWindowsIrs.length, computeWindows2Irs.length)
+    assertEquals(computeWindowsIrs.length, computeWindowsIteratorIrs.length)
+    assertEquals(computeWindowsIrs.length, computeWindows2IteratorIrs.length)
+    val gson = new Gson
+    for (i <- queries.indices) {
+      val expected = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindowsIrs(i)))
+      val iteratorActual = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindowsIteratorIrs(i)))
+      assertEquals(expected, iteratorActual)
+      val actual = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindows2Irs(i)))
+      assertEquals(expected, actual)
+      val oldIteratorActual = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindows2IteratorIrs(i)))
+      assertEquals(expected, oldIteratorActual)
+    }
+  }
+
+  it should "benchmark computeWindows against computeWindows2" in {
+    val dayMillis = 24L * 60 * 60 * 1000
+    val hourMillis = 60L * 60 * 1000
+    val baseTs = TsUtils.datetimeToTs("2026-01-01 00:00:00")
+    val eventCount = 200000
+    val queryCount = 20000
+    val queryStartOffset = 40L * dayMillis
+    val querySpan = queryCount.toLong * hourMillis
+    val eventSpan = queryStartOffset + querySpan
+    val events = Array.tabulate(eventCount) { i =>
+      val ts = baseTs + ((eventSpan * i) / eventCount)
+      new TestRow(ts, (i % 1000).toLong)(0)
+    }
+    val queries = Array.tabulate(queryCount) { i =>
+      baseTs + queryStartOffset + i.toLong * hourMillis
+    }
+    val columns = Seq(Column("ts", LongType, 900), Column("num", LongType, 1000))
+    val schema = columns.map(_.schema)
+    val windows = Seq(new Window(1, TimeUnit.HOURS),
+                      new Window(1, TimeUnit.DAYS),
+                      new Window(7, TimeUnit.DAYS),
+                      new Window(30, TimeUnit.DAYS))
+    val aggregations = Seq(
+      Builders.Aggregation(Operation.SUM, "num", windows),
+      Builders.Aggregation(Operation.COUNT, "num", windows),
+      Builders.Aggregation(Operation.LAST_K, "num", windows, argMap = Map("k" -> "20"))
+    )
+
+    val hopsAggregator = new HopsAggregator(queries.min, aggregations, schema, FiveMinuteResolution)
+    val sawtoothAggregator = new SawtoothAggregator(aggregations, schema, FiveMinuteResolution)
+    var hopMaps = hopsAggregator.init()
+    events.foreach { event => hopMaps = hopsAggregator.update(hopMaps, event) }
+    val hops = hopsAggregator.toTimeSortedArray(hopMaps)
+
+    def timed[A](name: String, runs: Int = 3, warmups: Int = 1)(f: => A): A = {
+      (0 until warmups).foreach(_ => f)
+      val start = System.nanoTime()
+      var result: A = null.asInstanceOf[A]
+      (0 until runs).foreach(_ => result = f)
+      val elapsedMillis = (System.nanoTime() - start).toDouble / 1000000
+      println(f"$name: ${elapsedMillis / runs}%.2f ms avg over $runs runs")
+      result
+    }
+
+    val computeWindowsIrs = timed("sawtooth/computeWindows") {
+      sawtoothAggregator.computeWindows(hops, queries)
+    }
+    val computeWindows2Irs = timed("sawtooth/computeWindows2") {
+      sawtoothAggregator.computeWindows2(hops, queries)
+    }
+
+    assertEquals(computeWindowsIrs.length, computeWindows2Irs.length)
+    val gson = new Gson
+    for (i <- queries.indices) {
+      val expected = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindowsIrs(i)))
+      val actual = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindows2Irs(i)))
+      assertEquals(expected, actual)
+    }
+  }
+
 }
 
 object SawtoothAggregatorTest {
