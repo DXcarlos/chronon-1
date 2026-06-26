@@ -456,6 +456,7 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
                      // ------- TODO: CLEANUP --------
                      inputTableToSubPartitionFiltersMap: Map[String, Map[String, String]] = Map.empty,
                      inputToOutputShift: Int = 0,
+                     inputPartitionRange: Option[PartitionRange] = None,
                      skipFirstHole: Boolean = true,
                      inputPartitionSpecs: Seq[PartitionSpec] = Seq(partitionSpec)
 
@@ -532,10 +533,14 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
         inputPartitionSpec <- inputPartitionSpecs;
         table <- inputTables;
         subPartitionFilters = inputTableToSubPartitionFiltersMap.getOrElse(table, Map.empty);
+        inputRange = inputPartitionRange.getOrElse(outputPartitionRange);
+        inputRangeForSpec =
+          if (inputRange.partitionSpec == inputPartitionSpec) inputRange
+          else inputRange.intersectingRange(inputPartitionSpec);
         // List in the input table's spec; output ds filters can exclude coarser input partitions.
         listed = partitions(table,
                             subPartitionFilters,
-                            Option(outputPartitionRange.intersectingRange(inputPartitionSpec)),
+                            Option(inputRangeForSpec),
                             tablePartitionSpec = Some(inputPartitionSpec));
         listedSpec = if (inputPartitionSpec.hasSameGrid(partitionSpec)) partitionSpec else inputPartitionSpec;
         contained <- PartitionRange.fullyContainedPartitions(listed, listedSpec, workingSpec)

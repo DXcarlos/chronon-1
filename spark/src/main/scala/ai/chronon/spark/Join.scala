@@ -331,20 +331,30 @@ class Join(joinConf: api.Join,
             joinLevelBloomMapOpt
           }
 
+          val leftTable = if (usingBootstrappedLeft) {
+            joinConfCloned.metaData.bootstrapTable
+          } else {
+            joinConfCloned.left.table
+          }
+          val leftPartitionSpec = if (usingBootstrappedLeft) {
+            tableUtils.partitionSpec
+          } else {
+            joinConfCloned.left.query.partitionSpec(tableUtils.partitionSpec)
+          }
+
           val runContext =
-            JoinPartJobContext(unfilledLeftDf, bloomFilterOpt, tableProps, runSmallMode)
+            JoinPartJobContext(unfilledLeftDf,
+                               bloomFilterOpt,
+                               tableProps,
+                               runSmallMode,
+                               leftTable = Some(leftTable),
+                               leftPartitionSpec = Some(leftPartitionSpec))
 
           val skewKeys: Option[Map[String, Seq[String]]] = Option(joinConfCloned.skewKeys).map { jmap =>
             val scalaMap = jmap.toScala
             scalaMap.map { case (key, list) =>
               key -> list.asScala.toSeq
             }
-          }
-
-          val leftTable = if (usingBootstrappedLeft) {
-            joinConfCloned.metaData.bootstrapTable
-          } else {
-            JoinUtils.computeFullLeftSourceTableName(joinConfCloned)
           }
 
           val joinPartJobRange = new DateRange()

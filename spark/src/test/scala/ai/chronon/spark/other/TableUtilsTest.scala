@@ -397,6 +397,87 @@ class TableUtilsTest extends AnyFlatSpec {
     assertEquals(expected, actual)
   }
 
+  it should "use explicit input range for shifted sub-daily unfilled range checks" in {
+    import spark.implicits._
+    val hourlySpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 60 * 60 * 1000)
+    val hourlyTableUtils = TableUtils(spark, hourlySpec)
+    val outputTable = "db.shifted_subdaily_output"
+    val inputTable = "db.shifted_subdaily_input"
+    spark.sql("CREATE DATABASE IF NOT EXISTS db")
+    spark.sql(s"DROP TABLE IF EXISTS $outputTable")
+    spark.sql(s"DROP TABLE IF EXISTS $inputTable")
+
+    try {
+      Seq(("2024-01-01-00-00", "existing"))
+        .toDF("ds", "id")
+        .write
+        .partitionBy("ds")
+        .saveAsTable(outputTable)
+      Seq(("2024-01-01-01-00", "present"),
+          ("2024-01-01-02-00", "present"),
+          ("2024-01-01-04-00", "present"))
+        .toDF("ds", "id")
+        .write
+        .partitionBy("ds")
+        .saveAsTable(inputTable)
+
+      val outputRange = PartitionRange("2024-01-01-00-00", "2024-01-01-03-00")(hourlySpec)
+      val inputRange = PartitionRange("2024-01-01-01-00", "2024-01-01-04-00")(hourlySpec)
+      val actual = hourlyTableUtils.unfilledRanges(outputTable,
+                                                   outputRange,
+                                                   Some(Seq(inputTable)),
+                                                   inputToOutputShift = -1,
+                                                   inputPartitionRange = Some(inputRange),
+                                                   skipFirstHole = false,
+                                                   inputPartitionSpecs = Seq(hourlySpec))
+
+      assertEquals(
+        Seq(("2024-01-01-01-00", "2024-01-01-01-00"), ("2024-01-01-03-00", "2024-01-01-03-00")),
+        actual.get.map(range => (range.start, range.end))
+      )
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $outputTable")
+      spark.sql(s"DROP TABLE IF EXISTS $inputTable")
+    }
+  }
+
+  it should "map coarse input partitions onto offset sub-daily unfilled output ranges" in {
+    import spark.implicits._
+    val offsetSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
+    val offsetTableUtils = TableUtils(spark, offsetSpec)
+    val outputTable = "db.offset_subdaily_output"
+    val inputTable = "db.offset_daily_input"
+    spark.sql("CREATE DATABASE IF NOT EXISTS db")
+    spark.sql(s"DROP TABLE IF EXISTS $outputTable")
+    spark.sql(s"DROP TABLE IF EXISTS $inputTable")
+
+    try {
+      Seq(("2024-01-01-01-00", "existing"))
+        .toDF("ds", "id")
+        .write
+        .partitionBy("ds")
+        .saveAsTable(outputTable)
+      Seq(("2024-01-01", "present"))
+        .toDF("ds", "id")
+        .write
+        .partitionBy("ds")
+        .saveAsTable(inputTable)
+
+      val outputRange = PartitionRange("2024-01-01-01-00", "2024-01-01-07-00")(offsetSpec)
+      val actual = offsetTableUtils.unfilledRanges(outputTable,
+                                                   outputRange,
+                                                   Some(Seq(inputTable)),
+                                                   inputPartitionRange = Some(outputRange),
+                                                   skipFirstHole = false,
+                                                   inputPartitionSpecs = Seq(PartitionSpec.daily))
+
+      assertEquals(Seq(("2024-01-01-04-00", "2024-01-01-07-00")), actual.get.map(range => (range.start, range.end)))
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $outputTable")
+      spark.sql(s"DROP TABLE IF EXISTS $inputTable")
+    }
+  }
+
 
   it should "double udf registration" in {
     tableUtils.sql("CREATE TEMPORARY FUNCTION test AS 'ai.chronon.spark.other.SimpleAddUDF'")

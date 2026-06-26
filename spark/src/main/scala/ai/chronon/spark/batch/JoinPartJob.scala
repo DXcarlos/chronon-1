@@ -23,7 +23,9 @@ import scala.jdk.CollectionConverters._
 case class JoinPartJobContext(leftDf: Option[DfWithStats],
                               joinLevelBloomMapOpt: Option[util.Map[String, BloomFilter]],
                               tableProps: Map[String, String],
-                              runSmallMode: Boolean)
+                              runSmallMode: Boolean,
+                              leftTable: Option[String] = None,
+                              leftPartitionSpec: Option[PartitionSpec] = None)
 
 // alignOutput forces the job to produce the partitions specified by range.
 // legacy behavior was to not align, but that prevents from partition aware orchestration
@@ -114,26 +116,60 @@ class JoinPartJob(node: JoinPartNode,
       !partSnapshotSpec.hasSameGrid(tableUtils.partitionSpec)
     val rightRange = JoinUtils.snapshotScanRange(node.leftDataModel, joinPart, leftRange, partSnapshotSpec)
     val outputRange = if (crossGridSnapshot) leftRange else rightRange
+    val inputToOutputShift =
+      if (node.leftDataModel == EVENTS && joinPart.groupBy.inferredAccuracy == Accuracy.SNAPSHOT && !crossGridSnapshot)
+        -1
+      else 0
 
     // Can kill the option after we deprecate monolith join job
     jobContext.leftDf.foreach { leftDf =>
       try {
 
         val start = System.currentTimeMillis()
-        val prunedLeft = leftDf.prunePartitions(leftRange) // We can kill this after we deprecate monolith join job
-        val filledDf =
-          computeJoinPart(prunedLeft, joinPart, jobContext.joinLevelBloomMapOpt, skipBloom = jobContext.runSmallMode)
+        val unfilledRanges = jobContext.leftTable match {
+          case Some(leftTable) =>
+            tableUtils
+              .unfilledRanges(
+                partTable,
+                outputRange,
+                Some(Seq(leftTable)),
+                inputToOutputShift = inputToOutputShift,
+                inputPartitionRange = Some(leftRange),
+                skipFirstHole = false,
+                inputPartitionSpecs = jobContext.leftPartitionSpec.toSeq
+              )
+              .getOrElse(Seq.empty)
+          case None =>
+            Seq(outputRange)
+        }
 
-        // Cache join part data into intermediate table
-        if (filledDf.isDefined) {
-          logger.info(s"Writing to join part table: $partTable for partition range $outputRange")
-          filledDf.get.save(partTable, jobContext.tableProps.toMap)
+        val unfilledRangesToCompute = if (unfilledRanges.nonEmpty && jobContext.runSmallMode) {
+          Seq(
+            PartitionRange(unfilledRanges.minBy(_.start).start, unfilledRanges.maxBy(_.end).end)(
+              unfilledRanges.head.partitionSpec))
         } else {
-          logger.info(s"Skipping $partTable because no data in computed joinPart.")
+          unfilledRanges
+        }
+
+        unfilledRangesToCompute.foreach { unfilledRightRange =>
+          val unfilledLeftRange = unfilledRightRange.shiftPartitions(-inputToOutputShift)
+          val prunedLeft =
+            leftDf.prunePartitions(unfilledLeftRange) // We can kill this after we deprecate monolith join job
+          val filledDf =
+            computeJoinPart(prunedLeft, joinPart, jobContext.joinLevelBloomMapOpt, skipBloom = jobContext.runSmallMode)
+
+          // Cache join part data into intermediate table
+          if (filledDf.isDefined) {
+            logger.info(s"Writing to join part table: $partTable for partition range $unfilledRightRange")
+            filledDf.get.save(partTable, jobContext.tableProps.toMap)
+          } else {
+            logger.info(s"Skipping $partTable because no data in computed joinPart.")
+          }
         }
 
         val elapsedMins = (System.currentTimeMillis() - start) / 60000
         partMetrics.gauge(Metrics.Name.LatencyMinutes, elapsedMins)
+        partMetrics.gauge(Metrics.Name.PartitionCount, unfilledRangesToCompute.map(_.partitions.length).sum)
         logger.info(s"Wrote to join part table: $partTable in $elapsedMins minutes")
       } catch {
         case e: Exception =>
