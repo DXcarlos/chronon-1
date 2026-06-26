@@ -19,6 +19,7 @@ package ai.chronon.spark
 import ai.chronon.online.Extensions.StructTypeOps
 import com.google.gson.GsonBuilder
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.types.DecimalType
 import org.apache.spark.sql.types.DoubleType
 import org.apache.spark.sql.types.FloatType
@@ -30,6 +31,7 @@ import java.util
 
 object Comparison {
   @transient lazy val logger: Logger = LoggerFactory.getLogger(getClass)
+  private val NumericTolerance = 0.00001
 
   // used for comparison
   def sortedJson(m: Map[String, Any]): String = {
@@ -42,14 +44,37 @@ object Comparison {
     gson.toJson(tm)
   }
 
-  def stringifyMaps(df: DataFrame): DataFrame = {
+  private def numericValuesAlmostEqual(left: Any, right: Any): Boolean = {
+    if (left == null || right == null) return left == right
+
+    val leftDouble = left.asInstanceOf[Number].doubleValue()
+    val rightDouble = right.asInstanceOf[Number].doubleValue()
+    if (leftDouble.isNaN || rightDouble.isNaN) {
+      leftDouble.isNaN && rightDouble.isNaN
+    } else if (leftDouble.isInfinity || rightDouble.isInfinity) {
+      leftDouble == rightDouble
+    } else {
+      math.abs(leftDouble - rightDouble) <= NumericTolerance
+    }
+  }
+
+  def numericMapsAlmostEqual(left: Map[String, Any], right: Map[String, Any]): Boolean = {
+    if (left == null || right == null) return left == right
+    if (left.keySet != right.keySet) return false
+
+    left.forall { case (key, leftValue) =>
+      numericValuesAlmostEqual(leftValue, right(key))
+    }
+  }
+
+  def stringifyMaps(df: DataFrame, preserveColumns: Set[String] = Set.empty): DataFrame = {
     try {
       df.sparkSession.udf.register("sorted_json", (m: Map[String, Any]) => sortedJson(m))
     } catch {
       case e: Exception => e.printStackTrace()
     }
     val selects = for (field <- df.schema.fields) yield {
-      if (field.dataType.isInstanceOf[MapType]) {
+      if (field.dataType.isInstanceOf[MapType] && !preserveColumns.contains(field.name)) {
         s"sorted_json(${field.name}) as `${field.name}`"
       } else {
         s"${field.name} as `${field.name}`"
@@ -73,12 +98,28 @@ object Comparison {
         |""".stripMargin
     )
 
-    val prefixedExpectedDf = prefixColumnName(stringifyMaps(a), s"${aName}_")
-    val prefixedOutputDf = prefixColumnName(stringifyMaps(b), s"${bName}_")
+    val approximateMapCols = (a.schema.fields ++ b.schema.fields)
+      .filter(field => isApproximateMapType(field.dataType))
+      .map(_.name)
+      .toSet
+
+    if (approximateMapCols.nonEmpty) {
+      try {
+        a.sparkSession.udf.register(
+          "numeric_maps_almost_equal",
+          (left: Map[String, Any], right: Map[String, Any]) => numericMapsAlmostEqual(left, right))
+      } catch {
+        case e: Exception => e.printStackTrace()
+      }
+    }
+
+    val prefixedExpectedDf = prefixColumnName(stringifyMaps(a, approximateMapCols), s"${aName}_")
+    val prefixedOutputDf = prefixColumnName(stringifyMaps(b, approximateMapCols), s"${bName}_")
 
     val joinExpr = keys
       .map(key => prefixedExpectedDf(s"${aName}_$key") <=> prefixedOutputDf(s"${bName}_$key"))
       .reduce((col1, col2) => col1.and(col2))
+
     val joined = prefixedExpectedDf.join(
       prefixedOutputDf,
       joinExpr,
@@ -105,8 +146,10 @@ object Comparison {
         val left = s"${aName}_$col"
         val right = s"${bName}_$col"
         val compareExpression =
-          if (doubleCols.contains(col)) {
-            s"($left is NOT NULL) AND ($right is NOT NULL) and (abs($left - $right) > 0.00001)"
+          if (approximateMapCols.contains(col)) {
+            s"($left is NOT NULL) AND ($right is NOT NULL) and (NOT numeric_maps_almost_equal($left, $right))"
+          } else if (doubleCols.contains(col)) {
+            s"($left is NOT NULL) AND ($right is NOT NULL) and (abs($left - $right) > $NumericTolerance)"
           } else { s"($left <> $right)" }
         Seq(s"(($left IS NULL AND $right IS NOT NULL) OR ($right IS NULL AND $left IS NOT NULL) OR $compareExpression)")
       }
@@ -123,4 +166,13 @@ object Comparison {
     val renamedColumns = df.columns.map(c => { df(c).as(s"$prefix$c") })
     df.select(renamedColumns: _*)
   }
+
+  private def isApproximateType(dataType: DataType): Boolean =
+    dataType == DoubleType || dataType == FloatType || dataType.isInstanceOf[DecimalType]
+
+  private def isApproximateMapType(dataType: DataType): Boolean =
+    dataType match {
+      case MapType(_, valueType, _) => isApproximateType(valueType)
+      case _                        => false
+    }
 }

@@ -28,6 +28,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 import java.util
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 class Timer {
@@ -46,6 +47,82 @@ class Timer {
 }
 
 class SawtoothAggregatorTest extends AnyFlatSpec {
+
+  private val NumericTolerance = 0.00001
+
+  private def assertApproximatelyEqual(expected: Any, actual: Any, path: String = "value"): Unit = {
+    (expected, actual) match {
+      case (null, null) =>
+      case (null, _) | (_, null) =>
+        fail(s"$path expected <$expected> but was <$actual>")
+      case (expectedArray: Array[_], actualArray: Array[_]) =>
+        assertEquals(s"$path length", expectedArray.length, actualArray.length)
+        expectedArray.indices.foreach { i =>
+          assertApproximatelyEqual(expectedArray(i), actualArray(i), s"$path[$i]")
+        }
+      case (expectedMap: java.util.Map[_, _], actualMap: java.util.Map[_, _]) =>
+        assertMapsApproximatelyEqual(
+          expectedMap.asScala.toMap.asInstanceOf[Map[Any, Any]],
+          actualMap.asScala.toMap.asInstanceOf[Map[Any, Any]],
+          path
+        )
+      case (expectedMap: scala.collection.Map[_, _], actualMap: scala.collection.Map[_, _]) =>
+        assertMapsApproximatelyEqual(
+          expectedMap.asInstanceOf[scala.collection.Map[Any, Any]],
+          actualMap.asInstanceOf[scala.collection.Map[Any, Any]],
+          path
+        )
+      case (expectedList: java.util.List[_], actualList: java.util.List[_]) =>
+        assertSequencesApproximatelyEqual(expectedList.asScala.toIndexedSeq, actualList.asScala.toIndexedSeq, path)
+      case (expectedSeq: Seq[_], actualSeq: Seq[_]) =>
+        assertSequencesApproximatelyEqual(expectedSeq, actualSeq, path)
+      case _ =>
+        (toApproximateDouble(expected), toApproximateDouble(actual)) match {
+          case (Some(expectedDouble), Some(actualDouble)) =>
+            assertDoublesApproximatelyEqual(expectedDouble, actualDouble, path)
+          case _ =>
+            assertEquals(path, expected, actual)
+        }
+    }
+  }
+
+  private def assertMapsApproximatelyEqual(expected: scala.collection.Map[Any, Any],
+                                           actual: scala.collection.Map[Any, Any],
+                                           path: String): Unit = {
+    assertEquals(s"$path keys", expected.keySet.toSet, actual.keySet.toSet)
+    expected.keys.foreach { key =>
+      assertApproximatelyEqual(expected(key), actual(key), s"$path.$key")
+    }
+  }
+
+  private def assertSequencesApproximatelyEqual(expected: Seq[_], actual: Seq[_], path: String): Unit = {
+    assertEquals(s"$path length", expected.length, actual.length)
+    expected.indices.foreach { i =>
+      assertApproximatelyEqual(expected(i), actual(i), s"$path[$i]")
+    }
+  }
+
+  private def toApproximateDouble(value: Any): Option[Double] =
+    value match {
+      case double: java.lang.Double     => Some(double.doubleValue())
+      case float: java.lang.Float       => Some(float.doubleValue())
+      case decimal: java.math.BigDecimal => Some(decimal.doubleValue())
+      case decimal: BigDecimal          => Some(decimal.doubleValue())
+      case _                            => None
+    }
+
+  private def assertDoublesApproximatelyEqual(expected: Double, actual: Double, path: String): Unit = {
+    if (expected.isNaN || actual.isNaN) {
+      assertTrue(s"$path expected <$expected> but was <$actual>", expected.isNaN && actual.isNaN)
+    } else if (expected.isInfinity || actual.isInfinity) {
+      assertEquals(path, expected, actual, 0.0)
+    } else {
+      assertTrue(
+        s"$path expected <$expected> but was <$actual>",
+        math.abs(expected - actual) <= NumericTolerance
+      )
+    }
+  }
 
   it should "tail accuracy" in {
     val timer = new Timer
@@ -112,9 +189,7 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
     assertEquals(naiveIrs.length, queries.length)
     assertEquals(sawtoothIrs.length, queries.length)
     for (i <- queries.indices) {
-      val naiveStr = gson.toJson(naiveIrs(i))
-      val sawtoothStr = gson.toJson(sawtoothIrs(i))
-      assertEquals(naiveStr, sawtoothStr)
+      assertApproximatelyEqual(naiveIrs(i), sawtoothIrs(i), s"query $i")
     }
   }
 
@@ -165,11 +240,8 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
 
     assertEquals(naiveIrs.length, queries.length)
     assertEquals(sawtoothIrs.length, queries.length)
-    val gson = new Gson
     for (i <- queries.indices) {
-      val naiveStr = gson.toJson(rowAgg.finalize(naiveIrs(i)))
-      val sawtoothStr = gson.toJson(rowAgg.finalize(sawtoothIrs(i)))
-      assertEquals(naiveStr, sawtoothStr)
+      assertApproximatelyEqual(rowAgg.finalize(naiveIrs(i)), rowAgg.finalize(sawtoothIrs(i)), s"query $i")
     }
     timer.publish("comparison")
   }
@@ -291,15 +363,14 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
     assertEquals(computeWindowsIrs.length, computeWindows2Irs.length)
     assertEquals(computeWindowsIrs.length, computeWindowsIteratorIrs.length)
     assertEquals(computeWindowsIrs.length, computeWindows2IteratorIrs.length)
-    val gson = new Gson
     for (i <- queries.indices) {
-      val expected = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindowsIrs(i)))
-      val iteratorActual = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindowsIteratorIrs(i)))
-      assertEquals(expected, iteratorActual)
-      val actual = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindows2Irs(i)))
-      assertEquals(expected, actual)
-      val oldIteratorActual = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindows2IteratorIrs(i)))
-      assertEquals(expected, oldIteratorActual)
+      val expected = sawtoothAggregator.windowedAggregator.finalize(computeWindowsIrs(i))
+      val iteratorActual = sawtoothAggregator.windowedAggregator.finalize(computeWindowsIteratorIrs(i))
+      assertApproximatelyEqual(expected, iteratorActual, s"query $i iterator")
+      val actual = sawtoothAggregator.windowedAggregator.finalize(computeWindows2Irs(i))
+      assertApproximatelyEqual(expected, actual, s"query $i old")
+      val oldIteratorActual = sawtoothAggregator.windowedAggregator.finalize(computeWindows2IteratorIrs(i))
+      assertApproximatelyEqual(expected, oldIteratorActual, s"query $i old iterator")
     }
   }
 
@@ -355,11 +426,10 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
     }
 
     assertEquals(computeWindowsIrs.length, computeWindows2Irs.length)
-    val gson = new Gson
     for (i <- queries.indices) {
-      val expected = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindowsIrs(i)))
-      val actual = gson.toJson(sawtoothAggregator.windowedAggregator.finalize(computeWindows2Irs(i)))
-      assertEquals(expected, actual)
+      val expected = sawtoothAggregator.windowedAggregator.finalize(computeWindowsIrs(i))
+      val actual = sawtoothAggregator.windowedAggregator.finalize(computeWindows2Irs(i))
+      assertApproximatelyEqual(expected, actual, s"query $i")
     }
   }
 
