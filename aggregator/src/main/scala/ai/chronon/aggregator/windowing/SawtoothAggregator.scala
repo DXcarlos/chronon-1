@@ -17,7 +17,18 @@
 package ai.chronon.aggregator.windowing
 
 import ai.chronon.aggregator.row.{ColumnAggregator, RowAggregator}
-import ai.chronon.api.{Aggregation, AggregationPart, DataType, Row, TsUtils}
+import ai.chronon.api.{
+  Aggregation,
+  AggregationPart,
+  BooleanType,
+  DataType,
+  IntType,
+  LongType,
+  Operation,
+  Row,
+  ShortType,
+  TsUtils
+}
 import ai.chronon.api.Extensions.UnpackedAggregations
 import ai.chronon.api.Extensions.WindowMapping
 import ai.chronon.api.Extensions.WindowOps
@@ -67,13 +78,23 @@ class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(Strin
     if (hops == null) return endTimes.iterator.map(_ => windowedAggregator.init)
     if (!isSorted(endTimes)) return computeWindows2Iterator(hops, endTimes)
 
+    val useSlidingRange = Array.tabulate(windowedAggregator.length)(canUseSlidingRange)
     val ranges = Array.tabulate(windowedAggregator.length, hopSizes.length) { case (col, hopIndex) =>
-      new SlidingHopRange(hops(hopIndex), windowedAggregator(col), baseIrIndices(col))
+      if (useSlidingRange(col)) new SlidingHopRange(hops(hopIndex), windowedAggregator(col), baseIrIndices(col))
+      else null
+    }
+    lazy val cache = {
+      val ret = new HopRangeCache(hops, windowedAggregator, baseIrIndices, arena)
+      ret.reset()
+      ret
     }
     endTimes.iterator.map { endTime =>
       val result = windowedAggregator.init
       for (col <- windowedAggregator.indices) {
-        result.update(col, genIr(ranges(col), col, endTime))
+        val ir =
+          if (useSlidingRange(col)) genIr(ranges(col), col, endTime)
+          else genIr2(cache, col, endTime)
+        result.update(col, ir)
       }
       result
     }
@@ -112,6 +133,30 @@ class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(Strin
     }
     true
   }
+
+  private def canUseSlidingRange(col: Int): Boolean = {
+    val aggregation = perWindowAggs(col)
+    // The sliding queue changes merge association; keep the chronological fold for IRs where that is not bit-stable.
+    aggregation.operation match {
+      case Operation.COUNT | Operation.MIN | Operation.MAX | Operation.FIRST | Operation.LAST | Operation.FIRST_K |
+          Operation.LAST_K | Operation.HISTOGRAM | Operation.UNIQUE_COUNT =>
+        true
+      case Operation.SUM =>
+        inputType(aggregation) match {
+          case BooleanType | IntType | LongType | ShortType => true
+          case _                                            => false
+        }
+      case _ => false
+    }
+  }
+
+  private def inputType(aggregation: AggregationPart): DataType =
+    inputSchema.find(_._1 == aggregation.inputColumn).map(_._2).getOrElse {
+      throw new IllegalArgumentException(
+        s"Input column '${aggregation.inputColumn}' not found in schema. " +
+          s"Available columns: [${inputSchema.map(_._1).mkString(", ")}]"
+      )
+    }
 
   private def merge(left: Any, right: Any, col: Int): Any =
     if (right == null) left else windowedAggregator(col).merge(left, right)

@@ -272,6 +272,8 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
     val aggregations = Seq(
       Builders.Aggregation(Operation.SUM, "num", windows),
       Builders.Aggregation(Operation.COUNT, "num", windows),
+      Builders.Aggregation(Operation.AVERAGE, "num", windows),
+      Builders.Aggregation(Operation.VARIANCE, "num", windows),
       Builders.Aggregation(Operation.LAST_K, "num", windows, argMap = Map("k" -> "20"))
     )
 
