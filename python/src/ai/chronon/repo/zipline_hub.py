@@ -355,13 +355,19 @@ class ZiplineHub:
             print_error(f"Error calling diff API: {self._get_error_details(e)}", format=self.format)
             raise e
 
-    def call_upload_api(self, diff_confs, branch: str):
+    def call_upload_api(self, diff_confs, branch: str, team_webhooks=None):
         url = f"{self.base_url}/upload/v2/confs"
 
         upload_request = {
             "diffConfs": diff_confs,
             "branch": branch,
         }
+        if team_webhooks:
+            upload_request["teamWebhooks"] = {
+                team: [w.__dict__ for w in webhooks]
+                for team, webhooks in team_webhooks.items()
+                if webhooks
+            }
 
         try:
             response = requests.post(

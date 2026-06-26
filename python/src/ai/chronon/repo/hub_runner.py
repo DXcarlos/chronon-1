@@ -29,6 +29,7 @@ from ai.chronon.cli.theme import (
 from ai.chronon.click_helpers import handle_compile, handle_conf_not_found, handle_dry_run_compile
 from ai.chronon.repo import hub_uploader, utils
 from ai.chronon.repo.auth import get_user_email
+from ai.chronon.repo.config import _load_teams_silent
 from ai.chronon.repo.constants import VALID_CLOUDS, RunMode
 from ai.chronon.repo.utils import print_possible_confs, upload_to_blob_store
 from ai.chronon.repo.zipline_hub import ZiplineHub
@@ -124,6 +125,17 @@ def team_metadata_conf(team: str = "default", env: str = 'prod') -> str:
 
 def default_team_metadata_conf(env: str = 'prod') -> str:
     return team_metadata_conf("default", env)
+
+
+def _build_team_webhooks(repo: str, env: str) -> dict:
+    """Load teams.<env>.py and return {team_name: team.webhooks} for teams that
+    actually declared any webhooks. Missing teams file → empty dict, so flows
+    running in envs without a teams.<env>.py keep working unchanged."""
+    try:
+        team_dict = _load_teams_silent(repo, env)
+    except click.ClickException:
+        return {}
+    return {name: team.webhooks for name, team in team_dict.items() if team.webhooks}
 
 
 def _env_from_conf_path(conf: str) -> str:
@@ -389,10 +401,15 @@ def redeploy_streaming(repo, confs, hub_url=None, use_auth=True, format: Format 
 
     with status_spinner("Computing local conf hashes...", format=format):
         conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo, env=env)
+    team_webhooks = _build_team_webhooks(repo, env)
     branch = get_current_branch()
     with status_spinner("Syncing confs with Hub...", format=format):
         hub_uploader.compute_and_upload_diffs(
-            branch, zipline_hub=zipline_hub, local_repo_confs=conf_name_to_hash_dict, format=format
+            branch,
+            zipline_hub=zipline_hub,
+            local_repo_confs=conf_name_to_hash_dict,
+            team_webhooks=team_webhooks,
+            format=format,
         )
 
     metadata_names = [utils.get_metadata_name_from_conf(repo, conf) for conf in confs]
@@ -440,6 +457,7 @@ def submit_schedule_all(
     with status_spinner("Computing local conf hashes...", format=format):
         conf_name_to_obj_dict = hub_uploader.build_local_repo_hashmap(root_dir=repo, env=env)
 
+    team_webhooks = _build_team_webhooks(repo, env)
     branch = get_current_branch()
 
     with status_spinner("Syncing confs with Hub...", format=format):
@@ -448,6 +466,7 @@ def submit_schedule_all(
             branch,
             zipline_hub=zipline_hub,
             local_repo_confs=conf_name_to_obj_dict,
+            team_webhooks=team_webhooks,
             format=format,
         )
 
@@ -601,10 +620,12 @@ def submit_workflow(
     hub_conf = get_hub_conf(conf, root_dir=repo)
     zipline_hub = _get_zipline_hub(hub_url, hub_conf, use_auth, format)
 
+    conf_env = _env_from_conf_path(conf)
     with status_spinner("Computing local conf hashes...", format=format):
         conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(
-            root_dir=repo, env=_env_from_conf_path(conf)
+            root_dir=repo, env=conf_env
         )
+    team_webhooks = _build_team_webhooks(repo, conf_env)
     branch = get_current_branch()
 
     with status_spinner("Syncing confs with Hub...", format=format):
@@ -612,6 +633,7 @@ def submit_workflow(
             branch,
             zipline_hub=zipline_hub,
             local_repo_confs=conf_name_to_hash_dict,
+            team_webhooks=team_webhooks,
             format=format,
         )
 
@@ -657,10 +679,12 @@ def submit_schedule(
     hub_conf = get_hub_conf(conf, root_dir=repo)
     zipline_hub = _get_zipline_hub(hub_url, hub_conf, use_auth, format)
 
+    conf_env = _env_from_conf_path(conf)
     with status_spinner("Computing local conf hashes...", format=format):
         conf_name_to_obj_dict = hub_uploader.build_local_repo_hashmap(
-            root_dir=repo, env=_env_from_conf_path(conf)
+            root_dir=repo, env=conf_env
         )
+    team_webhooks = _build_team_webhooks(repo, conf_env)
     branch = get_current_branch()
 
     with status_spinner("Syncing confs with Hub...", format=format):
@@ -668,6 +692,7 @@ def submit_schedule(
             branch,
             zipline_hub=zipline_hub,
             local_repo_confs=conf_name_to_obj_dict,
+            team_webhooks=team_webhooks,
             format=format,
         )
 
@@ -1144,9 +1169,11 @@ def eval(
         format=format,
         auth_url=hub_conf.frontend_url,
     )
+    conf_env = _env_from_conf_path(conf)
     conf_name_to_hash_dict = hub_uploader.build_local_repo_hashmap(
-        root_dir=repo, env=_env_from_conf_path(conf)
+        root_dir=repo, env=conf_env
     )
+    team_webhooks = _build_team_webhooks(repo, conf_env)
     branch = get_current_branch()
     if test_data_path:
         # Upload the test data skeleton to the bucket.
@@ -1163,7 +1190,10 @@ def eval(
         parameters["testDataPath"] = f"{zipline_artifact_prefix}/{url}"
 
     hub_uploader.compute_and_upload_diffs(
-        branch, zipline_hub=zipline_hub, local_repo_confs=conf_name_to_hash_dict
+        branch,
+        zipline_hub=zipline_hub,
+        local_repo_confs=conf_name_to_hash_dict,
+        team_webhooks=team_webhooks,
     )
 
     # get conf name

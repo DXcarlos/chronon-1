@@ -350,8 +350,6 @@ struct MetaData {
 
     # information that needs to be present on every physical node
     204: optional common.ExecutionInfo executionInfo
-
-    205: optional list<Webhook> webhooks
 }
 
 // This has to be 0-indexed for Java usage

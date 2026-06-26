@@ -72,3 +72,5 @@ ClusterConfigProperties = common.ClusterConfigProperties
 ExecutionInfo = common.ExecutionInfo
 
 Team = ttypes.Team
+Webhook = ttypes.Webhook
+WebhookType = ttypes.WebhookType

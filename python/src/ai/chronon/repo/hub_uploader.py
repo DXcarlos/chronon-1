@@ -82,6 +82,7 @@ def compute_and_upload_diffs(
         branch: str,
         zipline_hub: ZiplineHub,
         local_repo_confs: dict[str, Conf],
+        team_webhooks: dict[str, list] | None = None,
         format: Format = Format.TEXT,
 ) -> dict[str, Conf]:
     # Determine which confs are different from the ZiplineHub
@@ -114,7 +115,9 @@ def compute_and_upload_diffs(
             diff_confs.append(conf.__dict__)
 
         # Make PUT request to ZiplineHub
-        zipline_hub.call_upload_api(branch=branch, diff_confs=diff_confs)
+        zipline_hub.call_upload_api(
+            branch=branch, diff_confs=diff_confs, team_webhooks=team_webhooks
+        )
         print_step(
             f"⬆️ Uploaded {len(diffed_confs)} changed confs to branch '{branch}'.", format=format
         )
