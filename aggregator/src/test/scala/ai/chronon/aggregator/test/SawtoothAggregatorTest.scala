@@ -107,7 +107,7 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
       case double: java.lang.Double     => Some(double.doubleValue())
       case float: java.lang.Float       => Some(float.doubleValue())
       case decimal: java.math.BigDecimal => Some(decimal.doubleValue())
-      case decimal: BigDecimal          => Some(decimal.doubleValue())
+      case decimal: BigDecimal          => Some(decimal.doubleValue)
       case _                            => None
     }
 
