@@ -19,6 +19,7 @@ package ai.chronon.aggregator.test
 import ai.chronon.aggregator.row.RowAggregator
 import ai.chronon.aggregator.test.SawtoothAggregatorTest.sawtoothAggregate
 import ai.chronon.aggregator.windowing._
+import ai.chronon.aggregator.windowing.SawtoothAggregator.WindowComputerKind
 import ai.chronon.api.Extensions.AggregationOps
 import ai.chronon.api._
 import com.google.gson.Gson
@@ -323,7 +324,7 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
 
   }
 
-  it should "match computeWindows to computeWindows2 across hop tiers" in {
+  it should "match window computer implementations across hop tiers" in {
     val dayMillis = 24L * 60 * 60 * 1000
     val baseTs = TsUtils.datetimeToTs("2026-01-01 00:00:00")
     val eventCount = 5000
@@ -355,41 +356,47 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
     events.foreach { event => hopMaps = hopsAggregator.update(hopMaps, event) }
     val hops = hopsAggregator.toTimeSortedArray(hopMaps)
 
-    val computeWindowsIrs = sawtoothAggregator.computeWindows(hops, queries)
-    val computeWindowsIteratorIrs = sawtoothAggregator.computeWindowsIterator(hops, queries).toArray
-    val computeWindows2Irs = sawtoothAggregator.computeWindows2(hops, queries)
-    val computeWindows2IteratorIrs = sawtoothAggregator.computeWindows2Iterator(hops, queries).toArray
+    val expectedIrs = sawtoothAggregator.computeWindows(hops, queries, WindowComputerKind.Cached)
+    val defaultIrs = sawtoothAggregator.computeWindows(hops, queries)
+    val strategyIrs = WindowComputerKind.all.map { kind =>
+      kind -> sawtoothAggregator.computeWindows(hops, queries, kind)
+    }
 
-    assertEquals(computeWindowsIrs.length, computeWindows2Irs.length)
-    assertEquals(computeWindowsIrs.length, computeWindowsIteratorIrs.length)
-    assertEquals(computeWindowsIrs.length, computeWindows2IteratorIrs.length)
+    assertEquals(expectedIrs.length, defaultIrs.length)
+    strategyIrs.foreach { case (kind, irs) =>
+      assertEquals(s"${kind.name} length", expectedIrs.length, irs.length)
+    }
+
     for (i <- queries.indices) {
-      val expected = sawtoothAggregator.windowedAggregator.finalize(computeWindowsIrs(i))
-      val iteratorActual = sawtoothAggregator.windowedAggregator.finalize(computeWindowsIteratorIrs(i))
-      assertApproximatelyEqual(expected, iteratorActual, s"query $i iterator")
-      val actual = sawtoothAggregator.windowedAggregator.finalize(computeWindows2Irs(i))
-      assertApproximatelyEqual(expected, actual, s"query $i old")
-      val oldIteratorActual = sawtoothAggregator.windowedAggregator.finalize(computeWindows2IteratorIrs(i))
-      assertApproximatelyEqual(expected, oldIteratorActual, s"query $i old iterator")
+      val expected = sawtoothAggregator.windowedAggregator.finalize(expectedIrs(i))
+      val defaultActual = sawtoothAggregator.windowedAggregator.finalize(defaultIrs(i))
+      assertApproximatelyEqual(expected, defaultActual, s"query $i default")
+      strategyIrs.foreach { case (kind, irs) =>
+        val actual = sawtoothAggregator.windowedAggregator.finalize(irs(i))
+        assertApproximatelyEqual(expected, actual, s"query $i ${kind.name}")
+      }
+    }
+
+    val unsortedQueries = Array(queries(20), queries(2), queries(200))
+    val unsortedExpectedIrs = sawtoothAggregator.computeWindows(hops, unsortedQueries, WindowComputerKind.Cached)
+    val unsortedDefaultIrs = sawtoothAggregator.computeWindows(hops, unsortedQueries)
+    val unsortedSlidingIrs = sawtoothAggregator.computeWindows(hops, unsortedQueries, WindowComputerKind.Sliding)
+    for (i <- unsortedQueries.indices) {
+      val expected = sawtoothAggregator.windowedAggregator.finalize(unsortedExpectedIrs(i))
+      val defaultActual = sawtoothAggregator.windowedAggregator.finalize(unsortedDefaultIrs(i))
+      assertApproximatelyEqual(expected, defaultActual, s"unsorted query $i default")
+      val slidingActual = sawtoothAggregator.windowedAggregator.finalize(unsortedSlidingIrs(i))
+      assertApproximatelyEqual(expected, slidingActual, s"unsorted query $i sliding fallback")
+    }
+    assertThrows[IllegalArgumentException] {
+      sawtoothAggregator.windowComputer(WindowComputerKind.Sliding).computeWindowsIterator(hops, unsortedQueries).toArray
     }
   }
 
-  it should "benchmark computeWindows against computeWindows2" in {
+  it should "benchmark window computer implementations" in {
     val dayMillis = 24L * 60 * 60 * 1000
     val hourMillis = 60L * 60 * 1000
     val baseTs = TsUtils.datetimeToTs("2026-01-01 00:00:00")
-    val eventCount = 200000
-    val queryCount = 20000
-    val queryStartOffset = 40L * dayMillis
-    val querySpan = queryCount.toLong * hourMillis
-    val eventSpan = queryStartOffset + querySpan
-    val events = Array.tabulate(eventCount) { i =>
-      val ts = baseTs + ((eventSpan * i) / eventCount)
-      new TestRow(ts, (i % 1000).toLong)(0)
-    }
-    val queries = Array.tabulate(queryCount) { i =>
-      baseTs + queryStartOffset + i.toLong * hourMillis
-    }
     val columns = Seq(Column("ts", LongType, 900), Column("num", LongType, 1000))
     val schema = columns.map(_.schema)
     val windows = Seq(new Window(1, TimeUnit.HOURS),
@@ -402,12 +409,6 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
       Builders.Aggregation(Operation.LAST_K, "num", windows, argMap = Map("k" -> "20"))
     )
 
-    val hopsAggregator = new HopsAggregator(queries.min, aggregations, schema, FiveMinuteResolution)
-    val sawtoothAggregator = new SawtoothAggregator(aggregations, schema, FiveMinuteResolution)
-    var hopMaps = hopsAggregator.init()
-    events.foreach { event => hopMaps = hopsAggregator.update(hopMaps, event) }
-    val hops = hopsAggregator.toTimeSortedArray(hopMaps)
-
     def timed[A](name: String, runs: Int = 3, warmups: Int = 1)(f: => A): A = {
       (0 until warmups).foreach(_ => f)
       val start = System.nanoTime()
@@ -418,19 +419,50 @@ class SawtoothAggregatorTest extends AnyFlatSpec {
       result
     }
 
-    val computeWindowsIrs = timed("sawtooth/computeWindows") {
-      sawtoothAggregator.computeWindows(hops, queries)
-    }
-    val computeWindows2Irs = timed("sawtooth/computeWindows2") {
-      sawtoothAggregator.computeWindows2(hops, queries)
+    def runScenario(label: String, queryCount: Int, queryStepMillis: Long): Unit = {
+      val eventCount = 200000
+      val queryStartOffset = 40L * dayMillis
+      val querySpan = queryCount.toLong * queryStepMillis
+      val eventSpan = queryStartOffset + querySpan
+      val events = Array.tabulate(eventCount) { i =>
+        val ts = baseTs + ((eventSpan * i) / eventCount)
+        new TestRow(ts, (i % 1000).toLong)(0)
+      }
+      val queries = Array.tabulate(queryCount) { i =>
+        baseTs + queryStartOffset + i.toLong * queryStepMillis
+      }
+
+      val hopsAggregator = new HopsAggregator(queries.min, aggregations, schema, FiveMinuteResolution)
+      val sawtoothAggregator = new SawtoothAggregator(aggregations, schema, FiveMinuteResolution)
+      var hopMaps = hopsAggregator.init()
+      events.foreach { event => hopMaps = hopsAggregator.update(hopMaps, event) }
+      val hops = hopsAggregator.toTimeSortedArray(hopMaps)
+
+      val results = WindowComputerKind.all.map { kind =>
+        val computer = sawtoothAggregator.windowComputer(kind)
+        val irs = timed(s"sawtooth/$label/${kind.name}") {
+          computer.computeWindowsIterator(hops, queries).toArray
+        }
+        println(s"sawtooth/$label/${kind.name}/maxRetainedQueueEntries: ${computer.maxRetainedQueueEntries}")
+        kind -> irs
+      }
+
+      val resultsByKind = results.toMap
+      val expectedIrs = resultsByKind(WindowComputerKind.Cached)
+      results.foreach { case (kind, irs) =>
+        assertEquals(s"$label ${kind.name} length", expectedIrs.length, irs.length)
+      }
+      for (i <- queries.indices) {
+        val expected = sawtoothAggregator.windowedAggregator.finalize(expectedIrs(i))
+        results.foreach { case (kind, irs) =>
+          val actual = sawtoothAggregator.windowedAggregator.finalize(irs(i))
+          assertApproximatelyEqual(expected, actual, s"$label query $i ${kind.name}")
+        }
+      }
     }
 
-    assertEquals(computeWindowsIrs.length, computeWindows2Irs.length)
-    for (i <- queries.indices) {
-      val expected = sawtoothAggregator.windowedAggregator.finalize(computeWindowsIrs(i))
-      val actual = sawtoothAggregator.windowedAggregator.finalize(computeWindows2Irs(i))
-      assertApproximatelyEqual(expected, actual, s"query $i")
-    }
+    runScenario("hourly", queryCount = 20000, queryStepMillis = hourMillis)
+    runScenario("daily", queryCount = 2000, queryStepMillis = dayMillis)
   }
 
 }

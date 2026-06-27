@@ -42,8 +42,34 @@ import scala.collection.mutable
 //       c. query_times by hopStart - `(key, hopStart) -> [query_ts]`
 //      And produce `key -> [query_ts, IR]`
 // NOTE: Not using the `cumulate` method will result in snapshot accuracy.
+object SawtoothAggregator {
+  sealed trait WindowComputerKind extends Serializable {
+    def name: String
+    def requiresSorted: Boolean
+  }
+
+  object WindowComputerKind {
+    case object Cached extends WindowComputerKind {
+      override val name: String = "cached"
+      override val requiresSorted: Boolean = false
+    }
+    case object Sliding extends WindowComputerKind {
+      override val name: String = "sliding"
+      override val requiresSorted: Boolean = true
+    }
+    case object QueryAwareSliding extends WindowComputerKind {
+      override val name: String = "query-aware-sliding"
+      override val requiresSorted: Boolean = true
+    }
+
+    val all: Seq[WindowComputerKind] = Seq(Cached, Sliding, QueryAwareSliding)
+  }
+}
+
 class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(String, DataType)], resolution: Resolution)
     extends Serializable {
+
+  import SawtoothAggregator.WindowComputerKind
 
   protected val hopSizes = resolution.hopSizes
 
@@ -63,43 +89,43 @@ class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(Strin
   @transient private lazy val arena =
     Array.fill(resolution.hopSizes.length)(Array.fill[Entry](windowedAggregator.length)(null))
 
-  def computeWindowsIterator(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Iterator[Array[Any]] = {
-    if (hops == null) return endTimes.iterator.map(_ => windowedAggregator.init)
-    if (!isSorted(endTimes)) return computeWindows2Iterator(hops, endTimes)
+  trait WindowComputer extends Serializable {
+    def kind: WindowComputerKind
+    def computeWindowsIterator(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Iterator[Array[Any]]
+    def maxRetainedQueueEntries: Long = 0L
+  }
 
-    val ranges = Array.tabulate(windowedAggregator.length, hopSizes.length) { case (col, hopIndex) =>
-      new SlidingHopRange(hops(hopIndex), windowedAggregator(col), baseIrIndices(col))
+  def windowComputer(kind: WindowComputerKind): WindowComputer =
+    kind match {
+      case WindowComputerKind.Cached            => new CachedWindowComputer
+      case WindowComputerKind.Sliding           => new SlidingWindowComputer
+      case WindowComputerKind.QueryAwareSliding => new QueryAwareSlidingWindowComputer
     }
-    endTimes.iterator.map { endTime =>
-      val result = windowedAggregator.init
-      for (col <- windowedAggregator.indices) {
-        result.update(col, genIr(ranges(col), col, endTime))
-      }
-      result
-    }
+
+  def computeWindowsIterator(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Iterator[Array[Any]] = {
+    if (hops == null) return emptyWindowsIterator(endTimes)
+    val kind = if (isSorted(endTimes)) WindowComputerKind.Sliding else WindowComputerKind.Cached
+    windowComputer(kind).computeWindowsIterator(hops, endTimes)
+  }
+
+  def computeWindowsIterator(hops: HopsAggregator.OutputArrayType,
+                             endTimes: Array[Long],
+                             kind: WindowComputerKind): Iterator[Array[Any]] = {
+    if (hops == null) return emptyWindowsIterator(endTimes)
+    val effectiveKind = if (kind.requiresSorted && !isSorted(endTimes)) WindowComputerKind.Cached else kind
+    windowComputer(effectiveKind).computeWindowsIterator(hops, endTimes)
   }
 
   def computeWindows(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Array[Array[Any]] =
     computeWindowsIterator(hops, endTimes).toArray
 
-  def computeWindows2Iterator(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Iterator[Array[Any]] = {
+  def computeWindows(hops: HopsAggregator.OutputArrayType,
+                     endTimes: Array[Long],
+                     kind: WindowComputerKind): Array[Array[Any]] =
+    computeWindowsIterator(hops, endTimes, kind).toArray
 
-    lazy val cache = {
-      val ret = new HopRangeCache(hops, windowedAggregator, baseIrIndices, arena)
-      ret.reset() // clear arena
-      ret
-    }
-
-    endTimes.iterator.map { et =>
-      val result = windowedAggregator.init
-      if (hops != null) {
-        for (col <- windowedAggregator.indices) {
-          result.update(col, genIr2(cache, col, et))
-        }
-      }
-      result
-    }
-  }
+  def computeWindows2Iterator(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Iterator[Array[Any]] =
+    computeWindowsIterator(hops, endTimes, WindowComputerKind.Cached)
 
   def computeWindows2(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Array[Array[Any]] =
     computeWindows2Iterator(hops, endTimes).toArray
@@ -113,11 +139,14 @@ class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(Strin
     true
   }
 
+  private def emptyWindowsIterator(endTimes: Array[Long]): Iterator[Array[Any]] =
+    endTimes.iterator.map(_ => windowedAggregator.init)
+
   private def merge(left: Any, right: Any, col: Int): Any =
     if (right == null) left else windowedAggregator(col).merge(left, right)
 
   // stitches multiple hops into a continuous window
-  private def genIr(ranges: Array[SlidingHopRange], col: Int, endTime: Long): Any = {
+  private def genIr(col: Int, endTime: Long, aggregateRange: (Int, Long, Long) => Any): Any = {
     val window = perWindowAggs(col).window
     var hopIndex = tailHopIndices(col)
     val hopMillis = hopSizes(hopIndex)
@@ -125,26 +154,114 @@ class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(Strin
     var start = TsUtils.round(endTime - window.millis, hopMillis)
     while (hopIndex < hopSizes.length) {
       val end = TsUtils.round(endTime, hopSizes(hopIndex))
-      baseIr = merge(baseIr, ranges(hopIndex).aggregate(start, end), col)
+      baseIr = merge(baseIr, aggregateRange(hopIndex, start, end), col)
       start = end
       hopIndex += 1
     }
     baseIr
   }
 
-  private def genIr2(cache: HopRangeCache, col: Int, endTime: Long): Any = {
-    val window = perWindowAggs(col).window
-    var hopIndex = tailHopIndices(col)
-    val hopMillis = hopSizes(hopIndex)
-    var baseIr: Any = null
-    var start = TsUtils.round(endTime - window.millis, hopMillis)
-    while (hopIndex < hopSizes.length) {
-      val end = TsUtils.round(endTime, hopSizes(hopIndex))
-      baseIr = windowedAggregator(col).merge(baseIr, cache.merge(hopIndex, col, start, end))
-      start = end
-      hopIndex += 1
+  private class CachedWindowComputer extends WindowComputer {
+    override def kind: WindowComputerKind = WindowComputerKind.Cached
+
+    override def computeWindowsIterator(hops: HopsAggregator.OutputArrayType,
+                                        endTimes: Array[Long]): Iterator[Array[Any]] = {
+      if (hops == null) return emptyWindowsIterator(endTimes)
+      lazy val cache = {
+        val ret = new HopRangeCache(hops, windowedAggregator, baseIrIndices, arena)
+        ret.reset() // clear arena
+        ret
+      }
+
+      endTimes.iterator.map { endTime =>
+        val result = windowedAggregator.init
+        for (col <- windowedAggregator.indices) {
+          result.update(col, genIr(col, endTime, (hopIndex, start, end) => cache.merge(hopIndex, col, start, end)))
+        }
+        result
+      }
     }
-    baseIr
+  }
+
+  private class SlidingWindowComputer extends WindowComputer {
+    private var ranges: Array[Array[SlidingHopRange]] = Array.empty
+
+    override def kind: WindowComputerKind = WindowComputerKind.Sliding
+
+    override def computeWindowsIterator(hops: HopsAggregator.OutputArrayType,
+                                        endTimes: Array[Long]): Iterator[Array[Any]] = {
+      if (hops == null) return emptyWindowsIterator(endTimes)
+      require(isSorted(endTimes), s"${kind.name} window computer requires sorted end times")
+      ranges = Array.tabulate(windowedAggregator.length, hopSizes.length) { case (col, hopIndex) =>
+        new SlidingHopRange(hops(hopIndex), windowedAggregator(col), baseIrIndices(col))
+      }
+
+      endTimes.iterator.map { endTime =>
+        val result = windowedAggregator.init
+        for (col <- windowedAggregator.indices) {
+          val colRanges = ranges(col)
+          result.update(col, genIr(col, endTime, (hopIndex, start, end) => colRanges(hopIndex).aggregate(start, end)))
+        }
+        result
+      }
+    }
+
+    override def maxRetainedQueueEntries: Long =
+      ranges.iterator.flatMap(_.iterator).map(_.maxRetainedEntries.toLong).sum
+  }
+
+  private class QueryAwareSlidingWindowComputer extends WindowComputer {
+    private var ranges: Array[Array[CoalescingSlidingHopRange]] = Array.empty
+
+    override def kind: WindowComputerKind = WindowComputerKind.QueryAwareSliding
+
+    override def computeWindowsIterator(hops: HopsAggregator.OutputArrayType,
+                                        endTimes: Array[Long]): Iterator[Array[Any]] = {
+      if (hops == null) return emptyWindowsIterator(endTimes)
+      require(isSorted(endTimes), s"${kind.name} window computer requires sorted end times")
+      val splitPoints = computeSplitPoints(endTimes)
+      ranges = Array.tabulate(windowedAggregator.length, hopSizes.length) { case (col, hopIndex) =>
+        new CoalescingSlidingHopRange(hops(hopIndex),
+                                      windowedAggregator(col),
+                                      baseIrIndices(col),
+                                      splitPoints(col)(hopIndex))
+      }
+
+      endTimes.iterator.map { endTime =>
+        val result = windowedAggregator.init
+        for (col <- windowedAggregator.indices) {
+          val colRanges = ranges(col)
+          result.update(col, genIr(col, endTime, (hopIndex, start, end) => colRanges(hopIndex).aggregate(start, end)))
+        }
+        result
+      }
+    }
+
+    override def maxRetainedQueueEntries: Long =
+      ranges.iterator.flatMap(_.iterator).map(_.maxRetainedEntries.toLong).sum
+
+    private def appendDistinct(buffer: mutable.ArrayBuffer[Long], value: Long): Unit = {
+      if (buffer.isEmpty || buffer.last != value) buffer += value
+    }
+
+    private def computeSplitPoints(endTimes: Array[Long]): Array[Array[Array[Long]]] = {
+      val buffers = Array.fill(windowedAggregator.length, hopSizes.length)(mutable.ArrayBuffer.empty[Long])
+      endTimes.foreach { endTime =>
+        for (col <- windowedAggregator.indices) {
+          val window = perWindowAggs(col).window
+          var hopIndex = tailHopIndices(col)
+          val hopMillis = hopSizes(hopIndex)
+          var start = TsUtils.round(endTime - window.millis, hopMillis)
+          while (hopIndex < hopSizes.length) {
+            appendDistinct(buffers(col)(hopIndex), start)
+            val end = TsUtils.round(endTime, hopSizes(hopIndex))
+            start = end
+            hopIndex += 1
+          }
+        }
+      }
+      buffers.map(_.map(_.toArray))
+    }
   }
 
   // method is used to generate head-realtime ness on top of hops
@@ -283,6 +400,7 @@ private class IrQueueEntry(val value: Any, val aggregate: Any) {}
 private[windowing] class TwoStackIrQueue(aggregator: ColumnAggregator) {
   private val inStack = new util.ArrayDeque[IrQueueEntry]()
   private val outStack = new util.ArrayDeque[IrQueueEntry]()
+  private var maxSize = 0
 
   def clear(): Unit = {
     inStack.clear()
@@ -297,6 +415,7 @@ private[windowing] class TwoStackIrQueue(aggregator: ColumnAggregator) {
   def push(ir: Any): Unit = {
     val previousAggregate = if (inStack.isEmpty) null else inStack.peek().aggregate
     inStack.push(new IrQueueEntry(ir, mergedCopy(previousAggregate, ir)))
+    maxSize = math.max(maxSize, size)
   }
 
   def pop(): Unit = {
@@ -319,6 +438,10 @@ private[windowing] class TwoStackIrQueue(aggregator: ColumnAggregator) {
     else if (inAggregate == null) outAggregate
     else mergedCopy(outAggregate, inAggregate)
   }
+
+  def size: Int = inStack.size() + outStack.size()
+
+  def maxRetainedEntries: Int = maxSize
 }
 
 private[windowing] class SlidingHopRange(hops: Array[HopsAggregator.HopIr],
@@ -374,6 +497,144 @@ private[windowing] class SlidingHopRange(hops: Array[HopsAggregator.HopIr],
     }
     queue.aggregate
   }
+
+  def maxRetainedEntries: Int = queue.maxRetainedEntries
+}
+
+private class ExpiringIrQueueEntry(val expiresAt: Long, val value: Any, val aggregate: Any) {}
+
+private[windowing] class CoalescingTwoStackIrQueue(aggregator: ColumnAggregator) {
+  private val inStack = new util.ArrayDeque[ExpiringIrQueueEntry]()
+  private val outStack = new util.ArrayDeque[ExpiringIrQueueEntry]()
+  private var maxSize = 0
+
+  def clear(): Unit = {
+    inStack.clear()
+    outStack.clear()
+  }
+
+  private def mergedCopy(left: Any, right: Any): Any = {
+    val base = if (left == null) null else aggregator.clone(left)
+    aggregator.merge(base, right)
+  }
+
+  private def pushEntry(expiresAt: Long, value: Any): Unit = {
+    val previousAggregate = if (inStack.isEmpty) null else inStack.peek().aggregate
+    inStack.push(new ExpiringIrQueueEntry(expiresAt, value, mergedCopy(previousAggregate, value)))
+  }
+
+  def push(ir: Any, expiresAt: Long): Unit = {
+    if (ir == null) return
+    if (!inStack.isEmpty && inStack.peek().expiresAt == expiresAt) {
+      val top = inStack.pop()
+      val mergedValue = mergedCopy(top.value, ir)
+      pushEntry(expiresAt, mergedValue)
+    } else {
+      pushEntry(expiresAt, ir)
+    }
+    maxSize = math.max(maxSize, size)
+  }
+
+  private def transferInToOut(): Unit = {
+    while (!inStack.isEmpty) {
+      val entry = inStack.pop()
+      val previousAggregate = if (outStack.isEmpty) null else outStack.peek().aggregate
+      outStack.push(new ExpiringIrQueueEntry(entry.expiresAt, entry.value, mergedCopy(entry.value, previousAggregate)))
+    }
+  }
+
+  def popExpired(start: Long): Unit = {
+    var done = false
+    while (!done) {
+      if (outStack.isEmpty) transferInToOut()
+      if (!outStack.isEmpty && outStack.peek().expiresAt <= start) {
+        outStack.pop()
+      } else {
+        done = true
+      }
+    }
+  }
+
+  def aggregate: Any = {
+    val outAggregate = if (outStack.isEmpty) null else outStack.peek().aggregate
+    val inAggregate = if (inStack.isEmpty) null else inStack.peek().aggregate
+    if (outAggregate == null) inAggregate
+    else if (inAggregate == null) outAggregate
+    else mergedCopy(outAggregate, inAggregate)
+  }
+
+  def size: Int = inStack.size() + outStack.size()
+
+  def maxRetainedEntries: Int = maxSize
+}
+
+private[windowing] class CoalescingSlidingHopRange(hops: Array[HopsAggregator.HopIr],
+                                                   aggregator: ColumnAggregator,
+                                                   hopIrIndex: Int,
+                                                   splitPoints: Array[Long]) {
+  private val queue = new CoalescingTwoStackIrQueue(aggregator)
+  private var initialized = false
+  private var rightIdx = 0
+
+  @inline
+  private def ts(hop: Array[Any]): Long = hop.last.asInstanceOf[Long]
+
+  private def lowerBound(start: Long): Int = {
+    var low = 0
+    var high = hops.length
+    while (low < high) {
+      val mid = (low + high) >>> 1
+      if (ts(hops(mid)) < start) low = mid + 1
+      else high = mid
+    }
+    low
+  }
+
+  private def nextSplitAfter(timestamp: Long): Long = {
+    var low = 0
+    var high = splitPoints.length
+    while (low < high) {
+      val mid = (low + high) >>> 1
+      if (splitPoints(mid) <= timestamp) low = mid + 1
+      else high = mid
+    }
+    if (low < splitPoints.length) splitPoints(low) else Long.MaxValue
+  }
+
+  private def mergedCopy(left: Any, right: Any): Any = {
+    val base = if (left == null) null else aggregator.clone(left)
+    aggregator.merge(base, right)
+  }
+
+  def aggregate(start: Long, end: Long): Any = {
+    if (start >= end || hops.isEmpty) return null
+
+    if (!initialized) {
+      rightIdx = lowerBound(start)
+      initialized = true
+    } else {
+      queue.popExpired(start)
+      val startIdx = lowerBound(start)
+      if (startIdx >= rightIdx) {
+        queue.clear()
+        rightIdx = startIdx
+      }
+    }
+
+    while (rightIdx < hops.length && ts(hops(rightIdx)) < end) {
+      val expiresAt = nextSplitAfter(ts(hops(rightIdx)))
+      var blockIr: Any = null
+      while (rightIdx < hops.length && ts(hops(rightIdx)) < end && nextSplitAfter(ts(hops(rightIdx))) == expiresAt) {
+        blockIr = mergedCopy(blockIr, hops(rightIdx)(hopIrIndex))
+        rightIdx += 1
+      }
+      queue.push(blockIr, expiresAt)
+    }
+    queue.popExpired(start)
+    queue.aggregate
+  }
+
+  def maxRetainedEntries: Int = queue.maxRetainedEntries
 }
 
 private[windowing] class HopRangeCache(hopsArrays: HopsAggregator.OutputArrayType,
