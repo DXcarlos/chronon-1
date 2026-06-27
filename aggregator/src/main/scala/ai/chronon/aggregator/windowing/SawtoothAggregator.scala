@@ -124,12 +124,6 @@ class SawtoothAggregator(aggregations: Seq[Aggregation], inputSchema: Seq[(Strin
                      kind: WindowComputerKind): Array[Array[Any]] =
     computeWindowsIterator(hops, endTimes, kind).toArray
 
-  def computeWindows2Iterator(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Iterator[Array[Any]] =
-    computeWindowsIterator(hops, endTimes, WindowComputerKind.Cached)
-
-  def computeWindows2(hops: HopsAggregator.OutputArrayType, endTimes: Array[Long]): Array[Array[Any]] =
-    computeWindows2Iterator(hops, endTimes).toArray
-
   private def isSorted(endTimes: Array[Long]): Boolean = {
     var i = 1
     while (i < endTimes.length) {
