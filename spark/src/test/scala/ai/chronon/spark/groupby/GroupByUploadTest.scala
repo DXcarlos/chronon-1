@@ -634,25 +634,26 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     tableUtils.sql(s"USE $namespace")
 
     val eventsTable = "test_gb_with_derivations"
+    val compactPartitionFormat = "yyyyMMdd"
 
     // Create test data with the columns needed for the derivations GroupBy
     import org.apache.spark.sql.functions._
-      import spark.implicits._
+    import spark.implicits._
 
     val testData = Seq(
       ("test_user_123", 100, 42.5, System.currentTimeMillis() - 86400000L), // 1 day ago
       ("test_user_123", 200, 33.3, System.currentTimeMillis() - 172800000L), // 2 days ago
       ("test_user_456", 150, 25.0, System.currentTimeMillis() - 86400000L)
     ).toDF("id", "int_val", "double_val", "ts")
-      .withColumn(tableUtils.partitionColumn, from_unixtime(col("ts") / 1000, tableUtils.partitionFormat))
+      .withColumn(tableUtils.partitionColumn, from_unixtime(col("ts") / 1000, compactPartitionFormat))
 
     testData.save(s"$namespace.$eventsTable")
 
-    val groupByConf = makeDerivationsGroupBy(namespace, eventsTable)
+    val groupByConf = makeDerivationsGroupBy(namespace, eventsTable, compactPartitionFormat)
     GroupByUpload.run(groupByConf, endDs = yesterday)
   }
 
-  private def makeDerivationsGroupBy(namespace: String, eventsTable: String): GroupBy =
+  private def makeDerivationsGroupBy(namespace: String, eventsTable: String, partitionFormat: String): GroupBy =
     Builders.GroupBy(
       sources = Seq(
         Builders.Source.events(
@@ -669,7 +670,7 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
             wheres = Seq.empty,
             timeColumn = "ts",
             startPartition = "20231106"
-          )
+          ).setPartitionFormat(partitionFormat)
         )
       ),
       keyColumns = Seq("id"),
@@ -760,8 +761,11 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     transactionsDf.save(transactionsTable)
     transactionsDf.show()
 
+    // online defaults to false here on purpose: this mirrors a GroupBy that's only a join dependency - it gets
+    // batch-uploaded (and is fully servable, as the data fetch below confirms) yet carries online=false in its
+    // own conf. fetchGroupBySchema must still resolve its schema.
     val userTransactionsGroupBy = Builders.GroupBy(
-      metaData = Builders.MetaData(namespace = namespace, name = "user_transactions", online = true),
+      metaData = Builders.MetaData(namespace = namespace, name = "user_transactions"),
       sources = Seq(
         Builders.Source.events(
           Builders.Query(selects = Builders.Selects("user_id", "price", "discount", "quantity", "ts")),
@@ -840,8 +844,9 @@ class GroupByUploadTest extends SparkTestBase with Matchers {
     math.abs(user2DiscountRate.doubleValue() - 0.0996) should be < 0.0001
 
     // /v1/groupby/:name/schema must resolve from the batch GroupByServingInfo alone: serve() above ran a
-    // real GroupByUpload and bulk-loaded the batch dataset without writing the conf to CHRONON_METADATA,
-    // which is the production setup that previously broke fetchGroupBySchema.
+    // real GroupByUpload and bulk-loaded the batch dataset without writing the conf to CHRONON_METADATA.
+    // The GroupBy is online=false in its conf (like a join dependency) but servable - the schema must
+    // resolve regardless, matching the data fetch above.
     val schema = fetcher.fetchGroupBySchema("user_transactions").get
     schema.groupByName shouldBe "user_transactions"
     AvroCodec.of(schema.keySchema).fieldNames.toSet shouldBe Set("user_id")

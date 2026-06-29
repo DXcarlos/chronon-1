@@ -1,3 +1,5 @@
+import os
+
 from ai.chronon.repo.cluster import generate_dataproc_cluster_config, generate_emr_cluster_config
 from ai.chronon.repo.constants import RunMode
 from ai.chronon.repo.spark_catalog_confs import *
@@ -45,7 +47,7 @@ gcp = Team(
         common={
             "CLOUD_PROVIDER": "gcp",
             "CUSTOMER_ID": "canary",
-            "VERSION": "latest",
+            "VERSION": os.environ.get("VERSION", "latest"),
             "GCP_PROJECT_ID": "canary-443022",
             "GCP_REGION": "us-central1",
             "SPARK_CLUSTER_NAME": "zipline-canary-cluster",
@@ -125,7 +127,7 @@ aws = Team(
         common={
             "CLOUD_PROVIDER": "aws",
             "CUSTOMER_ID": "canary",
-            "VERSION": "latest",
+            "VERSION": os.environ.get("VERSION", "latest"),
             "AWS_REGION": "us-west-2",
             "SPARK_CLUSTER_NAME": "zipline-emr-canary",
             "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",
@@ -253,7 +255,7 @@ azure = Team(
         common={
             "CLOUD_PROVIDER": "azure",
             "CUSTOMER_ID": "dev",
-            "VERSION": "latest",
+            "VERSION": os.environ.get("VERSION", "latest"),
             "SPARK_CLUSTER_NAME": "http://dev-zipline-kyuubi.westus.cloudapp.azure.com:10099",
             "ARTIFACT_PREFIX": "abfss://dev-zipline-artifacts@ziplineai2.dfs.core.windows.net",
             "WAREHOUSE_PREFIX": "abfss://dev-zipline-warehouse@ziplineai2.dfs.core.windows.net",
@@ -303,7 +305,7 @@ aws_databricks = Team(
         common={
             "CLOUD_PROVIDER": "aws",
             "CUSTOMER_ID": "dev",
-            "VERSION": "latest",
+            "VERSION": os.environ.get("VERSION", "latest"),
             "AWS_REGION": "us-west-2",
             "SPARK_CLUSTER_NAME": "zipline-emr-canary",
             "ARTIFACT_PREFIX": "s3://zipline-artifacts-canary",

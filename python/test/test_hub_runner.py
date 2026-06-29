@@ -11,6 +11,7 @@
 #     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
+import datetime
 from unittest.mock import Mock, patch
 
 import click
@@ -20,6 +21,7 @@ from rich.text import Text
 
 from ai.chronon.cli.formatter import Format
 from ai.chronon.repo.hub_runner import get_conf_type, hub, redeploy_streaming, repo_option
+from ai.chronon.repo.zipline_hub import _format_hub_partition
 from gen_thrift.api.ttypes import Environment
 
 
@@ -176,6 +178,146 @@ class TestHubRunner:
         # Check headers
         headers = call_args[1]['headers']
         assert headers['Content-Type'] == "application/json"
+
+    @patch('requests.post')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    def test_backfill_rejects_end_ds_before_start_ds(
+        self,
+        mock_get_current_branch,
+        mock_post,
+        canary,
+        online_join_conf,
+    ):
+        mock_get_current_branch.return_value = "test-branch"
+
+        runner = CliRunner()
+        result = self._run_and_print(runner, hub, [
+            'backfill',
+            online_join_conf,
+            '--chronon-root', canary,
+            '--no-use-auth',
+            '--start-ds', '2024-02-15',
+            '--end-ds', '2024-01-15',
+        ])
+
+        assert result.exit_code != 0
+        assert "End date 2024-01-15 is before start date 2024-02-15" in result.output
+        mock_post.assert_not_called()
+
+    @patch('requests.post')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    def test_backfill_allows_equal_start_and_end_ds(
+        self,
+        mock_get_current_branch,
+        mock_post,
+        canary,
+        online_join_conf,
+    ):
+        mock_get_current_branch.return_value = "test-branch"
+
+        runner = CliRunner()
+        result = self._run_and_print(runner, hub, [
+            'backfill',
+            online_join_conf,
+            '--chronon-root', canary,
+            '--no-use-auth',
+            '--start-ds', '2024-01-15',
+            '--end-ds', '2024-01-15',
+        ])
+
+        assert result.exit_code == 0
+
+    @patch('requests.post')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    def test_backfill_accepts_subdaily_date_formats(
+        self,
+        mock_get_current_branch,
+        mock_post,
+        canary,
+        online_join_conf,
+    ):
+        """Subdaily Hub backfills should validate common date spellings and send Chronon partitions."""
+        mock_get_current_branch.return_value = "test-branch"
+
+        runner = CliRunner()
+        result = self._run_and_print(runner, hub, [
+            'backfill',
+            online_join_conf,
+            '--chronon-root', canary,
+            '--no-use-auth',
+            '--start-ds', '2024-01-15 03:30',
+            '--end-ds', '2024-01-15T06:30',
+            '--skip-compile',
+        ])
+
+        assert result.exit_code == 0
+        json_payload = mock_post.call_args[1]['json']
+        assert json_payload['start'] == "2024-01-15-03-30"
+        assert json_payload['end'] == "2024-01-15-06-30"
+
+    @patch('requests.post')
+    @patch('ai.chronon.repo.hub_runner.get_current_branch')
+    def test_backfill_accepts_slash_and_zero_second_date_formats(
+        self,
+        mock_get_current_branch,
+        mock_post,
+        canary,
+        online_join_conf,
+    ):
+        mock_get_current_branch.return_value = "test-branch"
+
+        runner = CliRunner()
+        result = self._run_and_print(runner, hub, [
+            'backfill',
+            online_join_conf,
+            '--chronon-root', canary,
+            '--no-use-auth',
+            '--start-ds', '2024/01/15 03:30:00',
+            '--end-ds', '2024-01-15-06:30',
+            '--skip-compile',
+        ])
+
+        assert result.exit_code == 0
+        json_payload = mock_post.call_args[1]['json']
+        assert json_payload['start'] == "2024-01-15-03-30"
+        assert json_payload['end'] == "2024-01-15-06-30"
+
+    def test_backfill_rejects_invalid_date_formats(self, canary, online_join_conf):
+        runner = CliRunner()
+        result = runner.invoke(hub, [
+            'backfill',
+            online_join_conf,
+            '--chronon-root', canary,
+            '--no-use-auth',
+            '--start-ds', '2024-99-15',
+            '--end-ds', '2024-01-15',
+            '--skip-compile',
+        ])
+
+        assert result.exit_code != 0
+        assert "does not match any supported date format" in result.output
+
+    def test_backfill_rejects_second_precision_date_formats(self, canary, online_join_conf):
+        runner = CliRunner()
+        result = runner.invoke(hub, [
+            'backfill',
+            online_join_conf,
+            '--chronon-root', canary,
+            '--no-use-auth',
+            '--start-ds', '2024-01-15 03:30:01',
+            '--end-ds', '2024-01-15',
+            '--skip-compile',
+        ])
+
+        assert result.exit_code != 0
+        assert "must be aligned to minute precision" in result.output
+
+    def test_zipline_hub_partition_format_preserves_subdaily_datetimes(self):
+        assert _format_hub_partition(datetime.date(2024, 1, 15), None) == "2024-01-15"
+        assert _format_hub_partition(datetime.datetime(2024, 1, 15, 0, 0), None) == "2024-01-15"
+        assert _format_hub_partition(datetime.datetime(2024, 1, 15, 3, 30), None) == "2024-01-15-03-30"
+        with pytest.raises(ValueError, match="minute precision"):
+            _format_hub_partition(datetime.datetime(2024, 1, 15, 3, 30, 1), None)
 
     @patch('requests.post')
     @patch('ai.chronon.repo.hub_runner.get_current_branch')
@@ -938,6 +1080,9 @@ class TestHubRunner:
             "results": [
                 {"nodeName": "aws.my_node.v1", "startPartition": "2024-01-01", "endPartition": "2024-01-05"},
             ],
+            "affectedConfs": [
+                {"confName": "aws.my_conf.v1", "startPartition": "2024-01-01", "endPartition": "2024-01-05", "mode": "backfill"},
+            ],
             "totalNodesCleared": 1,
             "message": "Cleared 1 nodes",
         }
@@ -975,10 +1120,13 @@ class TestHubRunner:
         apply_call = mock_post.call_args_list[1]
         assert "/workflow/v2/clear-downstream/apply" in apply_call[0][0]
         apply_payload = apply_call[1]['json']
-        assert len(apply_payload['nodeResults']) == 1
+        # Apply sends the same inputs as preview (the hub recomputes) — no nodeResults round-trip.
+        assert apply_payload['confName'] == ".".join(online_join_conf.split("/")[-2:])
+        assert apply_payload['branch'] == "test-branch"
         assert apply_payload['user'] == "test@example.com"
-        assert len(apply_payload['affectedConfs']) == 1
-        assert apply_payload['affectedConfs'][0]['confName'] == "aws.my_conf.v1"
+        assert apply_payload['start'] == "2024-01-01"
+        assert apply_payload['end'] == "2024-01-05"
+        assert 'nodeResults' not in apply_payload
 
     @patch('ai.chronon.repo.hub_runner.get_metadata_map')
     @patch('ai.chronon.repo.hub_runner.get_schedule_modes')

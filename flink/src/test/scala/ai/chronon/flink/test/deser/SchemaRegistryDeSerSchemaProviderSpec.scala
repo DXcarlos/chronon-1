@@ -378,6 +378,93 @@ class SchemaRegistrySerDeSpec extends AnyFlatSpec {
     assert(mutation.after(2) == null, "email should be null (default from schema 2)")
   }
 
+  it should "decode mixed writer versions using a pinned reader schema version when forward compatible schemas are used" in {
+    val schema1Str =
+      """{ "type": "record", "name": "ForwardCompatibleEvent", "fields": [
+        |  { "name": "entityId", "type": "string" },
+        |  { "name": "userId", "type": "string" },
+        |  { "name": "ts", "type": "long" },
+        |  { "name": "eventCount", "type": "int" }
+        |]}""".stripMargin
+
+    val schema2Str =
+      """{ "type": "record", "name": "ForwardCompatibleEvent", "fields": [
+        |  { "name": "entityId", "type": "string" },
+        |  { "name": "userId", "type": "string" },
+        |  { "name": "ts", "type": "long" },
+        |  { "name": "eventCount", "type": "int" },
+        |  { "name": "newStringField", "type": "string" },
+        |  { "name": "newIntField", "type": "int" }
+        |]}""".stripMargin
+
+    val freshClient = new MockSchemaRegistryClient(Seq(avroSchemaProvider).asJava)
+    val subject = "forward-compatible-version-pin-test-value"
+
+    val schema1Id = freshClient.register(subject, new AvroSchema(schema1Str))
+    val schema2Id = freshClient.register(subject, new AvroSchema(schema2Str))
+    assert(schema1Id != schema2Id, "Schema IDs should differ")
+
+    val topicInfo = TopicInfo(
+      "forward-compatible-version-pin-test",
+      "kafka",
+      Map(
+        RegistryHostKey -> "localhost",
+        SchemaRegistryWireFormat -> "true",
+        ReaderSchemaVersionKey -> "1"
+      )
+    )
+    val serDe = new MockSchemaRegistrySerDe(topicInfo, freshClient)
+
+    assert(serDe.schema.fields.map(_.name).toSeq == Seq("entityId", "userId", "ts", "eventCount"))
+
+    val codec1 = new AvroCodec(schema1Str)
+    val record1 = new GenericData.Record(codec1.schema)
+    record1.put("entityId", "e1")
+    record1.put("userId", "u1")
+    record1.put("ts", 1234L)
+    record1.put("eventCount", 1)
+
+    val codec2 = new AvroCodec(schema2Str)
+    val record2 = new GenericData.Record(codec2.schema)
+    record2.put("entityId", "e2")
+    record2.put("userId", "u2")
+    record2.put("ts", 5678L)
+    record2.put("eventCount", 2)
+    record2.put("newStringField", "new-value")
+    record2.put("newIntField", 1000)
+
+    val mutation1 = serDe.fromBytes(buildWireFormatMessage(schema1Id, codec1.encodeBinary(record1)))
+    assert(mutation1.after.toSeq == Seq("e1", "u1", 1234L, 1))
+
+    val mutation2 = serDe.fromBytes(buildWireFormatMessage(schema2Id, codec2.encodeBinary(record2)))
+    assert(mutation2.after.toSeq == Seq("e2", "u2", 5678L, 2))
+  }
+
+  it should "fail when reader schema version is not registered" in {
+    val schemaStr =
+      """{ "type": "record", "name": "MissingReaderVersion", "fields": [
+        |  { "name": "id", "type": "string" }
+        |]}""".stripMargin
+
+    val freshClient = new MockSchemaRegistryClient(Seq(avroSchemaProvider).asJava)
+    freshClient.register("missing-reader-version-test-value", new AvroSchema(schemaStr))
+
+    val topicInfo = TopicInfo(
+      "missing-reader-version-test",
+      "kafka",
+      Map(
+        RegistryHostKey -> "localhost",
+        ReaderSchemaVersionKey -> "2"
+      )
+    )
+    val serDe = new MockSchemaRegistrySerDe(topicInfo, freshClient)
+
+    val thrown = intercept[IllegalArgumentException] {
+      serDe.schema
+    }
+    assert(thrown.getMessage.contains("Failed to retrieve schema details from the registry"))
+  }
+
   // Schema evolution scenario 2: Flink started before schema upgrade
   // Flink starts and caches schema 1 as the reader (latest at startup).
   // Later, producers upgrade to schema 2. The wire header carries schema 2's ID,

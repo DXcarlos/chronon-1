@@ -771,7 +771,7 @@ class CosmosKVStoreImpl(
         val successCount = flattened.count(_ == true)
         val failureCount = flattened.count(_ == false)
 
-        logger.info(
+        logger.debug(
           s"[multiPut] [requestId=$batchRequestId] Completed: total=${requests.size}, success=$successCount, failures=$failureCount")
 
         if (failureCount > 0) {
@@ -799,7 +799,10 @@ class CosmosKVStoreImpl(
       val batchDataset = groupBy.batchDataset
       val containerName = mapDatasetToContainer(batchDataset)
 
-      val loaderArgs = Array(
+      def optionalArg(name: String, propName: String): Seq[String] =
+        conf.get(propName).filter(_.nonEmpty).map(value => Seq(name, value)).getOrElse(Seq.empty)
+
+      val loaderArgs = Seq(
         "--table-name",
         sourceOfflineTable,
         "--dataset",
@@ -816,9 +819,13 @@ class CosmosKVStoreImpl(
         containerName,
         "--ttl",
         dataTTLSeconds.toString
-      )
+      ) ++
+        optionalArg("--partition-column", Spark2CosmosLoader.PartitionColumnProp) ++
+        optionalArg("--partition-format", Spark2CosmosLoader.PartitionFormatProp) ++
+        optionalArg("--partition-span-millis", Spark2CosmosLoader.PartitionSpanMillisProp) ++
+        optionalArg("--partition-offset-millis", Spark2CosmosLoader.PartitionOffsetMillisProp)
 
-      Spark2CosmosLoader.main(loaderArgs)
+      Spark2CosmosLoader.main(loaderArgs.toArray)
 
       logger.info("Cosmos bulk load completed successfully")
       metricsContext.distribution("bulkPut.latency", System.currentTimeMillis() - startTs)
@@ -833,7 +840,7 @@ class CosmosKVStoreImpl(
   }
 
   override def list(request: ListRequest): Future[ListResponse] = {
-    logger.info(s"Performing list for ${request.dataset}")
+    logger.debug(s"Performing list for ${request.dataset}")
 
     val listLimit = request.props.get("limit") match {
       case Some(value: Int)    => value

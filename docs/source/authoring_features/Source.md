@@ -87,6 +87,8 @@ In this case there would be:
 
 As you can see, a pre-requisite to using the streaming `EntitySource` is a change capture system. [Debezium](https://debezium.io/) is one suitable solution for this piece of upstream infrastructure.
 
+For a more detailed complete guide see [Entity Source](./EntitySource.md).
+
 ## Batch EntitySource
 
 Taken from the [users.py](https://github.com/zipline-ai/chronon/blob/main/api/python/test/sample/group_bys/quickstart/users.py) example GroupBy in the quickstart tutorial.
@@ -101,7 +103,7 @@ source = Source(
     ))
 ```
 
-This is similar to the above, however, it only contains the `snapshotTable`, and not the batch and streaming mutations sources.
+This is similar to the above, however, it only contains the `snapshotTable`, and not the batch and streaming mutations sources. See [Entity Source](./EntitySource.md) for the full reference on all EntitySource parameters.
 
 ## Time-Partitioned Sources
 
@@ -124,6 +126,7 @@ Key points:
 
 * `partition_column` is set to the timestamp or date column in the source table (e.g. `event_ts`, `created_at`). Chronon uses this column for range filtering (`WHERE event_ts >= '2024-01-01' AND event_ts < '2024-01-02'`).
 * `time_column` remains the expression that produces milliseconds-since-epoch for Chronon's event-time windowing and temporal join logic. It is independent of `partition_column`.
-* `time_partitioned=True` tells Chronon that the table does not have discrete Hive-style partitions. Instead of running `SHOW PARTITIONS`, Chronon computes `MIN` and `MAX` of the `partition_column` and expands that range into a contiguous list of dates (one per day). This is a **gap-filling** approach: every date between the earliest and latest observed timestamp is treated as present, even if no rows exist for some dates in between. The logic assumes continuous coverage across the observed range rather than enumerating only dates that actually contain data.
+* `time_partitioned=True` tells Chronon that the table does not have discrete Hive-style partitions. Instead of running `SHOW PARTITIONS`, Chronon computes `MIN` and `MAX` of the `partition_column` and expands that range into a contiguous list of dates (one per day by default, or on the consumer's sub-daily grid). This is a **gap-filling** approach: every partition between the earliest and latest observed timestamp is treated as present, even if no rows exist for some partitions in between. The logic assumes continuous coverage across the observed range rather than enumerating only partitions that actually contain data.
+* For sub-daily outputs, external `time_partitioned=True` sources may omit `partition_interval`/`partition_offset`; Chronon slices them on the consumer grid. Physical Hive-style sources still need an explicit grid unless they come from another Chronon config's `.table`/`.derived_table` reference.
 * After scanning, the partition column values are formatted into date strings (e.g. `yyyy-MM-dd`) and mapped to the standard `ds` column. This means downstream output tables remain physically date-partitioned exactly as they would be with Hive-style sources — consumers see no difference.
 * The orchestration sensor uses the format provider's `maxTimestampDate` method (e.g. `SELECT DATE(MAX(partition_column))`) to check whether data has landed for the required date range, replacing the standard partition-existence check. Each engine (Spark/BigQuery/Snowflake) implements this via its native connector.

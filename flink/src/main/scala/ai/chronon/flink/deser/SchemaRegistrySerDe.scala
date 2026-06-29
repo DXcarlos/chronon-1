@@ -11,6 +11,7 @@ import ai.chronon.online.serde.{
   ProtobufSerDe,
   SerDe
 }
+import io.confluent.kafka.schemaregistry.ParsedSchema
 import io.confluent.kafka.schemaregistry.avro.AvroSchema
 import io.confluent.kafka.schemaregistry.client.{CachedSchemaRegistryClient, SchemaRegistryClient}
 import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientException
@@ -21,10 +22,12 @@ import scala.jdk.CollectionConverters._
 /** Schema Provider / SerDe implementation that uses the Confluent Schema Registry to fetch schemas for topics.
   * Supports both Avro and Protobuf schemas.
   *
-  * Can be configured as: topic = "kafka://topic-name/registry_host=host/[registry_port=port]/[registry_scheme=http]/[subject=subject]/[proto3_default_as_null=false]/[basic.auth.credentials.source=USER_INFO]"
-  * Port, scheme, subject, and basic auth params are optional. If port is missing, we assume the host is pointing to a
-  * LB address / such that forwards to the right host + port. Scheme defaults to http. Subject defaults to the topic
-  * name + "-value" (based on schema registry conventions).
+  * Can be configured as: topic =
+  * "kafka://topic-name/registry_host=host/[registry_port=port]/[registry_scheme=http]/[subject=subject]/[reader_schema_version=version]/[proto3_default_as_null=false]/[basic.auth.credentials.source=USER_INFO]"
+  * Port, scheme, subject, reader schema version, and basic auth params are optional. If port is missing, we assume the
+  * host is pointing to a LB address / such that forwards to the right host + port. Scheme defaults to http. Subject
+  * defaults to the topic name + "-value" (based on schema registry conventions). If reader_schema_version is provided,
+  * the SerDe uses that schema version as the reader schema instead of the latest schema at startup.
   *
   * For authenticated registries, set `basic.auth.credentials.source=USER_INFO` in the topic URI params and provide
   * credentials via the `SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO` env var (or `basic.auth.user.info` in topic params).
@@ -68,20 +71,39 @@ class SchemaRegistrySerDe(topicInfo: TopicInfo) extends SerDe {
 
   @transient private lazy val delegate: SerDe = buildSerDe(topicInfo)
 
+  private def readerSchemaVersion(value: String): Int =
+    try {
+      value.trim.toInt
+    } catch {
+      case e: NumberFormatException =>
+        throw new IllegalArgumentException(s"$ReaderSchemaVersionKey must be an integer, got: $value", e)
+    }
+
+  private def readerSchema(subject: String): ParsedSchema = {
+    val maybeReaderSchemaVersion = topicInfo.params.get(ReaderSchemaVersionKey).map(readerSchemaVersion)
+
+    try {
+      maybeReaderSchemaVersion match {
+        case Some(version) =>
+          val metadata = schemaRegistryClient.getSchemaMetadata(subject, version)
+          schemaRegistryClient.getSchemaBySubjectAndId(subject, metadata.getId)
+        case None =>
+          val metadata = schemaRegistryClient.getLatestSchemaMetadata(subject)
+          schemaRegistryClient.getSchemaBySubjectAndId(subject, metadata.getId)
+      }
+    } catch {
+      case e: RestClientException =>
+        throw new IllegalArgumentException(
+          s"Failed to retrieve schema details from the registry. Status: ${e.getStatus}; Error code: ${e.getErrorCode}",
+          e)
+      case e: Exception =>
+        throw new IllegalArgumentException("Error connecting to and requesting schema details from the registry", e)
+    }
+  }
+
   private def buildSerDe(topicInfo: TopicInfo): SerDe = {
     val subject = topicInfo.params.getOrElse(RegistrySubjectKey, s"${topicInfo.name}-value")
-    val parsedSchema =
-      try {
-        val metadata = schemaRegistryClient.getLatestSchemaMetadata(subject)
-        schemaRegistryClient.getSchemaById(metadata.getId)
-      } catch {
-        case e: RestClientException =>
-          throw new IllegalArgumentException(
-            s"Failed to retrieve schema details from the registry. Status: ${e.getStatus}; Error code: ${e.getErrorCode}",
-            e)
-        case e: Exception =>
-          throw new IllegalArgumentException("Error connecting to and requesting schema details from the registry", e)
-      }
+    val parsedSchema = readerSchema(subject)
 
     parsedSchema.schemaType() match {
       case AvroSchema.TYPE =>
@@ -134,6 +156,7 @@ object SchemaRegistrySerDe {
   val RegistryPortKey = "registry_port"
   val RegistrySchemeKey = "registry_scheme"
   val RegistrySubjectKey = "subject"
+  val ReaderSchemaVersionKey = "reader_schema_version"
   val SchemaRegistryWireFormat = "schema_registry_wire_format"
   val Proto3DefaultAsNullKey = "proto3_default_as_null"
 

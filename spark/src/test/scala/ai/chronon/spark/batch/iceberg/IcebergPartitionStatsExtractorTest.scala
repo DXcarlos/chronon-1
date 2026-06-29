@@ -681,6 +681,178 @@ class IcebergPartitionStatsExtractorTest
     columnFieldIds should contain allOf (idFieldId.get, nameFieldId.get, valueFieldId.get)
   }
 
+  it should "surface per-partition row counts for a partitioned table" in {
+    spark.sql("""
+      CREATE TABLE test_partitioned_table (
+        id BIGINT,
+        name STRING,
+        region STRING,
+        value DOUBLE
+      ) USING iceberg
+      PARTITIONED BY (region)
+      """)
+
+    spark.sql("""
+      INSERT INTO test_partitioned_table VALUES
+      (1, 'Alice', 'North', 100.0),
+      (2, 'Bob', 'North', 200.0),
+      (3, 'Charlie', 'South', 150.0),
+      (4, NULL, 'South', 300.0),
+      (5, 'Eve', 'East', NULL)
+      """)
+
+    spark.sql("REFRESH TABLE test_partitioned_table")
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val maybeResult =
+      extractor.extractPartitionStatsWithRowCounts("spark_catalog.default.test_partitioned_table", "test_conf")
+
+    maybeResult should be(defined)
+    val result = maybeResult.get
+
+    result.partitionRowCounts(List("region" -> "North")) should be(2L)
+    result.partitionRowCounts(List("region" -> "South")) should be(2L)
+    result.partitionRowCounts(List("region" -> "East")) should be(1L)
+    result.partitionRowCounts.values.sum should be(5L)
+
+    // Projection sanity: extractPartitionedStats returns the same tileSummaries map.
+    val viaOldApi =
+      extractor.extractPartitionedStats("spark_catalog.default.test_partitioned_table", "test_conf")
+    viaOldApi should be(Some(result.tileSummaries))
+  }
+
+  it should "aggregate row counts across multiple files in the same partition" in {
+    spark.sql("""
+      CREATE TABLE test_partitioned_table (
+        id BIGINT,
+        name STRING,
+        region STRING,
+        value DOUBLE
+      ) USING iceberg
+      PARTITIONED BY (region)
+      """)
+
+    // Two separate INSERTs produce two distinct data files under region=North.
+    spark.sql("""
+      INSERT INTO test_partitioned_table VALUES
+      (1, 'Alice', 'North', 100.0),
+      (2, 'Bob', 'North', 200.0)
+      """)
+
+    spark.sql("""
+      INSERT INTO test_partitioned_table VALUES
+      (3, 'Charlie', 'North', 50.0),
+      (4, NULL, 'North', 300.0)
+      """)
+
+    spark.sql("REFRESH TABLE test_partitioned_table")
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val maybeResult =
+      extractor.extractPartitionStatsWithRowCounts("spark_catalog.default.test_partitioned_table", "test_conf")
+
+    maybeResult should be(defined)
+    maybeResult.get.partitionRowCounts(List("region" -> "North")) should be(4L)
+  }
+
+  it should "surface row counts on the synthetic-partition (unpartitioned ds) path" in {
+    try {
+      spark.sql("""
+        CREATE TABLE test_unpartitioned_ds_rowcounts (
+          id BIGINT,
+          name STRING,
+          ds STRING,
+          value DOUBLE
+        ) USING iceberg
+        TBLPROPERTIES (
+          'write.metadata.metrics.default' = 'full',
+          'write.metadata.metrics.column.ds' = 'full'
+        )
+        """)
+      spark.sql("ALTER TABLE test_unpartitioned_ds_rowcounts WRITE ORDERED BY ds")
+
+      spark.sql("""
+        INSERT INTO test_unpartitioned_ds_rowcounts VALUES
+        (1, 'Alice', '2024-01-15', 100.0),
+        (2, 'Bob', '2024-01-15', 200.0)
+        """)
+      spark.sql("""
+        INSERT INTO test_unpartitioned_ds_rowcounts VALUES
+        (3, 'Charlie', '2024-01-16', 50.0)
+        """)
+
+      spark.sql("REFRESH TABLE test_unpartitioned_ds_rowcounts")
+
+      val extractor = new IcebergPartitionStatsExtractor(spark)
+      val maybeResult = extractor.extractPartitionStatsWithRowCounts(
+        "spark_catalog.default.test_unpartitioned_ds_rowcounts",
+        "test_conf")
+
+      maybeResult should be(defined)
+      val result = maybeResult.get
+      result.partitionRowCounts(List("ds" -> "2024-01-15")) should be(2L)
+      result.partitionRowCounts(List("ds" -> "2024-01-16")) should be(1L)
+    } finally {
+      spark.sql("DROP TABLE IF EXISTS test_unpartitioned_ds_rowcounts")
+    }
+  }
+
+  it should "return empty partitionRowCounts for an empty partitioned table" in {
+    spark.sql("""
+      CREATE TABLE test_partitioned_table (
+        id BIGINT,
+        name STRING,
+        region STRING,
+        value DOUBLE
+      ) USING iceberg
+      PARTITIONED BY (region)
+      """)
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val maybeResult =
+      extractor.extractPartitionStatsWithRowCounts("spark_catalog.default.test_partitioned_table", "test_conf")
+
+    maybeResult should be(defined)
+    maybeResult.get.partitionRowCounts should be(empty)
+    maybeResult.get.tileSummaries should be(empty)
+  }
+
+  it should "key partitionRowCounts by the full multi-column partition path" in {
+    spark.sql("""
+      CREATE TABLE test_partitioned_table (
+        id BIGINT,
+        name STRING,
+        year INT,
+        region STRING,
+        value DOUBLE
+      ) USING iceberg
+      PARTITIONED BY (year, region)
+      """)
+
+    spark.sql("""
+      INSERT INTO test_partitioned_table VALUES
+      (1, 'Alice', 2024, 'North', 100.0),
+      (2, 'Bob', 2024, 'North', 200.0),
+      (3, 'Charlie', 2024, 'South', 150.0),
+      (4, 'David', 2023, 'North', 300.0),
+      (5, 'Eve', 2023, 'South', 250.0)
+      """)
+
+    spark.sql("REFRESH TABLE test_partitioned_table")
+
+    val extractor = new IcebergPartitionStatsExtractor(spark)
+    val maybeResult =
+      extractor.extractPartitionStatsWithRowCounts("spark_catalog.default.test_partitioned_table", "test_conf")
+
+    maybeResult should be(defined)
+    val rowCounts = maybeResult.get.partitionRowCounts
+
+    rowCounts(List("year" -> "2024", "region" -> "North")) should be(2L)
+    rowCounts(List("year" -> "2024", "region" -> "South")) should be(1L)
+    rowCounts(List("year" -> "2023", "region" -> "North")) should be(1L)
+    rowCounts(List("year" -> "2023", "region" -> "South")) should be(1L)
+  }
+
   "IcebergPartitionStatsExtractor.extractPartitionMillisFromSlice" should "correctly parse single partition" in {
     val slice = "region=North"
     val partitionSpec = PartitionSpec.daily

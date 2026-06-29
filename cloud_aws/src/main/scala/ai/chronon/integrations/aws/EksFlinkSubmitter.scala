@@ -35,6 +35,27 @@ object EksFlinkSubmitter {
 
   def shellQuote(s: String): String = "'" + s.replace("'", "'\"'\"'") + "'"
 
+  // Extra pod labels stamped on the Flink JobManager/TaskManager pods, read from an env var so
+  // deployments can attach their own labels without code changes. Merged with the per-job
+  // chronon/job_name label by K8sFlinkSubmitter. Format: comma-separated key=value pairs, split
+  // on the first '=' (values may contain '='); entries with an empty key or value are skipped.
+  private[aws] val PodTemplateLabelsEnvVar = "FLINK_EKS_POD_LABELS"
+
+  private[aws] def parsePodTemplateLabels(raw: Option[String]): Map[String, String] =
+    raw.map(_.trim).filter(_.nonEmpty).fold(Map.empty[String, String]) { s =>
+      s.split(",")
+        .toSeq
+        .flatMap { entry =>
+          val eq = entry.indexOf('=')
+          if (eq > 0 && eq < entry.length - 1) {
+            val key = entry.substring(0, eq).trim
+            val value = entry.substring(eq + 1).trim
+            if (key.nonEmpty && value.nonEmpty) Some(key -> value) else None
+          } else None
+        }
+        .toMap
+    }
+
   // AWS IRSA credential config and Prometheus metrics reporter — injected into K8sFlinkSubmitter
   // so the base class stays cloud-agnostic.
   val extraAwsFlinkConfig: Map[String, String] = Map(
@@ -103,6 +124,7 @@ object EksFlinkSubmitter {
       extraJarNames = EksOnlyAdditionalJarNames,
       defaultJarsBasePath = DefaultS3FlinkJarsBasePath,
       k8sConfig = k8sConfig,
-      ingressBaseUrl = ingressBaseUrl
+      ingressBaseUrl = ingressBaseUrl,
+      podTemplateLabels = parsePodTemplateLabels(sys.env.get(PodTemplateLabelsEnvVar))
     )
 }

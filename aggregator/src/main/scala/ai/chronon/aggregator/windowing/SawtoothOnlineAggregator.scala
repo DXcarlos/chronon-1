@@ -162,7 +162,6 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
   def lambdaAggregateFinalizedTiled(finalBatchIr: FinalBatchIr,
                                     streamingTiledIrs: Iterator[TiledIr],
                                     ts: Long): Array[Any] = {
-    // TODO: Add support for mutations / hasReversal to the tiled implementation
     windowedAggregator.finalize(lambdaAggregateIrTiled(finalBatchIr, streamingTiledIrs, ts))
   }
 
@@ -211,8 +210,9 @@ class SawtoothOnlineAggregator(val batchEndTs: Long,
             import ai.chronon.aggregator.windowing.HopsAggregator.HopIrOps
             val hopStartTimeStamp = hopIr.getTs
 
-            // Only want to inspect tail hops that fall within the tailBuffer (default 2d), and after the queryTail
-            if ((batchEndTs - windowMillis) + tailBufferMillis > hopStartTimeStamp && hopStartTimeStamp >= queryTail) {
+            // Only want to inspect tail hops that fall within the tailBuffer (default 2d), and after the queryTail.
+            // Hop-aligned to mirror mergeTailHops' cutoff for non-hop-aligned batch ends.
+            if (queryTail + tailBufferMillis > hopStartTimeStamp && hopStartTimeStamp >= queryTail) {
               val tailHop = hopIr(baseIrIndices(i))
               if (tailHop != null) {
                 hasNonNullTailHop_ = true

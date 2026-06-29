@@ -25,7 +25,6 @@
           "spark.sql.catalog.workspace.auth.oauth.clientSecret": "{DATABRICKS_CLIENT_SECRET}",
           "spark.sql.catalog.workspace.auth.oauth.uri": "https://dbc-050d6f00-dcb3.cloud.databricks.com/oidc/v1/token",
           "spark.sql.catalog.workspace.auth.type": "oauth",
-          "spark.sql.catalog.workspace.renewCredential.enabled": "false",
           "spark.sql.catalog.workspace.uri": "https://dbc-050d6f00-dcb3.cloud.databricks.com",
           "spark.sql.catalog.workspace_iceberg": "org.apache.iceberg.spark.SparkCatalog",
           "spark.sql.catalog.workspace_iceberg.credential": "{DATABRICKS_CREDENTIAL}",

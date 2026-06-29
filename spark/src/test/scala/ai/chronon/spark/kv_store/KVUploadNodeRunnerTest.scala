@@ -2,10 +2,12 @@ package ai.chronon.spark.kv_store
 
 import ai.chronon.api.Constants.MetadataDataset
 import ai.chronon.api._
+import ai.chronon.api.Constants.KvUploadTimeoutMsKey
+import ai.chronon.api.Extensions.{WindowOps, WindowUtils}
 import ai.chronon.online.{Api, KVStore}
 import ai.chronon.online.fetcher.{FetchContext, MetadataStore}
 import ai.chronon.planner.{GroupByUploadToKVNode, JoinMetadataUpload, ModelTransformsUploadNode, NodeContent}
-import ai.chronon.spark.kv_store.KVUploadNodeRunner
+import org.apache.spark.SparkConf
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.stubbing.Stubber
@@ -90,6 +92,17 @@ class KVUploadNodeRunnerTest
     uploadTableCaptor.getValue shouldEqual "test_namespace.test_groupby__upload"
     groupByNameCaptor.getValue shouldEqual "test_groupby"
     partitionCaptor.getValue shouldEqual "2023-01-01"
+  }
+
+  it should "encode the resolved output partition spec into API props" in {
+    val partitionSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * WindowUtils.Hour.millis, WindowUtils.Hour.millis)
+
+    KVUploadNodeRunner.partitionSpecProps(partitionSpec) shouldBe Map(
+      KVUploadNodeRunner.PartitionColumnProp -> "ds",
+      KVUploadNodeRunner.PartitionFormatProp -> "yyyy-MM-dd-HH-mm",
+      KVUploadNodeRunner.PartitionSpanMillisProp -> (3 * WindowUtils.Hour.millis).toString,
+      KVUploadNodeRunner.PartitionOffsetMillisProp -> WindowUtils.Hour.millis.toString
+    )
   }
 
   it should "handle JOIN_METADATA_UPLOAD successfully" in {
@@ -248,5 +261,41 @@ class KVUploadNodeRunnerTest
     }
 
     exception.getMessage shouldEqual "FetchContext creation error"
+  }
+
+  it should "read Chronon SparkConf API props" in {
+    val sparkConf = new SparkConf(false)
+      .set(KvUploadTimeoutMsKey, "3600000")
+      .set("spark.chronon.some.other.config", "enabled")
+      .set("spark.sql.shuffle.partitions", "1")
+
+    KVUploadNodeRunner.sparkConfApiProps(sparkConf) shouldEqual Map(
+      KvUploadTimeoutMsKey -> "3600000",
+      "spark.chronon.some.other.config" -> "enabled"
+    )
+  }
+
+  it should "prefer CLI API props over SparkConf and node common conf" in {
+    val mergedProps = KVUploadNodeRunner.mergeApiProps(
+      nodeCommonConf = Map(
+        KvUploadTimeoutMsKey -> "1800000",
+        "node-only" -> "node"
+      ),
+      sparkConfProps = Map(
+        KvUploadTimeoutMsKey -> "3600000",
+        "spark-only" -> "spark"
+      ),
+      props = Map(
+        KvUploadTimeoutMsKey -> "7200000",
+        "cli-only" -> "cli"
+      )
+    )
+
+    mergedProps shouldEqual Map(
+      KvUploadTimeoutMsKey -> "7200000",
+      "node-only" -> "node",
+      "spark-only" -> "spark",
+      "cli-only" -> "cli"
+    )
   }
 }

@@ -1,6 +1,13 @@
 package ai.chronon.integrations.aws
 
-import ai.chronon.api.Constants.{ContinuationKey, KvEnableTtlArg, KvReplicaRegionsArg, KvTablePrefixArg, ListLimit}
+import ai.chronon.api.Constants.{
+  ContinuationKey,
+  KvEnableTtlArg,
+  KvReplicaRegionsArg,
+  KvTablePrefixArg,
+  KvUploadTimeoutMsKey,
+  ListLimit
+}
 import ai.chronon.api.Extensions.StringOps
 import ai.chronon.api.ScalaJavaConversions._
 import ai.chronon.api.{Constants, PartitionSpec, TilingUtils}
@@ -290,7 +297,7 @@ class DynamoDBKVStoreImpl(rawDynamoDbClient: DynamoDbAsyncClient, conf: Map[Stri
   // success behavior on batch writes which necessitates a bit more logic on our end to tie things together.
   // To keep things simple for now, we implement the multiput as a sequence of put calls.
   override def multiPut(keyValueDatasets: Seq[KVStore.PutRequest]): Future[Seq[Boolean]] = {
-    logger.info(s"Triggering multiput for ${keyValueDatasets.size}: rows")
+    logger.debug(s"Triggering multiput for ${keyValueDatasets.size}: rows")
     val futureResponses = keyValueDatasets.map { req =>
       val (actualKeyBytes, actualTimestamp) = if (isStreamingTable(req.dataset)) {
         // For streaming tables, unwrap TileKey to use entity key + tileSizeMs as partition key
@@ -501,7 +508,8 @@ class DynamoDBKVStoreImpl(rawDynamoDbClient: DynamoDbAsyncClient, conf: Map[Stri
 
   private[aws] def configuredImportTimeout: Duration =
     conf
-      .get(IonPathConfig.IonWriterTimeoutKey)
+      .get(KvUploadTimeoutMsKey)
+      .orElse(conf.get(IonPathConfig.IonWriterTimeoutKey))
       .map(timeoutMillis => Duration.ofMillis(timeoutMillis.toLong))
       .getOrElse(DynamoImportDefaultTimeout)
 
@@ -710,7 +718,7 @@ object DynamoDBKVStoreConstants {
 
   val DataTTLSeconds = 5.days.toSeconds.toInt
   val MillisPerDay = 1.day.toMillis
-  val DynamoImportDefaultTimeout: Duration = Duration.ofMinutes(30)
+  val DynamoImportDefaultTimeout: Duration = Duration.ofMinutes(60)
 
   val BatchTableGCAgeDays = 30
   val BatchTableGCMaxDelete = 10

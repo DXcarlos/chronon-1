@@ -1,6 +1,13 @@
 package ai.chronon.integrations.aws
 
-import ai.chronon.api.Constants.{ContinuationKey, KvEnableTtlArg, KvReplicaRegionsArg, KvTablePrefixArg, ListLimit}
+import ai.chronon.api.Constants.{
+  ContinuationKey,
+  KvEnableTtlArg,
+  KvReplicaRegionsArg,
+  KvTablePrefixArg,
+  KvUploadTimeoutMsKey,
+  ListLimit
+}
 import ai.chronon.api.ScalaJavaConversions._
 import java.time.LocalDate
 import ai.chronon.api.TilingUtils
@@ -617,12 +624,21 @@ class DynamoDBKVStoreTest extends AnyFlatSpec with Matchers with BeforeAndAfterA
     ttlDesc.timeToLiveStatus() shouldBe software.amazon.awssdk.services.dynamodb.model.TimeToLiveStatus.DISABLED
   }
 
-  it should "configure DynamoDB import timeout from ion writer timeout millis" in {
+  it should "configure DynamoDB import timeout from kv upload timeout millis" in {
     val defaultStore = new DynamoDBKVStoreImpl(client)
-    defaultStore.configuredImportTimeout shouldBe Duration.ofMinutes(30)
+    defaultStore.configuredImportTimeout shouldBe Duration.ofMinutes(60)
 
-    val configuredStore = new DynamoDBKVStoreImpl(client, Map(IonPathConfig.IonWriterTimeoutKey -> "3600000"))
+    val configuredStore = new DynamoDBKVStoreImpl(client, Map(KvUploadTimeoutMsKey -> "3600000"))
     configuredStore.configuredImportTimeout shouldBe Duration.ofHours(1)
+
+    val legacyConfiguredStore = new DynamoDBKVStoreImpl(client, Map(IonPathConfig.IonWriterTimeoutKey -> "7200000"))
+    legacyConfiguredStore.configuredImportTimeout shouldBe Duration.ofHours(2)
+
+    val genericConfiguredStore = new DynamoDBKVStoreImpl(
+      client,
+      Map(KvUploadTimeoutMsKey -> "3600000", IonPathConfig.IonWriterTimeoutKey -> "7200000")
+    )
+    genericConfiguredStore.configuredImportTimeout shouldBe Duration.ofHours(1)
   }
 
   it should "gcOldBatchTables deletes tables older than the GC threshold" in {

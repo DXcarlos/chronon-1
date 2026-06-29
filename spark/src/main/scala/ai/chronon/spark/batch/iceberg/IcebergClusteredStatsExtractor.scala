@@ -2,6 +2,7 @@ package ai.chronon.spark.batch.iceberg
 
 import ai.chronon.api.PartitionSpec
 import ai.chronon.observability.{TileSummary, TileSummaryKey}
+import ai.chronon.spark.batch.iceberg.IcebergPartitionStatsExtractor.IcebergPartitionStatsResult
 import org.apache.iceberg.DataFile
 import org.apache.iceberg.types.Type
 import org.slf4j.LoggerFactory
@@ -18,6 +19,11 @@ object IcebergClusteredStatsExtractor {
 
   def extract(fullTableName: String, table: org.apache.iceberg.Table, confName: String)(implicit
       partitionSpec: PartitionSpec): Option[Map[TileSummaryKey, TileSummary]] = {
+    extractWithRowCounts(fullTableName, table, confName).map(_.tileSummaries)
+  }
+
+  def extractWithRowCounts(fullTableName: String, table: org.apache.iceberg.Table, confName: String)(implicit
+      partitionSpec: PartitionSpec): Option[IcebergPartitionStatsResult] = {
     Option(table.schema()) match {
       case None =>
         logger.info(
@@ -46,9 +52,9 @@ object IcebergClusteredStatsExtractor {
                                        schema: org.apache.iceberg.Schema,
                                        partitionFieldId: Int,
                                        partitionFieldType: Type)(implicit
-      partitionSpec: PartitionSpec): Option[Map[TileSummaryKey, TileSummary]] = {
+      partitionSpec: PartitionSpec): Option[IcebergPartitionStatsResult] = {
     Option(table.currentSnapshot()) match {
-      case None => Some(Map.empty)
+      case None => Some(IcebergPartitionStatsResult(Map.empty, Map.empty))
       case Some(_) =>
         val tasks = table.newScan().includeColumnStats().planFiles()
         val partitionAccumulators = mutable.Map[PartitionKey, PartitionAccumulator]()
@@ -76,8 +82,13 @@ object IcebergClusteredStatsExtractor {
           tasks.close()
         }
 
-        if (complete) Some(partitionAccumulators.values.flatMap(_.toTileSummaries).toMap)
-        else None
+        if (complete) {
+          val tileSummaries = partitionAccumulators.values.flatMap(_.toTileSummaries).toMap
+          val rowCounts = partitionAccumulators.iterator.map { case (key, acc) =>
+            key -> acc.totalRowCount
+          }.toMap
+          Some(IcebergPartitionStatsResult(tileSummaries, rowCounts))
+        } else None
     }
   }
 

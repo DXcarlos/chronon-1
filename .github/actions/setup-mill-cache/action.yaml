@@ -26,6 +26,37 @@ inputs:
 runs:
   using: composite
   steps:
+    # TODO(david): remove once chronon-ci:latest is republished from main with JDK 17.
+    # Mill 1.1.6 launcher is class file v61 (JDK 17); stale image still has JDK 11.
+    # GitHub-hosted runners already ship JDK 17 (Temurin); only the stale container needs apt install.
+    - name: Ensure JDK 17
+      shell: bash
+      run: |
+        set -eo pipefail
+        find_jdk17() {
+          for d in "${JAVA_HOME_17_X64:-}" /usr/lib/jvm/temurin-17-jdk-* /usr/lib/jvm/java-17-openjdk-* /usr/lib/jvm/zulu-17-* /usr/lib/jvm/*-17-jdk-*; do
+            if [ -n "$d" ] && [ -x "$d/bin/java" ]; then
+              echo "$d"
+              return 0
+            fi
+          done
+          return 0
+        }
+        JDK17="$(find_jdk17)"
+        if [ -z "$JDK17" ]; then
+          SUDO=""
+          [ "$(id -u)" != "0" ] && SUDO="sudo"
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends openjdk-17-jdk
+          JDK17="$(find_jdk17)"
+        fi
+        if [ -z "$JDK17" ]; then
+          echo "Failed to locate JDK 17 after install" >&2
+          exit 1
+        fi
+        echo "JAVA_HOME=$JDK17" >> "$GITHUB_ENV"
+        echo "$JDK17/bin" >> "$GITHUB_PATH"
+
     - name: Configure cache paths
       shell: bash
       env:

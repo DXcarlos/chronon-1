@@ -33,6 +33,27 @@ jobs:
         run: |
           ./mill flink\[${{ env.SCALA_VERSION }}\].test
 
+  e2e_tests:
+    runs-on: ubuntu-8_cores-32_gb
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mill-cache
+        with:
+          scala-version: ${{ env.SCALA_VERSION }}
+          coursier-repositories: ${{ vars.COURSIER_REPOSITORIES }}
+
+      - name: Run e2e integration tests
+        run: |
+          ./mill e2e_tests\[${{ env.SCALA_VERSION }}\].test
+
   aggregator_tests:
     runs-on: ubuntu-latest
     container:
