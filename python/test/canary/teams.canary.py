@@ -194,6 +194,8 @@ aws_databricks_env.common['FRONTEND_URL'] = "https://crucible-aws.zipline.ai"
 aws_databricks_env.common['HUB_URL'] = "https://crucible-aws.zipline.ai/services/hub"
 aws_databricks_env.common['EVAL_URL'] = "https://crucible-aws.zipline.ai/services/eval"
 aws_databricks_env.common['SPARK_CLUSTER_NAME'] = "crucible-eks"
+aws_databricks_env.common['FLINK_JARS_URI'] = "s3://zipline-spark-libs/spark-3.5.3/libs/"
+aws_databricks_env.common['FLINK_STATE_URI'] = "s3://zipline-warehouse-crucible/flink-state"
 aws_databricks.conf.common['spark.sql.warehouse.dir'] = "s3://zipline-warehouse-crucible/data/uc-poc/warehouse/"
 aws_databricks.conf.common['spark.sql.catalog.polaris'] = "org.apache.iceberg.spark.SparkCatalog"
 aws_databricks.conf.common['spark.sql.catalog.polaris.type'] = "rest"
@@ -203,6 +205,8 @@ aws_databricks.conf.common['spark.sql.catalog.polaris.credential'] = "{OC_CREDEN
 aws_databricks.conf.common['spark.sql.catalog.polaris.scope'] = "PRINCIPAL_ROLE:ALL"
 aws_databricks.conf.common['spark.sql.catalog.polaris.header.X-Iceberg-Access-Delegation'] = "vended-credentials"
 aws_databricks.conf.common['spark.sql.catalog.polaris.io-impl'] = "org.apache.iceberg.aws.s3.S3FileIO"
+aws_databricks.conf.common['spark.chronon.table_write.upload.format'] = "ion"
+aws_databricks.conf.common['spark.chronon.table_write.upload.location'] = "s3://zipline-warehouse-crucible/data/ion_uploads/"
 # UC's vended-creds default works on the K8sSubmitter path; only EMR needs the opt-out.
 del aws_databricks.conf.common['spark.sql.catalog.workspace.renewCredential.enabled']
 
