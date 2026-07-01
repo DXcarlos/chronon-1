@@ -2,9 +2,16 @@
 
 Supports two token types (auto-detected):
 - **JWT** (from ``zipline auth get-access-token``): used directly, no exchange needed.
-- **Session token** (from a service principal): exchanged for a short-lived JWT
-  via ``GET {auth_url}/api/auth/token``.  Exchanged JWTs are cached and
-  automatically refreshed when within 60 s of expiry.
+- **Session token** (from a service principal or CLI login): exchanged for a
+  short-lived JWT via ``POST {auth_url}/auth/cli-token``.  Exchanged JWTs are
+  cached and automatically refreshed when within 60 s of expiry.
+
+The exchange sends the opaque session token in the request body rather than the
+``Authorization`` header. Perimeter API gateways commonly reject any
+``Authorization`` header that isn't a JWT, which would block a bearer-carried
+opaque token before it reaches the origin; a header-less request is not blocked.
+Older frontends that predate ``/auth/cli-token`` are handled by falling back to
+the legacy ``GET /api/auth/token`` bearer exchange.
 """
 
 import base64
@@ -30,43 +37,66 @@ def is_jwt(token: str) -> bool:
     return True
 
 
-def _decode_jwt_exp(jwt_token: str) -> float:
-    """Decode the ``exp`` claim from a JWT without signature verification."""
+def decode_jwt_claims(jwt_token: str) -> dict:
+    """Decode a JWT payload (claims) without verifying the signature."""
     payload_b64 = jwt_token.split(".")[1]
     payload_b64 += "=" * (4 - len(payload_b64) % 4)
-    payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-    return float(payload["exp"])
+    return json.loads(base64.urlsafe_b64decode(payload_b64))
+
+
+def _decode_jwt_exp(jwt_token: str) -> float:
+    """Decode the ``exp`` claim from a JWT without signature verification."""
+    return float(decode_jwt_claims(jwt_token)["exp"])
+
+
+def _request_exchange(session_token: str, base_url: str) -> requests.Response:
+    """Call the token-exchange endpoint, carrying the opaque token in the body.
+
+    Sends ``POST {base_url}/auth/cli-token`` with the session token in the JSON
+    body (no ``Authorization`` header) so JWT-only perimeter gateways don't
+    reject it. Falls back to the legacy ``GET /api/auth/token`` bearer exchange
+    when the frontend predates ``/auth/cli-token`` (HTTP 404).
+    """
+    resp = requests.post(
+        f"{base_url}/auth/cli-token",
+        json={"session_token": session_token},
+        headers={"Content-Type": "application/json"},
+        timeout=10,
+    )
+    if resp.status_code == 404:
+        resp = requests.get(
+            f"{base_url}/api/auth/token",
+            headers={"Authorization": f"Bearer {session_token}"},
+            timeout=10,
+        )
+    return resp
 
 
 def exchange_session_for_jwt(session_token: str, auth_url: str) -> str:
     """Exchange a BetterAuth session token for a short-lived JWT.
 
-    Calls ``GET {auth_url}/api/auth/token`` with the session token as a
-    Bearer credential and returns the JWT string.
+    Posts the session token to ``{auth_url}/auth/cli-token`` (see
+    :func:`_request_exchange`) and returns the JWT string.
     """
-    endpoint = f"{auth_url.rstrip('/')}/api/auth/token"
+    base_url = auth_url.rstrip("/")
     try:
-        resp = requests.get(
-            endpoint,
-            headers={"Authorization": f"Bearer {session_token}"},
-            timeout=10,
-        )
+        resp = _request_exchange(session_token, base_url)
     except requests.ConnectionError:
         raise RuntimeError(
-            f"Could not connect to auth server at {endpoint}. "
+            f"Could not connect to auth server at {base_url}. "
             "Check that ZIPLINE_AUTH_URL is correct and the frontend is running. "
             f"Current ZIPLINE_AUTH_URL: {auth_url}"
         ) from None
     except requests.Timeout:
         raise RuntimeError(
-            f"Timed out connecting to auth server at {endpoint}. "
+            f"Timed out connecting to auth server at {base_url}. "
             "Check that ZIPLINE_AUTH_URL is correct and the frontend is reachable."
         ) from None
 
     if resp.status_code == 401:
         raise RuntimeError(
-            f"Token rejected by auth server at {endpoint} (HTTP 401). "
-            "The ZIPLINE_TOKEN may be expired, revoked, or does not belong to "
+            f"Token rejected by auth server at {base_url} (HTTP 401). "
+            "The token may be expired, revoked, or does not belong to "
             "this auth server. Check that ZIPLINE_AUTH_URL matches the frontend "
             "where the token was created. If using a service principal, rotate "
             "the token in the admin UI. If using a personal session, run "
@@ -74,14 +104,14 @@ def exchange_session_for_jwt(session_token: str, auth_url: str) -> str:
         )
     if not resp.ok:
         raise RuntimeError(
-            f"Token exchange failed (HTTP {resp.status_code}) at {endpoint}. "
+            f"Token exchange failed (HTTP {resp.status_code}) at {base_url}. "
             f"Response: {resp.text[:200]}"
         )
 
     token = resp.json().get("token")
     if not token:
         raise RuntimeError(
-            f"Token exchange at {endpoint} succeeded but no JWT was returned. "
+            f"Token exchange at {base_url} succeeded but no JWT was returned. "
             "Check that the auth server is configured correctly."
         )
     return token
