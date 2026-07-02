@@ -1,6 +1,7 @@
 package ai.chronon.integrations.aws
 
 import ai.chronon.api.JobStatusType
+import ai.chronon.api.submission.KubernetesPlacement
 import ai.chronon.integrations.aws.EmrSubmitter.{
   DatabricksOAuthTokenVar,
   DefaultClusterIdleTimeout,
@@ -525,6 +526,10 @@ class EmrSubmitter(customerId: String,
           .get(EksNodeSelector)
           .map(EmrServerlessSubmitter.parseNodeSelector)
           .getOrElse(Map.empty)
+        val tolerations = submissionProperties
+          .get(EksTolerations)
+          .map(raw => KubernetesPlacement.tolerationsAsStringMaps(KubernetesPlacement.decodeTolerations(raw)))
+          .getOrElse(Seq.empty)
 
         val groupByName = JobSubmitter.getArgValue(args.toArray, GroupByNameArgKeyword).filter(_.nonEmpty)
 
@@ -546,6 +551,7 @@ class EmrSubmitter(customerId: String,
             namespace = namespace,
             envVars = envVars,
             nodeSelector = nodeSelector,
+            tolerations = tolerations,
             groupByName = groupByName
           )
         // Encode namespace into the job ID so status/kill can target the right namespace

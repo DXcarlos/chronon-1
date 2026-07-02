@@ -379,7 +379,7 @@ class K8sFlinkSubmitterTest extends AnyFlatSpec {
   private def containerEnvVars(submitter: K8sFlinkSubmitter,
                                 envVars: java.util.List[java.util.Map[String, String]]
                                ): java.util.List[java.util.Map[String, String]] = {
-    val componentSpec = submitter.buildComponentSpec(
+    val componentSpec: java.util.Map[String, Object] = submitter.buildComponentSpec(
       memory = "4G",
       cpu = 1.0,
       replicas = Some(1),
@@ -435,6 +435,40 @@ class K8sFlinkSubmitterTest extends AnyFlatSpec {
     val envMap = envs.asScala.map(e => e.get("name") -> e.get("value")).toMap
     assertEquals("/opt/flink/usrlib/*", envMap("FLINK_CLASSPATH"))
     assertEquals("secret-value", envMap("SASL_JAAS_CFG"))
+  }
+
+  it should "include placement selector and tolerations in component pod templates" in {
+    val submitter = submitterWithExtra()
+    val tolerations = Seq(Map(
+      "key" -> "zipline.ai/node-pool",
+      "operator" -> "Equal",
+      "value" -> "default-streaming",
+      "effect" -> "NoSchedule"))
+
+    val componentSpec: java.util.Map[String, Object] = submitter.buildComponentSpec(
+      memory = "4G",
+      cpu = 1.0,
+      replicas = Some(1),
+      Collections.emptyList(),
+      Collections.emptyList(),
+      Collections.emptyList(),
+      Collections.emptyList(),
+      nodeSelector = Map("zipline.ai/node-pool" -> "default-streaming"),
+      tolerations = tolerations
+    )
+    val podSpec = componentSpec.get("podTemplate")
+      .asInstanceOf[java.util.Map[String, Object]]
+      .get("spec")
+      .asInstanceOf[java.util.Map[String, Object]]
+
+    val nodeSelector = podSpec.get("nodeSelector").asInstanceOf[java.util.Map[String, String]].asScala.toMap
+    assertEquals("default-streaming", nodeSelector("zipline.ai/node-pool"))
+    val renderedTolerations = podSpec.get("tolerations")
+      .asInstanceOf[java.util.List[java.util.Map[String, String]]]
+      .asScala
+      .map(_.asScala.toMap)
+      .toSeq
+    assertTrue(renderedTolerations.contains(tolerations.head))
   }
 
   // --- createFlinkIngress ---

@@ -283,6 +283,7 @@ class K8sFlinkSubmitter(
              namespace: String,
              envVars: Map[String, String] = Map.empty,
              nodeSelector: Map[String, String] = Map.empty,
+             tolerations: Seq[Map[String, String]] = Seq.empty,
              groupByName: Option[String] = None): String = {
 
     val deploymentName = sanitizeDeploymentName(s"flink-$jobId")
@@ -342,6 +343,7 @@ class K8sFlinkSubmitter(
         containerSpec.volumeMounts,
         containerSpec.volumes,
         nodeSelector = nodeSelector,
+        tolerations = tolerations,
         labels = effectivePodLabels
       )
     )
@@ -356,6 +358,7 @@ class K8sFlinkSubmitter(
         containerSpec.volumeMounts,
         containerSpec.volumes,
         nodeSelector = nodeSelector,
+        tolerations = tolerations,
         labels = effectivePodLabels
       )
     )
@@ -492,6 +495,7 @@ class K8sFlinkSubmitter(
       volumeMounts: java.util.List[java.util.Map[String, String]],
       volumes: java.util.List[java.util.Map[String, Object]],
       nodeSelector: Map[String, String] = Map.empty,
+      tolerations: Seq[Map[String, String]] = Seq.empty,
       labels: Map[String, String] = podTemplateLabels): java.util.Map[String, Object] = {
     val component = new java.util.HashMap[String, Object]()
 
@@ -517,6 +521,9 @@ class K8sFlinkSubmitter(
     podSpec.put("volumes", volumes)
     if (nodeSelector.nonEmpty) {
       podSpec.put("nodeSelector", nodeSelector.asJava)
+    }
+    if (tolerations.nonEmpty) {
+      podSpec.put("tolerations", tolerations.map(_.asJava).asJava)
     }
 
     val podMeta = new java.util.HashMap[String, Object]()

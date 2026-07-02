@@ -1,6 +1,7 @@
 package ai.chronon.integrations.aws
 
 import ai.chronon.api.JobStatusType
+import ai.chronon.api.submission.KubernetesPlacement
 import ai.chronon.integrations.cloud_k8s.{K8sFlinkStatusProvider, K8sFlinkSubmitter}
 import ai.chronon.spark.submission.JobSubmitterConstants._
 import ai.chronon.spark.submission.{
@@ -142,6 +143,10 @@ class EmrServerlessSubmitter(
           .get(EksNodeSelector)
           .map(EmrServerlessSubmitter.parseNodeSelector)
           .getOrElse(Map.empty)
+        val tolerations = submissionProperties
+          .get(EksTolerations)
+          .map(raw => KubernetesPlacement.tolerationsAsStringMaps(KubernetesPlacement.decodeTolerations(raw)))
+          .getOrElse(Seq.empty)
 
         val groupByName = JobSubmitter.getArgValue(args.toArray, GroupByNameArgKeyword).filter(_.nonEmpty)
 
@@ -163,6 +168,7 @@ class EmrServerlessSubmitter(
             namespace = namespace,
             envVars = envVars,
             nodeSelector = nodeSelector,
+            tolerations = tolerations,
             groupByName = groupByName
           )
         s"flink:$namespace:$deploymentName"
