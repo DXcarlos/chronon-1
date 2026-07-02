@@ -1,3 +1,4 @@
+from ai.chronon.repo.spark_catalog_confs import OpenCatalogConfiguration
 from ai.chronon.types import ConfigProperties, EngineType, EnvironmentVariables, StagingQuery, TableDependency
 
 
@@ -23,7 +24,7 @@ CLAIMS_DEMO_ENV = EnvironmentVariables(
         "SNOWFLAKE_PRIVATE_KEY_VAULT_URI": "https://demo-service-writer-pkey.vault.azure.net/secrets/snowflake-private-key",
         "POSTGRES_HOST": "crucible-claims-pg-westus.postgres.database.azure.com",
         "POSTGRES_PASSWORD_VAULT_URI": "https://crucible-azure-kv.vault.azure.net/secrets/postgres-password",
-        "OC_CREDENTIAL_VAULT_URI": "",
+        "OC_CREDENTIAL_VAULT_URI": "https://dev-zipline-secrets.vault.azure.net/secrets/oc-catalog-credential",
     }
 )
 
@@ -45,15 +46,14 @@ CLAIMS_DEMO_CONF = ConfigProperties(
         "spark.executor.extraJavaOptions": "-Dlog4j.configurationFile=/opt/chronon/log4j2.properties",
         "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         "spark.sql.defaultCatalog": "spark_catalog",
-        "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
-        "spark.sql.catalog.spark_catalog.type": "jdbc",
-        "spark.sql.catalog.spark_catalog.uri": "jdbc:postgresql://{POSTGRES_HOST}:5432/iceberg_catalog?sslmode=require",
-        "spark.sql.catalog.spark_catalog.jdbc.user": "chronon",
-        "spark.sql.catalog.spark_catalog.jdbc.password": "{POSTGRES_PASSWORD}",
-        "spark.sql.catalog.spark_catalog.warehouse": "abfss://crucible@ziplineai2.dfs.core.windows.net/claims-demo/warehouse",
-        "spark.sql.catalog.spark_catalog.credential": "",
-        "spark.sql.catalog.spark_catalog.header.X-Iceberg-Access-Delegation": "",
-        "spark.sql.catalog.spark_catalog.scope": "",
+        **OpenCatalogConfiguration(
+            {
+                "spark.sql.catalog.spark_catalog.uri": "https://crucible-azure.zipline.ai/services/catalog",
+                "spark.sql.catalog.spark_catalog.credential": "{OC_CREDENTIAL}",
+                "spark.sql.catalog.spark_catalog.warehouse": "polaris_claims-demo",
+                "spark.sql.catalog.spark_catalog.scope": "PRINCIPAL_ROLE:chronon-engine",
+            }
+        ),
     }
 )
 
