@@ -321,7 +321,6 @@ class EmrSubmitterTest extends AnyFlatSpec with Matchers with MockitoSugar {
         namespace = org.mockito.ArgumentMatchers.anyString(),
         envVars = org.mockito.ArgumentMatchers.any(),
         nodeSelector = org.mockito.ArgumentMatchers.any(),
-        tolerations = org.mockito.ArgumentMatchers.any(),
         groupByName = org.mockito.ArgumentMatchers.any()
       )
     ).thenReturn("flink-abc123")
@@ -365,7 +364,6 @@ class EmrSubmitterTest extends AnyFlatSpec with Matchers with MockitoSugar {
         namespace = org.mockito.ArgumentMatchers.anyString(),
         envVars = org.mockito.ArgumentMatchers.any(),
         nodeSelector = nodeSelectorCaptor.capture(),
-        tolerations = org.mockito.ArgumentMatchers.any(),
         groupByName = org.mockito.ArgumentMatchers.any()
       )
     ).thenReturn("flink-abc123")
@@ -410,7 +408,6 @@ class EmrSubmitterTest extends AnyFlatSpec with Matchers with MockitoSugar {
         namespace = org.mockito.ArgumentMatchers.anyString(),
         envVars = org.mockito.ArgumentMatchers.any(),
         nodeSelector = org.mockito.ArgumentMatchers.any(),
-        tolerations = org.mockito.ArgumentMatchers.any(),
         groupByName = groupByCaptor.capture()
       )
     ).thenReturn("flink-abc123")
@@ -456,7 +453,6 @@ class EmrSubmitterTest extends AnyFlatSpec with Matchers with MockitoSugar {
         namespace = org.mockito.ArgumentMatchers.anyString(),
         envVars = org.mockito.ArgumentMatchers.any(),
         nodeSelector = org.mockito.ArgumentMatchers.any(),
-        tolerations = org.mockito.ArgumentMatchers.any(),
         groupByName = groupByCaptor.capture()
       )
     ).thenReturn("flink-abc123")

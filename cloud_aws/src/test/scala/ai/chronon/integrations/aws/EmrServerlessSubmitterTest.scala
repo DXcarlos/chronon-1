@@ -944,7 +944,6 @@ class EmrServerlessSubmitterTest extends AnyFlatSpec with Matchers with MockitoS
         namespace = org.mockito.ArgumentMatchers.anyString(),
         envVars = org.mockito.ArgumentMatchers.any(),
         nodeSelector = org.mockito.ArgumentMatchers.any(),
-        tolerations = org.mockito.ArgumentMatchers.any(),
         groupByName = org.mockito.ArgumentMatchers.any()
       )
     ).thenReturn("flink-abc123")
@@ -989,7 +988,6 @@ class EmrServerlessSubmitterTest extends AnyFlatSpec with Matchers with MockitoS
         namespace = org.mockito.ArgumentMatchers.anyString(),
         envVars = org.mockito.ArgumentMatchers.any(),
         nodeSelector = org.mockito.ArgumentMatchers.any(),
-        tolerations = org.mockito.ArgumentMatchers.any(),
         groupByName = groupByCaptor.capture()
       )
     ).thenReturn("flink-abc123")
@@ -1036,7 +1034,6 @@ class EmrServerlessSubmitterTest extends AnyFlatSpec with Matchers with MockitoS
         namespace = org.mockito.ArgumentMatchers.anyString(),
         envVars = org.mockito.ArgumentMatchers.any(),
         nodeSelector = org.mockito.ArgumentMatchers.any(),
-        tolerations = org.mockito.ArgumentMatchers.any(),
         groupByName = groupByCaptor.capture()
       )
     ).thenReturn("flink-abc123")

@@ -17,10 +17,6 @@ object JobSubmitterConstants {
   val JobType = "job-type"
   val MetadataName = "metadata-name"
   val ZiplineVersion = "zipline-version"
-  val ZiplineTeam = "zipline-team"
-  val RunMode = "run-mode"
-  val KubernetesNodeSelector = "kubernetesNodeSelector"
-  val KubernetesTolerations = "kubernetesTolerations"
 
   val SparkJobType = "spark"
   val FlinkJobType = "flink"
@@ -45,7 +41,6 @@ object JobSubmitterConstants {
   val EksServiceAccount = "eksServiceAccount"
   val EksNamespace = "eksNamespace"
   val EksNodeSelector = "eksNodeSelector"
-  val EksTolerations = "eksTolerations"
 
   val JarUriArgKeyword = "--jar-uri"
   val JobTypeArgKeyword = "--job-type"
