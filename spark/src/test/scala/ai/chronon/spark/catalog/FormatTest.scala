@@ -164,6 +164,11 @@ class FormatTest extends SparkTestBase {
     val threeHourly = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
     Format.readinessPartition("2024-04-03", PartitionSpec.daily) shouldBe "2024-04-03"
     Format.readinessPartition("2024-04-03-06-00", threeHourly) shouldBe "2024-04-03-03-00"
+    // a tail interval proven complete from write metadata counts despite being sub-daily
+    Format.readinessPartition("2024-04-03-06-00", threeHourly, tailIntervalComplete = true) shouldBe
+      "2024-04-03-06-00"
+    // the flag is only meaningful for sub-daily grids; daily readiness is unchanged either way
+    Format.readinessPartition("2024-04-03", PartitionSpec.daily, tailIntervalComplete = true) shouldBe "2024-04-03"
   }
 
   it should "return the max date when scanning a date column" in {

@@ -371,9 +371,18 @@ object Format {
     * stalls until the NEXT batch lands, or forever once the gate advances daily). Sub-daily
     * grids model streaming ingestion where the tail interval is genuinely in flight, so a
     * partition only counts once data crosses its interval end.
+    *
+    * `tailIntervalComplete` lets formats with write metadata (Delta commit history, Iceberg
+    * snapshot lineage) override the in-flight assumption for sub-daily grids: when a table is
+    * written in atomic chunks (a batch job lands each interval at once, strictly after the
+    * interval closes), waiting for data past the interval end costs a full extra interval of
+    * latency even though the data is already complete. Formats prove completeness from their
+    * commit metadata; anything unprovable stays conservative.
     */
-  def readinessPartition(dataBearingPartition: String, spec: PartitionSpec): String =
-    if (spec.spanMillis >= PartitionSpec.daily.spanMillis) dataBearingPartition
+  def readinessPartition(dataBearingPartition: String,
+                         spec: PartitionSpec,
+                         tailIntervalComplete: Boolean = false): String =
+    if (spec.spanMillis >= PartitionSpec.daily.spanMillis || tailIntervalComplete) dataBearingPartition
     else spec.before(dataBearingPartition)
 
   def sanitizePartitionValues(partitions: Iterable[String]): List[String] = partitions.iterator

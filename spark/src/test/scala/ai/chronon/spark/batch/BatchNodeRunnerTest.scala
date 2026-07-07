@@ -1616,28 +1616,68 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
         |  id INT,
         |  created_at TIMESTAMP
         |)""".stripMargin)
-    // watermark just below the 06:00 partition's interval end (09:00)
-    spark.sql(
-      """INSERT INTO test_db.subdaily_watermark VALUES
-        |(1, TIMESTAMP '2024-01-01 05:10:00'),
-        |(2, TIMESTAMP '2024-01-01 08:59:00')
-        |""".stripMargin)
+
+    val formatter = java.time.format.DateTimeFormatter
+      .ofPattern("yyyy-MM-dd HH:mm:ss")
+      .withZone(java.time.ZoneOffset.UTC)
+    // an interval that cannot close during the test: commits always land before its end, so
+    // this is a stream mid-interval and the watermark stays below the interval end
+    val openInterval = threeHourSpec.at(System.currentTimeMillis() + threeHourSpec.spanMillis)
+    val midIntervalTs = formatter.format(
+      java.time.Instant.ofEpochMilli(threeHourSpec.partitionStartMillis(openInterval) + 50 * 60 * 1000))
+    spark.sql(s"INSERT INTO test_db.subdaily_watermark VALUES (1, TIMESTAMP '$midIntervalTs')")
 
     val dep = TableDependencies.fromTable("test_db.subdaily_watermark", subDailyQuery("created_at"))
     val runner = defaultRunner()
-    val sixOClockFire = PartitionRange("2024-01-01-06-00", "2024-01-01-06-00")(threeHourSpec)
+    val openIntervalFire = PartitionRange(openInterval, openInterval)(threeHourSpec)
 
-    runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
+    runner.checkPartitions(sensorFor(dep), openIntervalFire) match {
       case Success(_) => fail("watermark below the interval end timestamp must not be ready")
       case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
     }
 
-    // watermark reaching the interval end timestamp makes the partition complete
-    spark.sql("INSERT INTO test_db.subdaily_watermark VALUES (3, TIMESTAMP '2024-01-01 09:00:00')")
+    // watermark crossing the interval end timestamp makes the partition complete
+    val nextInterval = threeHourSpec.after(openInterval)
+    val nextIntervalTs = formatter.format(
+      java.time.Instant.ofEpochMilli(threeHourSpec.partitionStartMillis(nextInterval) + 60 * 1000))
+    spark.sql(s"INSERT INTO test_db.subdaily_watermark VALUES (2, TIMESTAMP '$nextIntervalTs')")
 
-    runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
+    runner.checkPartitions(sensorFor(dep), openIntervalFire) match {
       case Success(_) => // ready
-      case Failure(e) => fail(s"watermark at the interval end timestamp should be ready: ${e.getMessage}")
+      case Failure(e) => fail(s"watermark past the interval end timestamp should be ready: ${e.getMessage}")
+    }
+  }
+
+  it should "fire immediately once a chunked write lands after the interval closes" in {
+    spark.sql("DROP TABLE IF EXISTS test_db.subdaily_watermark_chunked")
+    spark.sql(
+      """CREATE TABLE test_db.subdaily_watermark_chunked (
+        |  id INT,
+        |  created_at TIMESTAMP
+        |)""".stripMargin)
+    // a whole 06:00-09:00 interval written at once, long after it closed — a chunked batch
+    // writer. Waiting for data past 09:00 would stall a full extra interval even though the
+    // interval is already complete.
+    spark.sql(
+      """INSERT INTO test_db.subdaily_watermark_chunked VALUES
+        |(1, TIMESTAMP '2024-01-01 06:10:00'),
+        |(2, TIMESTAMP '2024-01-01 08:59:00')
+        |""".stripMargin)
+
+    val dep = TableDependencies.fromTable("test_db.subdaily_watermark_chunked", subDailyQuery("created_at"))
+    val runner = defaultRunner()
+
+    val sixOClockFire = PartitionRange("2024-01-01-06-00", "2024-01-01-06-00")(threeHourSpec)
+    runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
+      case Success(_) => // ready without waiting for data past 09:00
+      case Failure(e) => fail(s"chunk-complete interval should be ready: ${e.getMessage}")
+    }
+
+    // the interval after the chunk has no data at all and must not be ready
+    val nineOClockFire = PartitionRange("2024-01-01-09-00", "2024-01-01-09-00")(threeHourSpec)
+    runner.checkPartitions(sensorFor(dep), nineOClockFire) match {
+      case Success(_) => fail("09:00 fire must not be satisfied by the 06:00 chunk")
+      case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
     }
   }
 
