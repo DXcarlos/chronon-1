@@ -208,7 +208,13 @@ trait Format {
             .collect()
             .headOption
             .filterNot(_.isNullAt(0))
-            .map(row => Format.readinessPartition(partitionSpec.at(row.getLong(0)), partitionSpec))
+            .map { row =>
+              val maxMillis = row.getLong(0)
+              Format.readinessPartition(partitionSpec.at(maxMillis),
+                                        partitionSpec,
+                                        Some(maxMillis),
+                                        Format.readinessOffsetMillis(sparkSession))
+            }
       }
     } match {
       case Success(result) => result
@@ -335,6 +341,14 @@ private[catalog] case class StatsDateRange(start: String, end: String) {
   def lastAvailablePartition: String = end
 }
 
+private[catalog] case class StatsDateRangeWithMillis(start: String, end: String, startMillis: Long, endMillis: Long) {
+  def toStatsDateRange: StatsDateRange = StatsDateRange(start, end)
+
+  def firstAvailablePartition: String = start
+
+  def lastAvailablePartition: String = end
+}
+
 case class ResolvedTableName(catalog: String, namespace: String, table: String) {
   def toIdentifier: Identifier = Identifier.of(Array(namespace), table)
 
@@ -372,9 +386,27 @@ object Format {
     * grids model streaming ingestion where the tail interval is genuinely in flight, so a
     * partition only counts once data crosses its interval end.
     */
-  def readinessPartition(dataBearingPartition: String, spec: PartitionSpec): String =
+  def readinessPartition(dataBearingPartition: String,
+                         spec: PartitionSpec,
+                         maxMillis: Option[Long] = None,
+                         readinessOffsetMillis: Long = DefaultReadinessOffsetMillis): String =
     if (spec.spanMillis >= PartitionSpec.daily.spanMillis) dataBearingPartition
-    else spec.before(dataBearingPartition)
+    else {
+      val isWithinReadinessOffset = maxMillis.exists { max =>
+        val distanceToPartitionEnd = spec.partitionEndMillis(dataBearingPartition) - max
+        distanceToPartitionEnd >= 0 && distanceToPartitionEnd <= readinessOffsetMillis
+      }
+      if (isWithinReadinessOffset) dataBearingPartition else spec.before(dataBearingPartition)
+    }
+
+  val ReadinessOffsetMillisConf: String = "spark.chronon.time_partitioned.readiness_offset.millis"
+  val DefaultReadinessOffsetMillis: Long = 0L
+
+  def readinessOffsetMillis(sparkSession: SparkSession): Long = {
+    val offset = sparkSession.conf.get(ReadinessOffsetMillisConf, DefaultReadinessOffsetMillis.toString).toLong
+    require(offset >= 0, s"$ReadinessOffsetMillisConf must be >= 0, got $offset")
+    offset
+  }
 
   def sanitizePartitionValues(partitions: Iterable[String]): List[String] = partitions.iterator
     .flatMap(Option(_))

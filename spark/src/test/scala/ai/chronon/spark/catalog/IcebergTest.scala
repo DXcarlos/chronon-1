@@ -158,6 +158,40 @@ class IcebergTest extends SparkTestBase with Matchers {
     Iceberg.lastAvailablePartition(tableName, "created_at", PartitionSpec.daily) shouldBe Some("2024-04-03")
   }
 
+  it should "apply readiness offset to near-complete sub-daily Iceberg stats boundaries" in {
+    val tableName = "default.iceberg_subdaily_readiness_offset_test"
+    val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+    spark.sql(s"DROP TABLE IF EXISTS $tableName")
+
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          id INT,
+          created_at TIMESTAMP
+        ) USING iceberg
+        TBLPROPERTIES (
+          'write.metadata.metrics.default' = 'full',
+          'write.metadata.metrics.column.created_at' = 'full'
+        )
+      """)
+      spark.sql(s"ALTER TABLE $tableName WRITE ORDERED BY created_at")
+
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+        (1, TIMESTAMP '2024-04-03 12:17:00'),
+        (2, TIMESTAMP '2024-04-03 14:59:59.500')
+      """)
+
+      Iceberg.lastAvailablePartition(tableName, "created_at", threeHourSpec) shouldBe Some("2024-04-03-09-00")
+
+      spark.conf.set(Format.ReadinessOffsetMillisConf, "1000")
+      Iceberg.lastAvailablePartition(tableName, "created_at", threeHourSpec) shouldBe Some("2024-04-03-12-00")
+    } finally {
+      spark.conf.set(Format.ReadinessOffsetMillisConf, Format.DefaultReadinessOffsetMillis.toString)
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
   it should "return the inclusive last partition from Iceberg file stats for a single-day timestamp range" in {
     val range = StatsDateRange(start = "2024-04-01", end = "2024-04-01")
 

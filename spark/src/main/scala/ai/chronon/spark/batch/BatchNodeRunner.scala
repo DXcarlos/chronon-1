@@ -10,7 +10,7 @@ import ai.chronon.planner._
 import ai.chronon.spark.Extensions._
 import ai.chronon.spark.batch.iceberg.IcebergPartitionStatsExtractor
 import ai.chronon.spark.batch.{StagingQuery => StagingQueryUtil}
-import ai.chronon.spark.catalog.TableUtils
+import ai.chronon.spark.catalog.{Format, TableUtils}
 import ai.chronon.spark.join.UnionJoin
 import ai.chronon.spark.submission.{NodeConfReader, SparkSessionBuilder}
 import ai.chronon.spark.utils.SemanticUtils
@@ -134,8 +134,13 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             .dataWatermarkMillis(tableName, Some(spec))
             .getOrElse(throw new RuntimeException(s"Could not determine data watermark for ${tableName}"))
 
-          val requiredEndMillis = requiredRange.maxMillis
-          logger.info(s"Data watermark: ${TsUtils.toStr(watermark)}, required end: ${TsUtils.toStr(requiredEndMillis)}")
+          val readinessOffsetMillis = BatchNodeRunner.readinessOffsetMillis(tableUtils)
+          val requiredEndMillis = BatchNodeRunner.effectiveRequiredEndMillis(requiredRange.maxMillis, tableUtils)
+          logger.info(
+            s"Data watermark: ${TsUtils.toStr(watermark)}, " +
+              s"required end: ${TsUtils.toStr(requiredRange.maxMillis)}, " +
+              s"readiness offset millis: ${readinessOffsetMillis}, " +
+              s"effective required end: ${TsUtils.toStr(requiredEndMillis)}")
 
           if (watermark > requiredEndMillis) {
             logger.info(s"Sensor succeeded: ${TsUtils.toStr(watermark)} > ${TsUtils.toStr(requiredEndMillis)}")
@@ -654,7 +659,7 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
               inputPartitionSpec.translate(value, tableUtils.partitionSpec)
             else value
           }
-          val requiredEndMillis = requiredEndsMillis.last
+          val requiredEndMillis = BatchNodeRunner.effectiveRequiredEndMillis(requiredEndsMillis.last, tableUtils)
           val ready = watermark.exists(_._2 > requiredEndMillis)
 
           // Collect semanticHash values from all dependencies for this table
@@ -786,6 +791,14 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 }
 
 object BatchNodeRunner {
+  val ReadinessOffsetMillisConf: String = Format.ReadinessOffsetMillisConf
+  val DefaultReadinessOffsetMillis: Long = Format.DefaultReadinessOffsetMillis
+
+  private[batch] def readinessOffsetMillis(tableUtils: TableUtils): Long =
+    Format.readinessOffsetMillis(tableUtils.sparkSession)
+
+  private[batch] def effectiveRequiredEndMillis(requiredEndMillis: Long, tableUtils: TableUtils): Long =
+    requiredEndMillis - readinessOffsetMillis(tableUtils)
 
   def main(args: Array[String]): Unit = {
     val batchArgs = new BatchNodeRunnerArgs(args)

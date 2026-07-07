@@ -90,12 +90,15 @@ case object DeltaLake extends Format {
 
   private def statsLastAvailablePartition(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] =
-    statsDateRange(tableName, columnName, partitionSpec).map { range =>
+    statsDateRangeWithMillis(tableName, columnName, partitionSpec).map { range =>
       sparkSession.read.table(tableName).schema(columnName).dataType match {
         // numeric columns are epoch millis per statsBoundary, so they carry the same
         // in-flight-tail semantics as timestamps
         case TimestampType | _: NumericType =>
-          Format.readinessPartition(range.lastAvailablePartition, partitionSpec)
+          Format.readinessPartition(range.lastAvailablePartition,
+                                    partitionSpec,
+                                    Some(range.endMillis),
+                                    Format.readinessOffsetMillis(sparkSession))
         case _ => range.lastAvailablePartition
       }
     }
@@ -111,7 +114,11 @@ case object DeltaLake extends Format {
     }
 
   private[catalog] def statsDateRange(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
-      sparkSession: SparkSession): Option[StatsDateRange] = {
+      sparkSession: SparkSession): Option[StatsDateRange] =
+    statsDateRangeWithMillis(tableName, columnName, partitionSpec).map(_.toStatsDateRange)
+
+  private def statsDateRangeWithMillis(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[StatsDateRangeWithMillis] = {
     import sparkSession.implicits._
 
     Try {
@@ -152,8 +159,12 @@ case object DeltaLake extends Format {
 
         if (fileCount > 0 && missingCount == 0 && !row.isNullAt(2) && !row.isNullAt(3)) {
           Some(
-            StatsDateRange(start = partitionSpec.at(row.getAs[Long]("startMillis")),
-                           end = partitionSpec.at(row.getAs[Long]("endMillis"))))
+            StatsDateRangeWithMillis(
+              start = partitionSpec.at(row.getAs[Long]("startMillis")),
+              end = partitionSpec.at(row.getAs[Long]("endMillis")),
+              startMillis = row.getAs[Long]("startMillis"),
+              endMillis = row.getAs[Long]("endMillis")
+            ))
         } else {
           None
         }
@@ -161,7 +172,7 @@ case object DeltaLake extends Format {
     } match {
       case Success(result) =>
         if (result.isDefined) {
-          logger.info(s"Resolved Delta log stats boundaries for $tableName.$columnName: ${result.get}")
+          logger.info(s"Resolved Delta log stats boundaries for $tableName.$columnName: ${result.get.toStatsDateRange}")
         } else {
           logger.info(s"Delta log stats were incomplete for $tableName.$columnName; falling back to table scan")
         }

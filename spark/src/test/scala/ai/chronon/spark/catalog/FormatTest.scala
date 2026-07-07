@@ -166,6 +166,37 @@ class FormatTest extends SparkTestBase {
     Format.readinessPartition("2024-04-03-06-00", threeHourly) shouldBe "2024-04-03-03-00"
   }
 
+  it should "apply readiness offset when scanning sub-daily timestamp boundaries" in {
+    val tableName = "format_scan_subdaily_readiness_offset_test"
+    val threeHourly = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+    spark.sql(s"""
+      CREATE OR REPLACE TEMP VIEW $tableName AS
+      SELECT * FROM VALUES
+        (1, TIMESTAMP '2024-04-03 12:17:00'),
+        (2, TIMESTAMP '2024-04-03 14:59:59.500')
+      AS t(id, created_at)
+    """)
+
+    val fmt = new Format {
+      override def supportSubPartitionsFilter = false
+      override def partitions(tableName: String, partitionFilters: String)(implicit ss: SparkSession) = Nil
+      override def primaryPartitions(tableName: String,
+                                     partitionColumn: String,
+                                     partitionFilters: String,
+                                     subPartitionsFilter: Map[String, String])(implicit
+          ss: SparkSession) = Nil
+    }
+
+    try {
+      fmt.lastAvailablePartition(tableName, "created_at", threeHourly)(spark) shouldBe Some("2024-04-03-09-00")
+
+      spark.conf.set(Format.ReadinessOffsetMillisConf, "1000")
+      fmt.lastAvailablePartition(tableName, "created_at", threeHourly)(spark) shouldBe Some("2024-04-03-12-00")
+    } finally {
+      spark.conf.set(Format.ReadinessOffsetMillisConf, Format.DefaultReadinessOffsetMillis.toString)
+    }
+  }
+
   it should "return the max date when scanning a date column" in {
     val tableName = "format_date_scan_last_available_test"
     spark.sql(s"""

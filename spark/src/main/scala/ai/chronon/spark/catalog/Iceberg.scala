@@ -107,10 +107,14 @@ case object Iceberg extends Format {
 
   private def statsLastAvailablePartition(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] =
-    statsDateRange(tableName, columnName, partitionSpec).map { range =>
+    statsDateRangeWithMillis(tableName, columnName, partitionSpec).map { range =>
       sparkSession.read.table(tableName).schema(columnName).dataType match {
-        case TimestampType => Format.readinessPartition(range.lastAvailablePartition, partitionSpec)
-        case _             => range.lastAvailablePartition
+        case TimestampType =>
+          Format.readinessPartition(range.lastAvailablePartition,
+                                    partitionSpec,
+                                    Some(range.endMillis),
+                                    Format.readinessOffsetMillis(sparkSession))
+        case _ => range.lastAvailablePartition
       }
     }
 
@@ -126,6 +130,10 @@ case object Iceberg extends Format {
 
   private[catalog] def statsDateRange(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[StatsDateRange] =
+    statsDateRangeWithMillis(tableName, columnName, partitionSpec).map(_.toStatsDateRange)
+
+  private def statsDateRangeWithMillis(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[StatsDateRangeWithMillis] =
     Try {
       val table = loadIcebergTable(tableName).getOrElse {
         throw new IllegalStateException(s"Could not load Iceberg table: $tableName")
@@ -141,7 +149,8 @@ case object Iceberg extends Format {
     } match {
       case Success(result) =>
         if (result.isDefined) {
-          logger.info(s"Resolved Iceberg file stats boundaries for $tableName.$columnName: ${result.get}")
+          logger.info(
+            s"Resolved Iceberg file stats boundaries for $tableName.$columnName: ${result.get.toStatsDateRange}")
         } else {
           logger.info(s"Iceberg file stats were incomplete for $tableName.$columnName; falling back to table scan")
         }
@@ -190,7 +199,7 @@ case object Iceberg extends Format {
                                         fieldId: java.lang.Integer,
                                         fieldType: org.apache.iceberg.types.Type,
                                         partitionSpec: PartitionSpec,
-                                        extractor: IcebergPartitionStatsExtractor): Option[StatsDateRange] =
+                                        extractor: IcebergPartitionStatsExtractor): Option[StatsDateRangeWithMillis] =
     Option(table.currentSnapshot()).flatMap { _ =>
       val tasks = table.newScan().includeColumnStats().planFiles()
       try {
@@ -206,9 +215,11 @@ case object Iceberg extends Format {
         }
 
         range.flatten.map { case (minMillis, maxMillis) =>
-          StatsDateRange(
+          StatsDateRangeWithMillis(
             start = partitionSpec.at(minMillis),
-            end = partitionSpec.at(maxMillis)
+            end = partitionSpec.at(maxMillis),
+            startMillis = minMillis,
+            endMillis = maxMillis
           )
         }
       } finally {

@@ -265,6 +265,8 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
   }
 
   override def beforeEach(): Unit = {
+    spark.conf.set(BatchNodeRunner.ReadinessOffsetMillisConf, BatchNodeRunner.DefaultReadinessOffsetMillis.toString)
+
     // Drop all test tables to ensure fresh start
     spark.sql("DROP TABLE IF EXISTS test_db.input_table")
     spark.sql("DROP TABLE IF EXISTS test_db.left_table")
@@ -283,6 +285,7 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_sq_test")
     spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_join_test")
     spark.sql("DROP TABLE IF EXISTS test_db.yyyymmdd_join_gb")
+    spark.sql("DROP TABLE IF EXISTS test_db.subdaily_watermark_offset")
 
     setupTestTables()
     mockKVStore.reset()
@@ -547,6 +550,23 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
       assertTrue("Should be ready", status.ready)
       assertTrue("Should have last available partition", status.lastAvailablePartition.isDefined)
     }
+  }
+
+  it should "apply the Spark readiness offset when computing input table statuses" in {
+    spark.conf.set(BatchNodeRunner.ReadinessOffsetMillisConf, (24 * 60 * 60 * 1000).toString)
+
+    val configPath = createTestConfigFile(today, today)
+    val node = ThriftJsonCodec.fromJsonFile[Node](configPath, check = true)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val metadata = node.metaData
+    val range = PartitionRange(today, today)(tableUtils.partitionSpec)
+
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+
+    assertEquals("Should have one table status", 1, statuses.size)
+    val status = statuses.head
+    assertTrue("Input should be ready with readiness offset", status.ready)
+    assertEquals(PartitionSpec.daily.epochMillis(today) - 1, status.requiredEndMillis)
   }
 
   it should "identify not-ready tables correctly" in {
@@ -1638,6 +1658,35 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
       case Success(_) => // ready
       case Failure(e) => fail(s"watermark at the interval end timestamp should be ready: ${e.getMessage}")
+    }
+  }
+
+  it should "apply the Spark readiness offset to the effective required end" in {
+    val oneHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 60 * 60 * 1000)
+    val hourlyQuery = new Query()
+      .setPartitionColumn("created_at")
+      .setPartitionFormat(oneHourSpec.format)
+      .setPartitionInterval(new Window(1, TimeUnit.HOURS))
+
+    spark.conf.set(BatchNodeRunner.ReadinessOffsetMillisConf, (60 * 60 * 1000).toString)
+    spark.sql("DROP TABLE IF EXISTS test_db.subdaily_watermark_offset")
+    spark.sql(
+      """CREATE TABLE test_db.subdaily_watermark_offset (
+        |  id INT,
+        |  created_at TIMESTAMP
+        |)""".stripMargin)
+    spark.sql(
+      """INSERT INTO test_db.subdaily_watermark_offset VALUES
+        |(1, TIMESTAMP '2024-01-01 08:30:00')
+        |""".stripMargin)
+
+    val dep = TableDependencies.fromTable("test_db.subdaily_watermark_offset", hourlyQuery)
+    val runner = defaultRunner()
+    val eightOClockFire = PartitionRange("2024-01-01-08-00", "2024-01-01-08-00")(oneHourSpec)
+
+    runner.checkPartitions(sensorFor(dep), eightOClockFire) match {
+      case Success(_) => // ready because the 08:00 watermark is beyond the offset-adjusted 07:59:59 required end
+      case Failure(e) => fail(s"watermark should be ready with readiness offset: ${e.getMessage}")
     }
   }
 

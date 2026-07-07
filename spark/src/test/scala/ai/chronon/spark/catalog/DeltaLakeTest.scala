@@ -98,6 +98,66 @@ class DeltaLakeTest extends AnyFlatSpec with BeforeAndAfterAll {
     }
   }
 
+  it should "apply readiness offset to near-complete sub-daily Delta stats boundaries" in {
+    val dbName = s"delta_subdaily_readiness_offset_${System.nanoTime()}"
+    val tableName = s"$dbName.subdaily_near_complete_time_with_stats"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+
+    val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          created_at TIMESTAMP,
+          user_id STRING
+        ) USING DELTA
+      """)
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+          (TIMESTAMP '2024-01-01 09:17:00', 'user1'),
+          (TIMESTAMP '2024-01-01 14:59:59.500', 'user2')
+      """)
+
+      DeltaLake.lastAvailablePartition(tableName, "created_at", threeHourSpec) shouldBe Some("2024-01-01-09-00")
+
+      spark.conf.set(Format.ReadinessOffsetMillisConf, "1000")
+      DeltaLake.lastAvailablePartition(tableName, "created_at", threeHourSpec) shouldBe Some("2024-01-01-12-00")
+    } finally {
+      spark.conf.set(Format.ReadinessOffsetMillisConf, Format.DefaultReadinessOffsetMillis.toString)
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+      spark.sql(s"DROP DATABASE IF EXISTS $dbName")
+    }
+  }
+
+  it should "keep sub-daily Delta stats conservative outside the readiness offset" in {
+    val dbName = s"delta_subdaily_readiness_offset_strict_${System.nanoTime()}"
+    val tableName = s"$dbName.subdaily_incomplete_time_with_stats"
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+
+    val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+
+    try {
+      spark.conf.set(Format.ReadinessOffsetMillisConf, "1000")
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          created_at TIMESTAMP,
+          user_id STRING
+        ) USING DELTA
+      """)
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+          (TIMESTAMP '2024-01-01 09:17:00', 'user1'),
+          (TIMESTAMP '2024-01-01 14:59:58.000', 'user2')
+      """)
+
+      DeltaLake.lastAvailablePartition(tableName, "created_at", threeHourSpec) shouldBe Some("2024-01-01-09-00")
+    } finally {
+      spark.conf.set(Format.ReadinessOffsetMillisConf, Format.DefaultReadinessOffsetMillis.toString)
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+      spark.sql(s"DROP DATABASE IF EXISTS $dbName")
+    }
+  }
+
   it should "apply readiness semantics to epoch-millis numeric columns in Delta log stats" in {
     val dbName = s"delta_numeric_stats_${System.nanoTime()}"
     val tableName = s"$dbName.numeric_epoch_with_stats"
