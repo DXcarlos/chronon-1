@@ -1616,48 +1616,40 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
         |  id INT,
         |  created_at TIMESTAMP
         |)""".stripMargin)
-
-    val formatter = java.time.format.DateTimeFormatter
-      .ofPattern("yyyy-MM-dd HH:mm:ss")
-      .withZone(java.time.ZoneOffset.UTC)
-    // an interval that cannot close during the test: commits always land before its end, so
-    // this is a stream mid-interval and the watermark stays below the interval end
-    val openInterval = threeHourSpec.at(System.currentTimeMillis() + threeHourSpec.spanMillis)
-    val midIntervalTs = formatter.format(
-      java.time.Instant.ofEpochMilli(threeHourSpec.partitionStartMillis(openInterval) + 50 * 60 * 1000))
-    spark.sql(s"INSERT INTO test_db.subdaily_watermark VALUES (1, TIMESTAMP '$midIntervalTs')")
+    // watermark just below the 06:00 partition's interval end (09:00)
+    spark.sql(
+      """INSERT INTO test_db.subdaily_watermark VALUES
+        |(1, TIMESTAMP '2024-01-01 05:10:00'),
+        |(2, TIMESTAMP '2024-01-01 08:59:00')
+        |""".stripMargin)
 
     val dep = TableDependencies.fromTable("test_db.subdaily_watermark", subDailyQuery("created_at"))
     val runner = defaultRunner()
-    val openIntervalFire = PartitionRange(openInterval, openInterval)(threeHourSpec)
+    val sixOClockFire = PartitionRange("2024-01-01-06-00", "2024-01-01-06-00")(threeHourSpec)
 
-    runner.checkPartitions(sensorFor(dep), openIntervalFire) match {
+    runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
       case Success(_) => fail("watermark below the interval end timestamp must not be ready")
       case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
     }
 
-    // watermark crossing the interval end timestamp makes the partition complete
-    val nextInterval = threeHourSpec.after(openInterval)
-    val nextIntervalTs = formatter.format(
-      java.time.Instant.ofEpochMilli(threeHourSpec.partitionStartMillis(nextInterval) + 60 * 1000))
-    spark.sql(s"INSERT INTO test_db.subdaily_watermark VALUES (2, TIMESTAMP '$nextIntervalTs')")
+    // watermark reaching the interval end timestamp makes the partition complete
+    spark.sql("INSERT INTO test_db.subdaily_watermark VALUES (3, TIMESTAMP '2024-01-01 09:00:00')")
 
-    runner.checkPartitions(sensorFor(dep), openIntervalFire) match {
+    runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
       case Success(_) => // ready
-      case Failure(e) => fail(s"watermark past the interval end timestamp should be ready: ${e.getMessage}")
+      case Failure(e) => fail(s"watermark at the interval end timestamp should be ready: ${e.getMessage}")
     }
   }
 
-  it should "fire immediately once a chunked write lands after the interval closes" in {
+  it should "fire via the settle gate once a chunked write settles within the readiness offset" in {
     spark.sql("DROP TABLE IF EXISTS test_db.subdaily_watermark_chunked")
     spark.sql(
       """CREATE TABLE test_db.subdaily_watermark_chunked (
         |  id INT,
         |  created_at TIMESTAMP
         |)""".stripMargin)
-    // a whole 06:00-09:00 interval written at once, long after it closed — a chunked batch
-    // writer. Waiting for data past 09:00 would stall a full extra interval even though the
-    // interval is already complete.
+    // a whole 06:00-09:00 interval landed at once, after it closed - a chunked batch writer.
+    // Waiting for data past 09:00 would stall a full extra interval.
     spark.sql(
       """INSERT INTO test_db.subdaily_watermark_chunked VALUES
         |(1, TIMESTAMP '2024-01-01 06:10:00'),
@@ -1666,19 +1658,96 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
 
     val dep = TableDependencies.fromTable("test_db.subdaily_watermark_chunked", subDailyQuery("created_at"))
     val runner = defaultRunner()
-
     val sixOClockFire = PartitionRange("2024-01-01-06-00", "2024-01-01-06-00")(threeHourSpec)
+
+    // the default gate requires a real settle window; a single attempt stays conservative
     runner.checkPartitions(sensorFor(dep), sixOClockFire) match {
-      case Success(_) => // ready without waiting for data past 09:00
-      case Failure(e) => fail(s"chunk-complete interval should be ready: ${e.getMessage}")
+      case Success(_) => fail("must not fire before the settle window elapses")
+      case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
     }
 
-    // the interval after the chunk has no data at all and must not be ready
+    // zero settle: stability is trivially satisfied and the chunk fires without data past 09:00
+    val settledGate = new WatermarkSettleGate(offsetMillis = 5 * 60 * 1000, settleMillis = 0)
+    runner.checkPartitions(sensorFor(dep), sixOClockFire, Some(settledGate)) match {
+      case Success(_) => // ready
+      case Failure(e) => fail(s"settled chunk within the offset should be ready: ${e.getMessage}")
+    }
+
+    // the interval after the chunk has no data at all and must not fire
     val nineOClockFire = PartitionRange("2024-01-01-09-00", "2024-01-01-09-00")(threeHourSpec)
-    runner.checkPartitions(sensorFor(dep), nineOClockFire) match {
+    runner.checkPartitions(sensorFor(dep),
+                           nineOClockFire,
+                           Some(new WatermarkSettleGate(offsetMillis = 5 * 60 * 1000, settleMillis = 0))) match {
       case Success(_) => fail("09:00 fire must not be satisfied by the 06:00 chunk")
       case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
     }
+  }
+
+  it should "not fire via the settle gate when max ts is outside the readiness offset" in {
+    spark.sql("DROP TABLE IF EXISTS test_db.subdaily_watermark_sparse")
+    spark.sql(
+      """CREATE TABLE test_db.subdaily_watermark_sparse (
+        |  id INT,
+        |  created_at TIMESTAMP
+        |)""".stripMargin)
+    // max ts 20 minutes before the 09:00 boundary: outside the offset, so the gate must stay
+    // closed no matter how long the table settles - the offset bounds the worst-case tail hole
+    spark.sql(
+      """INSERT INTO test_db.subdaily_watermark_sparse VALUES
+        |(1, TIMESTAMP '2024-01-01 06:10:00'),
+        |(2, TIMESTAMP '2024-01-01 08:40:00')
+        |""".stripMargin)
+
+    val dep = TableDependencies.fromTable("test_db.subdaily_watermark_sparse", subDailyQuery("created_at"))
+    val runner = defaultRunner()
+    val sixOClockFire = PartitionRange("2024-01-01-06-00", "2024-01-01-06-00")(threeHourSpec)
+
+    runner.checkPartitions(sensorFor(dep),
+                           sixOClockFire,
+                           Some(new WatermarkSettleGate(offsetMillis = 5 * 60 * 1000, settleMillis = 0))) match {
+      case Success(_) => fail("max ts outside the readiness offset must not fire")
+      case Failure(e) => assertTrue(e.getMessage.contains("Sensor"))
+    }
+  }
+
+  "WatermarkSettleGate" should "fire only after max ts settles within the readiness offset" in {
+    var now = 0L
+    val gate =
+      new WatermarkSettleGate(offsetMillis = 5 * 60 * 1000, settleMillis = 10 * 60 * 1000, nowMillis = () => now)
+    val intervalEnd = 100L * 60 * 60 * 1000
+
+    // outside the offset: never fires
+    gate.observe(intervalEnd - 6 * 60 * 1000, intervalEnd) shouldBe false
+
+    // within the offset: observation starts, fires only once the settle window elapses
+    val maxTs = intervalEnd - 60 * 1000
+    gate.observe(maxTs, intervalEnd) shouldBe false
+    now = 9 * 60 * 1000
+    gate.observe(maxTs, intervalEnd) shouldBe false
+    now = 10 * 60 * 1000
+    gate.observe(maxTs, intervalEnd) shouldBe true
+
+    // an advancing max ts (a live stream) resets the observation
+    val advanced = maxTs + 1000
+    gate.observe(advanced, intervalEnd) shouldBe false
+    now = 19 * 60 * 1000
+    gate.observe(advanced, intervalEnd) shouldBe false
+    now = 20 * 60 * 1000
+    gate.observe(advanced, intervalEnd) shouldBe true
+
+    // regressing below the offset resets entirely
+    gate.observe(intervalEnd - 10 * 60 * 1000, intervalEnd) shouldBe false
+    gate.observe(maxTs, intervalEnd) shouldBe false
+    now = 30 * 60 * 1000
+    gate.observe(maxTs, intervalEnd) shouldBe true
+  }
+
+  it should "scale offset and settle bounds to the grain" in {
+    BatchNodeRunner.readinessOffsetMillis(3 * 60 * 60 * 1000) shouldBe 5 * 60 * 1000
+    BatchNodeRunner.settleMillis(3 * 60 * 60 * 1000) shouldBe 10 * 60 * 1000
+    // fine grids shrink both so latency and the worst-case hole stay a small fraction of the interval
+    BatchNodeRunner.readinessOffsetMillis(15 * 60 * 1000) shouldBe 75 * 1000
+    BatchNodeRunner.settleMillis(15 * 60 * 1000) shouldBe 150 * 1000
   }
 
   "Trigger expression sensors" should "preserve the daily contract" in {

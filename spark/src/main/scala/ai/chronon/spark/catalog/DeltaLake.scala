@@ -4,7 +4,6 @@ import ai.chronon.api.PartitionSpec
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.delta.DeltaLog
-import org.apache.spark.sql.delta.actions.AddFile
 import org.apache.spark.sql.functions.{
   coalesce,
   col,
@@ -96,9 +95,7 @@ case object DeltaLake extends Format {
         // numeric columns are epoch millis per statsBoundary, so they carry the same
         // in-flight-tail semantics as timestamps
         case TimestampType | _: NumericType =>
-          Format.readinessPartition(range.lastAvailablePartition,
-                                    partitionSpec,
-                                    tailIntervalLandedComplete(tableName, columnName, partitionSpec, range))
+          Format.readinessPartition(range.lastAvailablePartition, partitionSpec)
         case _ => range.lastAvailablePartition
       }
     }
@@ -108,109 +105,25 @@ case object DeltaLake extends Format {
     statsDateRange(tableName, columnName, partitionSpec).map { range =>
       sparkSession.read.table(tableName).schema(columnName).dataType match {
         case TimestampType =>
-          val trimmedLast =
-            if (tailIntervalLandedComplete(tableName, columnName, partitionSpec, range)) range.lastAvailablePartition
-            else partitionSpec.before(range.lastAvailablePartition)
-          partitionSpec.expandRange(range.firstAvailablePartition, trimmedLast)
+          partitionSpec.expandRange(range.firstAvailablePartition, partitionSpec.before(range.lastAvailablePartition))
         case _ => range.virtualPartitions(partitionSpec)
       }
     }
 
-  /** Whether the sub-daily tail interval (the one holding the table's max timestamp) landed
-    * complete: every commit that wrote data into it has a commit timestamp at or after the
-    * interval's end. That is the signature of a chunked batch writer (each interval written
-    * atomically once it closes) as opposed to streaming ingest, which commits during the
-    * interval and keeps the conservative one-behind readiness of [[Format.readinessPartition]].
-    *
-    * Commit timestamps and per-commit file stats come from the delta log history rather than
-    * live-file modificationTime: OPTIMIZE rewrites old data into fresh files, which would make
-    * streamed data look like it arrived after the interval closed. dataChange=false commits
-    * (compaction) are ignored for the same reason. Any gap in attribution — missing stats,
-    * unknown commit versions, more commits than a chunked writer would produce — falls back to
-    * false, i.e. today's interval-end readiness.
-    */
-  private[catalog] def tailIntervalLandedComplete(tableName: String,
-                                                  columnName: String,
-                                                  partitionSpec: PartitionSpec,
-                                                  range: StatsDateRange)(implicit
-      sparkSession: SparkSession): Boolean = {
-    if (partitionSpec.spanMillis >= PartitionSpec.daily.spanMillis) return false
-
-    Try {
-      import sparkSession.implicits._
-
-      val tailPartition = range.lastAvailablePartition
-      val intervalStart = partitionSpec.partitionStartMillis(tailPartition)
-      val intervalEnd = partitionSpec.partitionEndMillis(tailPartition)
-      // one extra interval of lookback absorbs producer clock skew near the interval start:
-      // a commit just before the boundary can carry data timestamped just after it
-      val scanFromMillis = intervalStart - partitionSpec.spanMillis
-
-      val describeResult = sparkSession.sql(s"DESCRIBE DETAIL $tableName")
-      val tablePath = describeResult.select("location").head().getString(0)
-      val deltaLog = DeltaLog.forTable(sparkSession, tablePath)
-
-      val history = deltaLog.history.getHistory(Some(DeltaLake.MaxCommitsToInspect + 1))
-      val inScan = history.filter(_.timestamp.getTime >= scanFromMillis)
-      val versionToCommitMillis: Map[Long, Long] =
-        inScan.flatMap(commit => commit.version.map(_ -> commit.timestamp.getTime)).toMap
-
-      // more commits than a chunked writer would produce across two intervals reads as
-      // streaming (or an unboundable scan) — bail before paying for the log walk
-      if (inScan.isEmpty || inScan.size > DeltaLake.MaxCommitsToInspect || versionToCommitMillis.size != inScan.size) {
-        false
-      } else {
-        val addFiles = deltaLog
-          .getChanges(versionToCommitMillis.keys.min)
-          .flatMap { case (version, actions) =>
-            actions.collect { case add: AddFile if add.dataChange => (version, add.stats) }
-          }
-          .toVector
-
-        val attributable = addFiles.forall { case (version, stats) =>
-          versionToCommitMillis.contains(version) && Option(stats).exists(_.nonEmpty)
-        }
-
-        if (addFiles.isEmpty || !attributable) {
-          false
-        } else {
-          val columnType = sparkSession.read.table(tableName).schema(columnName).dataType
-          val statsSchema = StructType(Seq(StructField("maxValues", MapType(StringType, StringType), nullable = true)))
-
-          val perFile = addFiles
-            .map { case (version, stats) => (versionToCommitMillis(version), stats) }
-            .toDF("commit_millis", "stats")
-            .select(col("commit_millis"), from_json(col("stats"), statsSchema).as("stats"))
-            .select(col("commit_millis"), col("stats.maxValues").getItem(columnName).as("max_value"))
-            .select(col("commit_millis"),
-                    (statsBoundary("max_value", columnType, partitionSpec).cast("long") * 1000).as("max_millis"))
-            .collect()
-
-          val boundariesResolved = perFile.forall(!_.isNullAt(1))
-          val intersecting = perFile.filter(row => !row.isNullAt(1) && row.getAs[Long]("max_millis") >= intervalStart)
-
-          boundariesResolved && intersecting.nonEmpty &&
-          intersecting.forall(_.getAs[Long]("commit_millis") >= intervalEnd)
-        }
-      }
-    } match {
-      case Success(complete) =>
-        if (complete) {
-          logger.info(
-            s"Tail interval ${range.lastAvailablePartition} of $tableName.$columnName landed complete " +
-              "(chunked write); reporting it as ready")
-        }
-        complete
-      case Failure(e) =>
-        logger.warn(
-          s"Failed to check tail interval completeness for $tableName.$columnName: " +
-            s"${Option(e.getMessage).getOrElse("(no message)")}")
-        false
-    }
-  }
-
   private[catalog] def statsDateRange(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
-      sparkSession: SparkSession): Option[StatsDateRange] = {
+      sparkSession: SparkSession): Option[StatsDateRange] =
+    statsBoundsMillis(tableName, columnName, partitionSpec).map { case (startMillis, endMillis) =>
+      StatsDateRange(start = partitionSpec.at(startMillis), end = partitionSpec.at(endMillis))
+    }
+
+  override def maxTimestampMillis(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[Long] =
+    statsBoundsMillis(tableName, columnName, partitionSpec)
+      .map(_._2)
+      .orElse(super.maxTimestampMillis(tableName, columnName, partitionSpec))
+
+  private def statsBoundsMillis(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[(Long, Long)] = {
     import sparkSession.implicits._
 
     Try {
@@ -250,9 +163,7 @@ case object DeltaLake extends Format {
         val missingCount = row.getAs[Long]("missingCount")
 
         if (fileCount > 0 && missingCount == 0 && !row.isNullAt(2) && !row.isNullAt(3)) {
-          Some(
-            StatsDateRange(start = partitionSpec.at(row.getAs[Long]("startMillis")),
-                           end = partitionSpec.at(row.getAs[Long]("endMillis"))))
+          Some((row.getAs[Long]("startMillis"), row.getAs[Long]("endMillis")))
         } else {
           None
         }
@@ -288,9 +199,4 @@ case object DeltaLake extends Format {
     }
 
   override def supportSubPartitionsFilter: Boolean = true
-
-  // Upper bound on the delta log walk in tailIntervalLandedComplete: a chunked writer commits
-  // a handful of times across two intervals (chunks + occasional compaction); a streaming
-  // writer blows past this and keeps conservative readiness without paying for the full walk.
-  private[catalog] val MaxCommitsToInspect: Int = 128
 }

@@ -263,6 +263,47 @@ trait Format {
     metadataLastAvailablePartition(tableName, partitionColumn)
       .orElse(scanLastAvailablePartition(tableName, partitionColumn, partitionSpec))
 
+  /** Raw epoch millis of the newest value in the sensed column — the millisecond-precision
+    * sibling of [[lastAvailablePartition]] for checks that grid flooring would erase (the
+    * sensor's settle gate compares max ts against an interval end minus a small offset).
+    * String columns parse as partition values, reporting the newest partition's START — they
+    * undershoot any offset check, keeping the gate inert for hard-partitioned tables, which
+    * never need it. Formats with file-level stats (Delta log, Iceberg manifests) override to
+    * answer from metadata instead of a scan.
+    */
+  def maxTimestampMillis(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[Long] = scanMaxTimestampMillis(tableName, columnName, partitionSpec)
+
+  protected def scanMaxTimestampMillis(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[Long] = {
+    import sparkSession.implicits._
+    Try {
+      val df = sparkSession.read.table(tableName)
+      val colType = df.schema(columnName).dataType
+      colType match {
+        case StringType =>
+          df.select(max(col(columnName)).as("last_partition"))
+            .as[String]
+            .collect()
+            .headOption
+            .flatMap(v => Option(v))
+            .flatMap(v => Try(partitionSpec.epochMillis(v)).toOption)
+        case dt =>
+          df.select(epochMillisCol(max(col(columnName)), dt).as("max_millis"))
+            .collect()
+            .headOption
+            .filterNot(_.isNullAt(0))
+            .map(_.getLong(0))
+      }
+    } match {
+      case Success(result) => result
+      case Failure(e) =>
+        logger.warn(
+          s"Failed to get max timestamp for $tableName.$columnName: ${e.getClass.getSimpleName}: ${Option(e.getMessage).getOrElse("(no message)")}")
+        None
+    }
+  }
+
   // Unified first available partition: handles both string partition columns and timestamp/date columns.
   def firstAvailablePartition(tableName: String, partitionColumn: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] =
@@ -371,18 +412,9 @@ object Format {
     * stalls until the NEXT batch lands, or forever once the gate advances daily). Sub-daily
     * grids model streaming ingestion where the tail interval is genuinely in flight, so a
     * partition only counts once data crosses its interval end.
-    *
-    * `tailIntervalComplete` lets formats with write metadata (Delta commit history, Iceberg
-    * snapshot lineage) override the in-flight assumption for sub-daily grids: when a table is
-    * written in atomic chunks (a batch job lands each interval at once, strictly after the
-    * interval closes), waiting for data past the interval end costs a full extra interval of
-    * latency even though the data is already complete. Formats prove completeness from their
-    * commit metadata; anything unprovable stays conservative.
     */
-  def readinessPartition(dataBearingPartition: String,
-                         spec: PartitionSpec,
-                         tailIntervalComplete: Boolean = false): String =
-    if (spec.spanMillis >= PartitionSpec.daily.spanMillis || tailIntervalComplete) dataBearingPartition
+  def readinessPartition(dataBearingPartition: String, spec: PartitionSpec): String =
+    if (spec.spanMillis >= PartitionSpec.daily.spanMillis) dataBearingPartition
     else spec.before(dataBearingPartition)
 
   def sanitizePartitionValues(partitions: Iterable[String]): List[String] = partitions.iterator

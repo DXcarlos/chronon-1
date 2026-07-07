@@ -58,7 +58,10 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
 
   // in ad-hoc flows, the jobs downstream of external tables will simply fail (albeit, with retries)
   // in scheduled flow, the jobs downstream of external sensors will be stalled by the sensor
-  def checkPartitions(conf: ExternalSourceSensorNode, range: PartitionRange): Try[Unit] = {
+  // settleGateOverride is a test seam; production gates derive from the dependency's grain
+  def checkPartitions(conf: ExternalSourceSensorNode,
+                      range: PartitionRange,
+                      settleGateOverride: Option[WatermarkSettleGate] = None): Try[Unit] = {
     val tableName = Option(conf.sourceTableDependency)
       .map(_.tableInfo)
       .map(_.table)
@@ -126,6 +129,23 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     // A partitioned input is ready after its last partition covers the required range.
     if (hasPartitionColumn) {
       val spec = tableInfo.partitionSpec(tableUtils.partitionSpec)
+      val requiredEndMillis = requiredRange.maxMillis
+      // maxMillis is the range's last inclusive millisecond; the interval boundary is one past it
+      val intervalEndMillis = requiredEndMillis + 1
+      // Sub-daily readiness reports one interval behind (data past the interval end is the only
+      // hard proof of completeness), which makes a chunked batch writer - one that lands each
+      // interval at once, after it closes - wait a full extra interval for the NEXT chunk. The
+      // settle gate rescues that case from the watermark's own behavior: max ts close enough to
+      // the interval end (within offset) and not advancing for a settle window means the writer
+      // finished the interval. A live stream keeps advancing max ts, so it can never fire early
+      // here; it fires via the classic check once it crosses the boundary.
+      val settleGate: Option[WatermarkSettleGate] =
+        if (spec.spanMillis < PartitionSpec.daily.spanMillis)
+          settleGateOverride.orElse(
+            Some(new WatermarkSettleGate(BatchNodeRunner.readinessOffsetMillis(spec.spanMillis),
+                                         BatchNodeRunner.settleMillis(spec.spanMillis))))
+        else None
+
       @tailrec
       def retry(attempt: Long): Try[Unit] = {
         Try {
@@ -134,16 +154,28 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
             .dataWatermarkMillis(tableName, Some(spec))
             .getOrElse(throw new RuntimeException(s"Could not determine data watermark for ${tableName}"))
 
-          val requiredEndMillis = requiredRange.maxMillis
           logger.info(s"Data watermark: ${TsUtils.toStr(watermark)}, required end: ${TsUtils.toStr(requiredEndMillis)}")
 
           if (watermark > requiredEndMillis) {
             logger.info(s"Sensor succeeded: ${TsUtils.toStr(watermark)} > ${TsUtils.toStr(requiredEndMillis)}")
             ()
           } else {
-            throw new RuntimeException(
-              s"Sensor check failed: data watermark ${TsUtils.toStr(watermark)} has not passed " +
-                s"required end ${TsUtils.toStr(requiredEndMillis)}")
+            val settled = settleGate.exists { gate =>
+              tableUtils.dataMaxTimestampMillis(tableName, Some(spec)).exists { maxTs =>
+                val ready = gate.observe(maxTs, intervalEndMillis)
+                if (ready) {
+                  logger.info(
+                    s"Sensor succeeded via settle gate: max ts ${TsUtils.toStr(maxTs)} is within the readiness " +
+                      s"offset of interval end ${TsUtils.toStr(intervalEndMillis)} and has settled")
+                }
+                ready
+              }
+            }
+            if (!settled) {
+              throw new RuntimeException(
+                s"Sensor check failed: data watermark ${TsUtils.toStr(watermark)} has not passed " +
+                  s"required end ${TsUtils.toStr(requiredEndMillis)}")
+            }
           }
         } match {
           case Success(_) => Success(())
@@ -785,7 +817,48 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   }
 }
 
+/** Settle gate for sub-daily timestamp watermark sensors: ready once max ts sits within
+  * `offsetMillis` of the interval end AND has not advanced for `settleMillis`. Quiescence is
+  * measured on max ts rather than table commit activity so that straggler commits for older
+  * intervals (or other feeds sharing the table) cannot hold readiness hostage, while a live
+  * lagging stream - which keeps advancing max ts - can never fire early through this gate.
+  * The offset bounds the worst-case tail hole when a writer dies inside the final stretch of
+  * an interval and later resumes.
+  */
+class WatermarkSettleGate(offsetMillis: Long,
+                          settleMillis: Long,
+                          nowMillis: () => Long = () => System.currentTimeMillis()) {
+
+  // process-local observation state: a sensor restart re-observes and costs one extra settle
+  // window, never correctness
+  private var anchor: Option[(Long, Long)] = None
+
+  def observe(maxTsMillis: Long, intervalEndMillis: Long): Boolean = {
+    if (maxTsMillis < intervalEndMillis - offsetMillis) {
+      anchor = None
+      false
+    } else {
+      if (!anchor.exists(_._1 == maxTsMillis)) {
+        anchor = Some((maxTsMillis, nowMillis()))
+      }
+      nowMillis() - anchor.get._2 >= settleMillis
+    }
+  }
+}
+
 object BatchNodeRunner {
+
+  // Settle-gate bounds scale with the grain so the added latency and the worst-case tail hole
+  // stay a small fraction of the interval on fine grids: a 3h grain gets the full 5min/10min,
+  // a 15min grain gets 75s/2.5min.
+  private[batch] val MaxReadinessOffsetMillis: Long = 5 * 60 * 1000L
+  private[batch] val MaxSettleMillis: Long = 10 * 60 * 1000L
+
+  private[batch] def readinessOffsetMillis(spanMillis: Long): Long =
+    math.min(MaxReadinessOffsetMillis, spanMillis / 12)
+
+  private[batch] def settleMillis(spanMillis: Long): Long =
+    math.min(MaxSettleMillis, spanMillis / 6)
 
   def main(args: Array[String]): Unit = {
     val batchArgs = new BatchNodeRunnerArgs(args)

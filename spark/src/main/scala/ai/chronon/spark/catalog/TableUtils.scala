@@ -208,6 +208,17 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
   def dataWatermarkMillis(tableName: String, tableSpec: Option[PartitionSpec] = None): Option[Long] =
     dataWatermark(tableName, tableSpec).map(_._2)
 
+  /** Raw epoch millis of the newest data point in the sensed column: the millisecond-precision
+    * sibling of [[dataWatermark]] for checks that partition flooring would erase (the sensor's
+    * settle gate). Stats-backed formats answer from file metadata; others scan.
+    */
+  def dataMaxTimestampMillis(tableName: String, tableSpec: Option[PartitionSpec] = None): Option[Long] = {
+    val spec = tableSpec.getOrElse(partitionSpec)
+    tableFormatProvider
+      .readFormat(tableName)
+      .flatMap(_.maxTimestampMillis(tableName, spec.column, spec)(sparkSession))
+  }
+
   def tableCoversRange(table: String, range: PartitionRange, tableSpec: Option[PartitionSpec] = None): Boolean = {
     try {
       dataWatermarkMillis(table, tableSpec) match {

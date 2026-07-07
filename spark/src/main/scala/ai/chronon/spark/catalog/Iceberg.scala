@@ -2,7 +2,7 @@ package ai.chronon.spark.catalog
 
 import ai.chronon.api.PartitionSpec
 import ai.chronon.spark.batch.iceberg.IcebergPartitionStatsExtractor
-import org.apache.iceberg.{DataFile, DataOperations}
+import org.apache.iceberg.DataFile
 import org.apache.iceberg.spark.source.SparkTable
 import org.apache.iceberg.types.Type
 import org.apache.spark.sql.connector.catalog.TableCatalog
@@ -15,16 +15,6 @@ import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 
 case object Iceberg extends Format {
-
-  private case class FileBounds(lowerMillis: Long, upperMillis: Long, dataSequenceNumber: Option[Long])
-
-  private case class StatsState(table: org.apache.iceberg.Table, bounds: Vector[FileBounds]) {
-    def dateRange(partitionSpec: PartitionSpec): StatsDateRange =
-      StatsDateRange(
-        start = partitionSpec.at(bounds.map(_.lowerMillis).min),
-        end = partitionSpec.at(bounds.map(_.upperMillis).max)
-      )
-  }
 
   override def tableTypeString: String = "iceberg"
 
@@ -117,45 +107,37 @@ case object Iceberg extends Format {
 
   private def statsLastAvailablePartition(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[String] =
-    statsState(tableName, columnName, partitionSpec).map { state =>
-      val range = state.dateRange(partitionSpec)
+    statsDateRange(tableName, columnName, partitionSpec).map { range =>
       sparkSession.read.table(tableName).schema(columnName).dataType match {
-        case TimestampType =>
-          Format.readinessPartition(range.lastAvailablePartition,
-                                    partitionSpec,
-                                    tailIntervalLandedComplete(tableName, columnName, state, partitionSpec, range))
-        case _ => range.lastAvailablePartition
+        case TimestampType => Format.readinessPartition(range.lastAvailablePartition, partitionSpec)
+        case _             => range.lastAvailablePartition
       }
     }
 
   private def statsVirtualPartitions(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
       sparkSession: SparkSession): Option[List[String]] =
-    statsState(tableName, columnName, partitionSpec).map { state =>
-      val range = state.dateRange(partitionSpec)
+    statsDateRange(tableName, columnName, partitionSpec).map { range =>
       sparkSession.read.table(tableName).schema(columnName).dataType match {
         case TimestampType =>
-          val trimmedLast =
-            if (tailIntervalLandedComplete(tableName, columnName, state, partitionSpec, range))
-              range.lastAvailablePartition
-            else partitionSpec.before(range.lastAvailablePartition)
-          partitionSpec.expandRange(range.firstAvailablePartition, trimmedLast)
+          partitionSpec.expandRange(range.firstAvailablePartition, partitionSpec.before(range.lastAvailablePartition))
         case _ => range.virtualPartitions(partitionSpec)
       }
     }
 
   private[catalog] def statsDateRange(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
-      sparkSession: SparkSession): Option[StatsDateRange] = {
-    val result = statsState(tableName, columnName, partitionSpec).map(_.dateRange(partitionSpec))
-    if (result.isDefined) {
-      logger.info(s"Resolved Iceberg file stats boundaries for $tableName.$columnName: ${result.get}")
-    } else {
-      logger.info(s"Iceberg file stats were incomplete for $tableName.$columnName; falling back to table scan")
+      sparkSession: SparkSession): Option[StatsDateRange] =
+    statsBoundsMillis(tableName, columnName, partitionSpec).map { case (minMillis, maxMillis) =>
+      StatsDateRange(start = partitionSpec.at(minMillis), end = partitionSpec.at(maxMillis))
     }
-    result
-  }
 
-  private def statsState(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
-      sparkSession: SparkSession): Option[StatsState] =
+  override def maxTimestampMillis(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[Long] =
+    statsBoundsMillis(tableName, columnName, partitionSpec)
+      .map(_._2)
+      .orElse(super.maxTimestampMillis(tableName, columnName, partitionSpec))
+
+  private def statsBoundsMillis(tableName: String, columnName: String, partitionSpec: PartitionSpec)(implicit
+      sparkSession: SparkSession): Option[(Long, Long)] =
     Try {
       val table = loadIcebergTable(tableName).getOrElse {
         throw new IllegalStateException(s"Could not load Iceberg table: $tableName")
@@ -167,65 +149,20 @@ case object Iceberg extends Format {
       val fieldType = field.`type`()
       val extractor = new IcebergPartitionStatsExtractor(sparkSession)
 
-      currentDataFilesBounds(table, fieldId, fieldType, partitionSpec, extractor)
+      currentDataFilesBoundsMillis(table, fieldId, fieldType, partitionSpec, extractor)
     } match {
-      case Success(result) => result
+      case Success(result) =>
+        if (result.isDefined) {
+          logger.info(s"Resolved Iceberg file stats boundaries for $tableName.$columnName: ${result.get}")
+        } else {
+          logger.info(s"Iceberg file stats were incomplete for $tableName.$columnName; falling back to table scan")
+        }
+        result
       case Failure(e) =>
         logger.warn(
           s"Failed to resolve Iceberg file stats boundaries for $tableName.$columnName: ${Option(e.getMessage).getOrElse("(no message)")}")
         None
     }
-
-  /** Whether the sub-daily tail interval (the one holding the table's max timestamp) landed
-    * complete: every live file carrying data for it was ingested by a snapshot committed at or
-    * after the interval's end — the signature of a chunked batch writer, as opposed to
-    * streaming ingest which commits during the interval and keeps the conservative one-behind
-    * readiness of [[Format.readinessPartition]].
-    *
-    * Files are attributed to their ingest commit via dataSequenceNumber, which survives
-    * compaction (rewritten files inherit the sequence number of the data they carry), so
-    * compacted streaming data still maps back to its original in-interval commit. Anything
-    * unmappable — v1 tables (all sequence numbers 0), expired snapshots, sequence numbers not
-    * belonging to a data-writing snapshot — keeps conservative interval-end readiness.
-    */
-  private def tailIntervalLandedComplete(tableName: String,
-                                         columnName: String,
-                                         state: StatsState,
-                                         partitionSpec: PartitionSpec,
-                                         range: StatsDateRange): Boolean = {
-    if (partitionSpec.spanMillis >= PartitionSpec.daily.spanMillis) return false
-
-    Try {
-      val tailPartition = range.lastAvailablePartition
-      val intervalStart = partitionSpec.partitionStartMillis(tailPartition)
-      val intervalEnd = partitionSpec.partitionEndMillis(tailPartition)
-
-      val dataOps = Set(DataOperations.APPEND, DataOperations.OVERWRITE)
-      val ingestMillisBySeq: Map[Long, Long] = state.table
-        .snapshots()
-        .asScala
-        .filter(snapshot => dataOps.contains(snapshot.operation()))
-        .map(snapshot => snapshot.sequenceNumber() -> snapshot.timestampMillis())
-        .toMap
-
-      val intersecting = state.bounds.filter(_.upperMillis >= intervalStart)
-      intersecting.nonEmpty && intersecting.forall(
-        _.dataSequenceNumber.filter(_ > 0).flatMap(ingestMillisBySeq.get).exists(_ >= intervalEnd))
-    } match {
-      case Success(complete) =>
-        if (complete) {
-          logger.info(
-            s"Tail interval ${range.lastAvailablePartition} of $tableName.$columnName landed complete " +
-              "(chunked write); reporting it as ready")
-        }
-        complete
-      case Failure(e) =>
-        logger.warn(
-          s"Failed to check tail interval completeness for $tableName.$columnName: " +
-            s"${Option(e.getMessage).getOrElse("(no message)")}")
-        false
-    }
-  }
 
   private def fileDateRange(file: DataFile,
                             fieldId: java.lang.Integer,
@@ -261,30 +198,26 @@ case object Iceberg extends Format {
         throw new IllegalArgumentException(s"Unsupported Iceberg bound type $other for value $value")
     }
 
-  // Live data files' column bounds plus the dataSequenceNumber needed to attribute each file
-  // to its ingest snapshot. Any file without usable bounds voids the whole result, matching
-  // the all-or-nothing stats contract of statsDateRange.
-  private def currentDataFilesBounds(table: org.apache.iceberg.Table,
-                                     fieldId: java.lang.Integer,
-                                     fieldType: org.apache.iceberg.types.Type,
-                                     partitionSpec: PartitionSpec,
-                                     extractor: IcebergPartitionStatsExtractor): Option[StatsState] =
+  private def currentDataFilesBoundsMillis(table: org.apache.iceberg.Table,
+                                           fieldId: java.lang.Integer,
+                                           fieldType: org.apache.iceberg.types.Type,
+                                           partitionSpec: PartitionSpec,
+                                           extractor: IcebergPartitionStatsExtractor): Option[(Long, Long)] =
     Option(table.currentSnapshot()).flatMap { _ =>
       val tasks = table.newScan().includeColumnStats().planFiles()
       try {
-        val bounds = tasks
-          .iterator()
-          .asScala
-          .map { task =>
+        val range = tasks.iterator().asScala.foldLeft(Some(None): Option[Option[(Long, Long)]]) {
+          case (None, _) => None
+          case (Some(acc), task) =>
             fileDateRange(task.file(), fieldId, fieldType, partitionSpec, extractor).map {
               case (lowerMillis, upperMillis) =>
-                FileBounds(lowerMillis, upperMillis, Option(task.file().dataSequenceNumber()).map(_.longValue()))
+                Some(acc.fold(lowerMillis -> upperMillis) { case (minMillis, maxMillis) =>
+                  Math.min(minMillis, lowerMillis) -> Math.max(maxMillis, upperMillis)
+                })
             }
-          }
-          .toVector
+        }
 
-        if (bounds.isEmpty || bounds.contains(None)) None
-        else Some(StatsState(table, bounds.flatten))
+        range.flatten
       } finally {
         tasks.close()
       }

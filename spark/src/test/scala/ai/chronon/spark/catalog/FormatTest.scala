@@ -158,17 +158,35 @@ class FormatTest extends SparkTestBase {
     }
 
     fmt.lastAvailablePartition(tableName, "created_at", PartitionSpec.daily)(spark) shouldBe Some("2024-04-03")
+    // raw max for the sensor's settle gate: millisecond precision, not partition-floored
+    fmt.maxTimestampMillis(tableName, "created_at", PartitionSpec.daily)(spark) shouldBe Some(1712181598000L)
+  }
+
+  it should "report the newest partition START for string columns in maxTimestampMillis" in {
+    // hard-partitioned tables never need the settle gate: parsing the max ds value yields the
+    // partition's start millis, which undershoots any offset check against an interval end
+    val tableName = "format_string_max_ts_test"
+    spark.sql(s"""
+      CREATE OR REPLACE TEMP VIEW $tableName AS
+      SELECT * FROM VALUES
+        (1, '2024-04-01'),
+        (2, '2024-04-03')
+      AS t(id, ds)
+    """)
+
+    val fmt = new Format {
+      override def supportSubPartitionsFilter = false
+      override def partitions(tableName: String, partitionFilters: String)(implicit ss: SparkSession) = Nil
+    }
+
+    fmt.maxTimestampMillis(tableName, "ds", PartitionSpec.daily)(spark) shouldBe
+      Some(PartitionSpec.daily.epochMillis("2024-04-03"))
   }
 
   it should "keep sub-daily readiness one interval behind the data-bearing partition" in {
     val threeHourly = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
     Format.readinessPartition("2024-04-03", PartitionSpec.daily) shouldBe "2024-04-03"
     Format.readinessPartition("2024-04-03-06-00", threeHourly) shouldBe "2024-04-03-03-00"
-    // a tail interval proven complete from write metadata counts despite being sub-daily
-    Format.readinessPartition("2024-04-03-06-00", threeHourly, tailIntervalComplete = true) shouldBe
-      "2024-04-03-06-00"
-    // the flag is only meaningful for sub-daily grids; daily readiness is unchanged either way
-    Format.readinessPartition("2024-04-03", PartitionSpec.daily, tailIntervalComplete = true) shouldBe "2024-04-03"
   }
 
   it should "return the max date when scanning a date column" in {
