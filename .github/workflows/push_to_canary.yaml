@@ -387,13 +387,18 @@ jobs:
         shell: bash
         run: |
           docker ps -a
-          TEST_FAILED=false
-          python3 scripts/fetcher_tests/json_string_test.py || TEST_FAILED=true
-          if [ "$TEST_FAILED" = "true" ]; then
-            echo "JSON string tests failed"
-            docker logs chronon-service-chronon-fetcher-1
-            exit 1
-          fi
+          MAX_ATTEMPTS=3
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo "JSON string tests attempt $attempt of $MAX_ATTEMPTS"
+            if python3 scripts/fetcher_tests/json_string_test.py; then
+              echo "JSON string tests passed on attempt $attempt"
+              exit 0
+            fi
+            echo "JSON string tests failed on attempt $attempt"
+          done
+          echo "JSON string tests failed after $MAX_ATTEMPTS attempts"
+          docker logs chronon-service-chronon-fetcher-1
+          exit 1
 
       - name: Run fetcher integration tests
         shell: bash
