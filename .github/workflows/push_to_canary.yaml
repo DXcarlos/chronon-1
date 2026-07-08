@@ -705,12 +705,16 @@ jobs:
             set -eo pipefail
             ACCOUNT="ziplineai2"
             CONTAINER="dev-zipline-artifacts"
+            # commit metadata mirrors the aws/gcp candidate uploads; publish_release
+            # verifies it against the release tag before promoting.
+            METADATA="commit=${{ github.sha }} branch=${{ github.ref_name }}"
             az storage blob upload \
               --account-name $ACCOUNT \
               --auth-mode login \
               --container-name $CONTAINER \
               --file cloud_azure_lib_deploy.jar \
               --name release/passing-candidate/jars/cloud_azure_lib_deploy.jar \
+              --metadata $METADATA \
               --tier cool \
               --overwrite
             az storage blob upload \
@@ -719,6 +723,7 @@ jobs:
                 --container-name $CONTAINER \
                 --file flink_assembly_deploy.jar \
                 --name release/passing-candidate/jars/flink_assembly_deploy.jar \
+                --metadata $METADATA \
                 --tier cool \
                 --overwrite
             az storage blob upload \
@@ -727,6 +732,7 @@ jobs:
                 --container-name $CONTAINER \
                 --file service_assembly_deploy.jar \
                 --name release/passing-candidate/jars/service_assembly_deploy.jar \
+                --metadata $METADATA \
                 --tier cool \
                 --overwrite
             az storage blob upload \
@@ -735,6 +741,7 @@ jobs:
                 --container-name $CONTAINER \
                 --file ${{ needs.build_and_push.outputs.wheel_name }} \
                 --name release/passing-candidate/wheels/${{ needs.build_and_push.outputs.wheel_name }} \
+                --metadata $METADATA \
                 --tier cool \
                 --overwrite
 
@@ -818,16 +825,23 @@ jobs:
         env:
           TARGET_BRANCH: main-passing-tests
         run: |
-          echo "Merging to main-passing-tests branch after successful push to canary"
-          if git show-ref --quiet refs/heads/$TARGET_BRANCH; then
-            echo "Target branch $TARGET_BRANCH exists. Merging main into it..."
-            git checkout $TARGET_BRANCH
-            git merge main --no-ff -m "Merge main into $TARGET_BRANCH"
-          else
-            echo "Target branch $TARGET_BRANCH does not exist. Creating it..."
-            git checkout -b $TARGET_BRANCH main
+          # Promote exactly the commit these integration tests ran against. The previous
+          # merge flow checked refs/heads/$TARGET_BRANCH, which never exists in a fresh
+          # checkout (only refs/remotes/origin/...), so it always recreated the branch from
+          # the current main tip - promoting commits that never passed tests.
+          echo "Promoting tested commit ${{ github.sha }} to $TARGET_BRANCH"
+          if git push origin ${{ github.sha }}:refs/heads/$TARGET_BRANCH; then
+            exit 0
           fi
-          git push origin $TARGET_BRANCH
+          # Non-fast-forward: a run for a newer commit finished first. That newer commit
+          # also passed tests, so losing this race is fine as long as ours is contained.
+          git fetch origin $TARGET_BRANCH
+          if git merge-base --is-ancestor ${{ github.sha }} origin/$TARGET_BRANCH; then
+            echo "$TARGET_BRANCH already contains ${{ github.sha }}; nothing to promote."
+          else
+            echo "Failed to promote ${{ github.sha }} to $TARGET_BRANCH" >&2
+            exit 1
+          fi
 
       - name: Create CI Status File
         run: |

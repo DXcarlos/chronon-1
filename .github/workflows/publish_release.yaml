@@ -114,6 +114,20 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Verify passing-candidate provenance
+        run: |
+          # passing-candidate holds whatever the LAST green canary run built. Refuse to
+          # promote it as this release unless it was built at the tagged commit, otherwise
+          # a canary run racing the release ships bytes the tag does not name.
+          CANDIDATE_COMMIT=$(gcloud storage objects describe \
+            gs://zipline-artifacts-canary/release/passing-candidate/jars/cloud_gcp_lib_deploy.jar \
+            --format=json | jq -r '.custom_fields.commit // .metadata.commit // empty')
+          if [ "$CANDIDATE_COMMIT" != "${{ github.sha }}" ]; then
+            echo "passing-candidate was built at '$CANDIDATE_COMMIT' but the release tag points at '${{ github.sha }}'." >&2
+            echo "Re-run this release once the tagged commit's canary run has promoted its candidate." >&2
+            exit 1
+          fi
+
       - name: Download GCP JARs
         run: |
           mkdir -p gcp-jars
@@ -139,6 +153,20 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/github_actions
           aws-region: ${{secrets.AWS_REGION}}
+
+      - name: Verify passing-candidate provenance
+        run: |
+          # See the GCP job: never promote a candidate built at a different commit
+          # than the one this release tags.
+          CANDIDATE_COMMIT=$(aws s3api head-object \
+            --bucket zipline-artifacts-canary \
+            --key release/passing-candidate/jars/cloud_aws_lib_deploy.jar \
+            --query "Metadata.commit" --output text)
+          if [ "$CANDIDATE_COMMIT" != "${{ github.sha }}" ]; then
+            echo "passing-candidate was built at '$CANDIDATE_COMMIT' but the release tag points at '${{ github.sha }}'." >&2
+            echo "Re-run this release once the tagged commit's canary run has promoted its candidate." >&2
+            exit 1
+          fi
 
       - name: Download AWS JARs
         run: |
@@ -167,6 +195,22 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify passing-candidate provenance
+        run: |
+          # See the GCP job: never promote a candidate built at a different commit
+          # than the one this release tags.
+          CANDIDATE_COMMIT=$(az storage blob show \
+            --account-name ziplineai2 \
+            --auth-mode login \
+            --container-name dev-zipline-artifacts \
+            --name release/passing-candidate/jars/cloud_azure_lib_deploy.jar \
+            --query "metadata.commit" -o tsv)
+          if [ "$CANDIDATE_COMMIT" != "${{ github.sha }}" ]; then
+            echo "passing-candidate was built at '$CANDIDATE_COMMIT' but the release tag points at '${{ github.sha }}'." >&2
+            echo "Re-run this release once the tagged commit's canary run has promoted its candidate." >&2
+            exit 1
+          fi
 
       - name: Download Azure JARs
         run: |
