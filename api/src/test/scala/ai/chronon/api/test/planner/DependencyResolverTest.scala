@@ -91,6 +91,24 @@ class DependencyResolverTest extends AnyFlatSpec with Matchers {
     result shouldBe Some(PartitionRange("2024-01-05-00-00", "2024-01-05-21-00")(threeHourSpec))
   }
 
+  it should "allow date-shaped cutoffs for time-partitioned dependencies on sub-daily grids" in {
+    val queryRange = PartitionRange("2024-01-02-01-00", "2024-01-03-01-00")(offsetThreeHourSpec)
+    val tableDep = dep("test.time_partitioned_table")
+    tableDep.setStartCutOff("2024-01-02")
+    tableDep.setEndCutOff("2024-01-02")
+    tableDep.setTableInfo(
+      new TableInfo()
+        .setTable("test.time_partitioned_table")
+        .setPartitionColumn("event_ts")
+        .setPartitionFormat(offsetThreeHourSpec.format)
+        .setTimePartitioned(true)
+    )
+
+    val result = DependencyResolver.computeInputRange(queryRange, tableDep)
+
+    result shouldBe Some(PartitionRange("2024-01-02-01-00", "2024-01-02-22-00")(offsetThreeHourSpec))
+  }
+
   it should "map a daily downstream range to boundary-crossing offset input partitions" in {
     val queryRange = PartitionRange("2024-01-02", "2024-01-02")
     val tableDep = dep("test.hourly_table")

@@ -1,3 +1,4 @@
+import gen_thrift.common.ttypes as common
 from gen_thrift.api.ttypes import (
     Aggregation,
     BootstrapPart,
@@ -462,3 +463,69 @@ class TestTimePartitionedValidation:
 
         errors = validator.validate_obj(group_by)
         assert not _has_time_partitioned_missing_partition_column_error(errors)
+
+    def test_downstream_consumer_validates_partition_bounds_against_full_chain_grid(self):
+        group_by = _make_group_by()
+        source_query = group_by.sources[0].events.query
+        source_query.timePartitioned = False
+        source_query.startPartition = "2025-11-29"
+        source_query.endPartition = "2026-04-12-02-00"
+
+        downstream_consumer = _make_join(group_by=group_by)
+        downstream_consumer.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+
+        errors = _make_validator().validate_obj(downstream_consumer)
+        messages = "\n".join(str(error) for error in errors)
+
+        assert "join team.my_join's underlying group_by team.my_gb source[0]" in messages
+        assert "startPartition '2025-11-29'" in messages
+        assert "endPartition '2026-04-12-02-00'" in messages
+        assert "yyyy-MM-dd-HH-mm" in messages
+
+    def test_downstream_consumer_accepts_partition_bounds_on_full_chain_grid(self):
+        group_by = _make_group_by()
+        source_query = group_by.sources[0].events.query
+        source_query.timePartitioned = False
+        source_query.partitionInterval = common.Window(length=3, timeUnit=common.TimeUnit.HOURS)
+        source_query.partitionOffset = common.Window(length=1, timeUnit=common.TimeUnit.HOURS)
+        source_query.startPartition = "2025-11-29-01-00"
+        source_query.endPartition = "2026-04-12-04-00"
+
+        downstream_consumer = _make_join(group_by=group_by)
+        downstream_consumer.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+
+        errors = _make_validator().validate_obj(downstream_consumer)
+
+        assert not any("partition bounds" in str(error) for error in errors)
+
+    def test_downstream_consumer_allows_time_partitioned_partition_bounds(self):
+        group_by = _make_group_by()
+        source_query = group_by.sources[0].events.query
+        source_query.timePartitioned = True
+        source_query.startPartition = "2025-11-29"
+        source_query.endPartition = "2026-04-12"
+
+        downstream_consumer = _make_join(group_by=group_by)
+        downstream_consumer.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+
+        errors = _make_validator().validate_obj(downstream_consumer)
+
+        assert not any("partition bounds" in str(error) for error in errors)

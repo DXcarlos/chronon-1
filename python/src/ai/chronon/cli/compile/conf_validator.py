@@ -21,7 +21,10 @@ import sys
 import textwrap
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
+
+from sqlglot.dialects.spark import Spark
 
 import gen_thrift.common.ttypes as common
 from ai.chronon.cli.compile.column_hashing import (
@@ -36,6 +39,7 @@ from ai.chronon.cli.theme import console
 from ai.chronon.logger import get_logger
 from ai.chronon.repo.serializer import thrift_simple_json
 from ai.chronon.utils import get_query, get_root_source
+from ai.chronon.windows import DAILY_PARTITION_FORMAT, PartitionSpec
 from gen_thrift.api.ttypes import (
     Accuracy,
     Aggregation,
@@ -86,6 +90,79 @@ def _output_grid_token(obj) -> Optional[str]:
     if interval_ms == DAY_MILLIS and offset_ms == 0:
         return None
     return f"grid:interval_ms={interval_ms},offset_ms={offset_ms}"
+
+
+def _legacy_partition_spec() -> PartitionSpec:
+    return PartitionSpec(format=DAILY_PARTITION_FORMAT, interval="1d")
+
+
+def _resolve_partition_spec(table_info, default_spec: PartitionSpec) -> PartitionSpec:
+    """Mirror Scala TableInfoOps/QueryOps.partitionSpec defaulting."""
+    declared_interval = getattr(table_info, "partitionInterval", None)
+    time_partitioned = bool(getattr(table_info, "timePartitioned", False))
+    if declared_interval is not None:
+        interval = declared_interval
+    elif time_partitioned:
+        interval = default_spec.interval
+    else:
+        interval = "1d"
+
+    declared_offset = getattr(table_info, "partitionOffset", None)
+    if declared_offset is not None:
+        offset = declared_offset
+    elif declared_interval is not None:
+        offset = None
+    else:
+        offset = default_spec.offset
+
+    return PartitionSpec(
+        column=getattr(table_info, "partitionColumn", None) or default_spec.column,
+        format=getattr(table_info, "partitionFormat", None) or default_spec.format,
+        interval=interval,
+        offset=offset,
+        time_partitioned=getattr(table_info, "timePartitioned", None),
+    )
+
+
+def _config_partition_spec(obj, default_spec: PartitionSpec = None) -> PartitionSpec:
+    default_spec = default_spec or _legacy_partition_spec()
+    metadata = getattr(obj, "metaData", None)
+    execution_info = getattr(metadata, "executionInfo", None) if metadata else None
+    table_info = getattr(execution_info, "outputTableInfo", None) if execution_info else None
+    return _resolve_partition_spec(table_info, default_spec) if table_info else default_spec
+
+
+def _partition_value_millis(value: str, partition_format: str) -> Optional[int]:
+    if "'" in partition_format:
+        return None
+    python_format = Spark.format_time(f"'{partition_format}'").this
+    if "%-" in python_format:
+        return None
+    parsed = datetime.strptime(value, python_format)
+    if parsed.strftime(python_format) != value:
+        raise ValueError(
+            f"Partition value '{value}' does not match partition format '{partition_format}'"
+        )
+    return int(parsed.replace(tzinfo=timezone.utc).timestamp() * 1000)
+
+
+def _partition_bound_error(value: str, partition_spec: PartitionSpec) -> Optional[str]:
+    java_format = partition_spec.defaulted_format()
+    try:
+        partition_millis = _partition_value_millis(value, java_format)
+    except (TypeError, ValueError):
+        return f"does not match partition_format '{java_format}'"
+    if partition_millis is None:
+        return None
+
+    interval_millis = partition_spec.interval_millis()
+    offset_millis = partition_spec.offset_millis()
+    if interval_millis is not None and (partition_millis - offset_millis) % interval_millis != 0:
+        return (
+            f"is not on the {interval_millis}ms partition grid with "
+            f"partition_offset={offset_millis}ms"
+        )
+    return None
 
 
 def _strip_fields_recursive(obj, fields_to_strip):
@@ -306,12 +383,89 @@ class ConfValidator(object):
         old_obj = self._get_old_obj(type(obj), obj.metaData.name)
         return not old_obj or not self._has_diff(obj, old_obj) or not old_obj.metaData.online
 
-    def _validate_time_partitioned_query(
-        self, query: Optional[Query], source_context: str
+    def _validate_partition_bounds(
+        self,
+        query: Optional[Query],
+        source_context: str,
+        downstream_partition_spec: PartitionSpec,
     ) -> BaseException | None:
-        # timePartitioned flag is deprecated — partition column type is detected automatically.
-        # Kept for backwards compatibility but no longer enforced.
-        return None
+        if query is None:
+            return None
+        if getattr(query, "timePartitioned", False):
+            return None
+
+        effective_spec = _resolve_partition_spec(query, downstream_partition_spec)
+        invalid_bounds = []
+        for field_name in ("startPartition", "endPartition"):
+            value = getattr(query, field_name, None)
+            if value is None:
+                continue
+            reason = _partition_bound_error(value, effective_spec)
+            if reason:
+                invalid_bounds.append(f"{field_name} '{value}' {reason}")
+
+        if not invalid_bounds:
+            return None
+        return ValueError(
+            f"{source_context} has partition bounds that do not align with the effective "
+            f"downstream grid: {'; '.join(invalid_bounds)}"
+        )
+
+    def _validate_embedded_join_bounds(
+        self, join: Join, default_spec: PartitionSpec, source_context: str, seen=None
+    ) -> List[BaseException]:
+        """Validate bounds in an embedded JoinSource using its inherited consumer grid."""
+        seen = seen or set()
+        if id(join) in seen:
+            return []
+        seen.add(id(join))
+        join_spec = _config_partition_spec(join, default_spec)
+        errors = []
+
+        if join.left:
+            left_query = get_query(join.left)
+            error = self._validate_partition_bounds(
+                left_query, f"{source_context} left", join_spec
+            )
+            if error:
+                errors.append(error)
+            if join.left.joinSource and join.left.joinSource.join:
+                errors.extend(
+                    self._validate_embedded_join_bounds(
+                        join.left.joinSource.join, join_spec, f"{source_context} left", seen
+                    )
+                )
+
+        for index, bootstrap_part in enumerate(join.bootstrapParts or []):
+            error = self._validate_partition_bounds(
+                bootstrap_part.query,
+                f"{source_context} bootstrapParts[{index}]",
+                join_spec,
+            )
+            if error:
+                errors.append(error)
+
+        for index, join_part in enumerate(join.joinParts or []):
+            group_by = join_part.groupBy
+            group_by_spec = _config_partition_spec(group_by, join_spec)
+            for source_index, source in enumerate(group_by.sources or []):
+                error = self._validate_partition_bounds(
+                    get_query(source),
+                    f"{source_context} joinParts[{index}] group_by source[{source_index}]",
+                    join_spec,
+                )
+                if error:
+                    errors.append(error)
+                if source.joinSource and source.joinSource.join:
+                    errors.extend(
+                        self._validate_embedded_join_bounds(
+                            source.joinSource.join,
+                            group_by_spec,
+                            f"{source_context} joinParts[{index}] group_by source[{source_index}]",
+                            seen,
+                        )
+                    )
+        return errors
 
     def _validate_derivations(
         self, pre_derived_cols: List[str], derivations: List[Derivation]
@@ -453,17 +607,28 @@ class ConfValidator(object):
             if not gb.metaData or gb.metaData.online is False
         ]
         errors = []
+        join_partition_spec = _config_partition_spec(join)
 
         if join.left and (left_query := get_query(join.left)) is not None:
-            left_query_err = self._validate_time_partitioned_query(
-                left_query, f"join {join.metaData.name} left"
+            left_query_err = self._validate_partition_bounds(
+                left_query, f"join {join.metaData.name} left", join_partition_spec
             )
             if left_query_err:
                 errors.append(left_query_err)
+            if join.left.joinSource and join.left.joinSource.join:
+                errors.extend(
+                    self._validate_embedded_join_bounds(
+                        join.left.joinSource.join,
+                        join_partition_spec,
+                        f"join {join.metaData.name} left",
+                    )
+                )
 
         for index, bootstrap_part in enumerate(join.bootstrapParts or []):
-            bootstrap_query_err = self._validate_time_partitioned_query(
-                bootstrap_part.query, f"join {join.metaData.name} bootstrapParts[{index}]"
+            bootstrap_query_err = self._validate_partition_bounds(
+                bootstrap_part.query,
+                f"join {join.metaData.name} bootstrapParts[{index}]",
+                join_partition_spec,
             )
             if bootstrap_query_err:
                 errors.append(bootstrap_query_err)
@@ -479,7 +644,10 @@ class ConfValidator(object):
             if group_by.metaData.production is False
         ]
         # Check if the underlying groupBy is valid
-        group_by_errors = [self._validate_group_by(group_by) for group_by in included_group_bys]
+        group_by_errors = [
+            self._validate_group_by(group_by, join_partition_spec)
+            for group_by in included_group_bys
+        ]
         errors += [
             ValueError(f"join {join.metaData.name}'s underlying {error}")
             for errors in group_by_errors
@@ -528,7 +696,9 @@ class ConfValidator(object):
 
         return errors
 
-    def _validate_group_by(self, group_by: GroupBy) -> List[BaseException]:
+    def _validate_group_by(
+        self, group_by: GroupBy, downstream_partition_spec: PartitionSpec = None
+    ) -> List[BaseException]:
         """
         Validate group_by's status with materialized versions of joins
         including the group_by.
@@ -540,6 +710,7 @@ class ConfValidator(object):
         online_joins = [join.metaData.name for join in joins if join.metaData.online is True]
         prod_joins = [join.metaData.name for join in joins if join.metaData.production is True]
         errors = []
+        consumer_partition_spec = downstream_partition_spec or _config_partition_spec(group_by)
 
         non_temporal = group_by.accuracy is None or group_by.accuracy == Accuracy.SNAPSHOT
 
@@ -625,11 +796,21 @@ class ConfValidator(object):
 
         for index, source in enumerate(group_by.sources):
             src: Source = source
-            query_error = self._validate_time_partitioned_query(
-                get_query(src), f"group_by {group_by.metaData.name} source[{index}]"
+            query_error = self._validate_partition_bounds(
+                get_query(src),
+                f"group_by {group_by.metaData.name} source[{index}]",
+                consumer_partition_spec,
             )
             if query_error:
                 errors.append(query_error)
+            if src.joinSource and src.joinSource.join:
+                errors.extend(
+                    self._validate_embedded_join_bounds(
+                        src.joinSource.join,
+                        consumer_partition_spec,
+                        f"group_by {group_by.metaData.name} source[{index}]",
+                    )
+                )
 
             if src.events and src.events.isCumulative and (src.events.query.timeColumn is None):
                 errors.append(

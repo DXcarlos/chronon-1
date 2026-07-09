@@ -696,6 +696,7 @@ def test_compile_substitutes_namespace_placeholder_in_key_filter(tmp_path, monke
                 keys=["subject"],
                 aggregations=[Aggregation(input_column="event", operation=Operation.SUM, windows=["1d"])],
                 key_filter=active_subjects,
+                version=1,
             )
             """
         ).strip(),
@@ -703,6 +704,79 @@ def test_compile_substitutes_namespace_placeholder_in_key_filter(tmp_path, monke
 
     _run_compile(tmp_path, monkeypatch)
     _assert_no_namespace_placeholder_in_compiled(tmp_path / "compiled")
+
+
+def test_compile_allows_time_partitioned_bounds_on_downstream_subdaily_grid(
+    tmp_path, monkeypatch
+):
+    _scaffold_repo(tmp_path)
+    _write(
+        tmp_path / "group_bys" / "sample_team" / "time_partitioned_bounds.py",
+        dedent(
+            """
+            from ai.chronon.types import Aggregation, EventSource, GroupBy, Operation, Query, selects
+
+            v1 = GroupBy(
+                sources=[
+                    EventSource(
+                        table="external.time_partitioned_events",
+                        query=Query(
+                            selects=selects(value="value", user_id="user_id"),
+                            time_column="event_ts",
+                            partition_column="event_ts",
+                            time_partitioned=True,
+                            start_partition="2025-11-29",
+                            end_partition="2026-04-12",
+                        ),
+                    )
+                ],
+                keys=["user_id"],
+                aggregations=[Aggregation(input_column="value", operation=Operation.SUM, windows=["1d"])],
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+    _write(
+        tmp_path / "joins" / "sample_team" / "time_partitioned_bounds_join.py",
+        dedent(
+            """
+            from group_bys.sample_team.time_partitioned_bounds import v1 as bounds_gb
+            from ai.chronon.types import EventSource, Join, JoinPart, Query, selects
+
+            v1 = Join(
+                left=EventSource(
+                    table="external.left_events",
+                    query=Query(
+                        selects=selects("user_id"),
+                        time_column="event_ts",
+                        partition_column="ds",
+                        partition_interval="3h",
+                        partition_offset="1h",
+                        start_partition="2025-11-29-01-00",
+                    ),
+                ),
+                right_parts=[JoinPart(group_by=bounds_gb)],
+                offline_schedule="0 1-22/3 * * *",
+                partition_interval="3h",
+                partition_offset="1h",
+                version=1,
+            )
+            """
+        ).strip(),
+    )
+
+    results, has_errors, _ = _run_compile(
+        tmp_path, monkeypatch, ignore_python_errors=False
+    )
+
+    from gen_thrift.api.ttypes import ConfType
+
+    assert not has_errors
+    assert (
+        "sample_team.time_partitioned_bounds_join.v1__1"
+        in results[ConfType.JOIN].obj_dict
+    )
 
 
 def test_compile_rejects_lost_table_reference_grid_metadata(tmp_path, monkeypatch, capsys):

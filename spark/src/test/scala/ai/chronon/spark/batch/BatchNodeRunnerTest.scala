@@ -1458,6 +1458,8 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
   // ---------- sub-daily sensor readiness ----------
 
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
+  private val offsetThreeHourSpec =
+    PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
 
   private def subDailyQuery(partitionColumn: String = "ds"): Query =
     new Query()
@@ -1568,6 +1570,34 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
 
     args.startDs() shouldBe "2024-01-01-06-00"
     args.endDs() shouldBe "2024-01-01-09-00"
+  }
+
+  "BatchNodeRunner" should "normalize date-shaped run args for time-partitioned sensors" in {
+    val tableInfo = new TableInfo()
+      .setTable("test_db.time_partitioned_source")
+      .setPartitionColumn("event_ts")
+      .setPartitionFormat(offsetThreeHourSpec.format)
+      .setTimePartitioned(true)
+    val dep = new TableDependency().setTableInfo(tableInfo)
+    val sensor = sensorFor(dep)
+    val content = new NodeContent()
+    content.setExternalSourceSensor(sensor)
+    val metadata = new MetaData()
+      .setName("test_db.time_partitioned_source__sensor")
+      .setTeam("test_team")
+      .setOutputNamespace("test_db")
+      .setExecutionInfo(
+        new ExecutionInfo().setOutputTableInfo(
+          new TableInfo().setTable("test_db.time_partitioned_source").withSpec(offsetThreeHourSpec)
+        )
+      )
+    val node = new Node().setMetaData(metadata).setContent(content)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+
+    val range = runner.rangeFromArgs("2024-01-02", "2024-01-02")
+
+    range.start shouldBe "2024-01-01-22-00"
+    range.end shouldBe "2024-01-02-22-00"
   }
 
   "Sub-daily partitioned sensors" should "distinguish two fires on the same day" in {
