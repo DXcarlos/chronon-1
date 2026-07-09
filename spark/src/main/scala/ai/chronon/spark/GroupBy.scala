@@ -764,8 +764,9 @@ object GroupBy {
     implicit val sourcePartitionSpec: PartitionSpec = source.query.partitionSpec(tableUtils.partitionSpec)
     // intersectingRange so a coarser source still supplies the query range's full time interval
     val effectiveQueryRange = queryRange.intersectingRange(sourcePartitionSpec)
-    val sourceStartPartition = sourcePartitionSpec.normalizeStart(source.query.startPartition, tableUtils.partitionSpec)
-    val sourceEndPartition = sourcePartitionSpec.normalizeEnd(source.query.endPartition, tableUtils.partitionSpec)
+    val cutoffFallbackSpecs = PartitionSpec.cutoffFallbackSpecs(source.query, tableUtils.partitionSpec)
+    val sourceStartPartition = sourcePartitionSpec.normalizeStart(source.query.startPartition, cutoffFallbackSpecs)
+    val sourceEndPartition = sourcePartitionSpec.normalizeEnd(source.query.endPartition, cutoffFallbackSpecs)
 
     // from here on down - the math is based entirely on source partition spec
     val PartitionRange(queryStart, queryEnd) = effectiveQueryRange

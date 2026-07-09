@@ -695,40 +695,6 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
     node.metaData.name.toLowerCase.contains("sensor")
   }
 
-  private def isTimePartitionedExternalSensor(conf: NodeContent): Boolean =
-    conf.isSetExternalSourceSensor &&
-      Option(conf.getExternalSourceSensor.sourceTableDependency)
-        .flatMap(dep => Option(dep.tableInfo))
-        .exists(tableInfo => tableInfo.isSetTimePartitioned && tableInfo.timePartitioned)
-
-  private[batch] def rangeFromArgs(startDs: String, endDs: String): PartitionRange = {
-    val metadata = node.metaData
-    val spec = runPartitionSpec(metadata, node.content)
-    val allowDailyFallback = isTimePartitionedExternalSensor(node.content)
-
-    def normalize(ds: String, isStart: Boolean): String = {
-      if (ds == null) return null
-      if (Try(spec.at(spec.epochMillis(ds)) == ds).getOrElse(false)) return ds
-
-      val normalized =
-        if (allowDailyFallback) {
-          Try {
-            if (isStart) spec.normalizeStart(ds, PartitionSpec.daily)
-            else spec.normalizeEnd(ds, PartitionSpec.daily)
-          }.toOption
-        } else None
-
-      require(
-        normalized.nonEmpty,
-        s"--start-ds/--end-ds value '$ds' is not a valid partition value for node '${metadata.name}' " +
-          s"(expected format '${spec.format}' on a ${spec.spanMillis}ms grid with offset ${spec.offsetMillis}ms)"
-      )
-      normalized.get
-    }
-
-    PartitionRange(normalize(startDs, isStart = true), normalize(endDs, isStart = false))(spec)
-  }
-
   def runFromArgs(
       startDs: String,
       endDs: String,
@@ -736,7 +702,16 @@ class BatchNodeRunner(node: Node, tableUtils: TableUtils, api: Api) extends Node
   ): Int = {
     Try {
       val metadata = node.metaData
-      val range = rangeFromArgs(startDs, endDs)
+      val spec = runPartitionSpec(metadata, node.content)
+      // catch a daily-formatted arg handed to a sub-daily node (and vice versa) before any work runs
+      Seq(startDs, endDs).foreach { ds =>
+        require(
+          Try(spec.at(spec.epochMillis(ds)) == ds).getOrElse(false),
+          s"--start-ds/--end-ds value '$ds' is not a valid partition value for node '${metadata.name}' " +
+            s"(expected format '${spec.format}' on a ${spec.spanMillis}ms grid with offset ${spec.offsetMillis}ms)"
+        )
+      }
+      val range = PartitionRange(startDs, endDs)(spec)
 
       val inputTablePartitionStatuses = computeInputTablePartitionStatuses(metadata, range, tableUtils)
 

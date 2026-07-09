@@ -12,6 +12,7 @@ class DependencyResolverTest extends AnyFlatSpec with Matchers {
   implicit val partitionSpec: PartitionSpec = PartitionSpec.daily
   private val threeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000)
   private val offsetThreeHourSpec = PartitionSpec("ds", "yyyy-MM-dd-HH-mm", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
+  private val compactOffsetThreeHourSpec = PartitionSpec("ds", "yyyyMMddHH", 3 * 60 * 60 * 1000, 60 * 60 * 1000)
 
   "computeOutputRange" should "return same range when no offsets are set" in {
     val parentRange = PartitionRange("2024-01-01", "2024-01-05")
@@ -107,6 +108,24 @@ class DependencyResolverTest extends AnyFlatSpec with Matchers {
     val result = DependencyResolver.computeInputRange(queryRange, tableDep)
 
     result shouldBe Some(PartitionRange("2024-01-02-01-00", "2024-01-02-22-00")(offsetThreeHourSpec))
+  }
+
+  it should "preserve downstream-format cutoff fallback for time-partitioned dependencies" in {
+    val queryRange = PartitionRange("2024-01-02-01-00", "2024-01-02-01-00")(offsetThreeHourSpec)
+    val tableDep = dep("test.compact_time_partitioned_table")
+    tableDep.setStartCutOff("2024-01-02-01-00")
+    tableDep.setEndCutOff("2024-01-02-01-00")
+    tableDep.setTableInfo(
+      new TableInfo()
+        .setTable("test.compact_time_partitioned_table")
+        .setPartitionColumn("event_ts")
+        .setPartitionFormat(compactOffsetThreeHourSpec.format)
+        .setTimePartitioned(true)
+    )
+
+    val result = DependencyResolver.computeInputRange(queryRange, tableDep)
+
+    result shouldBe Some(PartitionRange("2024010201", "2024010201")(compactOffsetThreeHourSpec))
   }
 
   it should "map a daily downstream range to boundary-crossing offset input partitions" in {

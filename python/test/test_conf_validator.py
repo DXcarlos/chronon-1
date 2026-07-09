@@ -1,7 +1,9 @@
 import gen_thrift.common.ttypes as common
 from gen_thrift.api.ttypes import (
+    Accuracy,
     Aggregation,
     BootstrapPart,
+    EntitySource,
     EventSource,
     ExternalPart,
     GroupBy,
@@ -507,6 +509,155 @@ class TestTimePartitionedValidation:
         )
 
         errors = _make_validator().validate_obj(downstream_consumer)
+
+        assert not any("partition bounds" in str(error) for error in errors)
+
+    def test_snapshot_group_by_uses_its_declared_output_grid_for_source_bounds(self):
+        group_by = _make_group_by()
+        group_by.accuracy = Accuracy.SNAPSHOT
+        group_by.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd",
+                partitionInterval=common.Window(length=1, timeUnit=common.TimeUnit.DAYS),
+            )
+        )
+        source_query = group_by.sources[0].events.query
+        source_query.startPartition = "2025-11-29"
+        source_query.endPartition = "2026-04-12"
+
+        downstream_consumer = _make_join(group_by=group_by)
+        downstream_consumer.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+
+        errors = _make_validator().validate_obj(downstream_consumer)
+
+        assert not any("partition bounds" in str(error) for error in errors)
+
+    def test_event_left_temporal_entity_group_by_uses_snapshot_grid_for_source_bounds(self):
+        group_by = GroupBy(
+            sources=[
+                Source(
+                    entities=EntitySource(
+                        snapshotTable="entity_table",
+                        query=Query(
+                            selects={"user_id": "user_id", "price": "price"},
+                            startPartition="2025-11-29",
+                            endPartition="2026-04-12",
+                        ),
+                    )
+                )
+            ],
+            keyColumns=["user_id"],
+            aggregations=[
+                Aggregation(inputColumn="price", operation=Operation.SUM),
+            ],
+            accuracy=Accuracy.TEMPORAL,
+            metaData=MetaData(
+                name="team.temporal_entity_gb",
+                executionInfo=common.ExecutionInfo(
+                    outputTableInfo=common.TableInfo(
+                        partitionFormat="yyyy-MM-dd",
+                        partitionInterval=common.Window(
+                            length=1, timeUnit=common.TimeUnit.DAYS
+                        ),
+                    )
+                ),
+            ),
+        )
+        downstream_consumer = _make_join(group_by=group_by)
+        downstream_consumer.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+
+        errors = _make_validator().validate_obj(downstream_consumer)
+
+        assert not any("partition bounds" in str(error) for error in errors)
+
+    def test_accuracy_none_with_topic_infers_temporal_for_source_bounds(self):
+        group_by = _make_group_by()
+        group_by.sources[0].events.topic = "events.topic"
+        group_by.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd",
+                partitionInterval=common.Window(length=1, timeUnit=common.TimeUnit.DAYS),
+            )
+        )
+        source_query = group_by.sources[0].events.query
+        source_query.startPartition = "2025-11-29"
+
+        downstream_consumer = _make_join(group_by=group_by)
+        downstream_consumer.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+
+        errors = _make_validator().validate_obj(downstream_consumer)
+        messages = "\n".join(str(error) for error in errors)
+
+        assert "join team.my_join's underlying group_by team.my_gb source[0]" in messages
+        assert "startPartition '2025-11-29'" in messages
+        assert "yyyy-MM-dd-HH-mm" in messages
+
+    def test_embedded_snapshot_group_by_uses_its_declared_output_grid_for_source_bounds(self):
+        group_by = _make_group_by(name="team.embedded_gb")
+        group_by.accuracy = Accuracy.SNAPSHOT
+        group_by.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd",
+                partitionInterval=common.Window(length=1, timeUnit=common.TimeUnit.DAYS),
+            )
+        )
+        source_query = group_by.sources[0].events.query
+        source_query.startPartition = "2025-11-29"
+        source_query.endPartition = "2026-04-12"
+
+        embedded_join = _make_join(name="team.embedded_join", group_by=group_by)
+        embedded_join.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+        downstream_consumer = _make_join()
+        downstream_consumer.left = Source(
+            joinSource=JoinSource(
+                join=embedded_join,
+                query=Query(selects={"user_id": "user_id"}, timeColumn="timestamp"),
+            )
+        )
+        downstream_consumer.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+
+        errors = _make_validator().validate_obj(downstream_consumer)
+
+        assert not any("partition bounds" in str(error) for error in errors)
+
+    def test_partition_bounds_accept_the_downstream_fallback_format(self):
+        group_by = _make_group_by()
+        source_query = group_by.sources[0].events.query
+        source_query.partitionFormat = "yyyyMMdd"
+        source_query.startPartition = "2025-11-29"
+        source_query.endPartition = "2026-04-12"
+
+        errors = _make_validator().validate_obj(group_by)
 
         assert not any("partition bounds" in str(error) for error in errors)
 

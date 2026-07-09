@@ -271,20 +271,40 @@ case class PartitionSpec(column: String, format: String, spanMillis: Long, offse
   }
 
   /** Normalizes a start value by translating from the fallback spec's interval start when needed. */
-  def normalizeStart(partition: String, fallbackSpec: PartitionSpec): String = {
+  def normalizeStart(partition: String, fallbackSpec: PartitionSpec): String =
+    normalizeStart(partition, Seq(fallbackSpec))
+
+  /** Normalizes a start value by translating from the first fallback spec that can parse it. */
+  def normalizeStart(partition: String, fallbackSpecs: Seq[PartitionSpec]): String = {
     if (partition == null) return null
+    require(fallbackSpecs.nonEmpty, "At least one fallback partition spec is required")
     val startMillis =
       Try(epochMillis(partition)).toOption
-        .getOrElse(fallbackSpec.partitionStartMillis(partition))
+        .orElse(
+          fallbackSpecs.iterator
+            .map(spec => Try(spec.partitionStartMillis(partition)).toOption)
+            .collectFirst { case Some(millis) => millis }
+        )
+        .getOrElse(fallbackSpecs.last.partitionStartMillis(partition))
     at(startMillis)
   }
 
   /** Normalizes an end value by translating from the fallback spec's interval end when needed. */
-  def normalizeEnd(partition: String, fallbackSpec: PartitionSpec): String = {
+  def normalizeEnd(partition: String, fallbackSpec: PartitionSpec): String =
+    normalizeEnd(partition, Seq(fallbackSpec))
+
+  /** Normalizes an end value by translating from the first fallback spec that can parse it. */
+  def normalizeEnd(partition: String, fallbackSpecs: Seq[PartitionSpec]): String = {
     if (partition == null) return null
+    require(fallbackSpecs.nonEmpty, "At least one fallback partition spec is required")
     val endMillis =
       Try(partitionEndMillis(partition)).toOption
-        .getOrElse(fallbackSpec.partitionEndMillis(partition))
+        .orElse(
+          fallbackSpecs.iterator
+            .map(spec => Try(spec.partitionEndMillis(partition)).toOption)
+            .collectFirst { case Some(millis) => millis }
+        )
+        .getOrElse(fallbackSpecs.last.partitionEndMillis(partition))
     at(endMillis - 1)
   }
 
@@ -312,6 +332,16 @@ object PartitionSpec {
     .optionalEnd()
     .toFormatter(Locale.US)
     .withResolverStyle(ResolverStyle.STRICT)
+
+  def cutoffFallbackSpecs(downstreamSpec: PartitionSpec, timePartitioned: Boolean): Seq[PartitionSpec] =
+    if (timePartitioned) Seq(downstreamSpec, daily).distinct
+    else Seq(downstreamSpec)
+
+  def cutoffFallbackSpecs(query: Query, downstreamSpec: PartitionSpec): Seq[PartitionSpec] =
+    cutoffFallbackSpecs(downstreamSpec, Option(query).exists(q => q.isSetTimePartitioned && q.timePartitioned))
+
+  def cutoffFallbackSpecs(tableInfo: TableInfo, downstreamSpec: PartitionSpec): Seq[PartitionSpec] =
+    cutoffFallbackSpecs(downstreamSpec, Option(tableInfo).exists(t => t.isSetTimePartitioned && t.timePartitioned))
 
   def validate(column: String, format: String, spanMillis: Long, offsetMillis: Long = 0L): Unit = {
     val grid = PartitionGrid(spanMillis, offsetMillis)

@@ -1555,6 +1555,68 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
       "2024-01-01-06-00")
   }
 
+  "GroupBy backfill with timePartitioned source" should "normalize date-shaped source cutoffs on sub-daily grids" in {
+    val inputTable = "test_db.time_partitioned_gb_source"
+    spark.sql(s"DROP TABLE IF EXISTS $inputTable")
+    spark.sql(
+      s"""CREATE TABLE $inputTable (
+         |  user_id INT,
+         |  value DOUBLE,
+         |  event_ts TIMESTAMP
+         |)""".stripMargin)
+    spark.sql(
+      s"""INSERT INTO $inputTable VALUES
+         |(1, 10.0, TIMESTAMP '2024-01-02 02:00:00'),
+         |(1, 30.0, TIMESTAMP '2024-01-02 20:00:00'),
+         |(2, 50.0, TIMESTAMP '2024-01-03 02:00:00')
+         |""".stripMargin)
+
+    val sourceQuery = Builders
+      .Query(
+        selects = Builders.Selects("user_id", "value"),
+        partitionColumn = "event_ts",
+        timeColumn = "UNIX_TIMESTAMP(event_ts) * 1000",
+        startPartition = "2024-01-02",
+        endPartition = "2024-01-02"
+      )
+      .setTimePartitioned(true)
+    val source = Builders.Source.events(sourceQuery, table = inputTable)
+    val tableDep = TableDependencies.fromSource(source).get
+
+    val gbMetaData = Builders.MetaData(namespace = "test_db", name = "time_partitioned_subdaily_gb", team = "test_team")
+    val outputTable = gbMetaData.outputTable
+    spark.sql(s"DROP TABLE IF EXISTS $outputTable")
+    val groupByConf = Builders.GroupBy(
+      sources = Seq(source),
+      keyColumns = Seq("user_id"),
+      aggregations = Seq(Builders.Aggregation(inputColumn = "value", operation = Operation.SUM)),
+      metaData = gbMetaData
+    )
+
+    val gbNode = new GroupByBackfillNode().setGroupBy(groupByConf)
+    val nodeContent = new NodeContent()
+    nodeContent.setGroupByBackfill(gbNode)
+
+    implicit val partitionSpec: PartitionSpec = offsetThreeHourSpec
+    val metadata = MetaDataUtils.layer(
+      baseMetadata = new MetaData().setOutputNamespace("test_db").setTeam("test_team"),
+      modeName = "backfill",
+      nodeName = "time_partitioned_subdaily_gb",
+      tableDependencies = Seq(tableDep),
+      stepDays = Some(1),
+      outputTableOverride = Some(outputTable)
+    )
+
+    val node = new Node().setMetaData(metadata).setContent(nodeContent)
+    val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange("2024-01-02-01-00", "2024-01-03-01-00")(offsetThreeHourSpec)
+
+    runner.run(metadata, nodeContent, Option(range))
+
+    val rows = spark.sql(s"SELECT user_id FROM $outputTable").collect()
+    rows.map(_.getInt(0)).toSet shouldBe Set(1)
+  }
+
   "BatchNodeRunnerArgs" should "accept formatted sub-daily start and end ds values" in {
     val args = new BatchNodeRunnerArgs(
       Array(
@@ -1572,32 +1634,48 @@ class BatchNodeRunnerTest extends SparkTestBase with Matchers with BeforeAndAfte
     args.endDs() shouldBe "2024-01-01-09-00"
   }
 
-  "BatchNodeRunner" should "normalize date-shaped run args for time-partitioned sensors" in {
+  "BatchNodeRunner.computeInputTablePartitionStatuses" should "normalize date-shaped cutoffs for time-partitioned join dependencies" in {
+    spark.sql("DROP TABLE IF EXISTS test_db.time_partitioned_source")
+    spark.sql(
+      """CREATE TABLE test_db.time_partitioned_source (
+        |  id INT,
+        |  event_ts TIMESTAMP
+        |)""".stripMargin)
+    spark.sql(
+      """INSERT INTO test_db.time_partitioned_source VALUES
+        |(1, TIMESTAMP '2024-01-02 23:59:00')
+        |""".stripMargin)
+
     val tableInfo = new TableInfo()
       .setTable("test_db.time_partitioned_source")
+      .withSpec(offsetThreeHourSpec)
       .setPartitionColumn("event_ts")
-      .setPartitionFormat(offsetThreeHourSpec.format)
       .setTimePartitioned(true)
-    val dep = new TableDependency().setTableInfo(tableInfo)
-    val sensor = sensorFor(dep)
-    val content = new NodeContent()
-    content.setExternalSourceSensor(sensor)
+    val dep = new TableDependency()
+      .setTableInfo(tableInfo)
+      .setStartCutOff("2024-01-02")
+      .setEndCutOff("2024-01-02")
     val metadata = new MetaData()
-      .setName("test_db.time_partitioned_source__sensor")
+      .setName("test_db.time_partitioned_join")
       .setTeam("test_team")
       .setOutputNamespace("test_db")
       .setExecutionInfo(
-        new ExecutionInfo().setOutputTableInfo(
-          new TableInfo().setTable("test_db.time_partitioned_source").withSpec(offsetThreeHourSpec)
-        )
+        new ExecutionInfo()
+          .setOutputTableInfo(new TableInfo().setTable("test_db.time_partitioned_join").withSpec(offsetThreeHourSpec))
+          .setTableDependencies(Seq(dep).asJava)
       )
+    val content = createTestNodeContent()
     val node = new Node().setMetaData(metadata).setContent(content)
     val runner = new BatchNodeRunner(node, tableUtils, mockApi)
+    val range = PartitionRange("2024-01-02-01-00", "2024-01-03-01-00")(offsetThreeHourSpec)
 
-    val range = runner.rangeFromArgs("2024-01-02", "2024-01-02")
+    val statuses = runner.computeInputTablePartitionStatuses(metadata, range, tableUtils).toSeq
+    statuses should have size 1
+    val status = statuses.head
 
-    range.start shouldBe "2024-01-01-22-00"
-    range.end shouldBe "2024-01-02-22-00"
+    status.ready shouldBe true
+    status.lastAvailablePartition shouldBe Some("2024-01-02-22-00")
+    status.requiredEndMillis shouldBe offsetThreeHourSpec.partitionEndMillis("2024-01-02-22-00") - 1
   }
 
   "Sub-daily partitioned sensors" should "distinguish two fires on the same day" in {

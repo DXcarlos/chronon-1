@@ -203,6 +203,35 @@ def _group_by_has_topic(groupBy: GroupBy) -> bool:
     return any(_source_has_topic(source) for source in groupBy.sources)
 
 
+def _source_data_model(source: Source) -> Optional[str]:
+    if source.events:
+        return "EVENTS"
+    if source.entities:
+        return "ENTITIES"
+    if source.joinSource and source.joinSource.join and source.joinSource.join.left:
+        return _source_data_model(source.joinSource.join.left)
+    return None
+
+
+def _group_by_data_model(group_by: GroupBy) -> Optional[str]:
+    models = {
+        model
+        for model in (_source_data_model(source) for source in group_by.sources or [])
+        if model is not None
+    }
+    if len(models) == 1:
+        return next(iter(models))
+    return None
+
+
+def _group_by_inferred_accuracy(group_by: GroupBy) -> Accuracy:
+    if group_by.accuracy is not None:
+        return group_by.accuracy
+    if _group_by_has_topic(group_by):
+        return Accuracy.TEMPORAL
+    return Accuracy.SNAPSHOT
+
+
 def _group_by_has_hourly_windows(groupBy: GroupBy) -> bool:
     aggs: List[Aggregation] = groupBy.aggregations
 
@@ -401,6 +430,8 @@ class ConfValidator(object):
             if value is None:
                 continue
             reason = _partition_bound_error(value, effective_spec)
+            if reason and _partition_bound_error(value, downstream_partition_spec) is None:
+                reason = None
             if reason:
                 invalid_bounds.append(f"{field_name} '{value}' {reason}")
 
@@ -411,6 +442,22 @@ class ConfValidator(object):
             f"downstream grid: {'; '.join(invalid_bounds)}"
         )
 
+    def _group_by_consumer_partition_spec(
+        self,
+        group_by: GroupBy,
+        downstream_partition_spec: PartitionSpec,
+        left_data_model: Optional[str] = None,
+    ) -> PartitionSpec:
+        inferred_accuracy = _group_by_inferred_accuracy(group_by)
+        group_by_data_model = _group_by_data_model(group_by)
+        if left_data_model == "EVENTS" and (
+            inferred_accuracy == Accuracy.SNAPSHOT or group_by_data_model == "ENTITIES"
+        ):
+            return _config_partition_spec(group_by, downstream_partition_spec)
+        if left_data_model is None and inferred_accuracy == Accuracy.SNAPSHOT:
+            return _config_partition_spec(group_by, downstream_partition_spec)
+        return downstream_partition_spec
+
     def _validate_embedded_join_bounds(
         self, join: Join, default_spec: PartitionSpec, source_context: str, seen=None
     ) -> List[BaseException]:
@@ -420,6 +467,7 @@ class ConfValidator(object):
             return []
         seen.add(id(join))
         join_spec = _config_partition_spec(join, default_spec)
+        left_data_model = _source_data_model(join.left) if join.left else None
         errors = []
 
         if join.left:
@@ -447,12 +495,14 @@ class ConfValidator(object):
 
         for index, join_part in enumerate(join.joinParts or []):
             group_by = join_part.groupBy
-            group_by_spec = _config_partition_spec(group_by, join_spec)
+            group_by_spec = self._group_by_consumer_partition_spec(
+                group_by, join_spec, left_data_model
+            )
             for source_index, source in enumerate(group_by.sources or []):
                 error = self._validate_partition_bounds(
                     get_query(source),
                     f"{source_context} joinParts[{index}] group_by source[{source_index}]",
-                    join_spec,
+                    group_by_spec,
                 )
                 if error:
                     errors.append(error)
@@ -608,6 +658,7 @@ class ConfValidator(object):
         ]
         errors = []
         join_partition_spec = _config_partition_spec(join)
+        left_data_model = _source_data_model(join.left) if join.left else None
 
         if join.left and (left_query := get_query(join.left)) is not None:
             left_query_err = self._validate_partition_bounds(
@@ -645,7 +696,7 @@ class ConfValidator(object):
         ]
         # Check if the underlying groupBy is valid
         group_by_errors = [
-            self._validate_group_by(group_by, join_partition_spec)
+            self._validate_group_by(group_by, join_partition_spec, left_data_model)
             for group_by in included_group_bys
         ]
         errors += [
@@ -697,7 +748,10 @@ class ConfValidator(object):
         return errors
 
     def _validate_group_by(
-        self, group_by: GroupBy, downstream_partition_spec: PartitionSpec = None
+        self,
+        group_by: GroupBy,
+        downstream_partition_spec: PartitionSpec = None,
+        left_data_model: Optional[str] = None,
     ) -> List[BaseException]:
         """
         Validate group_by's status with materialized versions of joins
@@ -710,9 +764,13 @@ class ConfValidator(object):
         online_joins = [join.metaData.name for join in joins if join.metaData.online is True]
         prod_joins = [join.metaData.name for join in joins if join.metaData.production is True]
         errors = []
-        consumer_partition_spec = downstream_partition_spec or _config_partition_spec(group_by)
 
-        non_temporal = group_by.accuracy is None or group_by.accuracy == Accuracy.SNAPSHOT
+        inferred_accuracy = _group_by_inferred_accuracy(group_by)
+        non_temporal = inferred_accuracy == Accuracy.SNAPSHOT
+        default_partition_spec = downstream_partition_spec or _legacy_partition_spec()
+        consumer_partition_spec = self._group_by_consumer_partition_spec(
+            group_by, default_partition_spec, left_data_model
+        )
 
         no_topic = not _group_by_has_topic(group_by)
         has_hourly_windows = _group_by_has_hourly_windows(group_by)
