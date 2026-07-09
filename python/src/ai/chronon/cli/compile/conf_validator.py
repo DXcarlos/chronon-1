@@ -450,8 +450,9 @@ class ConfValidator(object):
     ) -> PartitionSpec:
         inferred_accuracy = _group_by_inferred_accuracy(group_by)
         group_by_data_model = _group_by_data_model(group_by)
-        if left_data_model == "EVENTS" and (
-            inferred_accuracy == Accuracy.SNAPSHOT or group_by_data_model == "ENTITIES"
+        if left_data_model == "ENTITIES" or (
+            left_data_model == "EVENTS"
+            and (inferred_accuracy == Accuracy.SNAPSHOT or group_by_data_model == "ENTITIES")
         ):
             return _config_partition_spec(group_by, downstream_partition_spec)
         if left_data_model is None and inferred_accuracy == Accuracy.SNAPSHOT:

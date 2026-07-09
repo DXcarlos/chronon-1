@@ -582,6 +582,38 @@ class TestTimePartitionedValidation:
 
         assert not any("partition bounds" in str(error) for error in errors)
 
+    def test_entity_left_group_by_uses_snapshot_grid_for_source_bounds(self):
+        group_by = _make_group_by()
+        group_by.accuracy = Accuracy.TEMPORAL
+        group_by.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd",
+                partitionInterval=common.Window(length=1, timeUnit=common.TimeUnit.DAYS),
+            )
+        )
+        source_query = group_by.sources[0].events.query
+        source_query.startPartition = "2025-11-29"
+        source_query.endPartition = "2026-04-12"
+
+        downstream_consumer = _make_join(group_by=group_by)
+        downstream_consumer.left = Source(
+            entities=EntitySource(
+                snapshotTable="left_entity_table",
+                query=Query(selects={"user_id": "user_id"}),
+            )
+        )
+        downstream_consumer.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+
+        errors = _make_validator().validate_obj(downstream_consumer)
+
+        assert not any("partition bounds" in str(error) for error in errors)
+
     def test_accuracy_none_with_topic_infers_temporal_for_source_bounds(self):
         group_by = _make_group_by()
         group_by.sources[0].events.topic = "events.topic"
