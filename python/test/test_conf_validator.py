@@ -538,6 +538,39 @@ class TestTimePartitionedValidation:
 
         assert not any("partition bounds" in str(error) for error in errors)
 
+    def test_snapshot_group_by_uses_coarsest_declared_source_grid_for_source_bounds(self):
+        group_by = _make_group_by()
+        group_by.accuracy = Accuracy.SNAPSHOT
+        source_query = group_by.sources[0].events.query
+        source_query.startPartition = "2025-11-29"
+        source_query.endPartition = "2026-04-12"
+        group_by.sources.append(
+            Source(
+                events=EventSource(
+                    table="daily_table",
+                    query=Query(
+                        selects={"user_id": "user_id", "price": "price"},
+                        timeColumn="timestamp",
+                        partitionFormat="yyyy-MM-dd",
+                        partitionInterval=common.Window(length=1, timeUnit=common.TimeUnit.DAYS),
+                    ),
+                )
+            )
+        )
+
+        downstream_consumer = _make_join(group_by=group_by)
+        downstream_consumer.metaData.executionInfo = common.ExecutionInfo(
+            outputTableInfo=common.TableInfo(
+                partitionFormat="yyyy-MM-dd-HH-mm",
+                partitionInterval=common.Window(length=3, timeUnit=common.TimeUnit.HOURS),
+                partitionOffset=common.Window(length=1, timeUnit=common.TimeUnit.HOURS),
+            )
+        )
+
+        errors = _make_validator().validate_obj(downstream_consumer)
+
+        assert not any("partition bounds" in str(error) for error in errors)
+
     def test_event_left_temporal_entity_group_by_uses_snapshot_grid_for_source_bounds(self):
         group_by = GroupBy(
             sources=[
@@ -712,3 +745,13 @@ class TestTimePartitionedValidation:
         errors = _make_validator().validate_obj(downstream_consumer)
 
         assert not any("partition bounds" in str(error) for error in errors)
+
+    def test_time_partitioned_source_rejects_unparseable_partition_bounds(self):
+        group_by = _make_group_by()
+        source_query = group_by.sources[0].events.query
+        source_query.timePartitioned = True
+        source_query.startPartition = "not-a-partition"
+
+        errors = _make_validator().validate_obj(group_by)
+
+        assert any("startPartition 'not-a-partition'" in str(error) for error in errors)

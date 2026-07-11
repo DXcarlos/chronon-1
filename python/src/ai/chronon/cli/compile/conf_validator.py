@@ -124,12 +124,50 @@ def _resolve_partition_spec(table_info, default_spec: PartitionSpec) -> Partitio
     )
 
 
-def _config_partition_spec(obj, default_spec: PartitionSpec = None) -> PartitionSpec:
-    default_spec = default_spec or _legacy_partition_spec()
+def _output_table_info(obj):
     metadata = getattr(obj, "metaData", None)
     execution_info = getattr(metadata, "executionInfo", None) if metadata else None
-    table_info = getattr(execution_info, "outputTableInfo", None) if execution_info else None
+    return getattr(execution_info, "outputTableInfo", None) if execution_info else None
+
+
+def _config_partition_spec(obj, default_spec: PartitionSpec = None) -> PartitionSpec:
+    default_spec = default_spec or _legacy_partition_spec()
+    table_info = _output_table_info(obj)
     return _resolve_partition_spec(table_info, default_spec) if table_info else default_spec
+
+
+def _declared_source_partition_spec(
+    source: Source, default_spec: PartitionSpec
+) -> Optional[PartitionSpec]:
+    join_source = getattr(source, "joinSource", None)
+    upstream_join = getattr(join_source, "join", None) if join_source else None
+    output_table_info = _output_table_info(upstream_join) if upstream_join else None
+    if output_table_info and getattr(output_table_info, "partitionInterval", None):
+        return _resolve_partition_spec(output_table_info, default_spec)
+
+    query = getattr(join_source, "query", None) if join_source else get_query(source)
+    if query and getattr(query, "partitionInterval", None):
+        return _resolve_partition_spec(query, default_spec)
+    return None
+
+
+def _snapshot_group_by_partition_spec(
+    group_by: GroupBy, downstream_spec: PartitionSpec
+) -> PartitionSpec:
+    output_table_info = _output_table_info(group_by)
+    if output_table_info and getattr(output_table_info, "partitionInterval", None):
+        return _resolve_partition_spec(output_table_info, downstream_spec)
+
+    declared_sources = [
+        spec
+        for source in group_by.sources or []
+        if (spec := _declared_source_partition_spec(source, downstream_spec))
+    ]
+    return max(
+        declared_sources,
+        key=lambda spec: spec.interval_millis(),
+        default=downstream_spec,
+    )
 
 
 def _partition_value_millis(value: str, partition_format: str) -> Optional[int]:
@@ -420,17 +458,20 @@ class ConfValidator(object):
     ) -> BaseException | None:
         if query is None:
             return None
-        if getattr(query, "timePartitioned", False):
-            return None
 
         effective_spec = _resolve_partition_spec(query, downstream_partition_spec)
+        fallback_specs = [downstream_partition_spec]
+        if getattr(query, "timePartitioned", False):
+            fallback_specs.append(_legacy_partition_spec())
         invalid_bounds = []
         for field_name in ("startPartition", "endPartition"):
             value = getattr(query, field_name, None)
             if value is None:
                 continue
             reason = _partition_bound_error(value, effective_spec)
-            if reason and _partition_bound_error(value, downstream_partition_spec) is None:
+            if reason and any(
+                _partition_bound_error(value, spec) is None for spec in fallback_specs
+            ):
                 reason = None
             if reason:
                 invalid_bounds.append(f"{field_name} '{value}' {reason}")
@@ -454,9 +495,9 @@ class ConfValidator(object):
             left_data_model == "EVENTS"
             and (inferred_accuracy == Accuracy.SNAPSHOT or group_by_data_model == "ENTITIES")
         ):
-            return _config_partition_spec(group_by, downstream_partition_spec)
+            return _snapshot_group_by_partition_spec(group_by, downstream_partition_spec)
         if left_data_model is None and inferred_accuracy == Accuracy.SNAPSHOT:
-            return _config_partition_spec(group_by, downstream_partition_spec)
+            return _snapshot_group_by_partition_spec(group_by, downstream_partition_spec)
         return downstream_partition_spec
 
     def _validate_embedded_join_bounds(
