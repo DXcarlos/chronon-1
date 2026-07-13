@@ -299,8 +299,17 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
                        semanticHash: Option[String] = None,
                        clusterByColumns: List[String] = List.empty): Unit = {
 
-    // partitions to the last
-    val colOrder = df.columns.diff(partitionColumns) ++ partitionColumns
+    // For clustered tables, clustering columns must appear within Delta's stats coverage
+    // (default: first 32 columns). Place them first to guarantee stats exist regardless
+    // of how many aggregation columns the GroupBy produces.
+    // For Hive-style partitioned tables, partition columns go last (Hive convention).
+    val colOrder = if (clusterByColumns.nonEmpty) {
+      val clusterFirst = clusterByColumns.filter(df.columns.contains)
+      val rest = df.columns.filterNot(clusterFirst.contains)
+      (clusterFirst ++ rest).toArray
+    } else {
+      df.columns.diff(partitionColumns) ++ partitionColumns
+    }
 
     val dfRearranged = df.select(colOrder.map(colName => df.col(QuotingUtils.quoteIdentifier(colName))): _*)
 
