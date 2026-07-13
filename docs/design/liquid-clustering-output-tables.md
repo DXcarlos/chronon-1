@@ -356,9 +356,25 @@ def save(tableName: String,
 }
 ```
 
-#### e) Callers: `StagingQuery.scala`, `GroupBy.scala`, `Join.scala`
+#### e) Callers: `StagingQuery.scala`, `GroupBy.scala`, and every modular Join batch job
 
-Each reads `clusterByColumns` from `metaData` and passes it through:
+Chronon's Join execution has two planners: the legacy monolith planner (single `MergeJob` writes
+the final output) and the modular planner (`modular_execution=True`), which splits the join into
+several independently-orchestrated batch jobs, each writing its own table. `clusterByColumns` must
+be threaded through **every** one of these write sites, not just the final output, since each is a
+real physical table subject to the same `PARTITIONED BY` vs. `CLUSTER BY` choice:
+
+| Job | Table written |
+|---|---|
+| `batch/StagingQuery.scala` | StagingQuery output |
+| `GroupBy.scala` (`computeBackfill`) | GroupBy backfill output |
+| `batch/SourceJob.scala` | Shared per-source snapshot table |
+| `batch/JoinBootstrapJob.scala` | Per-join bootstrap table |
+| `batch/JoinPartJob.scala` | Per-join-part cache table |
+| `batch/JoinDerivationJob.scala` | Final Join output — **modular planner** |
+| `batch/MergeJob.scala` | Final Join output — **monolith planner** |
+
+Each reads `clusterByColumns` from its own `metaData` and passes it through:
 
 ```scala
 // StagingQuery.scala
@@ -369,6 +385,13 @@ private val clusterByCols: Seq[String] =
 df.save(outputTable, tableProps, partitionCols,
         autoExpand = ..., clusterByColumns = clusterByCols)
 ```
+
+⚠️ **Gap found during implementation:** an initial pass only wired `StagingQuery` and `MergeJob`
+(the monolith planner's final-output writer), following the existing precedent that
+`additionalOutputPartitionColumns` was StagingQuery-only. This missed that `MergeJob` is *not* the
+final writer under `modular_execution=True` — `JoinDerivationJob` is — so any Join run with the
+modular planner silently ignored `cluster_by_columns`. GroupBy backfill output was also missed.
+Both gaps are closed: all seven call sites above now forward `clusterByColumns`.
 
 ### 4. Python API Changes
 
@@ -579,8 +602,12 @@ df.write
 | `spark/.../TableUtils.scala` | Widen MERGE INTO condition for clustering |
 | `spark/.../Extensions.scala` | Pass `clusterByColumns` through `save()` |
 | `spark/.../batch/StagingQuery.scala` | Read and pass `clusterByColumns` |
-| `spark/.../GroupBy.scala` | Read and pass `clusterByColumns` |
-| `spark/.../Join.scala` | Read and pass `clusterByColumns` |
+| `spark/.../GroupBy.scala` (`computeBackfill`) | Read and pass `clusterByColumns` |
+| `spark/.../batch/SourceJob.scala` | Read and pass `clusterByColumns` |
+| `spark/.../batch/JoinBootstrapJob.scala` | Read and pass `clusterByColumns` |
+| `spark/.../batch/JoinPartJob.scala` | Read and pass `clusterByColumns` |
+| `spark/.../batch/JoinDerivationJob.scala` | Read and pass `clusterByColumns` (modular planner's final output) |
+| `spark/.../batch/MergeJob.scala` | Read and pass `clusterByColumns` (monolith planner's final output) |
 | `python/src/ai/chronon/group_by.py` | Add `cluster_by_columns` param |
 | `python/src/ai/chronon/join.py` | Add `cluster_by_columns` param |
 | `python/src/ai/chronon/staging_query.py` | Add `cluster_by_columns` param |
