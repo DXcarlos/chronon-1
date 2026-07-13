@@ -2,7 +2,7 @@ package ai.chronon.spark.catalog
 
 import ai.chronon.api.{PartitionRange, PartitionSpec}
 import ai.chronon.spark.submission.SparkSessionBuilder
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.types.StringType
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
@@ -519,6 +519,61 @@ class DeltaLakeClusteringTest extends AnyFlatSpec with BeforeAndAfterAll {
 
       val range = PartitionRange("2024-05-01", "2024-05-03")(tu.partitionSpec)
       tu.unfilledRanges(tableName, range) shouldBe None
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "throw IllegalStateException with clear message when writing empty DataFrame to clustered table" in {
+    val tableName = s"$dbName.cluster_empty_df"
+    try {
+      val customSpec = PartitionSpec("featureDt", "yyyy-MM-dd", 86400000L)
+      val tu = new TableUtils(spark, partitionSpecOverride = Some(customSpec))
+      import spark.implicits._
+
+      val df1 = Seq((1, java.sql.Date.valueOf("2024-06-01"), "acct1")).toDF("id", "featureDt", "accountId")
+      tu.insertPartitions(df1, tableName,
+        partitionColumns = List("featureDt"),
+        clusterByColumns = List("featureDt", "accountId"))
+
+      val emptyDf = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], df1.schema)
+      val ex = intercept[IllegalStateException] {
+        tu.insertPartitions(emptyDf, tableName,
+          partitionColumns = List("featureDt"),
+          clusterByColumns = List("featureDt", "accountId"))
+      }
+      ex.getMessage should include("DataFrame has zero rows")
+      ex.getMessage should include("featureDt")
+      ex.getMessage should include(tableName)
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "preserve existing data when empty DataFrame write is rejected" in {
+    val tableName = s"$dbName.cluster_empty_preserve"
+    try {
+      val customSpec = PartitionSpec("featureDt", "yyyy-MM-dd", 86400000L)
+      val tu = new TableUtils(spark, partitionSpecOverride = Some(customSpec))
+      import spark.implicits._
+
+      val df1 = Seq(
+        (1, java.sql.Date.valueOf("2024-06-01"), "acct1"),
+        (2, java.sql.Date.valueOf("2024-06-02"), "acct2")
+      ).toDF("id", "featureDt", "accountId")
+      tu.insertPartitions(df1, tableName,
+        partitionColumns = List("featureDt"),
+        clusterByColumns = List("featureDt", "accountId"))
+
+      val emptyDf = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], df1.schema)
+      intercept[IllegalStateException] {
+        tu.insertPartitions(emptyDf, tableName,
+          partitionColumns = List("featureDt"),
+          clusterByColumns = List("featureDt", "accountId"))
+      }
+
+      // Original data must survive the failed write attempt
+      tu.partitions(tableName) should contain theSameElementsAs List("2024-06-01", "2024-06-02")
     } finally {
       spark.sql(s"DROP TABLE IF EXISTS $tableName")
     }

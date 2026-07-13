@@ -372,6 +372,13 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
       val predicate = partitionColumns
         .map { pc =>
           val values = finalizedDf.select(col(pc)).distinct().collect().map(row => lit(row.get(0)).expr.sql)
+          if (values.isEmpty) {
+            throw new IllegalStateException(
+              s"Cannot write to clustered table $tableName: DataFrame has zero rows. " +
+                s"The partition column '$pc' produced no values for the replaceWhere predicate. " +
+                s"This usually means the upstream query returned no data for the requested date range. " +
+                s"Check that the source tables have data for the range being computed.")
+          }
           s"`$pc` IN (${values.mkString(", ")})"
         }
         .mkString(" AND ")
