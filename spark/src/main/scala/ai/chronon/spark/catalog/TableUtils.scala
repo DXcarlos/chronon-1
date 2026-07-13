@@ -365,9 +365,10 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
     val isClustered = clusterByColumns.nonEmpty && readFormat.exists(_.supportsLiquidClustering)
     if (isClustered) {
       // replaceWhere is atomic (single commit) and leverages Delta's file-level min/max stats
-      // to identify affected files without a row-level MERGE comparison — see
-      // docs/design/liquid-clustering-output-tables.md ("Write Strategy Analysis") for why
-      // this is preferred over MERGE INTO ON FALSE for clustered Delta tables.
+      // to identify affected files without a row-level MERGE comparison.
+      // NOTE: replaceWhere MUST be used with saveAsTable(), NOT insertInto().
+      // insertInto() ignores DataFrameWriter options (including replaceWhere) and
+      // SaveMode.Overwrite would wipe the entire table instead of just the target partitions.
       val predicate = partitionColumns
         .map { pc =>
           val values = finalizedDf.select(col(pc)).distinct().collect().map(row => lit(row.get(0)).expr.sql)
@@ -375,9 +376,10 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
         }
         .mkString(" AND ")
       finalizedDf.write
+        .format("delta")
         .mode(SaveMode.Overwrite)
         .option("replaceWhere", predicate)
-        .insertInto(tableName)
+        .saveAsTable(tableName)
     } else if (isIceberg && partitionColumns.nonEmpty && !hasPartitionSpec) {
       // Unpartitioned / UC liquid clustering: insertInto() with DYNAMIC mode appends instead of
       // replacing. Use MERGE INTO with ON FALSE for atomic delete+insert in a single snapshot.
