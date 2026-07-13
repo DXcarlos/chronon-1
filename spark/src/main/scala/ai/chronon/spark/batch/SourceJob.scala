@@ -20,6 +20,8 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
   private val sourceWithFilter = node
   private val dateRange = range.toPartitionRange(tableUtils.partitionSpec)
   private val outputTable = metaData.outputTable
+  private val clusterByColumns: Seq[String] =
+    Option(metaData.clusterByColumns).map(_.toScala.toSeq).getOrElse(Seq.empty)
 
   def parseSkewKeys(jmap: java.util.Map[String, java.util.List[String]]): Option[Map[String, Seq[String]]] = {
     Option(jmap).map(_.toScala.map { case (key, list) => key -> list.asScala.toSeq }.toMap)
@@ -64,7 +66,7 @@ class SourceJob(node: SourceWithFilterNode, metaData: MetaData, range: DateRange
         }
 
         // Save using the provided outputTable or compute one if not provided
-        dfWithTimeCol.save(outputTable, tableProperties = metaData.tableProps)
+        dfWithTimeCol.save(outputTable, tableProperties = metaData.tableProps, clusterByColumns = clusterByColumns)
       }
     }
   }

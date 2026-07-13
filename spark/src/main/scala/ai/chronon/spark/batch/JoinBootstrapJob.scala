@@ -30,6 +30,8 @@ class JoinBootstrapJob(node: JoinBootstrapNode, metaData: MetaData, range: DateR
 
   // Use the node's metadata output table
   private val outputTable = metaData.outputTable
+  private val clusterByColumns: Seq[String] =
+    Option(metaData.clusterByColumns).map(_.toScala).getOrElse(Seq.empty)
 
   def run(): Unit = tableUtils.withJobDescription(s"JoinBootstrapJob(${join.metaData.name}) $dateRange") {
     // Runs the bootstrap query and produces an output table specific to the `left` side of the Join
@@ -126,7 +128,7 @@ class JoinBootstrapJob(node: JoinBootstrapNode, metaData: MetaData, range: DateR
     println(s"EnrichedDF schema: ${enrichedDf.schema}")
 
     // set autoExpand = true since log table could be a bootstrap part
-    enrichedDf.save(bootstrapTable, tableProps, autoExpand = true)
+    enrichedDf.save(bootstrapTable, tableProps, autoExpand = true, clusterByColumns = clusterByColumns)
 
     val elapsedMins = (System.currentTimeMillis() - startMillis) / (60 * 1000)
     logger.info(s"Finished computing bootstrap table $bootstrapTable in $elapsedMins minutes")

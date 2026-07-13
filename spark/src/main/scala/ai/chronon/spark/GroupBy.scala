@@ -928,6 +928,8 @@ object GroupBy {
     val tableProps = Option(groupByConf.metaData.tableProperties)
       .map(_.toScala)
       .orNull
+    val clusterByColumns: Seq[String] =
+      Option(groupByConf.metaData.clusterByColumns).map(_.toScala.toSeq).getOrElse(Seq.empty)
     val groupByUnfilledRangesOpt = Option(
       Seq(PartitionRange(startPartition, endPartition)(tableUtils.partitionSpec))
     ) // TODO(tchow): possilbly revert if orchestrator is not yet available.
@@ -959,11 +961,11 @@ object GroupBy {
               case EVENTS   => groupByBackfill.snapshotEvents(range)
             }
             if (!groupByConf.hasDerivations) {
-              outputDf.save(outputTable, tableProps)
+              outputDf.save(outputTable, tableProps, clusterByColumns = clusterByColumns)
             } else {
               val finalOutputColumns = groupByConf.derivationsScala.finalOutputColumn(outputDf.columns)
               val result = outputDf.select(finalOutputColumns.toSeq: _*)
-              result.save(outputTable, tableProps)
+              result.save(outputTable, tableProps, clusterByColumns = clusterByColumns)
             }
             logger.info(s"Wrote to table $outputTable, into partitions: $range")
           }

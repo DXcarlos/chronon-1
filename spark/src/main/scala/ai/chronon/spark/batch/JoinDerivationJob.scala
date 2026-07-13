@@ -34,6 +34,9 @@ class JoinDerivationJob(node: JoinDerivationNode, metaData: MetaData, range: Dat
   // Output table for this derivation job comes from the metadata
   private val outputTable = metaData.outputTable
 
+  private val clusterByColumns: Seq[String] =
+    Option(metaData.clusterByColumns).map(_.toScala).getOrElse(Seq.empty)
+
   def run(): Unit = tableUtils.withJobDescription(s"JoinDerivationJob(${join.metaData.name}) $dateRange") {
 
     val leftDf = tableUtils.scanDf(query = null, table = trueLeftTable, range = Some(dateRange))
@@ -93,7 +96,7 @@ class JoinDerivationJob(node: JoinDerivationNode, metaData: MetaData, range: Dat
             }
           }
 
-    baseDf.select(finalOutputColumns: _*).save(outputTable)
+    baseDf.select(finalOutputColumns: _*).save(outputTable, clusterByColumns = clusterByColumns)
 
   }
 }

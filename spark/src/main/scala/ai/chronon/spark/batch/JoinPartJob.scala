@@ -3,6 +3,7 @@ package ai.chronon.spark.batch
 import ai.chronon.api.DataModel.{ENTITIES, EVENTS}
 import ai.chronon.api.Extensions.{DateRangeOps, DerivationOps, GroupByOps, JoinPartOps, MetadataOps, TableInfoOps}
 import ai.chronon.api.PartitionRange.toTimeRange
+import ai.chronon.api.ScalaJavaConversions.IterableOps
 import ai.chronon.api._
 import ai.chronon.online.metrics.Metrics
 import ai.chronon.planner.JoinPartNode
@@ -161,7 +162,9 @@ class JoinPartJob(node: JoinPartNode,
           // Cache join part data into intermediate table
           if (filledDf.isDefined) {
             logger.info(s"Writing to join part table: $partTable for partition range $unfilledRightRange")
-            filledDf.get.save(partTable, jobContext.tableProps.toMap)
+            val clusterByColumns: Seq[String] =
+              Option(metaData.clusterByColumns).map(_.toScala.toSeq).getOrElse(Seq.empty)
+            filledDf.get.save(partTable, jobContext.tableProps.toMap, clusterByColumns = clusterByColumns)
           } else {
             logger.info(s"Skipping $partTable because no data in computed joinPart.")
           }
