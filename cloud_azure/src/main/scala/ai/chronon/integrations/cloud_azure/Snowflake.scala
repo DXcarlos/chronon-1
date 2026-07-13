@@ -41,7 +41,8 @@ case object Snowflake extends Format {
                            schema: StructType,
                            partitionColumns: List[String],
                            tableProperties: Map[String, String],
-                           semanticHash: Option[String])(implicit sparkSession: SparkSession): Unit = {
+                           semanticHash: Option[String],
+                           clusterByColumns: List[String] = List.empty)(implicit sparkSession: SparkSession): Unit = {
     throw new UnsupportedOperationException("Table creation is not supported for Snowflake format.")
   }
 

@@ -357,6 +357,16 @@ struct MetaData {
 
     # information that needs to be present on every physical node
     204: optional common.ExecutionInfo executionInfo
+
+    /**
+    * When set (non-empty), the output table is created with `CLUSTER BY (col1, col2, ...)`
+    * (liquid clustering) instead of `PARTITIONED BY`. Only supported by formats that have
+    * an equivalent clustering mechanism (Delta Lake >= 3.1 / Databricks Runtime 13.3+,
+    * Snowflake). Formats without an equivalent (Iceberg, Hive) reject this at write time.
+    * The partition column (default "ds") remains a regular data column in the table; it is
+    * simply not used as a physical partition boundary.
+    **/
+    205: optional list<string> clusterByColumns
 }
 
 // This has to be 0-indexed for Java usage

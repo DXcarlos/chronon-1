@@ -325,4 +325,25 @@ class FormatTest extends SparkTestBase {
     Format.zeroParsedPartitionsWarning("db.t", List("garbage", "2026-06-03-03-00"), threeHourly) shouldBe empty
   }
 
+  // --- liquid clustering validation on createTable ---
+
+  it should "reject clusterByColumns for formats that don't support liquid clustering" in {
+    val ex = intercept[IllegalArgumentException] {
+      Hive.createTable("db.table",
+                       org.apache.spark.sql.types.StructType(Seq.empty),
+                       List("ds"),
+                       Map.empty,
+                       clusterByColumns = List("ds"))(spark)
+    }
+    ex.getMessage should include("Liquid clustering is not supported")
+  }
+
+  it should "default supportsLiquidClustering to false for a bare Format implementation" in {
+    val fmt = new Format {
+      override def supportSubPartitionsFilter = false
+      override def partitions(tableName: String, partitionFilters: String)(implicit ss: SparkSession) = List.empty
+    }
+    fmt.supportsLiquidClustering shouldBe false
+  }
+
 }

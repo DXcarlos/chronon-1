@@ -369,6 +369,7 @@ def Join(
     partition_interval: Optional[Union[common.Window, str]] = None,
     partition_offset: Optional[Union[common.Window, str]] = None,
     workflow_concurrency: Optional[int] = None,
+    cluster_by_columns: Optional[List[str]] = None,
 ) -> api.Join:
     """
     Construct a join object. A join can pull together data from various GroupBy's both offline and online. This is also
@@ -492,6 +493,14 @@ def Join(
         when a workflow is started from this Join. Request-level overrides take
         precedence.
     :type workflow_concurrency: int
+    :param cluster_by_columns:
+        When set (non-empty), the output table is created with liquid clustering
+        (`CLUSTER BY (col1, col2, ...)`) instead of Hive-style partitioning
+        (`PARTITIONED BY`). Only supported by formats with an equivalent clustering
+        mechanism (Delta Lake >= 3.1 / Databricks Runtime 13.3+, Snowflake); other
+        formats reject this at write time. The partition column (e.g. "ds") remains
+        a regular data column in the table.
+    :type cluster_by_columns: List[str]
     """
     # Normalize row_ids
     if isinstance(row_ids, str):
@@ -635,6 +644,7 @@ def Join(
         executionInfo=exec_info,
         version=str(version) if version is not None else None,
         environments=environments,
+        clusterByColumns=cluster_by_columns,
     )
 
     join = api.Join(

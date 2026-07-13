@@ -185,4 +185,6 @@ case object DeltaLake extends Format {
     }
 
   override def supportSubPartitionsFilter: Boolean = true
+
+  override def supportsLiquidClustering: Boolean = true
 }

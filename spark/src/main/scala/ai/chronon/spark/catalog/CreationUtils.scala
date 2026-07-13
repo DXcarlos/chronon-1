@@ -20,25 +20,35 @@ object CreationUtils {
                      schema: StructType,
                      partitionColumns: List[String],
                      tableProperties: Map[String, String],
-                     tableTypeString: String): String = {
+                     tableTypeString: String,
+                     clusterByColumns: List[String] = List.empty): String = {
 
     require(
       tableTypeString.isEmpty || ALLOWED_TABLE_TYPES.contains(tableTypeString.toLowerCase),
       s"Invalid table type: ${tableTypeString}. Must be empty OR one of: ${ALLOWED_TABLE_TYPES}"
     )
 
-    val noPartitions = StructType(
-      schema
-        .filterNot(field => partitionColumns.contains(field.name)))
+    val useClusterBy = clusterByColumns != null && clusterByColumns.nonEmpty
+
+    // Liquid clustering keeps the clustering columns (e.g. ds) as regular data columns rather
+    // than extracting them into a Hive-style partition spec, since CLUSTER BY has no notion of
+    // physically separate partition directories.
+    val dataSchema =
+      if (useClusterBy) schema
+      else StructType(schema.filterNot(field => partitionColumns.contains(field.name)))
 
     val createFragment =
       s"""CREATE TABLE IF NOT EXISTS $tableName (
-         |    ${noPartitions.toDDL}
+         |    ${dataSchema.toDDL}
          |)
          |${if (tableTypeString.isEmpty) "" else f"USING ${tableTypeString}"}
          |""".stripMargin
 
-    val partitionFragment = if (partitionColumns != null && partitionColumns.nonEmpty) {
+    val layoutFragment = if (useClusterBy) {
+      s"""CLUSTER BY (
+         |    ${clusterByColumns.mkString(",\n    ")}
+         |)""".stripMargin
+    } else if (partitionColumns != null && partitionColumns.nonEmpty) {
 
       val partitionDefinitions = schema
         .filter(field => partitionColumns.contains(field.name))
@@ -63,7 +73,7 @@ object CreationUtils {
       ""
     }
 
-    Seq(createFragment, partitionFragment, propertiesFragment).mkString("\n")
+    Seq(createFragment, layoutFragment, propertiesFragment).mkString("\n")
 
   }
 

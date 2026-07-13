@@ -28,6 +28,11 @@ class StagingQuery(stagingQueryConf: api.StagingQuery, endPartition: String, tab
         .map(_.toScala)
         .getOrElse(Seq.empty))
 
+  private val clusterByCols: Seq[String] =
+    Option(stagingQueryConf.metaData.clusterByColumns)
+      .map(_.toScala)
+      .getOrElse(Seq.empty)
+
   def computeStagingQuery(stepDays: Option[Int] = None,
                           enableAutoExpand: Option[Boolean] = Some(true),
                           overrideStartPartition: Option[String] = None,
@@ -88,7 +93,11 @@ class StagingQuery(stagingQueryConf: api.StagingQuery, endPartition: String, tab
       StagingQuery.substitute(tableUtils, stagingQueryConf.query, range.start, range.end, endPartition)
     logger.info(s"Rendered Staging Query to run is:\n$renderedQuery")
     val df = tableUtils.sql(renderedQuery)
-    df.save(outputTable, tableProps, partitionCols, autoExpand = enableAutoExpand.get)
+    df.save(outputTable,
+           tableProps,
+           partitionCols,
+           autoExpand = enableAutoExpand.get,
+           clusterByColumns = clusterByCols)
     logger.info(s"Wrote to table $outputTable, into partitions: $range")
     logger.info(s"Finished writing Staging Query data to $outputTable")
   }

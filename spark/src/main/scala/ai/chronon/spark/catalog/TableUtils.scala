@@ -296,7 +296,8 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
                        tableProperties: Map[String, String] = null,
                        partitionColumns: List[String] = List(partitionColumn),
                        autoExpand: Boolean = false,
-                       semanticHash: Option[String] = None): Unit = {
+                       semanticHash: Option[String] = None,
+                       clusterByColumns: List[String] = List.empty): Unit = {
 
     // partitions to the last
     val colOrder = df.columns.diff(partitionColumns) ++ partitionColumns
@@ -309,7 +310,8 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
                                                     dfRearranged.schema,
                                                     partitionColumns,
                                                     tableProperties,
-                                                    semanticHash)(sparkSession)
+                                                    semanticHash,
+                                                    clusterByColumns)(sparkSession)
       } catch {
         case _: TableAlreadyExistsException =>
           logger.info(s"Table $tableName already exists, skipping creation")
@@ -353,10 +355,30 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
     }
 
     logger.info(s"Writing to $tableName ...")
-    val isIceberg = tableFormatProvider.readFormat(tableName).contains(Iceberg)
+    val readFormat = tableFormatProvider.readFormat(tableName)
+    val isIceberg = readFormat.contains(Iceberg)
     val hasPartitionSpec =
       isIceberg && Try(Iceberg.partitionColumnNames(tableName)(sparkSession).nonEmpty).getOrElse(false)
-    if (isIceberg && partitionColumns.nonEmpty && !hasPartitionSpec) {
+    // A clustered write only makes sense once the target table itself has no Hive-style
+    // partition spec (CLUSTER BY tables never do) — guards against stale callers still
+    // passing clusterByColumns against a partitioned table from a previous config.
+    val isClustered = clusterByColumns.nonEmpty && readFormat.exists(_.supportsLiquidClustering)
+    if (isClustered) {
+      // replaceWhere is atomic (single commit) and leverages Delta's file-level min/max stats
+      // to identify affected files without a row-level MERGE comparison — see
+      // docs/design/liquid-clustering-output-tables.md ("Write Strategy Analysis") for why
+      // this is preferred over MERGE INTO ON FALSE for clustered Delta tables.
+      val predicate = partitionColumns
+        .map { pc =>
+          val values = finalizedDf.select(col(pc)).distinct().collect().map(row => lit(row.get(0)).expr.sql)
+          s"`$pc` IN (${values.mkString(", ")})"
+        }
+        .mkString(" AND ")
+      finalizedDf.write
+        .mode(SaveMode.Overwrite)
+        .option("replaceWhere", predicate)
+        .insertInto(tableName)
+    } else if (isIceberg && partitionColumns.nonEmpty && !hasPartitionSpec) {
       // Unpartitioned / UC liquid clustering: insertInto() with DYNAMIC mode appends instead of
       // replacing. Use MERGE INTO with ON FALSE for atomic delete+insert in a single snapshot.
       // ON FALSE means: no target row matches any source row, so all target rows matching the

@@ -134,9 +134,11 @@ class MergeJob(node: JoinMergeNode, metaData: MetaData, range: DateRange, joinPa
         }
 
       val tableProps = createTableProperties
+      val clusterByColumns: Seq[String] =
+        Option(metaData.clusterByColumns).map(_.toScala.toSeq).getOrElse(Seq.empty)
 
       withFinalJoinWriteOptimizations(tableUtils) {
-        joinedDfTry.get.save(outputTable, tableProps, autoExpand = true)
+        joinedDfTry.get.save(outputTable, tableProps, autoExpand = true, clusterByColumns = clusterByColumns)
       }
     }
   }

@@ -34,7 +34,13 @@ trait Format {
                   schema: StructType,
                   partitionColumns: List[String],
                   providedProperties: Map[String, String],
-                  semanticHash: Option[String] = None)(implicit sparkSession: SparkSession): Unit = {
+                  semanticHash: Option[String] = None,
+                  clusterByColumns: List[String] = List.empty)(implicit sparkSession: SparkSession): Unit = {
+    if (clusterByColumns.nonEmpty && !supportsLiquidClustering) {
+      throw new IllegalArgumentException(
+        s"Liquid clustering is not supported for format '$tableTypeString'. " +
+          s"Remove cluster_by_columns or use a format that supports it (e.g. Delta Lake).")
+    }
     val (creationName, quotedOriginal) = semanticHash match {
       case Some(hash) =>
         val parts = Format.parseIdentifier(tableName).toList
@@ -44,7 +50,7 @@ trait Format {
     }
     sparkSession.sql(
       CreationUtils
-        .createTableSql(creationName, schema, partitionColumns, providedProperties, tableTypeString))
+        .createTableSql(creationName, schema, partitionColumns, providedProperties, tableTypeString, clusterByColumns))
     if (semanticHash.isDefined) {
       try {
         sparkSession.sql(Format.renameTableSql(creationName, tableName))
@@ -61,6 +67,10 @@ trait Format {
       }
     }
   }
+
+  // Whether this format has an equivalent to liquid clustering (CLUSTER BY) as opposed to
+  // Hive-style PARTITIONED BY. Overridden by formats that support it (Delta Lake variants).
+  def supportsLiquidClustering: Boolean = false
 
   def table(tableName: String, partitionFilters: String)(implicit sparkSession: SparkSession): DataFrame = {
 
