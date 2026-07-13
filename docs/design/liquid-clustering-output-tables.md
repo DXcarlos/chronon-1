@@ -512,7 +512,10 @@ def _validate_cluster_by_columns(self, meta_data, config_name):
 | `replaceWhere` constraint check rejects rows outside predicate | Write fails if DataFrame has unexpected ds values | Build predicate from actual DataFrame values (IN list), not from config — always matches |
 | `unfilledRanges` fails on clustered tables | Backfills break | Already handled: Delta `scanDistinctPartitions()` and `statsDateRange()` work without partitions |
 | Partition column is `DateType` instead of `StringType` | `scanDistinctPartitions` silently returns empty → full recompute every run | Added `DateType` handling: cast to `yyyy-MM-dd` strings before collecting distinct values |
+| `DateType` partition column in typed where clauses | `typedWhereClauses` generates `timestamp_millis()` predicates for `DateType` → filter matches zero rows → empty DataFrame | Route `DateType` to string-literal comparisons (same as `StringType`) — Spark implicitly casts string to DATE |
 | `replaceWhere` used with `insertInto()` | `insertInto` ignores all options → full table overwrite on every write | Must use `saveAsTable()` with explicit `.format("delta")` for `replaceWhere` to take effect |
+| Empty DataFrame written to clustered table | `replaceWhere` predicate becomes `IN ()` → Delta rejects with cryptic error | Fail early with `IllegalStateException` explaining upstream returned no data |
+| Clustering columns outside Delta stats coverage | `DELTA_CLUSTERING_COLUMN_MISSING_STATS` when GroupBy produces 150+ columns | Place clustering columns first in column order; Hive convention (partition cols last) only for non-clustered tables |
 | Users accidentally set clustering on Iceberg | Confusion | Compile-time validation error with clear message |
 | `replaceWhere` on OSS Delta without data-skipping | Slower than expected | Still atomic and correct; performance degrades gracefully to full-file scan (same as MERGE INTO would) |
 
