@@ -54,7 +54,7 @@ class DefaultFormatProvider(val sparkSession: SparkSession) extends FormatProvid
     }
   }
 
-  private def isDeltaTable(tableName: String): Boolean = {
+  protected def isDeltaTable(tableName: String): Boolean = {
     Try {
       val describeResult = sparkSession.sql(s"DESCRIBE DETAIL $tableName")
       describeResult.select("format").first().getString(0).toLowerCase
