@@ -425,8 +425,9 @@ Same for `Join(...)` and `StagingQuery(...)`.
 When Chronon reads its **own** output tables (e.g., for `unfilledRanges` checks), it uses `TableUtils.partitions()`. For clustered tables, this must work without `SHOW PARTITIONS`:
 
 - **Delta Lake** already has a fallback: `scanDistinctPartitions()` which does `SELECT DISTINCT partition_col FROM table`. This works for clustered tables.
+- **Important: `DateType` support.** If the partition column (e.g. `featureDt`) is `DateType` rather than `StringType` in the table schema (common when a StagingQuery aliases a DATE source column as the partition key), `scanDistinctPartitions` must cast DATE values to `yyyy-MM-dd` strings. Without this, the method silently returns an empty list and `unfilledRanges` reports all partitions as missing.
 - Additionally, `DeltaLake.statsDateRange()` can compute min/max from the transaction log stats — already tested with `CLUSTER BY` (see `DeltaLakeTest.scala:133`).
-- The `timePartitioned` flag on the **output** table's `TableInfo` signals this non-Hive path. When `clusterByColumns` is set, we should auto-set `timePartitioned=true` on the output TableInfo.
+- **Partition column resolution:** Chronon determines which column to scan via `spark.chronon.partition.column` (default `ds`), **not** from `cluster_by_columns`. The two are independent — `cluster_by_columns` only controls the physical table layout (`CLUSTER BY` clause) and write strategy (`replaceWhere` predicate).
 
 ### 6. Validation Rules
 
@@ -510,6 +511,8 @@ def _validate_cluster_by_columns(self, meta_data, config_name):
 | Delta version too old for CLUSTER BY | Table creation fails | Validate at compile time (warn) + clear runtime error message |
 | `replaceWhere` constraint check rejects rows outside predicate | Write fails if DataFrame has unexpected ds values | Build predicate from actual DataFrame values (IN list), not from config — always matches |
 | `unfilledRanges` fails on clustered tables | Backfills break | Already handled: Delta `scanDistinctPartitions()` and `statsDateRange()` work without partitions |
+| Partition column is `DateType` instead of `StringType` | `scanDistinctPartitions` silently returns empty → full recompute every run | Added `DateType` handling: cast to `yyyy-MM-dd` strings before collecting distinct values |
+| `replaceWhere` used with `insertInto()` | `insertInto` ignores all options → full table overwrite on every write | Must use `saveAsTable()` with explicit `.format("delta")` for `replaceWhere` to take effect |
 | Users accidentally set clustering on Iceberg | Confusion | Compile-time validation error with clear message |
 | `replaceWhere` on OSS Delta without data-skipping | Slower than expected | Still atomic and correct; performance degrades gracefully to full-file scan (same as MERGE INTO would) |
 
