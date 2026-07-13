@@ -116,10 +116,14 @@ When writing to a clustered (non-partitioned) Delta table, we need to **replace*
 ```scala
 // Delta identifies files whose min/max stats overlap the predicate,
 // marks them as removed, and writes new files — all in one commit.
+// IMPORTANT: replaceWhere MUST be used with saveAsTable(), NOT insertInto().
+// insertInto() ignores all DataFrameWriter options, so replaceWhere would
+// be silently dropped and SaveMode.Overwrite would wipe the entire table.
 df.write
+  .format("delta")
   .mode("overwrite")
   .option("replaceWhere", "ds IN ('2024-07-11', '2024-07-12')")
-  .insertInto(tableName)
+  .saveAsTable(tableName)
 ```
 
 This is more efficient than MERGE INTO because:
@@ -298,6 +302,8 @@ def insertPartitions(df: DataFrame,
   if (isClustered && isDelta) {
     // BEST PATH for clustered Delta: replaceWhere
     // Atomic, uses data-skipping stats, no row-level comparison.
+    // NOTE: MUST use saveAsTable(), NOT insertInto() — insertInto() ignores
+    // all DataFrameWriter options, so replaceWhere would be silently dropped.
     val replaceWherePredicate = partitionColumns.map { pc =>
       val values = finalizedDf.select(col(pc)).distinct().collect()
         .map(row => lit(row.get(0)).expr.sql)
@@ -305,9 +311,10 @@ def insertPartitions(df: DataFrame,
     }.mkString(" AND ")
 
     finalizedDf.write
+      .format("delta")
       .mode("overwrite")
       .option("replaceWhere", replaceWherePredicate)
-      .insertInto(tableName)
+      .saveAsTable(tableName)
 
   } else if (isIceberg && partitionColumns.nonEmpty && !hasPartitionSpec) {
     // Fallback for unpartitioned Iceberg: MERGE INTO with ON FALSE
@@ -336,7 +343,7 @@ def insertPartitions(df: DataFrame,
 ```
 
 **Key design decisions:**
-- **Delta clustered → `replaceWhere`**: Atomic, efficient, uses data-skipping. No full-table scan.
+- **Delta clustered → `replaceWhere` + `saveAsTable`**: Atomic, efficient, uses data-skipping. No full-table scan. Must use `saveAsTable()`, not `insertInto()` (which ignores `replaceWhere`).
 - **Iceberg unpartitioned → MERGE INTO ON FALSE**: Iceberg lacks `replaceWhere`; MERGE INTO is the only atomic option.
 - **Hive/partitioned → `insertInto` with Overwrite**: Existing behavior, unchanged.
 
