@@ -881,6 +881,7 @@ class TableUtils(@transient val sparkSession: SparkSession, partitionSpecOverrid
 
     columnType match {
       case StringType     => whereClauses(range, Some(columnName))
+      case DateType       => whereClauses(range, Some(columnName))
       case _: NumericType => bounds(millis => s"${millis}L")
       case _              => bounds(millis => s"timestamp_millis(${millis}L)")
     }
