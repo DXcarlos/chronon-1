@@ -160,11 +160,25 @@ trait Format {
     import sparkSession.implicits._
     Try {
       val df = sparkSession.read.table(tableName)
-      df.schema(partitionColumn).dataType match {
+      val dt = df.schema(partitionColumn).dataType
+      dt match {
         case StringType =>
           val filtered = if (partitionFilters.isEmpty) df else df.where(partitionFilters)
           filtered.select(col(partitionColumn)).distinct().as[String].collect().toList
-        case _ => List.empty
+        case DateType =>
+          // CLUSTER BY tables may store the partition column as DATE rather than STRING.
+          // Cast to yyyy-MM-dd strings so Chronon's string-based partition arithmetic works.
+          val filtered = if (partitionFilters.isEmpty) df else df.where(partitionFilters)
+          filtered
+            .select(col(partitionColumn).cast(StringType).as(partitionColumn))
+            .distinct()
+            .as[String]
+            .collect()
+            .toList
+        case other =>
+          logger.info(
+            s"scanDistinctPartitions: column $partitionColumn has unsupported type $other for table $tableName, returning empty")
+          List.empty
       }
     } match {
       case Success(result) => result

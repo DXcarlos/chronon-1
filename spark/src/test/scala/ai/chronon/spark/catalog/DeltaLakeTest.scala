@@ -454,4 +454,73 @@ class DeltaLakeClusteringTest extends AnyFlatSpec with BeforeAndAfterAll {
       spark.sql(s"DROP TABLE IF EXISTS $tableName")
     }
   }
+
+  it should "detect partitions when the clustered column is DateType, not StringType" in {
+    val tableName = s"$dbName.cluster_date_col"
+    try {
+      val customSpec = PartitionSpec("featureDt", "yyyy-MM-dd", 86400000L)
+      val tu = new TableUtils(spark, partitionSpecOverride = Some(customSpec))
+
+      spark.sql(s"""
+        CREATE TABLE $tableName (
+          id INT, value STRING, featureDt DATE
+        ) USING DELTA CLUSTER BY (featureDt)
+      """)
+      spark.sql(s"""
+        INSERT INTO $tableName VALUES
+          (1, 'v1', DATE '2024-03-01'),
+          (2, 'v2', DATE '2024-03-02'),
+          (3, 'v3', DATE '2024-03-03')
+      """)
+
+      spark.read.table(tableName).schema("featureDt").dataType shouldBe org.apache.spark.sql.types.DateType
+
+      val scanned = DeltaLake.scanDistinctPartitions(tableName, "featureDt", "")
+      scanned should contain theSameElementsAs List("2024-03-01", "2024-03-02", "2024-03-03")
+
+      tu.partitions(tableName) should contain theSameElementsAs List("2024-03-01", "2024-03-02", "2024-03-03")
+
+      val range = PartitionRange("2024-03-01", "2024-03-03")(tu.partitionSpec)
+      tu.unfilledRanges(tableName, range) shouldBe None
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "detect DateType partitions in a multi-column CLUSTER BY table written via insertPartitions" in {
+    val tableName = s"$dbName.cluster_multikey_date"
+    try {
+      val customSpec = PartitionSpec("featureDt", "yyyy-MM-dd", 86400000L)
+      val tu = new TableUtils(spark, partitionSpecOverride = Some(customSpec))
+      import spark.implicits._
+
+      val df = Seq(
+        (1, java.sql.Date.valueOf("2024-05-01"), "acct1", java.sql.Timestamp.valueOf("2024-05-01 08:30:00")),
+        (2, java.sql.Date.valueOf("2024-05-01"), "acct2", java.sql.Timestamp.valueOf("2024-05-01 09:00:00")),
+        (3, java.sql.Date.valueOf("2024-05-02"), "acct1", java.sql.Timestamp.valueOf("2024-05-02 10:15:00"))
+      ).toDF("id", "featureDt", "accountId", "availabilityTs")
+
+      tu.insertPartitions(df, tableName,
+        partitionColumns = List("featureDt"),
+        clusterByColumns = List("featureDt", "accountId", "availabilityTs"))
+
+      spark.read.table(tableName).schema("featureDt").dataType shouldBe org.apache.spark.sql.types.DateType
+      tu.partitions(tableName) should contain theSameElementsAs List("2024-05-01", "2024-05-02")
+
+      // Second write: day 3 — prior data must survive
+      val df2 = Seq(
+        (4, java.sql.Date.valueOf("2024-05-03"), "acct3", java.sql.Timestamp.valueOf("2024-05-03 11:00:00"))
+      ).toDF("id", "featureDt", "accountId", "availabilityTs")
+      tu.insertPartitions(df2, tableName,
+        partitionColumns = List("featureDt"),
+        clusterByColumns = List("featureDt", "accountId", "availabilityTs"))
+
+      tu.partitions(tableName) should contain theSameElementsAs List("2024-05-01", "2024-05-02", "2024-05-03")
+
+      val range = PartitionRange("2024-05-01", "2024-05-03")(tu.partitionSpec)
+      tu.unfilledRanges(tableName, range) shouldBe None
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
 }
