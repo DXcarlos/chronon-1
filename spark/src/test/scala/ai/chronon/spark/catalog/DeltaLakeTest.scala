@@ -578,4 +578,75 @@ class DeltaLakeClusteringTest extends AnyFlatSpec with BeforeAndAfterAll {
       spark.sql(s"DROP TABLE IF EXISTS $tableName")
     }
   }
+
+  it should "place clustering columns first in the schema for Delta stats coverage" in {
+    val tableName = s"$dbName.cluster_col_order"
+    try {
+      val customSpec = PartitionSpec("featureDt", "yyyy-MM-dd", 86400000L)
+      val tu = new TableUtils(spark, partitionSpecOverride = Some(customSpec))
+      import spark.implicits._
+
+      // DataFrame with featureDt buried in the middle — clustering must move it first
+      val df = Seq(
+        (1, "val1", 100.0, java.sql.Date.valueOf("2024-07-01"), "acct1")
+      ).toDF("id", "value", "amount", "featureDt", "accountId")
+
+      tu.insertPartitions(df, tableName,
+        partitionColumns = List("featureDt"),
+        clusterByColumns = List("featureDt", "accountId"))
+
+      val tableColumns = spark.read.table(tableName).columns.toSeq
+      // Clustering columns must be first two, in declared order
+      tableColumns.head shouldBe "featureDt"
+      tableColumns(1) shouldBe "accountId"
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "generate string-based where clauses for DateType partition columns" in {
+    val tableName = s"$dbName.cluster_date_where"
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (id INT, featureDt DATE)
+        USING DELTA CLUSTER BY (featureDt)
+      """)
+      spark.sql(s"INSERT INTO $tableName VALUES (1, DATE '2024-08-15')")
+
+      val customSpec = PartitionSpec("featureDt", "yyyy-MM-dd", 86400000L)
+      val tu = new TableUtils(spark, partitionSpecOverride = Some(customSpec))
+      val range = PartitionRange("2024-08-01", "2024-08-31")(customSpec)
+
+      // typedWhereClauses must produce string comparisons, not timestamp_millis
+      val clauses = tu.typedWhereClauses(range, "featureDt", org.apache.spark.sql.types.DateType)
+      clauses.foreach { clause =>
+        clause should not include "timestamp_millis"
+        clause should (include(">=") or include("<"))
+      }
+
+      // Verify the clauses actually filter correctly
+      val filtered = spark.read.table(tableName).where(clauses.mkString(" AND "))
+      filtered.count() shouldBe 1
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "keep partition columns last for non-clustered tables (Hive convention)" in {
+    val tableName = s"$dbName.hive_col_order"
+    try {
+      val tu = new TableUtils(spark)
+      import spark.implicits._
+
+      val df = Seq(("2024-07-01", 1, "val1")).toDF("ds", "id", "value")
+
+      // No clusterByColumns → Hive-style: ds goes last
+      tu.insertPartitions(df, tableName, partitionColumns = List("ds"))
+
+      val tableColumns = spark.read.table(tableName).columns.toSeq
+      tableColumns.last shouldBe "ds"
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
 }
