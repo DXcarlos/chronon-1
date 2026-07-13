@@ -1,8 +1,9 @@
 package ai.chronon.spark.catalog
 
-import ai.chronon.api.PartitionSpec
+import ai.chronon.api.{PartitionRange, PartitionSpec}
 import ai.chronon.spark.submission.SparkSessionBuilder
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types.StringType
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
@@ -278,6 +279,179 @@ class DeltaLakeTest extends AnyFlatSpec with BeforeAndAfterAll {
     } finally {
       spark.sql(s"DROP TABLE IF EXISTS $tableName")
       spark.sql(s"DROP DATABASE IF EXISTS $dbName")
+    }
+  }
+}
+
+/** Integration tests for Delta Lake CLUSTER BY tables.
+  * Verifies the full partition-detection and write round-trip through TableUtils so that
+  * unfilledRanges correctly identifies already-written partitions in clustered tables.
+  */
+class DeltaLakeClusteringTest extends AnyFlatSpec with BeforeAndAfterAll {
+
+  private implicit lazy val spark: SparkSession =
+    SparkSessionBuilder.build(
+      "DeltaLakeClusteringTest",
+      local = true,
+      additionalConfig = Some(
+        Map(
+          "spark.sql.extensions" -> "io.delta.sql.DeltaSparkSessionExtension",
+          "spark.sql.catalog.spark_catalog" -> "org.apache.spark.sql.delta.catalog.DeltaCatalog",
+          "spark.chronon.partition.column" -> "ds",
+          "spark.chronon.table_write.format" -> "delta"
+        ))
+    )
+
+  override def afterAll(): Unit = {
+    if (spark != null) spark.stop()
+  }
+
+  private val dbName = s"delta_cluster_test_${System.nanoTime()}"
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sql(s"CREATE DATABASE IF NOT EXISTS $dbName")
+  }
+
+  it should "return empty partitionColumnNames for a CLUSTER BY table" in {
+    val tableName = s"$dbName.cluster_partcols"
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (id INT, value STRING, ds STRING)
+        USING DELTA CLUSTER BY (ds)
+      """)
+      DeltaLake.partitionColumnNames(tableName) shouldBe empty
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "return empty primaryPartitions for a CLUSTER BY table" in {
+    val tableName = s"$dbName.cluster_primary"
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (id INT, ds STRING)
+        USING DELTA CLUSTER BY (ds)
+      """)
+      spark.sql(s"INSERT INTO $tableName VALUES (1, '2024-01-01'), (2, '2024-01-02')")
+      DeltaLake.primaryPartitions(tableName, "ds", "") shouldBe empty
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "detect distinct partition values via scanDistinctPartitions for a CLUSTER BY table" in {
+    val tableName = s"$dbName.cluster_scan"
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (id INT, ds STRING)
+        USING DELTA CLUSTER BY (ds)
+      """)
+      spark.sql(s"INSERT INTO $tableName VALUES (1, '2024-01-01'), (2, '2024-01-02'), (3, '2024-01-01')")
+
+      val result = DeltaLake.scanDistinctPartitions(tableName, "ds", "")
+      result should contain theSameElementsAs List("2024-01-01", "2024-01-02")
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "detect partitions through TableUtils.partitions() for a CLUSTER BY table" in {
+    val tableName = s"$dbName.cluster_tu_parts"
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (id INT, ds STRING)
+        USING DELTA CLUSTER BY (ds)
+      """)
+      spark.sql(s"INSERT INTO $tableName VALUES (1, '2024-01-01'), (2, '2024-01-02'), (3, '2024-01-03')")
+
+      val tu = new TableUtils(spark)
+      tu.partitions(tableName) should contain theSameElementsAs List("2024-01-01", "2024-01-02", "2024-01-03")
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "return None from unfilledRanges when all partitions exist in a CLUSTER BY table" in {
+    val tableName = s"$dbName.cluster_unfilled"
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (id INT, ds STRING)
+        USING DELTA CLUSTER BY (ds)
+      """)
+      spark.sql(s"INSERT INTO $tableName VALUES (1, '2024-01-01'), (2, '2024-01-02'), (3, '2024-01-03')")
+
+      val tu = new TableUtils(spark)
+      val range = PartitionRange("2024-01-01", "2024-01-03")(tu.partitionSpec)
+      tu.unfilledRanges(tableName, range) shouldBe None
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "identify missing partitions in a CLUSTER BY table via unfilledRanges" in {
+    val tableName = s"$dbName.cluster_unfilled_gap"
+    try {
+      spark.sql(s"""
+        CREATE TABLE $tableName (id INT, ds STRING)
+        USING DELTA CLUSTER BY (ds)
+      """)
+      spark.sql(s"INSERT INTO $tableName VALUES (1, '2024-01-01'), (3, '2024-01-03')")
+
+      val tu = new TableUtils(spark)
+      val range = PartitionRange("2024-01-01", "2024-01-03")(tu.partitionSpec)
+      val unfilled = tu.unfilledRanges(tableName, range, skipFirstHole = false)
+      unfilled shouldBe defined
+      unfilled.get.flatMap(_.partitions) should contain theSameElementsAs Seq("2024-01-02")
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "preserve prior partitions when writing via insertPartitions with replaceWhere" in {
+    val tableName = s"$dbName.cluster_insert_read"
+    try {
+      val tu = new TableUtils(spark)
+      import spark.implicits._
+
+      // First write: days 1 and 2
+      val df1 = Seq((1, "val1", "2024-02-01"), (2, "val2", "2024-02-02")).toDF("id", "value", "ds")
+      tu.insertPartitions(df1, tableName, partitionColumns = List("ds"), clusterByColumns = List("ds"))
+
+      tu.partitions(tableName) should contain theSameElementsAs List("2024-02-01", "2024-02-02")
+
+      // Second write: day 3 only — days 1 and 2 must survive
+      val df2 = Seq((3, "val3", "2024-02-03")).toDF("id", "value", "ds")
+      tu.insertPartitions(df2, tableName, partitionColumns = List("ds"), clusterByColumns = List("ds"))
+
+      tu.partitions(tableName) should contain theSameElementsAs List("2024-02-01", "2024-02-02", "2024-02-03")
+
+      val range = PartitionRange("2024-02-01", "2024-02-03")(tu.partitionSpec)
+      tu.unfilledRanges(tableName, range) shouldBe None
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
+    }
+  }
+
+  it should "work with a custom partition column name like featureDt" in {
+    val tableName = s"$dbName.cluster_custom_col"
+    try {
+      val customSpec = PartitionSpec("featureDt", "yyyy-MM-dd", 86400000L)
+      val tu = new TableUtils(spark, partitionSpecOverride = Some(customSpec))
+      import spark.implicits._
+
+      val df = Seq((1, "val1", "2024-03-01"), (2, "val2", "2024-03-02")).toDF("id", "value", "featureDt")
+      tu.insertPartitions(df, tableName, partitionColumns = List("featureDt"), clusterByColumns = List("featureDt"))
+
+      val schema = spark.read.table(tableName).schema
+      schema("featureDt").dataType shouldBe StringType
+
+      tu.partitions(tableName) should contain theSameElementsAs List("2024-03-01", "2024-03-02")
+
+      val range = PartitionRange("2024-03-01", "2024-03-02")(tu.partitionSpec)
+      tu.unfilledRanges(tableName, range) shouldBe None
+    } finally {
+      spark.sql(s"DROP TABLE IF EXISTS $tableName")
     }
   }
 }
